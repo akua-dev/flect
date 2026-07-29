@@ -2,44 +2,91 @@
 
 > The interface that takes your shape.
 
-![An adaptive surface unfolding from a protected core into interface layers](assets/flect-hero.png)
+![Flect adapting across analytics, research, and its agent-native shaping surface](assets/flect-hero.png)
 
-Flect is an open-source, agent-native shell for interfaces that shape
-themselves.
+Flect is an open-source, agent-native shell for interfaces that can be changed
+from inside themselves.
 
-Install Flect as a standalone desktop application or use it in the browser to
-create useful interfaces from inside the interface itself. Connect products,
-data, and APIs when you need them—or start without a backend at all.
-
-Product teams and open-source projects can use Flect as their interface layer.
-They can ship an excellent default experience while leaving every user free to
-adapt it.
+The current milestone is a working local launcher: it discovers models already
+authenticated through [Pi](https://pi.dev), creates protected tool-free
+sessions, streams responses, and keeps a compiled safe-mode surface independent
+from user customization.
 
 ## Why Flect
 
 The agent is not a chatbot added beside a static application. It is the
 programmable backbone of the interface: able to understand available
-capabilities and compose, modify, and repair the experience while it is in use.
+capabilities and, as the platform grows, compose, modify, and repair the
+experience while it is in use.
 
 Flect keeps the core small and puts capabilities, components, and opinions in
-extensions. Users can inspect, keep, revise, remove, and share their
-customizations.
+extensions. A product team can ship an excellent recommended experience while
+leaving every user free to adapt it.
 
-## Two ways to begin
+## Run it locally
 
-- **Start with Flect:** build a personal interface in place, connecting data or
-  APIs only when useful.
-- **Start with a product:** use its recommended Flect experience unchanged,
-  personalize it, or replace parts of it.
+Flect currently requires Bun and an existing Pi provider login.
 
-Most people will use good defaults. Nobody should be trapped by them.
+```bash
+bun install
+bunx pi
+```
 
-## Status
+Inside Pi, run `/login`, choose a subscription or API-key provider, then quit
+Pi and start Flect:
 
-Flect is at the vision stage. The project is defining its foundations in
-public before committing to an implementation.
+```bash
+bun run dev
+```
 
-Read [VISION.md](VISION.md) for the complete direction and principles.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The local runtime listens
+only on `127.0.0.1:3210`; the browser shell uses Vite's `/api` proxy.
+
+Flect reads Pi's supported authentication state. It does not copy provider
+tokens into browser storage or create a second credential format.
+
+## What works today
+
+- authenticated model discovery through Pi;
+- automatic or explicit model selection;
+- in-memory, tool-free Pi sessions;
+- streamed turns with cancellation and public error redaction;
+- strict versioned contracts built with Effect Schema;
+- one `ManagedRuntime` connecting React to Effect services and layers;
+- fail-closed interface-document loading; and
+- `?safe=1`, which bypasses customized interface state.
+
+The prompt surface, secondary actions, and interface document establish the
+product shape. Arbitrary generated UI code, sandboxed extensions, product API
+capabilities, desktop packaging, and component sharing remain future work.
+
+## Effect architecture
+
+Effect is the application architecture rather than a utility dependency.
+
+- boundary values are `Schema.Class` contracts;
+- expected failures are tagged schema errors;
+- Pi, runtime, browser transport, and storage are `Context.Service`
+  capabilities;
+- production and test implementations are `Layer` values;
+- finite workflows use `Effect`;
+- agent events and SSE bodies use `Stream`; and
+- Bun and React execute programs only at their host boundaries.
+
+All Effect packages are pinned to the same version. Run `bun run prepare` to
+restore the matching official Effect source checkout used as this repository's
+API reference.
+
+## Verify
+
+```bash
+bun run check
+bun run build
+```
+
+Read [VISION.md](VISION.md) for the destination, [ARCHITECTURE.md](ARCHITECTURE.md)
+for current boundaries, and [CONTRIBUTING.md](CONTRIBUTING.md) before changing
+the implementation.
 
 ## License
 

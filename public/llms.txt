@@ -1,0 +1,8 @@
+# Flect
+
+Flect is an open-source, agent-native interface shell: the interface that
+takes your shape.
+
+- [Source and overview](https://github.com/akua-dev/flect)
+- [Vision](https://github.com/akua-dev/flect/blob/main/VISION.md)
+- [Architecture](https://github.com/akua-dev/flect/blob/main/ARCHITECTURE.md)

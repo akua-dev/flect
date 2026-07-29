@@ -38,7 +38,14 @@ This starts:
 - the Pi-backed runtime on `127.0.0.1:3210`.
 
 Pi owns provider login and credentials. Authenticate through Pi's supported
-login flow; never add keys to this repository or browser storage.
+login flow:
+
+```bash
+bunx pi
+# Run /login inside Pi, then choose a provider.
+```
+
+Never add keys to this repository or browser storage.
 
 ## Verification
 
@@ -47,8 +54,10 @@ bun run check
 bun run build
 ```
 
-`check` runs Biome, TypeScript, and credential-free tests. Browser smoke tests
-are added with the launcher milestone and run separately through Playwright.
+`check` runs Biome, TypeScript, and credential-free tests. A manual browser
+smoke should cover the empty launcher, a streamed turn, cancellation,
+`?safe=1`, and a compact viewport. A credentialed turn must never be recorded
+in a fixture, screenshot, or log.
 
 ## Change expectations
 

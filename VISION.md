@@ -61,6 +61,18 @@ In an agent-native world, a product's durable value is its capabilities, data,
 and domain knowledge—not a single prescribed arrangement of screens. Flect
 gives those capabilities an adaptable surface.
 
+### The AI interface comes with the shell
+
+A product that adopts Flect does not need to bolt a separate assistant onto
+every screen. The shell already gives the person a direct agent interface to
+the product's approved capabilities. Products may provide their own inference
+endpoint, but they do not have to: a user can choose a model and subscription
+they already control through the local agent runtime.
+
+This keeps model choice and inference cost flexible without weakening product
+authorization. The product still decides which API capabilities exist; the
+user decides which approved model helps them use those capabilities.
+
 ### Defaults remain valuable
 
 Product designers still create excellent starting experiences. Flect does not
@@ -114,3 +126,15 @@ surface. They will provide a secure, extensible foundation through which the
 interface can become personal, situational, and continuously useful.
 
 Flect is that foundation.
+
+## The first working slice
+
+The repository currently implements the protected conversational foundation,
+not arbitrary self-modifying code. A local Effect runtime embeds Pi for
+authenticated model discovery and tool-free sessions. The browser consumes
+strict contracts and streamed events through a single Effect
+`ManagedRuntime`. A compiled launcher and `?safe=1` recovery path remain outside
+customized interface state.
+
+This deliberately narrow slice proves the model, credential, streaming, and
+recovery boundaries on which sandboxed interface generation can safely build.

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flect repository hero</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        background: oklch(0.982 0 0);
+        color: oklch(0.12 0 0);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter",
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .hero {
+        position: relative;
+        width: 1716px;
+        height: 916px;
+        overflow: hidden;
+      }
+
+      .copy {
+        position: absolute;
+        z-index: 10;
+        top: 348px;
+        left: 96px;
+        width: 560px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 116px;
+        font-weight: 590;
+        letter-spacing: -0.04em;
+        line-height: 0.94;
+      }
+
+      p {
+        margin: 28px 0 0;
+        color: oklch(0.46 0 0);
+        font-size: 27px;
+        font-weight: 430;
+        letter-spacing: -0.022em;
+        line-height: 1.25;
+      }
+
+      .surface {
+        position: absolute;
+        overflow: hidden;
+        border-radius: 16px;
+        background: white;
+        box-shadow:
+          0 2px 4px rgb(0 0 0 / 0.06),
+          0 26px 64px rgb(0 0 0 / 0.12);
+      }
+
+      .surface img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      .analytics {
+        z-index: 1;
+        top: -38px;
+        left: 680px;
+        width: 1120px;
+        height: 598px;
+      }
+
+      .research {
+        z-index: 2;
+        top: 276px;
+        left: 790px;
+        width: 1100px;
+        height: 587px;
+      }
+
+      .flect {
+        z-index: 3;
+        top: 510px;
+        left: 980px;
+        width: 1000px;
+        height: 440px;
+        background: oklch(0.095 0 0);
+        box-shadow:
+          0 2px 4px rgb(0 0 0 / 0.09),
+          0 28px 68px rgb(0 0 0 / 0.2);
+      }
+
+      .flect img {
+        width: 1500px;
+        max-width: none;
+        transform: translate(-280px, -430px);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="hero">
+      <div class="copy">
+        <h1>Flect</h1>
+        <p>The interface that takes your shape.</p>
+      </div>
+
+      <div class="surface analytics">
+        <img src="./dashboard-analytics.png" alt="" />
+      </div>
+      <div class="surface research">
+        <img src="./dashboard-research.png" alt="" />
+      </div>
+      <div class="surface flect">
+        <img src="./flect-shell.png" alt="" />
+      </div>
+    </main>
+  </body>
+</html>
