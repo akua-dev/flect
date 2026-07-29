@@ -10,13 +10,17 @@ for self-modifying interfaces later.
 
 The React application renders the launcher, conversation, model selection,
 and a versioned interface document. It may keep transient UI state, but it
-does not hold provider credentials or call model providers.
+does not hold provider credentials or call model providers. A
+`ManagedRuntime` is the host boundary between React and Effect services; React
+owns rendering while Effect owns transport, validation, streaming,
+cancellation, and application workflows.
 
 ### Local runtime
 
 A Bun service binds to `127.0.0.1:3210`. It owns Pi SDK integration, model
 discovery, agent sessions, prompt streaming, cancellation, and public error
-redaction. Vite proxies `/api` to this service during development.
+redaction. Effect `HttpRouter` and `BunHttpServer` expose the API, and Vite
+proxies `/api` to this service during development.
 
 ### Pi
 
@@ -27,9 +31,30 @@ resulting available-model catalog and never creates shadow credential state.
 
 ### Shared contracts
 
-Strict, versioned Zod schemas define runtime requests, public responses,
-streamed events, and the customizable interface document. Both processes
-validate data at the boundary.
+Strict, versioned Effect Schema classes define runtime requests, public
+responses, streamed events, typed public failures, and the customizable
+interface document. Both processes decode unknown data through Effect before
+it enters application state.
+
+### Effect application kernel
+
+Flect treats Effect as its application architecture:
+
+- `Schema.Class`, `Schema.TaggedClass`, and `Schema.TaggedErrorClass` are the
+  source of truth for data and expected failures.
+- `Context.Service` describes Pi, runtime, browser transport, storage, and
+  other capabilities.
+- named `Layer` values provide production and test implementations.
+- `Effect` models finite workflows and typed failure; `Stream` models agent
+  events and HTTP bodies.
+- scoped acquisition and finalizers own Pi subscriptions, prompt fibers, HTTP
+  servers, and browser runtime disposal.
+- Effect-native HTTP and platform integrations form the Bun and browser
+  boundaries.
+
+Only packages needed by implemented capabilities are installed. “Effect
+native” means using its relevant architecture consistently, not depending on
+unrelated database, cluster, or workflow packages.
 
 ### Protected recovery
 
@@ -71,7 +96,8 @@ sandboxing are intentionally deferred.
 2. The user accepts automatic selection or chooses a model.
 3. The browser creates an in-memory session through the loopback API.
 4. The runtime creates a tool-free Pi session.
-5. A submitted prompt streams sanitized Flect events back to the browser.
+5. A submitted prompt becomes a scoped Effect `Stream` of sanitized Flect
+   events and is transported back to the browser as SSE.
 6. Session state disappears when the runtime process exits.
 
 See the [MVP design](docs/superpowers/specs/2026-07-29-flect-mvp-design.md)

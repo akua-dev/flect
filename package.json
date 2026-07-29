@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prepare": "./scripts/prepare-effect.sh",
     "dev": "concurrently --kill-others --names runtime,shell \"bun run dev:server\" \"bun run dev:web\"",
     "dev:server": "bun --watch server/index.ts",
     "dev:web": "vite",
@@ -18,12 +19,15 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "0.82.1",
+    "@effect/platform-browser": "4.0.0-beta.102",
+    "@effect/platform-bun": "4.0.0-beta.102",
+    "effect": "4.0.0-beta.102",
     "react": "19.2.8",
-    "react-dom": "19.2.8",
-    "zod": "4.4.3"
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",
+    "@effect/vitest": "4.0.0-beta.102",
     "@testing-library/jest-dom": "7.0.0",
     "@testing-library/react": "16.3.2",
     "@testing-library/user-event": "14.6.1",

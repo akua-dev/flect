@@ -15,6 +15,14 @@ prematurely expanding the platform.
 bun install
 ```
 
+The `prepare` script clones the canonical Effect source at the exact version
+used by Flect into the ignored `.repos/effect` directory. If needed, run it
+directly:
+
+```bash
+bun run prepare
+```
+
 No model credential is required for unit tests, type-checking, linting, or the
 production build.
 
@@ -45,6 +53,13 @@ are added with the launcher milestone and run separately through Playwright.
 ## Change expectations
 
 - Start behavior changes with a failing test.
+- Read `.agents/skills/effect-ts/SKILL.md` and its routed references for the
+  Effect capability being changed.
+- Search `.repos/effect` for current API signatures and tests instead of
+  guessing from older Effect versions.
+- Use Effect Schema, Services, Layers, Effects, Streams, scoped resources, and
+  `@effect/vitest` at application boundaries.
+- Keep all Effect packages aligned to the same exact version.
 - Keep browser, runtime, and shared-contract responsibilities separate.
 - Add public error messages deliberately; never forward raw provider errors.
 - Test safe mode when changing interface document loading or shell startup.

@@ -1,4 +1,5 @@
 .worktrees/
+.repos/effect
 node_modules/
 dist/
 coverage/

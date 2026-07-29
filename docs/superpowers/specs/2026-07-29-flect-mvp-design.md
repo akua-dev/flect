@@ -77,7 +77,9 @@ Flect starts as one TypeScript workspace with two process boundaries.
 The browser shell is a React application built with Vite. It owns rendering,
 accessible interaction, transient conversation state, and the versioned
 interface document. It does not read credentials, call model providers
-directly, or execute generated code.
+directly, or execute generated code. React enters application workflows
+through a single Effect `ManagedRuntime`; data access, decoding, streaming,
+resource lifetime, and typed failures remain Effect programs.
 
 The browser build is usable in a normal browser and is structured so the same
 assets can later be packaged as a desktop application.
@@ -97,10 +99,33 @@ The runtime does not create shadow credential storage. It uses Pi's default
 agent directory unless a future, explicit profile feature changes that
 decision.
 
+### Effect application architecture
+
+Effect is Flect's application backbone rather than a utility dependency:
+
+- Effect Schema classes are the one source of truth for request, response,
+  event, interface-document, and public-error contracts.
+- Pi, session runtime, browser transport, and browser storage are
+  `Context.Service` capabilities with named production and test Layers.
+- finite operations return `Effect`; agent turns and SSE bodies use `Stream`;
+  subscriptions, prompt fibers, HTTP servers, and browser runtimes are scoped.
+- expected failures are tagged and typed in the error channel; defects are
+  reserved for violated invariants.
+- Effect HTTP and platform integrations own Bun and browser network
+  boundaries, while React remains the rendering and interaction layer.
+- named operations carry structured logs and spans without recording prompts,
+  responses, model credentials, or provider payloads.
+
+All Effect packages are pinned to the same version. Flect adopts every
+relevant Effect capability for the implemented product, but does not install
+unrelated SQL, cluster, workflow, or telemetry exporters before a real
+requirement exists.
+
 ### Shared contracts
 
-Runtime payloads and interface documents use shared TypeScript schemas. The
-first transport contract contains:
+Runtime payloads and interface documents use shared Effect Schema classes.
+Unknown input is decoded with `Schema.decodeUnknownEffect` before entering
+application state. The first transport contract contains:
 
 - runtime health and Pi availability;
 - non-secret model summaries;
@@ -120,7 +145,7 @@ event fields and reject unsupported major versions.
 4. The browser creates a Flect session.
 5. The runtime creates an in-memory Pi agent session with a minimal Flect
    system prompt and an explicit tool allowlist.
-6. The browser submits a prompt and consumes the streamed response.
+6. The browser submits a prompt and consumes the Effect `Stream` response.
 7. Pi events are mapped to the stable Flect event contract; Pi internals and
    credentials never cross the boundary.
 8. The browser renders conversation output while keeping the composer

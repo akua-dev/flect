@@ -3,6 +3,7 @@
   "files": {
     "includes": [
       "**",
+      "!**/.repos",
       "!**/node_modules",
       "!**/dist",
       "!**/coverage",
