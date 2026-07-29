@@ -10,6 +10,7 @@ import {
   InterfaceDocument,
 } from "../../shared/interface-document";
 import { Launcher, type LauncherController } from "./launcher";
+import type { ShapingController } from "./shaper-panel";
 
 afterEach(cleanup);
 
@@ -37,6 +38,18 @@ function controller(
   };
 }
 
+function shaping(): ShapingController {
+  return {
+    status: "idle",
+    isolation: "ready",
+    verifyIsolation: vi.fn(() => Promise.resolve()),
+    request: vi.fn(() => Promise.resolve()),
+    accept: vi.fn(() => Promise.resolve()),
+    reject: vi.fn(() => Promise.resolve()),
+    rollback: vi.fn(() => Promise.resolve()),
+  };
+}
+
 describe("Launcher", () => {
   it("presents the shaping prompt as the primary empty state", async () => {
     const session = controller();
@@ -46,6 +59,7 @@ describe("Launcher", () => {
         document={defaultInterfaceDocument}
         safeMode={false}
         session={session}
+        shaping={shaping()}
       />,
     );
 
@@ -79,6 +93,7 @@ describe("Launcher", () => {
         document={defaultInterfaceDocument}
         safeMode={false}
         session={session}
+        shaping={shaping()}
       />,
     );
 
@@ -98,11 +113,36 @@ describe("Launcher", () => {
         document={defaultInterfaceDocument}
         safeMode={false}
         session={session}
+        shaping={shaping()}
       />,
     );
 
     await user.click(screen.getByRole("button", { name: "Stop response" }));
     expect(session.cancel).toHaveBeenCalledOnce();
+  });
+
+  it("does not present a completed empty assistant turn as still responding", () => {
+    const session = controller({
+      status: "ready",
+      messages: [
+        {
+          id: "assistant-1",
+          role: "assistant",
+          content: "",
+        },
+      ],
+    });
+
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={session}
+        shaping={shaping()}
+      />,
+    );
+
+    expect(screen.queryByText("Flect is responding")).not.toBeInTheDocument();
   });
 
   it("renders fenced response code as inert, readable code", () => {
@@ -120,6 +160,7 @@ describe("Launcher", () => {
         document={defaultInterfaceDocument}
         safeMode={false}
         session={session}
+        shaping={shaping()}
       />,
     );
 
@@ -142,6 +183,7 @@ describe("Launcher", () => {
         document={defaultInterfaceDocument}
         safeMode={false}
         session={session}
+        shaping={shaping()}
       />,
     );
 
@@ -154,11 +196,28 @@ describe("Launcher", () => {
   });
 
   it("identifies the protected shell and uses safe default copy", () => {
-    const unsafeDocument = new InterfaceDocument({
-      version: 1,
-      headline: "Customized",
-      placeholder: "Customized prompt",
-      secondaryActions: [],
+    const unsafeDocument = InterfaceDocument.make({
+      version: 2,
+      name: "Customized",
+      root: {
+        id: "custom-root",
+        type: "stack",
+        direction: "column",
+        gap: "md",
+        children: [
+          {
+            id: "custom-headline",
+            type: "text",
+            text: "Customized",
+            style: "headline",
+          },
+          {
+            id: "custom-prompt",
+            type: "prompt",
+            placeholder: "Customized prompt",
+          },
+        ],
+      },
     });
     render(
       <Launcher
@@ -169,6 +228,7 @@ describe("Launcher", () => {
         }
         safeMode
         session={controller()}
+        shaping={shaping()}
       />,
     );
 

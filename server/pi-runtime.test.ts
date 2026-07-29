@@ -7,7 +7,12 @@ import {
   SessionSelection,
 } from "../shared/contracts";
 import {
+  defaultInterfaceDocument,
+  InterfaceDocument,
+} from "../shared/interface-document";
+import {
   FlectRuntimeLive,
+  type PiAgentPair,
   PiSdk,
   type PiSession,
   type PiSessionPolicy,
@@ -16,6 +21,7 @@ import { FlectRuntime } from "./runtime";
 
 type FakeOptions = {
   readonly promptFailure?: boolean;
+  readonly promptResponse?: string;
 };
 
 function createFakePi(options: FakeOptions = {}) {
@@ -30,7 +36,9 @@ function createFakePi(options: FakeOptions = {}) {
             message: "The model runtime could not complete the request.",
           }),
         )
-      : Effect.sync(() => listener?.("A shaped response")),
+      : Effect.sync(() =>
+          listener?.(options.promptResponse ?? "A shaped response"),
+        ),
   );
 
   const session: PiSession = {
@@ -42,10 +50,26 @@ function createFakePi(options: FakeOptions = {}) {
       }),
     prompt,
     abort,
+    dispose: Effect.void,
   };
 
-  const createSession = vi.fn(
-    (_model: ModelSummary, _policy: PiSessionPolicy) => Effect.succeed(session),
+  const guardian: PiSession = {
+    ...session,
+    sessionId: "guardian-1",
+  };
+
+  const createAgentPair = vi.fn(
+    (
+      _model: ModelSummary,
+      _policies: {
+        readonly guardian: PiSessionPolicy;
+        readonly shaper: PiSessionPolicy;
+      },
+    ): Effect.Effect<PiAgentPair> =>
+      Effect.succeed({
+        guardian,
+        shaper: session,
+      }),
   );
 
   const layer = Layer.succeed(PiSdk)({
@@ -56,12 +80,12 @@ function createFakePi(options: FakeOptions = {}) {
         name: "GPT-5.6",
       }),
     ]),
-    createSession,
+    createAgentPair,
   });
 
   return {
     abort,
-    createSession,
+    createAgentPair,
     layer: FlectRuntimeLive.pipe(Layer.provide(layer)),
     prompt,
     unsubscribe,
@@ -92,16 +116,27 @@ describe("FlectRuntimeLive", () => {
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
 
       expect(sessionId).toBe("session-1");
-      expect(fake.createSession).toHaveBeenCalledWith(
+      expect(fake.createAgentPair).toHaveBeenCalledWith(
         new ModelSummary({
           provider: "openai-codex",
           id: "gpt-5.6",
           name: "GPT-5.6",
         }),
         {
-          noTools: "all",
-          storage: "memory",
-          extensions: "disabled",
+          guardian: {
+            role: "guardian",
+            noTools: "all",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+          shaper: {
+            role: "shaper",
+            noTools: "all",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
         },
       );
     }).pipe(Effect.provide(fake.layer));
@@ -122,6 +157,50 @@ describe("FlectRuntimeLive", () => {
         { type: "turn_completed" },
       ]);
       expect(fake.unsubscribe).toHaveBeenCalledOnce();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("validates a Shaper proposal before returning it", () => {
+    const shaped = InterfaceDocument.make({
+      ...defaultInterfaceDocument,
+      name: "Focused Flect",
+    });
+    const fake = createFakePi({
+      promptResponse: JSON.stringify(shaped),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const result = yield* runtime.shape(
+        sessionId,
+        "Make this more focused",
+        defaultInterfaceDocument,
+      );
+
+      expect(result).toEqual(shaped);
+      expect(fake.prompt).toHaveBeenCalledOnce();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("fails closed when Shaper returns an invalid document", () => {
+    const fake = createFakePi({
+      promptResponse: '{"version":2,"name":"Unsafe","root":{"type":"script"}}',
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const error = yield* runtime
+        .shape(sessionId, "Run a script", defaultInterfaceDocument)
+        .pipe(Effect.flip);
+
+      expect(error).toEqual(
+        new PiOperationFailed({
+          operation: "shape",
+          message: "The model runtime could not complete the request.",
+        }),
+      );
     }).pipe(Effect.provide(fake.layer));
   });
 

@@ -19,6 +19,7 @@ const withStorage = <A, E>(
     Effect.provide(
       Layer.succeed(InterfaceStorage)({
         read,
+        write: () => Effect.void,
       }),
     ),
   );
@@ -52,10 +53,27 @@ describe("loadInterfaceDocument", () => {
     const read = vi.fn(() =>
       Effect.succeed(
         JSON.stringify({
-          version: 1,
-          headline: "Where should we begin?",
-          placeholder: "Describe an interface",
-          secondaryActions: ["open"],
+          version: 2,
+          name: "Where should we begin?",
+          root: {
+            id: "root",
+            type: "stack",
+            direction: "column",
+            gap: "lg",
+            children: [
+              {
+                id: "headline",
+                type: "text",
+                text: "Where should we begin?",
+                style: "headline",
+              },
+              {
+                id: "prompt",
+                type: "prompt",
+                placeholder: "Describe an interface",
+              },
+            ],
+          },
         }),
       ),
     );
@@ -65,11 +83,28 @@ describe("loadInterfaceDocument", () => {
         const document = yield* loadInterfaceDocument({ safeMode: false });
 
         expect(document).toEqual(
-          new InterfaceDocument({
-            version: 1,
-            headline: "Where should we begin?",
-            placeholder: "Describe an interface",
-            secondaryActions: ["open"],
+          InterfaceDocument.make({
+            version: 2,
+            name: "Where should we begin?",
+            root: {
+              id: "root",
+              type: "stack",
+              direction: "column",
+              gap: "lg",
+              children: [
+                {
+                  id: "headline",
+                  type: "text",
+                  text: "Where should we begin?",
+                  style: "headline",
+                },
+                {
+                  id: "prompt",
+                  type: "prompt",
+                  placeholder: "Describe an interface",
+                },
+              ],
+            },
           }),
         );
         expect(read).toHaveBeenCalledWith("flect.interface.v1");

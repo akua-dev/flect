@@ -1,0 +1,1 @@
+{"main":{"identifier":"main","description":"The Flect main window receives only core WebView authority.","local":true,"windows":["main"],"permissions":["core:default"]}}

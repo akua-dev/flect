@@ -5,88 +5,133 @@
 ![Flect adapting across analytics, research, and its agent-native shaping surface](assets/flect-hero.png)
 
 Flect is an open-source, agent-native shell for interfaces that can be changed
-from inside themselves.
+from inside themselves. It runs as a macOS desktop application and in a normal
+browser, uses models already authenticated through [Pi](https://pi.dev), and
+keeps the interface-shaping workflow behind typed Effect capabilities.
 
-The current milestone is a working local launcher: it discovers models already
-authenticated through [Pi](https://pi.dev), creates protected tool-free
-sessions, streams responses, and keeps a compiled safe-mode surface independent
-from user customization.
+The first native slice is working: ask Pi a question, open the Interface Shaper,
+describe a change, preview the schema-validated result, keep or reject it, and
+roll back to the last known good interface.
 
 ## Why Flect
 
 The agent is not a chatbot added beside a static application. It is the
-programmable backbone of the interface: able to understand available
-capabilities and, as the platform grows, compose, modify, and repair the
-experience while it is in use.
+programmable backbone of the interface. A product team can ship an excellent
+recommended experience while leaving every user free to adapt it.
 
-Flect keeps the core small and puts capabilities, components, and opinions in
-extensions. A product team can ship an excellent recommended experience while
-leaving every user free to adapt it.
+Flect keeps the protected core small:
 
-## Run it locally
+- React renders only a closed set of validated interface nodes.
+- Effect owns contracts, workflows, resources, streams, revisions, and
+  recovery.
+- Pi owns model authentication and runs distinct Guardian and Shaper sessions.
+- Tauri packages the shared web interface without exposing the native Pi
+  runtime on a localhost port.
+- Optional pure extension logic runs in a disposable QuickJS WebAssembly worker
+  and may return inert, schema-decoded intents only.
 
-Flect currently requires Bun and an existing Pi provider login.
+## Where Flect is going
+
+Flect is building toward a universal sandboxed interface shell. People will be
+able to create or import supported web interfaces, shape them while they run,
+package them as portable `.flect` capsules, connect them to explicitly approved
+product and native capabilities, and share or fork the result.
+
+The defining boundary is simple: interfaces may reshape the user experience,
+but may affect the outside world only through inspectable, approved, and
+revocable capabilities. Shared components never receive ambient shell,
+filesystem, network, credential, native, Pi, or backend authority.
+
+## Run in a browser
+
+Flect requires Bun and a model login supported by Pi.
 
 ```bash
 bun install
 bunx pi
 ```
 
-Inside Pi, run `/login`, choose a subscription or API-key provider, then quit
-Pi and start Flect:
+Run `/login` inside Pi, complete a provider login, quit Pi, then start Flect:
 
 ```bash
 bun run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). The local runtime listens
-only on `127.0.0.1:3210`; the browser shell uses Vite's `/api` proxy.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Browser development uses
+an origin-restricted runtime on `127.0.0.1:3210`; Pi credentials never enter
+browser storage.
 
-Flect reads Pi's supported authentication state. It does not copy provider
-tokens into browser storage or create a second credential format.
+## Run as a macOS app
+
+Install the Rust and Tauri prerequisites, then run:
+
+```bash
+bun run dev:desktop
+```
+
+For an application bundle:
+
+```bash
+bun run build:desktop -- --bundles app
+open src-tauri/target/release/bundle/macos/Flect.app
+```
+
+The packaged app starts a compiled Bun/Pi sidecar and talks to it through
+private NDJSON stdio proxied by a narrow Tauri command. It does not start the
+browser development HTTP server.
 
 ## What works today
 
-- authenticated model discovery through Pi;
-- automatic or explicit model selection;
-- in-memory, tool-free Pi sessions;
-- streamed turns with cancellation and public error redaction;
-- strict versioned contracts built with Effect Schema;
-- one `ManagedRuntime` connecting React to Effect services and layers;
-- fail-closed interface-document loading; and
-- `?safe=1`, which bypasses customized interface state.
+- authenticated Pi model discovery and explicit model selection;
+- separate, in-memory, tool-free Guardian and Shaper Pi sessions;
+- streamed turns, cancellation, redacted public failures, and finalized-text
+  recovery when a provider emits no live text delta;
+- model-backed interface proposals using a strict recursive Effect Schema;
+- preview, keep, reject, a durable versioned revision journal, rollback,
+  last-known-good state, corrupt-journal recovery, and a compiled `?safe=1`
+  launcher;
+- a trusted renderer for `stack`, `text`, `prompt`, `button`, `divider`, and
+  `agent-panel` nodes;
+- strict extension manifests and a QuickJS-NG/WASM logic sandbox with resource
+  limits and no ambient browser, network, process, module, Tauri, or Pi access;
+- an explicit capability broker that requires both manifest declaration and a
+  user grant before applying the current interface-local intent;
+- browser and native transports behind the same Effect service; and
+- automated production-build Chromium coverage for chat, shaping, accept,
+  reject, persistence, rollback, corrupt-journal recovery, keyboard use,
+  reduced motion, sandbox isolation, and compact layout.
 
-The prompt surface, secondary actions, and interface document establish the
-product shape. Arbitrary generated UI code, sandboxed extensions, product API
-capabilities, desktop packaging, and component sharing remain future work.
+## Security boundary
 
-## Effect architecture
+The QuickJS worker is a defense-in-depth **logic sandbox**, not an operating
+system sandbox. Flect does not currently execute native extensions, shell
+commands, filesystem code, or arbitrary generated React. Extension sharing,
+product/API capability adapters, privileged host brokerage, remote runtimes,
+signing, notarization, and a macOS App Sandbox entitlement are not part of
+this slice.
 
-Effect is the application architecture rather than a utility dependency.
+See the [trust model](docs/trust-model.md) for the intended authority boundary.
 
-- boundary values are `Schema.Class` contracts;
-- expected failures are tagged schema errors;
-- Pi, runtime, browser transport, and storage are `Context.Service`
-  capabilities;
-- production and test implementations are `Layer` values;
-- finite workflows use `Effect`;
-- agent events and SSE bodies use `Stream`; and
-- Bun and React execute programs only at their host boundaries.
+## Documentation
 
-All Effect packages are pinned to the same version. Run `bun run prepare` to
-restore the matching official Effect source checkout used as this repository's
-API reference.
+- [Vision and product boundary](VISION.md)
+- [Users, positioning, and product principles](PRODUCT.md)
+- [Implemented architecture](ARCHITECTURE.md)
+- [Capability and sandbox trust model](docs/trust-model.md)
+- [Flect delivery project](https://github.com/orgs/akua-dev/projects/8)
+- [Flect 1.0 delivery epic](https://github.com/akua-dev/flect/issues/1)
 
 ## Verify
 
 ```bash
-bun run check
-bun run build
+bun run check:all
+bun run test:pi-smoke
 ```
 
-Read [VISION.md](VISION.md) for the destination, [ARCHITECTURE.md](ARCHITECTURE.md)
-for current boundaries, and [CONTRIBUTING.md](CONTRIBUTING.md) before changing
-the implementation.
+`check:all` includes lint, type checking, unit tests, production-build
+Playwright tests in real Chromium, Rust tests, and a macOS application build.
+The Pi smoke is separate because it uses the developer's existing provider
+login.
 
 ## License
 

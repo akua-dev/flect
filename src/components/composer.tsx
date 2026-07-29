@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import type { ModelSummary } from "../../shared/contracts";
-import type { InterfaceDocument } from "../../shared/interface-document";
 import type { AgentSessionStatus } from "../hooks/use-agent-session";
 import {
   AddIcon,
@@ -12,7 +11,7 @@ import {
 import { ModelMenu } from "./model-menu";
 
 export interface ComposerProps {
-  readonly document: InterfaceDocument;
+  readonly placeholder: string;
   readonly status: AgentSessionStatus;
   readonly models: ReadonlyArray<ModelSummary>;
   readonly selectedModel: ModelSummary | undefined;
@@ -23,7 +22,7 @@ export interface ComposerProps {
 }
 
 export function Composer({
-  document,
+  placeholder,
   status,
   models,
   selectedModel,
@@ -87,7 +86,7 @@ export function Composer({
           }
         }}
         name="prompt"
-        placeholder={document.placeholder}
+        placeholder={placeholder}
         rows={3}
         value={prompt}
       />

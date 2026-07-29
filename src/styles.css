@@ -173,6 +173,124 @@ textarea:focus-visible {
   flex-direction: column;
   align-items: center;
   padding: 108px 24px 38px;
+  transition:
+    margin var(--state-motion),
+    padding var(--state-motion);
+}
+
+.shell--shaping .workspace {
+  margin-right: 370px;
+  padding-right: 30px;
+  padding-left: 30px;
+}
+
+.interface-canvas {
+  display: flex;
+  width: min(790px, 100%);
+  min-height: calc(100dvh - 214px);
+  align-items: center;
+  justify-content: center;
+}
+
+.interface-stack {
+  display: flex;
+  min-width: 0;
+}
+
+.interface-stack--column {
+  flex-direction: column;
+}
+
+.interface-stack--row {
+  flex-flow: row wrap;
+  align-items: center;
+}
+
+.interface-stack--gap-sm {
+  gap: 6px;
+}
+
+.interface-stack--gap-md {
+  gap: 16px;
+}
+
+.interface-stack--gap-lg {
+  gap: 34px;
+}
+
+.interface-canvas > .interface-stack {
+  width: 100%;
+  align-items: center;
+}
+
+.interface-text {
+  margin: 0;
+}
+
+.interface-text--headline {
+  max-width: 680px;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+  font-size: 32px;
+  font-weight: 590;
+  letter-spacing: -0.025em;
+  line-height: 1.15;
+  text-align: center;
+  text-wrap: balance;
+}
+
+.interface-text--body {
+  color: var(--ink);
+  line-height: 1.55;
+}
+
+.interface-text--muted {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.interface-prompt {
+  width: 100%;
+}
+
+.interface-action {
+  min-height: 30px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 9px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition:
+    color var(--state-motion),
+    background var(--state-motion);
+}
+
+.interface-action:hover {
+  background: var(--canvas);
+  color: var(--ink);
+}
+
+.interface-divider {
+  width: 1px;
+  height: 20px;
+  border: 0;
+  background: var(--line);
+}
+
+.interface-agent-panel {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  background: var(--canvas);
+}
+
+.interface-agent-panel h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 590;
 }
 
 .invitation {
@@ -447,6 +565,228 @@ textarea:focus-visible {
   text-align: center;
 }
 
+.shaper-panel {
+  position: fixed;
+  z-index: 30;
+  top: 10px;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  width: 350px;
+  flex-direction: column;
+  overflow-y: auto;
+  border: 1px solid oklch(0.34 0.012 340 / 0.72);
+  border-radius: 20px;
+  padding: 20px;
+  background: oklch(0.145 0.006 340 / 0.97);
+  box-shadow:
+    0 24px 80px oklch(0.02 0 0 / 0.58),
+    inset 0 1px 0 oklch(1 0 0 / 0.035);
+  backdrop-filter: blur(28px);
+}
+
+.shaper-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.shaper-panel__header h2 {
+  margin: 4px 0 0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", sans-serif;
+  font-size: 20px;
+  font-weight: 610;
+  letter-spacing: -0.025em;
+}
+
+.shaper-panel__eyebrow {
+  color: var(--flect-rose-hover);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shaper-panel__close {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.shaper-panel__close:hover {
+  color: var(--ink);
+}
+
+.shaper-panel__intro {
+  margin: 20px 0 24px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.shaper-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shaper-form label {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 570;
+}
+
+.shaper-form textarea {
+  width: 100%;
+  min-height: 118px;
+  resize: vertical;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  outline: none;
+  padding: 13px 14px;
+  background: var(--canvas);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.shaper-form textarea:focus {
+  border-color: var(--flect-rose);
+  box-shadow: 0 0 0 3px oklch(0.63 0.18 340 / 0.12);
+}
+
+.shaper-form textarea::placeholder {
+  color: var(--quiet);
+}
+
+.shaper-primary,
+.shaper-secondary {
+  min-height: 36px;
+  border: 0;
+  border-radius: 9px;
+  padding: 0 13px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 590;
+  transition:
+    background var(--state-motion),
+    color var(--state-motion),
+    transform var(--state-motion);
+}
+
+.shaper-primary {
+  background: var(--ink);
+  color: var(--void);
+}
+
+.shaper-primary:not(:disabled):hover {
+  background: var(--flect-rose-hover);
+  color: var(--ink);
+  transform: translateY(-1px);
+}
+
+.shaper-primary:disabled {
+  cursor: default;
+  opacity: 0.42;
+}
+
+.shaper-secondary {
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+
+.shaper-secondary:hover {
+  color: var(--ink);
+}
+
+.revision-card {
+  margin-top: 18px;
+  border: 1px solid oklch(0.63 0.18 340 / 0.28);
+  border-radius: 13px;
+  padding: 13px;
+  background: oklch(0.63 0.18 340 / 0.065);
+}
+
+.revision-card > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.revision-card strong {
+  font-size: 12px;
+  font-weight: 590;
+}
+
+.revision-card__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--flect-rose-hover);
+  box-shadow: 0 0 0 3px oklch(0.63 0.18 340 / 0.13);
+}
+
+.revision-card p {
+  margin: 8px 0 12px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.revision-card__actions {
+  display: flex;
+  gap: 7px;
+}
+
+.revision-card__actions .shaper-primary {
+  flex: 1 1 auto;
+}
+
+.shaper-error {
+  margin: 16px 0 0;
+  border-radius: 10px;
+  padding: 10px 11px;
+  background: oklch(0.66 0.17 27 / 0.12);
+  color: oklch(0.82 0.1 27);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.shaper-panel__footer {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: auto;
+  padding-top: 28px;
+}
+
+.trust-stack {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--quiet);
+  font-size: 10px;
+  font-weight: 520;
+}
+
+.trust-stack span::before {
+  margin-right: 5px;
+  color: var(--ready);
+  content: "●";
+  font-size: 7px;
+}
+
 .runtime-alert {
   display: flex;
   min-height: 62px;
@@ -614,6 +954,20 @@ textarea:focus-visible {
     padding: 82px 12px 18px;
   }
 
+  .shell--shaping .workspace {
+    margin-right: 0;
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .shaper-panel {
+    top: 6px;
+    right: 6px;
+    bottom: 6px;
+    left: 6px;
+    width: auto;
+  }
+
   .invitation {
     padding-bottom: 28px;
   }
@@ -668,5 +1022,11 @@ textarea:focus-visible {
 
   .thinking span {
     animation: none;
+  }
+
+  .shaper-panel__close,
+  .shaper-primary,
+  .shaper-secondary {
+    transition: none;
   }
 }

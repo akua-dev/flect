@@ -13,6 +13,8 @@ import {
   RuntimeStatus,
   SessionResponse,
   SessionSelection,
+  ShapeRequest,
+  ShapeResponse,
   TurnError,
 } from "../shared/contracts";
 import { FlectRuntime, type FlectRuntimeShape } from "./runtime";
@@ -41,6 +43,7 @@ const runtimeJson = HttpServerResponse.schemaJson(RuntimeStatus);
 const modelsJson = HttpServerResponse.schemaJson(ModelsResponse);
 const sessionJson = HttpServerResponse.schemaJson(SessionResponse);
 const cancelJson = HttpServerResponse.schemaJson(CancelResponse);
+const shapeJson = HttpServerResponse.schemaJson(ShapeResponse);
 const publicErrorJson = HttpServerResponse.schemaJson(PublicErrorResponse);
 const encodeEventJson = Schema.encodeEffect(Schema.fromJsonString(FlectEvent));
 
@@ -154,6 +157,26 @@ const cancelRoute = HttpRouter.add(
   }).pipe(Effect.catch(() => runtimeFailure())),
 );
 
+const shapeRoute = HttpRouter.add(
+  "POST",
+  "/api/sessions/:sessionId/shape",
+  Effect.gen(function* () {
+    const path = yield* sessionPath;
+    const shape = yield* decodeBody(ShapeRequest);
+    if (Option.isNone(path) || Option.isNone(shape)) {
+      return yield* invalidRequest();
+    }
+
+    const runtime = yield* FlectRuntime;
+    const document = yield* runtime.shape(
+      path.value.sessionId,
+      shape.value.instruction,
+      shape.value.document,
+    );
+    return yield* shapeJson(new ShapeResponse({ version: 1, document }));
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
 const makeOriginMiddleware = (allowedOrigins: ReadonlySet<string>) =>
   HttpRouter.middleware(
     (httpEffect) =>
@@ -176,6 +199,7 @@ export const makeFlectHttpApp = (
     modelsRoute,
     createSessionRoute,
     promptRoute,
+    shapeRoute,
     cancelRoute,
     makeOriginMiddleware(allowedOrigins),
   );

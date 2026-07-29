@@ -30,12 +30,18 @@ import {
   TurnError,
   TurnStarted,
 } from "../shared/contracts";
+import {
+  type InterfaceDocument,
+  validateInterfaceDocument,
+} from "../shared/interface-document";
 import { FlectRuntime } from "./runtime";
 
 export type PiSessionPolicy = {
+  readonly role: "guardian" | "shaper";
   readonly noTools: "all";
   readonly storage: "memory";
   readonly extensions: "disabled";
+  readonly userResources: "disabled";
 };
 
 export type PiEvent = {
@@ -50,6 +56,12 @@ export interface PiSession {
   ) => Effect.Effect<() => void>;
   readonly prompt: (text: string) => Effect.Effect<void, PiOperationFailed>;
   readonly abort: () => Effect.Effect<void, PiOperationFailed>;
+  readonly dispose: Effect.Effect<void>;
+}
+
+export interface PiAgentPair {
+  readonly guardian: PiSession;
+  readonly shaper: PiSession;
 }
 
 export interface PiSdkShape {
@@ -57,21 +69,41 @@ export interface PiSdkShape {
     ReadonlyArray<ModelSummary>,
     PiOperationFailed
   >;
-  readonly createSession: (
+  readonly createAgentPair: (
     model: ModelSummary,
-    policy: PiSessionPolicy,
-  ) => Effect.Effect<PiSession, PiOperationFailed | NoModelAvailable>;
+    policies: {
+      readonly guardian: PiSessionPolicy;
+      readonly shaper: PiSessionPolicy;
+    },
+  ) => Effect.Effect<PiAgentPair, PiOperationFailed | NoModelAvailable>;
 }
 
 export class PiSdk extends Context.Service<PiSdk, PiSdkShape>()(
   "flect/server/PiSdk",
 ) {}
 
-const protectedSessionPolicy: PiSessionPolicy = Object.freeze({
-  noTools: "all",
-  storage: "memory",
-  extensions: "disabled",
+const protectedAgentPolicies = Object.freeze({
+  guardian: Object.freeze({
+    role: "guardian",
+    noTools: "all",
+    storage: "memory",
+    extensions: "disabled",
+    userResources: "disabled",
+  } satisfies PiSessionPolicy),
+  shaper: Object.freeze({
+    role: "shaper",
+    noTools: "all",
+    storage: "memory",
+    extensions: "disabled",
+    userResources: "disabled",
+  } satisfies PiSessionPolicy),
 });
+
+const guardianSystemPrompt =
+  "You are Flect Guardian, the protected recovery agent. You may reason about typed validation summaries and request deterministic recovery actions only. You cannot load user resources, modify the revision journal, execute extensions, or use shell, filesystem, browser, network, or process tools.";
+
+const shaperSystemPrompt =
+  "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may propose interface documents through explicitly supplied typed capabilities only. You cannot activate revisions, modify Guardian or safe mode, load user resources, execute extensions, or use shell, filesystem, browser, network, or process tools.";
 
 const piFailure = (operation: PiOperationFailed["operation"]) =>
   new PiOperationFailed({
@@ -107,9 +139,12 @@ export const PiSdkLive = Layer.effect(
       ),
     );
 
-    const createSession = Effect.fn("Flect.PiSdk.createSession")(function* (
+    const createAgentPair = Effect.fn("Flect.PiSdk.createAgentPair")(function* (
       model: ModelSummary,
-      policy: PiSessionPolicy,
+      policies: {
+        readonly guardian: PiSessionPolicy;
+        readonly shaper: PiSessionPolicy;
+      },
     ) {
       const models = yield* availableModels();
       const selected = models.find(
@@ -125,88 +160,215 @@ export const PiSdkLive = Layer.effect(
         );
       }
 
-      const settingsManager = SettingsManager.inMemory();
-      const resourceLoader = new DefaultResourceLoader({
-        cwd: process.cwd(),
-        agentDir: getAgentDir(),
-        settingsManager,
-        noExtensions: policy.extensions === "disabled",
-        noSkills: true,
-        noPromptTemplates: true,
-        noThemes: true,
-        noContextFiles: true,
-        systemPrompt:
-          "You are the local agent behind Flect, an interface that takes the user's shape. Respond clearly and help the user think through, build, or change interfaces. You have no tools in this protected session.",
-      });
+      const createProtectedSession = Effect.fn(
+        "Flect.PiSdk.createProtectedSession",
+      )(function* (policy: PiSessionPolicy) {
+        const settingsManager = SettingsManager.inMemory();
+        const sessionManager = SessionManager.inMemory();
+        const resourceLoader = new DefaultResourceLoader({
+          cwd: process.cwd(),
+          agentDir: getAgentDir(),
+          settingsManager,
+          noExtensions: policy.extensions === "disabled",
+          noSkills: policy.userResources === "disabled",
+          noPromptTemplates: policy.userResources === "disabled",
+          noThemes: policy.userResources === "disabled",
+          noContextFiles: policy.userResources === "disabled",
+          systemPrompt:
+            policy.role === "guardian"
+              ? guardianSystemPrompt
+              : shaperSystemPrompt,
+        });
 
-      yield* Effect.tryPromise({
-        try: () => resourceLoader.reload(),
-        catch: () => piFailure("create_session"),
-      });
+        yield* Effect.tryPromise({
+          try: () => resourceLoader.reload(),
+          catch: () => piFailure("create_session"),
+        });
 
-      const result = yield* Effect.tryPromise({
-        try: () =>
-          createAgentSession({
-            modelRuntime,
-            model: selected,
-            noTools: policy.noTools,
-            sessionManager: SessionManager.inMemory(),
-            settingsManager,
-            resourceLoader,
-          }),
-        catch: () => piFailure("create_session"),
-      });
+        const result = yield* Effect.tryPromise({
+          try: () =>
+            createAgentSession({
+              modelRuntime,
+              model: selected,
+              noTools: policy.noTools,
+              sessionManager,
+              settingsManager,
+              resourceLoader,
+            }),
+          catch: () => piFailure("create_session"),
+        });
 
-      return {
-        sessionId: result.session.sessionId,
-        subscribe: (listener: (event: PiEvent) => void) =>
-          Effect.sync(() =>
-            result.session.subscribe((event) => {
-              if (
-                event.type === "message_update" &&
-                event.assistantMessageEvent.type === "text_delta"
-              ) {
-                listener({
+        const listeners = new Set<(event: PiEvent) => void>();
+        let observedTextDelta = false;
+        const unsubscribeFromPi = result.session.subscribe((event) => {
+          if (
+            event.type === "message_update" &&
+            event.assistantMessageEvent.type === "text_delta"
+          ) {
+            observedTextDelta = true;
+            const delta = {
+              type: "text_delta",
+              delta: event.assistantMessageEvent.delta,
+            } satisfies PiEvent;
+            for (const listener of listeners) {
+              listener(delta);
+            }
+          }
+        });
+
+        return {
+          sessionId: result.session.sessionId,
+          subscribe: (listener: (event: PiEvent) => void) =>
+            Effect.sync(() => {
+              listeners.add(listener);
+              return () => {
+                listeners.delete(listener);
+              };
+            }),
+          prompt: Effect.fn("Flect.PiSession.prompt")(function* (text: string) {
+            observedTextDelta = false;
+            const previousMessageCount = result.session.messages.length;
+            yield* Effect.tryPromise({
+              try: () => result.session.prompt(text),
+              catch: () => piFailure("prompt"),
+            });
+
+            const assistant = result.session.messages
+              .slice(previousMessageCount)
+              .reverse()
+              .find((message) => message.role === "assistant");
+            if (assistant === undefined || assistant.stopReason === "error") {
+              return yield* Effect.fail(piFailure("prompt"));
+            }
+
+            if (
+              !observedTextDelta &&
+              result.session.messages.length > previousMessageCount
+            ) {
+              const text = result.session.getLastAssistantText();
+              if (text) {
+                const fallback = {
                   type: "text_delta",
-                  delta: event.assistantMessageEvent.delta,
-                });
+                  delta: text,
+                } satisfies PiEvent;
+                for (const listener of listeners) {
+                  listener(fallback);
+                }
               }
+            }
+          }),
+          abort: Effect.fn("Flect.PiSession.abort")(() =>
+            Effect.tryPromise({
+              try: () => result.session.abort(),
+              catch: () => piFailure("cancel"),
             }),
           ),
-        prompt: Effect.fn("Flect.PiSession.prompt")((text: string) =>
-          Effect.tryPromise({
-            try: () => result.session.prompt(text),
-            catch: () => piFailure("prompt"),
-          }),
-        ),
-        abort: Effect.fn("Flect.PiSession.abort")(() =>
-          Effect.tryPromise({
-            try: () => result.session.abort(),
-            catch: () => piFailure("cancel"),
-          }),
-        ),
+          dispose: Effect.sync(() => {
+            unsubscribeFromPi();
+            listeners.clear();
+            result.session.dispose();
+          }).pipe(
+            Effect.andThen(
+              Effect.tryPromise({
+                try: () => settingsManager.flush(),
+                catch: () => undefined,
+              }).pipe(Effect.catch(() => Effect.void)),
+            ),
+          ),
+        } satisfies PiSession;
+      });
+
+      const guardian = yield* createProtectedSession(policies.guardian);
+      const shaper = yield* createProtectedSession(policies.shaper).pipe(
+        Effect.tapError(() => guardian.dispose),
+      );
+
+      return {
+        guardian,
+        shaper,
       };
     });
 
     return {
       listModels,
-      createSession,
+      createAgentPair,
     };
   }),
 );
 
 type SessionRecord = {
   readonly session: PiSession;
+  readonly guardian: PiSession;
   readonly cancelled: Ref.Ref<boolean>;
 };
 
 const PUBLIC_TURN_ERROR = "The model could not complete this turn.";
+const MAX_SHAPER_RESPONSE_BYTES = 256 * 1024;
+
+const shapePrompt = (
+  instruction: string,
+  document: InterfaceDocument,
+) => `Propose a revised Flect interface document.
+
+Return exactly one JSON object and no markdown or commentary. The root must use
+only these closed node types: stack, text, prompt, button, divider, agent-panel.
+Never invent executable code, URLs, credentials, HTML, CSS, scripts, tools, or
+capabilities. Preserve stable node IDs when possible.
+
+Current validated document:
+${JSON.stringify(document)}
+
+User instruction:
+${JSON.stringify(instruction)}`;
+
+const parseShaperDocument = Effect.fn("Flect.Runtime.parseShaperDocument")(
+  function* (raw: string) {
+    if (new TextEncoder().encode(raw).byteLength > MAX_SHAPER_RESPONSE_BYTES) {
+      return yield* Effect.fail(piFailure("shape"));
+    }
+
+    const start = raw.indexOf("{");
+    const end = raw.lastIndexOf("}");
+    if (start < 0 || end < start) {
+      return yield* Effect.fail(piFailure("shape"));
+    }
+
+    const parsed = yield* Effect.try({
+      try: (): unknown => JSON.parse(raw.slice(start, end + 1)),
+      catch: () => piFailure("shape"),
+    });
+    return yield* validateInterfaceDocument(parsed).pipe(
+      Effect.mapError(() => piFailure("shape")),
+    );
+  },
+);
 
 export const FlectRuntimeLive = Layer.effect(
   FlectRuntime,
   Effect.gen(function* () {
     const pi = yield* PiSdk;
     const sessions = yield* Ref.make(HashMap.empty<string, SessionRecord>());
+
+    yield* Effect.addFinalizer(() =>
+      Ref.get(sessions).pipe(
+        Effect.flatMap((records) =>
+          Effect.forEach(
+            HashMap.values(records),
+            (record) =>
+              Effect.all(
+                [
+                  record.session.abort().pipe(Effect.catch(() => Effect.void)),
+                  record.guardian.abort().pipe(Effect.catch(() => Effect.void)),
+                  record.session.dispose,
+                  record.guardian.dispose,
+                ],
+                { concurrency: "unbounded", discard: true },
+              ),
+            { concurrency: "unbounded", discard: true },
+          ),
+        ),
+      ),
+    );
 
     const findSession = Effect.fn("Flect.Runtime.findSession")(function* (
       sessionId: string,
@@ -244,13 +406,17 @@ export const FlectRuntimeLive = Layer.effect(
         );
       }
 
-      const session = yield* pi.createSession(model, protectedSessionPolicy);
+      const pair = yield* pi.createAgentPair(model, protectedAgentPolicies);
       const cancelled = yield* Ref.make(false);
       yield* Ref.update(
         sessions,
-        HashMap.set(session.sessionId, { session, cancelled }),
+        HashMap.set(pair.shaper.sessionId, {
+          session: pair.shaper,
+          guardian: pair.guardian,
+          cancelled,
+        }),
       );
-      return session.sessionId;
+      return pair.shaper.sessionId;
     });
 
     const prompt = (
@@ -336,6 +502,24 @@ export const FlectRuntimeLive = Layer.effect(
       yield* record.session.abort();
     });
 
+    const shape = Effect.fn("Flect.Runtime.shape")(function* (
+      sessionId: string,
+      instruction: string,
+      document: InterfaceDocument,
+    ) {
+      const record = yield* findSession(sessionId);
+      const chunks: Array<string> = [];
+      const unsubscribe = yield* record.session.subscribe((event) => {
+        chunks.push(event.delta);
+      });
+
+      yield* record.session
+        .prompt(shapePrompt(instruction, document))
+        .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
+
+      return yield* parseShaperDocument(chunks.join(""));
+    });
+
     return {
       status: Effect.succeed(
         new RuntimeStatus({ version: 1, status: "ready" }),
@@ -343,6 +527,7 @@ export const FlectRuntimeLive = Layer.effect(
       listModels: pi.listModels,
       createSession,
       prompt,
+      shape,
       cancel,
     };
   }),

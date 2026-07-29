@@ -6,6 +6,7 @@ import type {
   RuntimeStatus,
   SessionSelection,
 } from "../shared/contracts";
+import type { InterfaceDocument } from "../shared/interface-document";
 
 export interface FlectRuntimeShape {
   readonly status: Effect.Effect<RuntimeStatus>;
@@ -20,6 +21,11 @@ export interface FlectRuntimeShape {
     sessionId: string,
     text: string,
   ) => Stream.Stream<FlectEvent, FlectRuntimeError>;
+  readonly shape: (
+    sessionId: string,
+    instruction: string,
+    document: InterfaceDocument,
+  ) => Effect.Effect<InterfaceDocument, FlectRuntimeError>;
   readonly cancel: (
     sessionId: string,
   ) => Effect.Effect<void, FlectRuntimeError>;

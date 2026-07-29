@@ -17,4 +17,11 @@ export default defineConfig({
       "/api": "http://127.0.0.1:3210",
     },
   },
+  preview: {
+    host: "127.0.0.1",
+    port: 5173,
+    proxy: {
+      "/api": "http://127.0.0.1:3210",
+    },
+  },
 });

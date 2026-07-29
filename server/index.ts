@@ -3,8 +3,12 @@ import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { makeFlectHttpApp } from "./app";
 import { FlectRuntimeLive, PiSdkLive } from "./pi-runtime";
+import { FlectTestRuntimeLive } from "./test-runtime";
 
-const RuntimeLive = FlectRuntimeLive.pipe(Layer.provide(PiSdkLive));
+const RuntimeLive =
+  process.env.FLECT_TEST_MODE === "1"
+    ? FlectTestRuntimeLive
+    : FlectRuntimeLive.pipe(Layer.provide(PiSdkLive));
 
 const ApplicationLive = makeFlectHttpApp().pipe(
   HttpRouter.provideRequest(RuntimeLive),

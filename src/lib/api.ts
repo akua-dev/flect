@@ -14,7 +14,10 @@ import {
   RuntimeStatus,
   SessionResponse,
   SessionSelection,
+  ShapeRequest,
+  ShapeResponse,
 } from "../../shared/contracts";
+import type { InterfaceDocument } from "../../shared/interface-document";
 
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
@@ -46,6 +49,11 @@ export interface FlectClientShape {
     sessionId: string,
     text: string,
   ) => Stream.Stream<FlectEvent, FlectUnavailableError>;
+  readonly shape: (
+    sessionId: string,
+    instruction: string,
+    document: InterfaceDocument,
+  ) => Effect.Effect<InterfaceDocument, FlectUnavailableError>;
   readonly cancel: (
     sessionId: string,
   ) => Effect.Effect<void, FlectUnavailableError>;
@@ -143,11 +151,29 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
           ),
       );
 
+      const shape = Effect.fn("Flect.Client.shape")(
+        (sessionId: string, instruction: string, document: InterfaceDocument) =>
+          HttpClientRequest.post(
+            `/sessions/${encodeURIComponent(sessionId)}/shape`,
+          ).pipe(
+            HttpClientRequest.schemaBodyJson(ShapeRequest)(
+              new ShapeRequest({ instruction, document }),
+            ),
+            Effect.flatMap(transport.execute),
+            Effect.flatMap(
+              HttpClientResponse.schemaBodyJson(ShapeResponse, strictOptions),
+            ),
+            Effect.map((response) => response.document),
+            Effect.mapError(unavailable),
+          ),
+      );
+
       return {
         status,
         models,
         createSession,
         prompt,
+        shape,
         cancel,
       };
     }),

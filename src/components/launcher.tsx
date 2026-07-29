@@ -1,13 +1,19 @@
 import { useState } from "react";
 import type { ModelSummary } from "../../shared/contracts";
-import type { InterfaceDocument } from "../../shared/interface-document";
+import type {
+  InterfaceDocument,
+  InterfaceNode,
+  PromptNode,
+} from "../../shared/interface-document";
 import type {
   AgentSessionStatus,
   ConversationMessage,
 } from "../hooks/use-agent-session";
 import { Composer } from "./composer";
 import { RefreshIcon } from "./icons";
+import { type InterfaceAction, InterfaceRenderer } from "./interface-renderer";
 import { MessageContent } from "./message-content";
+import { ShaperPanel, type ShapingController } from "./shaper-panel";
 
 export interface LauncherController {
   readonly status: AgentSessionStatus;
@@ -26,13 +32,41 @@ export interface LauncherProps {
   readonly document: InterfaceDocument;
   readonly safeMode: boolean;
   readonly session: LauncherController;
+  readonly shaping: ShapingController;
 }
 
-const actionLabel = {
+const actionLabel: Record<InterfaceAction, string> = {
   open: "Open",
   extensions: "Extensions",
   connect: "Connect",
-} as const;
+  shape: "Shape interface",
+  "safe-mode": "Safe mode",
+  "accept-revision": "Accept revision",
+  "reject-revision": "Reject revision",
+  "rollback-revision": "Roll back",
+};
+
+function findPrompt(node: InterfaceNode): PromptNode | undefined {
+  if (node.type === "prompt") {
+    return node;
+  }
+  if (node.type !== "stack") {
+    return undefined;
+  }
+  for (const child of node.children) {
+    const prompt = findPrompt(child);
+    if (prompt !== undefined) {
+      return prompt;
+    }
+  }
+  return undefined;
+}
+
+const defaultPrompt: PromptNode = {
+  id: "protected-prompt",
+  type: "prompt",
+  placeholder: "Build, change, or connect anything",
+};
 
 function RuntimeState({ status }: { readonly status: AgentSessionStatus }) {
   const ready = status !== "booting" && status !== "unavailable";
@@ -73,7 +107,7 @@ function Conversation({
               <MessageContent content={message.content} />
             ) : (
               isLatest &&
-              status !== "error" && (
+              (status === "submitting" || status === "streaming") && (
                 <span className="thinking" role="status">
                   <span className="sr-only">Flect is responding</span>
                   <span aria-hidden="true" />
@@ -89,12 +123,101 @@ function Conversation({
   );
 }
 
-export function Launcher({ document, safeMode, session }: LauncherProps) {
+export function Launcher({
+  document,
+  safeMode,
+  session,
+  shaping,
+}: LauncherProps) {
   const [notice, setNotice] = useState<string>();
+  const [shaperOpen, setShaperOpen] = useState(false);
   const hasConversation = session.messages.length > 0;
+  const promptNode = findPrompt(document.root) ?? defaultPrompt;
+
+  const handleInterfaceAction = (action: InterfaceAction) => {
+    if (action === "safe-mode") {
+      globalThis.location.assign("/?safe=1");
+      return;
+    }
+    if (action === "shape") {
+      setShaperOpen(true);
+      void shaping.verifyIsolation();
+      return;
+    }
+    if (action === "accept-revision") {
+      void shaping.accept();
+      return;
+    }
+    if (action === "reject-revision") {
+      void shaping.reject();
+      return;
+    }
+    if (action === "rollback-revision") {
+      void shaping.rollback();
+      return;
+    }
+    setNotice(`${actionLabel[action]} is ready.`);
+  };
+
+  const renderComposer = (node: PromptNode) => (
+    <section className="composer-area">
+      {session.status === "unavailable" && (
+        <div className="runtime-alert" role="alert">
+          <div>
+            <strong>Local runtime offline</strong>
+            <p>{session.error}</p>
+          </div>
+          <button
+            className="retry-button"
+            onClick={() => void session.refresh()}
+            type="button"
+          >
+            <RefreshIcon />
+            Try again
+          </button>
+        </div>
+      )}
+
+      {session.status === "error" && session.error && (
+        <div className="runtime-alert" role="alert">
+          <div>
+            <strong>The turn stopped</strong>
+            <p>{session.error}</p>
+          </div>
+          {session.lastPrompt && (
+            <button
+              className="retry-button"
+              onClick={() => void session.submit(session.lastPrompt)}
+              type="button"
+            >
+              <RefreshIcon />
+              Retry
+            </button>
+          )}
+        </div>
+      )}
+
+      <Composer
+        models={session.models}
+        onCancel={session.cancel}
+        onSecondaryAction={setNotice}
+        onSelectModel={session.selectModel}
+        onSubmit={session.submit}
+        placeholder={node.placeholder}
+        selectedModel={session.selectedModel}
+        status={session.status}
+      />
+
+      <div className="secondary-rail">
+        <span className="privacy-note">Local shell · models via Pi</span>
+      </div>
+    </section>
+  );
 
   return (
-    <div className={`shell${hasConversation ? " shell--conversation" : ""}`}>
+    <div
+      className={`shell${hasConversation ? " shell--conversation" : ""}${shaperOpen ? " shell--shaping" : ""}`}
+    >
       <header className="topbar">
         <a aria-label="Flect home" className="wordmark" href="/">
           <span>Flect</span>
@@ -113,85 +236,28 @@ export function Launcher({ document, safeMode, session }: LauncherProps) {
 
       <main className="workspace">
         {hasConversation ? (
-          <Conversation messages={session.messages} status={session.status} />
+          <>
+            <Conversation messages={session.messages} status={session.status} />
+            {renderComposer(promptNode)}
+          </>
         ) : (
-          <section className="invitation">
-            <h1>{document.headline}</h1>
-          </section>
+          <InterfaceRenderer
+            document={document}
+            onAction={handleInterfaceAction}
+            renderPrompt={renderComposer}
+          />
         )}
 
-        <section className="composer-area">
-          {session.status === "unavailable" && (
-            <div className="runtime-alert" role="alert">
-              <div>
-                <strong>Local runtime offline</strong>
-                <p>{session.error}</p>
-              </div>
-              <button
-                className="retry-button"
-                onClick={() => void session.refresh()}
-                type="button"
-              >
-                <RefreshIcon />
-                Try again
-              </button>
-            </div>
-          )}
-
-          {session.status === "error" && session.error && (
-            <div className="runtime-alert" role="alert">
-              <div>
-                <strong>The turn stopped</strong>
-                <p>{session.error}</p>
-              </div>
-              {session.lastPrompt && (
-                <button
-                  className="retry-button"
-                  onClick={() => void session.submit(session.lastPrompt)}
-                  type="button"
-                >
-                  <RefreshIcon />
-                  Retry
-                </button>
-              )}
-            </div>
-          )}
-
-          <Composer
-            document={document}
-            models={session.models}
-            onCancel={session.cancel}
-            onSecondaryAction={setNotice}
-            onSelectModel={session.selectModel}
-            onSubmit={session.submit}
-            selectedModel={session.selectedModel}
-            status={session.status}
-          />
-
-          <div className="secondary-rail">
-            <div className="secondary-actions">
-              {document.secondaryActions.map((action) => (
-                <button
-                  key={action}
-                  onClick={() =>
-                    setNotice(
-                      `${actionLabel[action]} is ready for the extension layer.`,
-                    )
-                  }
-                  type="button"
-                >
-                  {actionLabel[action]}
-                </button>
-              ))}
-            </div>
-            <span className="privacy-note">Local shell · models via Pi</span>
-          </div>
-
-          <p aria-live="polite" className="notice">
-            {notice ?? (safeMode ? "Custom interface state is bypassed." : "")}
-          </p>
-        </section>
+        <p aria-live="polite" className="notice">
+          {notice ?? (safeMode ? "Custom interface state is bypassed." : "")}
+        </p>
       </main>
+      {shaperOpen && (
+        <ShaperPanel
+          controller={shaping}
+          onClose={() => setShaperOpen(false)}
+        />
+      )}
     </div>
   );
 }

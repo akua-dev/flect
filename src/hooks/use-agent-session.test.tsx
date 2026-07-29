@@ -5,6 +5,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
 import { ModelSummary, RuntimeStatus } from "../../shared/contracts";
+import { defaultInterfaceDocument } from "../../shared/interface-document";
 import {
   FlectClient,
   type FlectClientShape,
@@ -38,10 +39,14 @@ function createFakeRuntime({
     ]),
     createSession: vi.fn(() => Effect.succeed("session-1")),
     prompt: vi.fn(prompt),
+    shape: vi.fn((_sessionId, _instruction, document) =>
+      Effect.succeed(document),
+    ),
     cancel: vi.fn(() => Effect.void),
   };
   const storage: InterfaceStorageShape = {
     read: () => Effect.succeed(null),
+    write: () => Effect.void,
   };
   const runtime: FlectBrowserRuntime = ManagedRuntime.make(
     Layer.merge(
@@ -94,6 +99,26 @@ describe("useAgentSession", () => {
       },
     ]);
     expect(result.current.status).toBe("ready");
+    unmount();
+    await runtime.dispose();
+  });
+
+  it("uses the protected Shaper session for interface proposals", async () => {
+    const { client, runtime } = createFakeRuntime();
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    const document = await act(() =>
+      result.current.shape("Make it focused", defaultInterfaceDocument),
+    );
+
+    expect(document).toEqual(defaultInterfaceDocument);
+    expect(client.createSession).toHaveBeenCalledOnce();
+    expect(client.shape).toHaveBeenCalledWith(
+      "session-1",
+      "Make it focused",
+      defaultInterfaceDocument,
+    );
     unmount();
     await runtime.dispose();
   });

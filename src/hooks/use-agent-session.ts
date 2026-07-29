@@ -1,11 +1,12 @@
 import { Effect, Fiber, Stream } from "effect";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type FlectEvent,
   ModelSelection,
   type ModelSummary,
   SessionSelection,
 } from "../../shared/contracts";
+import type { InterfaceDocument } from "../../shared/interface-document";
 import { FlectClient, FlectUnavailableError } from "../lib/api";
 import { browserRuntime, type FlectBrowserRuntime } from "../lib/runtime";
 
@@ -36,6 +37,23 @@ const sessionSelection = (
         }),
       })
     : new SessionSelection({});
+
+const ensurePiSession = Effect.fn("Flect.AgentSession.ensureSession")(
+  function* (
+    selection: SessionSelection,
+    readCurrent: () => string | undefined,
+    storeCurrent: (sessionId: string) => void,
+  ) {
+    const client = yield* FlectClient;
+    const existing = readCurrent();
+    if (existing !== undefined) {
+      return existing;
+    }
+    const sessionId = yield* client.createSession(selection);
+    storeCurrent(sessionId);
+    return sessionId;
+  },
+);
 
 export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   const [status, setStatus] = useState<AgentSessionStatus>("booting");
@@ -98,6 +116,22 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
     };
   }, [refresh, runtime]);
 
+  const selection = useMemo(
+    () => sessionSelection(selectedModel),
+    [selectedModel],
+  );
+  const ensureSession = useCallback(
+    () =>
+      ensurePiSession(
+        selection,
+        () => sessionIdRef.current,
+        (sessionId) => {
+          sessionIdRef.current = sessionId;
+        },
+      ),
+    [selection],
+  );
+
   const handleEvent = useCallback(
     (assistantId: string, event: FlectEvent): Effect.Effect<void> =>
       Effect.sync(() => {
@@ -150,14 +184,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
 
       const request = Effect.gen(function* () {
         const client = yield* FlectClient;
-        let sessionId = sessionIdRef.current;
-
-        if (sessionId === undefined) {
-          sessionId = yield* client.createSession(
-            sessionSelection(selectedModel),
-          );
-          sessionIdRef.current = sessionId;
-        }
+        const sessionId = yield* ensureSession();
 
         yield* client
           .prompt(sessionId, prompt)
@@ -183,7 +210,22 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
           }
         });
     },
-    [handleEvent, runtime, selectedModel, status],
+    [ensureSession, handleEvent, runtime, status],
+  );
+
+  const shape = useCallback(
+    (
+      instruction: string,
+      document: InterfaceDocument,
+    ): Promise<InterfaceDocument> =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const client = yield* FlectClient;
+          const sessionId = yield* ensureSession();
+          return yield* client.shape(sessionId, instruction, document);
+        }),
+      ),
+    [ensureSession, runtime],
   );
 
   const cancel = useCallback((): Promise<void> => {
@@ -221,6 +263,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
     lastPrompt,
     error,
     submit,
+    shape,
     cancel,
     refresh,
   };

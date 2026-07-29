@@ -22,6 +22,14 @@ Repository-wide constraints:
   capabilities use `Context.Service`; implementations use named `Layer`
   values; asynchronous workflows return `Effect`; streaming uses `Stream`;
   and expected failures stay typed in the error channel.
+- Use `Scope` and `Effect.acquireRelease` for resource lifetime, fibers and
+  interruption for cancellation, `Queue` for stream bridges, and
+  `Ref`/`SubscriptionRef` for shared or observable state. Use Effect
+  configuration, scheduling, retry, timeout, logging, and observability
+  facilities instead of parallel ad hoc mechanisms.
+- Name non-trivial workflows with `Effect.fn`, keep defects distinct from
+  expected typed failures, and provide dependencies through Layers in tests.
+  Use Effect test services such as `TestClock` when behavior depends on time.
 - Compose Layers once at the runtime edge. React components may own rendering
   state, but data access and business workflows must enter through an Effect
   runtime rather than Promise-shaped application services.
@@ -69,8 +77,10 @@ Repository-wide constraints:
   model provider is unavailable.
 - Pi tools are denied by default. Adding a tool or product capability requires
   an explicit, inspectable, revocable capability design.
-- Do not execute agent-generated JavaScript or third-party extension code
-  until a reviewed sandbox and recovery design exists.
+- Execute optional extension logic only through the reviewed QuickJS worker
+  sandbox and recovery design. It may return schema-validated inert intents;
+  it must not receive native, shell, filesystem, network, credential, Pi,
+  Tauri, DOM, storage, module, or arbitrary host-function authority.
 - Keep runtime automation in TypeScript. Prefer native browser, Bun, Pi, and
   provider interfaces over repository-owned wrappers or shadow state.
 - Keep platform behavior behind Effect services and Layers. The browser,
@@ -85,6 +95,31 @@ Repository-wide constraints:
 
 When a rule is specific to one subtree, move it to that subtree's `AGENTS.md`
 instead of expanding this file.
+
+## Documentation ownership
+
+Keep each kind of information in one canonical place and link to it elsewhere:
+
+- `VISION.md` owns the long-term product destination, promised capabilities,
+  and intentional non-capabilities.
+- `PRODUCT.md` owns users, positioning, personality, and product principles.
+- `DESIGN.md` owns the visible design system and interface tokens.
+- `ARCHITECTURE.md` describes only verified behavior and boundaries that exist
+  in the current implementation. Planned behavior must not be written there as
+  though it were shipped.
+- `docs/trust-model.md` explains the public capability, isolation, permission,
+  and recovery model. Permanent contributor safety constraints remain in the
+  closest `AGENTS.md`.
+- reviewed future designs belong in `docs/superpowers/specs/`; durable
+  technical decisions and their tradeoffs belong in `docs/decisions/`.
+- GitHub issues own executable work and acceptance criteria. The dedicated
+  public Flect organization project owns operating priority and status.
+- `README.md` is a concise entry point. It summarizes current behavior and the
+  destination, then links to the owning documents instead of duplicating them.
+
+When information changes, update its owner and any affected links. Do not
+maintain parallel capability lists, roadmaps, or implementation claims across
+multiple documents.
 
 ## Design context
 

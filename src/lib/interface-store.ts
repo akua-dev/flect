@@ -18,6 +18,10 @@ export interface InterfaceStorageShape {
   readonly read: (
     key: string,
   ) => Effect.Effect<string | null, InterfaceStorageError>;
+  readonly write: (
+    key: string,
+    value: string,
+  ) => Effect.Effect<void, InterfaceStorageError>;
 }
 
 export class InterfaceStorage extends Context.Service<
@@ -38,6 +42,7 @@ export const makeInterfaceStorageLayer = (storage: Pick<Storage, "getItem">) =>
         catch: storageError,
       }),
     ),
+    write: () => Effect.fail(storageError()),
   });
 
 export const InterfaceStorageLive = Layer.effect(
@@ -48,6 +53,13 @@ export const InterfaceStorageLive = Layer.effect(
         try: () => globalThis.localStorage.getItem(key),
         catch: storageError,
       }),
+    ),
+    write: Effect.fn("Flect.InterfaceStorage.write")(
+      (key: string, value: string) =>
+        Effect.try({
+          try: () => globalThis.localStorage.setItem(key, value),
+          catch: storageError,
+        }),
     ),
   })),
 );

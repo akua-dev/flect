@@ -1,7 +1,9 @@
 import { Effect, Schema, type SchemaAST } from "effect";
+import { InterfaceDocument } from "./interface-document";
 
 const NonEmptyText = Schema.Trim.check(Schema.isMinLength(1));
 const PromptText = NonEmptyText.check(Schema.isMaxLength(100_000));
+const ShapingInstruction = NonEmptyText.check(Schema.isMaxLength(4_000));
 
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
@@ -48,6 +50,18 @@ export class SessionSelection extends Schema.Class<SessionSelection>(
 export class PromptRequest extends Schema.Class<PromptRequest>("PromptRequest")(
   {
     text: PromptText,
+  },
+) {}
+
+export class ShapeRequest extends Schema.Class<ShapeRequest>("ShapeRequest")({
+  instruction: ShapingInstruction,
+  document: InterfaceDocument,
+}) {}
+
+export class ShapeResponse extends Schema.Class<ShapeResponse>("ShapeResponse")(
+  {
+    version: Schema.Literal(1),
+    document: InterfaceDocument,
   },
 ) {}
 
@@ -137,6 +151,7 @@ export class PiOperationFailed extends Schema.TaggedErrorClass<PiOperationFailed
       "list_models",
       "create_session",
       "prompt",
+      "shape",
       "cancel",
     ]),
     message: Schema.Literal(

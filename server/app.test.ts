@@ -9,6 +9,10 @@ import {
   TurnCompleted,
   TurnStarted,
 } from "../shared/contracts";
+import {
+  defaultInterfaceDocument,
+  InterfaceDocument,
+} from "../shared/interface-document";
 import { createApp, type FlectWebApp } from "./app";
 import type { FlectRuntimeShape } from "./runtime";
 
@@ -28,6 +32,14 @@ function createFakeRuntime(): FlectRuntimeShape {
         new TurnStarted({ type: "turn_started" }),
         new TextDelta({ type: "text_delta", delta: "Shaped" }),
         new TurnCompleted({ type: "turn_completed" }),
+      ),
+    ),
+    shape: vi.fn(() =>
+      Effect.succeed(
+        InterfaceDocument.make({
+          ...defaultInterfaceDocument,
+          name: "Focused Flect",
+        }),
       ),
     ),
     cancel: vi.fn(() => Effect.void),
@@ -161,6 +173,37 @@ describe("Flect HTTP application", () => {
         status: "cancelled",
       });
       expect(runtime.cancel).toHaveBeenCalledWith("session-1");
+    });
+  });
+
+  it.effect("returns a strictly validated interface proposal", () => {
+    const runtime = createFakeRuntime();
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/shape", {
+          method: "POST",
+          body: JSON.stringify({
+            instruction: "Make this more focused",
+            document: defaultInterfaceDocument,
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        document: {
+          ...defaultInterfaceDocument,
+          name: "Focused Flect",
+        },
+      });
+      expect(runtime.shape).toHaveBeenCalledWith(
+        "session-1",
+        "Make this more focused",
+        defaultInterfaceDocument,
+      );
     });
   });
 

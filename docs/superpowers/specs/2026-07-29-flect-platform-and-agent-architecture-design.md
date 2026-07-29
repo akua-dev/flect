@@ -2,7 +2,7 @@
 
 Date: 2026-07-29
 
-Status: Draft for written review
+Status: Approved for implementation
 
 ## Purpose
 
@@ -143,6 +143,9 @@ repositories at the following commits on 2026-07-29:
 | Project | Commit |
 | --- | --- |
 | Tauri | [`872428fe910e`](https://github.com/tauri-apps/tauri/commit/872428fe910efe25eeaa959b56adcd9d9a9a2157) |
+| Effect | [`cccd029ae012`](https://github.com/Effect-TS/effect/commit/cccd029ae0124a33254b4094f1bc9c06cd43324e) |
+| Pi | [`b4f293684bba`](https://github.com/earendil-works/pi/commit/b4f293684bba718d59cc1157679bcf6157b3a7f5) (`v0.82.1`) |
+| QuickJS Emscripten | [`7b7af98e4e69`](https://github.com/justjake/quickjs-emscripten/commit/7b7af98e4e69757c64c27aac46a74e1e07229545) |
 | React Native | [`9da1a011530f`](https://github.com/facebook/react-native/commit/9da1a011530faa45b23bb18a382252e196011120) |
 | React Native macOS | [`a93f65c1174d`](https://github.com/microsoft/react-native-macos/commit/a93f65c1174d335faf216d76ea69de6fd42cfabf) |
 | React Native Windows | [`c69cf55f67f9`](https://github.com/microsoft/react-native-windows/commit/c69cf55f67f9b03f467502dac1007ac2d9ebe209) |
@@ -573,11 +576,10 @@ partially mutating the authoritative state.
 
 The append-only event journal is the local foundation for the company or
 personal history described in the product vision. Clients subscribe only to
-the event channels and filters required by the active interface. Nostr may
-later be implemented as a signed replication and subscription adapter over
-the canonical event model; Nostr event kinds, relay exposure, identity,
-authorization, redaction, retention, and deletion require a separate reviewed
-design. The local domain model must not depend on one relay transport.
+the event channels and filters required by the active interface. Any future
+external replication or interoperability transport requires a separate
+reviewed identity, authorization, privacy, retention, and deletion design.
+The local domain model must not depend on a particular transport.
 
 Likewise, an advanced user or product may receive a scoped, read-only query
 capability over approved projections. Arbitrary raw SQL from browser or
@@ -613,6 +615,141 @@ React renders the validated active revision and preview state. Pi, React,
 Tauri, Rust, Swift, and extensions all use the same `UiShaping` service; none
 may mutate interface persistence directly.
 
+## Sandboxed extension execution
+
+### Threat model and trust boundaries
+
+The sandbox protects the application, user workspace, credentials, product
+connections, native host, Guardian, recovery state, and machine from
+agent-generated or third-party extension logic. Extension source, extension
+input, model output, imported component packages, and persisted extension state
+are untrusted.
+
+The trusted computing base is deliberately smaller:
+
+- the compiled launcher, renderer, schema decoder, capability broker, revision
+  journal, safe mode, and recovery selector;
+- the Effect runtime and the reviewed Flect application code;
+- the Tauri Rust host and its explicit capability manifest; and
+- the selected QuickJS WebAssembly runtime and system WebView.
+
+QuickJS Emscripten states that it has not received a formal security audit.
+Flect therefore does not treat a JavaScript interpreter alone as sufficient
+isolation. Interpreter limits, a dedicated worker, a zero-authority protocol,
+Tauri IPC isolation, content security policy, validation, attribution, and
+deterministic recovery are independent layers.
+
+Pi project trust and Pi sessions are not sandboxes. Pi documents that built-in
+tools and extensions run with the authority of the Pi process. Both Flect Pi
+domains therefore start with `noTools: "all"` and receive only their
+Flect-defined typed tools.
+
+### Declarative-first extension packages
+
+An extension package is data, not an npm package. Installing an extension never
+runs package-manager lifecycle scripts. Effect Schema defines its identifier,
+semantic version, Flect API version, content hash, provenance, component and
+action manifests, requested capabilities, declarative interface fragments, and
+optional sandboxed source.
+
+Interfaces remain declarative by default. A component that only needs layout,
+content, state bindings, and host actions contains no executable source.
+Generated UI changes likewise remain typed documents and patches. Executable
+logic is opt-in for behavior that cannot be expressed declaratively.
+
+The first sharing flow imports an inspected package after user confirmation and
+pins its content hash. A network marketplace, automatic updates, signatures,
+publisher identity, and revocation service require a later supply-chain design.
+
+### Execution boundary
+
+Optional extension logic runs in QuickJS-NG compiled to WebAssembly inside a
+dedicated browser `Worker`. The same worker implementation runs in a normal
+browser and the Tauri system WebView.
+
+Effect owns the boundary:
+
+- `ExtensionSandbox` is the application-facing `Context.Service`.
+- `SandboxCapabilityBroker` authorizes returned intents.
+- `ExtensionRegistry` resolves installed, enabled, and hash-pinned packages.
+- an Effect `RpcGroup` defines schema-only evaluate, result, failure, health,
+  and shutdown messages;
+- `BrowserWorker` and Effect RPC's worker protocol own the client; and
+- `BrowserWorkerRunner` owns the worker-side scoped runtime.
+
+Each evaluation creates a fresh QuickJS runtime and context. It receives only a
+schema-encoded immutable input and a frozen Flect API that can construct result
+values and capability intents. It receives no DOM, `window`, network,
+filesystem, process, environment, credentials, storage, Tauri IPC, or Pi
+objects. Module loading is disabled. `Date`, dynamic evaluation, proxies, and
+promises are disabled for the initial deterministic synchronous API.
+
+Sandbox source cannot execute a product action directly. It can return a typed
+intent such as a UI proposal or approved product-action request. The Effect
+capability broker decodes the intent, checks the extension's grant, current
+scope, user-confirmation policy, and exact base revision, then dispatches a
+normal idempotent command. Rejected or unknown intents have no side effect.
+
+### Resource limits and termination
+
+Initial limits are configuration values with conservative protected defaults:
+
+- 256 KiB source;
+- 1 MiB encoded input and 1 MiB encoded result;
+- 16 MiB QuickJS heap;
+- 512 KiB QuickJS stack;
+- 100 ms interpreter deadline; and
+- 2 second outer worker watchdog, including worker and WebAssembly startup,
+  with the 100 ms in-realm execution interrupt as the code deadline.
+
+The interpreter uses its memory, stack, and interrupt handlers. Effect owns the
+outer deadline, interruption, worker acquisition, and finalization. If the
+interpreter does not return, the host terminates the worker and acquires a
+fresh worker before accepting another evaluation. Handles, contexts, and
+runtimes are disposed after every request.
+
+Timeout, memory exhaustion, malformed output, worker failure, unsupported API
+version, capability denial, and user cancellation are distinct schema-backed
+errors. Public failures are sanitized; causes and extension source are not
+copied into product history.
+
+### Recovery
+
+An extension result is always a preview or intent until deterministic
+validation succeeds. It never updates the active interface directly.
+
+The revision journal records the extension identifier, version, content hash,
+requested grant, actor, and parent revision. Three consecutive startup or
+render failures attributable to the same extension and active revision disable
+that extension, preserve the rejected revision for inspection, and open safe
+mode on the last known-good revision. Recovery works without QuickJS, Pi, or a
+model provider.
+
+The Guardian may inspect sanitized sandbox failures and request a deterministic
+disable or restore operation. It cannot run extension source, grant a
+capability, edit the sandbox, or write revision state itself.
+
+### Desktop defense in depth
+
+The packaged Tauri application additionally:
+
+- uses Tauri's isolation pattern to validate frontend IPC before it reaches the
+  Rust core;
+- exposes no frontend shell or sidecar-spawn permission;
+- loads only bundled application assets in privileged WebViews;
+- applies a restrictive content security policy, adding only the
+  `wasm-unsafe-eval` allowance required to instantiate the sandbox runtime;
+- scopes the normal and safe-mode windows to separate minimum capabilities;
+- proxies one schema-framed application protocol to the private sidecar; and
+- keeps the compiled Bun/Pi sidecar on private standard I/O rather than a
+  privileged local port.
+
+QuickJS is an application-code sandbox, not an operating-system boundary for
+native tools. Any future capability that executes an untrusted shell command,
+native binary, or Pi extension requires a separately reviewed container, VM,
+micro-VM, XPC, or operating-system sandbox with explicit filesystem, network,
+process, and credential policy.
+
 ## Protected recovery
 
 The compiled launcher, safe-mode entry point, document decoder, revision
@@ -638,6 +775,7 @@ revision's failure count.
 ## Security model
 
 - Tauri capabilities are denied by default and scoped per window and WebView.
+- Tauri's isolation pattern validates the single application IPC surface.
 - A WebView that can load remote content receives no privileged native
   commands.
 - The safe-mode window has only recovery capabilities and cannot load user
@@ -651,6 +789,10 @@ revision's failure count.
   native messages, revision history, generated artifacts, or logs.
 - Agent output is always a proposal until deterministic code validates and
   commits it.
+- Extension packages are inert data at installation time; npm lifecycle code
+  is never an extension installation mechanism.
+- Optional extension source runs only through `ExtensionSandbox`; it has zero
+  ambient authority and can return only schema-decoded capability intents.
 
 ## Failure behavior
 
@@ -704,6 +846,24 @@ revision's failure count.
 - Prove the React renderer consumes only decoded interface state.
 - Prove safe mode restores a valid prior revision without Pi.
 
+### Sandbox tests
+
+- Prove declarative extensions install and render without executing source.
+- Prove the sandbox has no DOM, network, filesystem, process, Tauri, Pi, time,
+  dynamic-evaluation, or module-loading authority.
+- Prove undeclared, revoked, malformed, stale, and unknown capability intents
+  have no side effect.
+- Prove infinite loops, recursion, oversized input and output, and memory
+  exhaustion terminate within their outer bound and leave a usable fresh
+  worker.
+- Prove two extensions never share globals or mutable QuickJS state.
+- Prove every QuickJS handle, context, runtime, worker scope, and Effect fiber
+  is released after success, failure, interruption, and application shutdown.
+- Prove three attributable failures disable the extension and deterministic
+  safe-mode restore works without the sandbox worker or Pi.
+- Run the sandbox and recovery flows in the automated real-browser suite, not
+  only under a simulated DOM.
+
 ### Platform tests
 
 - Keep the normal browser build and browser tests passing.
@@ -733,14 +893,17 @@ The architecture should be implemented as separately reviewable milestones:
 3. Add the Effect UI-shaping kernel, isolated preview, sequenced client
    projection, and deterministic safe-mode restore in the browser
    application.
-4. Split the existing Pi integration into Guardian and Shaper services under
+4. Add declarative extension packages, the QuickJS-NG Effect worker sandbox,
+   capability intents, execution limits, and attributable disable/recovery.
+5. Split the existing Pi integration into Guardian and Shaper services under
    an Effect supervisor, initially keeping both sessions in memory.
-5. Give the Shaper only typed UI-shaping tools and give the Guardian only
+6. Give the Shaper only typed UI-shaping tools and give the Guardian only
    typed recovery tools.
-6. Add the Tauri desktop host and a private sidecar transport while preserving
+7. Add the Tauri desktop host, IPC isolation, and a private sidecar transport
+   while preserving
    the existing browser transport.
-7. Add a Swift bridge only with the first approved macOS-native capability.
-8. Add iOS and Android hosts as authenticated remote-runtime clients after the
+8. Add a Swift bridge only with the first approved macOS-native capability.
+9. Add iOS and Android hosts as authenticated remote-runtime clients after the
    remote authority design is approved.
 
 Each milestone must leave the repository runnable, tested, and fail-closed.
@@ -763,4 +926,8 @@ This design succeeds when:
 - clients hydrate and reconnect without gaps through sequenced snapshots and
   subscriptions;
 - invalid or broken customization cannot replace the protected launcher; and
-- deterministic safe mode and rollback work without any model.
+- deterministic safe mode and rollback work without any model;
+- optional extension code runs with zero ambient authority inside the bounded
+  worker sandbox; and
+- sandbox failure, interruption, and escape attempts cannot mutate the active
+  interface or invoke native and product capabilities.

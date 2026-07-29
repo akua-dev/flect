@@ -8,7 +8,12 @@
       "!**/dist",
       "!**/coverage",
       "!**/playwright-report",
-      "!**/test-results"
+      "!**/test-results",
+      "!**/bun.lock",
+      "!**/src-tauri/binaries",
+      "!**/src-tauri/gen",
+      "!**/src-tauri/icons",
+      "!**/src-tauri/target"
     ]
   },
   "formatter": {

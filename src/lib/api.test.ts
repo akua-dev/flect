@@ -7,6 +7,10 @@ import {
   SessionSelection,
 } from "../../shared/contracts";
 import {
+  defaultInterfaceDocument,
+  InterfaceDocument,
+} from "../../shared/interface-document";
+import {
   FlectClient,
   FlectUnavailableError,
   makeFlectClientLayer,
@@ -144,6 +148,35 @@ describe("FlectClient", () => {
           { type: "text_delta", delta: "Shaped" },
           { type: "turn_completed" },
         ]);
+      }),
+    );
+  });
+
+  it.effect("requests and validates an interface proposal", () => {
+    const shaped = InterfaceDocument.make({
+      ...defaultInterfaceDocument,
+      name: "Focused Flect",
+    });
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ version: 1, document: shaped }));
+
+    return withClient(
+      fetcher,
+      Effect.gen(function* () {
+        const client = yield* FlectClient;
+        const result = yield* client.shape(
+          "session-1",
+          "Make this more focused",
+          defaultInterfaceDocument,
+        );
+
+        expect(result).toEqual(shaped);
+        const [input, init] = fetcher.mock.calls[0] ?? [];
+        expect(String(input)).toBe(
+          "http://flect.local/api/sessions/session-1/shape",
+        );
+        expect(init?.method).toBe("POST");
       }),
     );
   });
