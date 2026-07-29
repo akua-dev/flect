@@ -151,11 +151,65 @@ repositories at the following commits on 2026-07-29:
 | Compose Multiplatform | [`c7da17559a6b`](https://github.com/JetBrains/compose-multiplatform/commit/c7da17559a6b752b593e16c7371cd0edbd097b01) |
 | Capacitor | [`4c1c8709413b`](https://github.com/ionic-team/capacitor/commit/4c1c8709413b9c19b008c99122ca330cc3c90e6f) |
 | Electron | [`d470d8fa50e0`](https://github.com/electron/electron/commit/d470d8fa50e09a29a9d262683ca36259a8b83f7f) |
+| T3 Code | [`d19039aeef69`](https://github.com/pingdotgg/t3code/commit/d19039aeef6942e6eb204856c43b5354c0333e2d) |
 
 The Tauri source inspection established an important limit: the generated
 desktop plugin implementation is Rust, while the generated Swift plugin is
 selected for iOS. Swift in a Tauri macOS application is therefore a custom
 native boundary, not an assumed desktop plugin feature.
+
+### T3 Code comparison
+
+T3 Code is the closest inspected implementation reference for Flect's local
+agent runtime and multi-surface concerns. At the pinned revision it uses an
+Effect-heavy Bun server, Effect Schema contracts, a React/Vite web client, an
+Electron desktop host, and a separate Expo/React Native mobile client. It
+shares contracts and an Effect client runtime between web and mobile, but it
+does not share the rendered interface between those surfaces.
+
+Flect adopts the following demonstrated patterns:
+
+- schema-only wire contracts that contain no runtime logic;
+- one scoped Effect connection supervisor per runtime environment;
+- separate finite queries, durable subscriptions, and idempotent commands;
+- provider-native events normalized into a stable canonical event vocabulary;
+- pure command decisions followed by durable events and projected read models;
+- snapshot-plus-sequence subscriptions that cannot silently miss events
+  during hydration or reconnection;
+- scoped subprocess and session lifetimes with persisted resumption metadata;
+- queue-backed side effects and typed milestone receipts so tests and runtime
+  coordination do not poll or sleep; and
+- platform applications that provide capability and persistence Layers rather
+  than owning connection policy.
+
+Flect deliberately does not copy:
+
+- Electron plus a separately rendered React Native application, because
+  Flect's customizable interface canvas must remain one DOM-based
+  implementation across browser, desktop, and mobile;
+- direct adapters for every model-provider CLI, because Pi already owns model
+  selection, provider authentication, and provider integration;
+- Git worktrees and hidden Git checkpoints, which are appropriate to a coding
+  agent but not to a general interface shell;
+- coding-specific thread, terminal, source-control, and diff semantics; or
+- default persistence of raw provider payloads, which would make a user's
+  company history provider-shaped and increase its privacy surface.
+
+This comparison reinforces the Tauri decision rather than changing it. T3
+Code's Electron host is effective because desktop owns Node-compatible coding
+agent processes and its mobile UI is a separate remote-control application.
+Flect instead values one user-shaped renderer on every platform. It adopts
+T3 Code's runtime boundaries while keeping Tauri as the smaller,
+capability-scoped cross-platform host.
+
+Primary evidence:
+
+- [T3 Code repository](https://github.com/pingdotgg/t3code)
+- [T3 Code architecture overview](https://github.com/pingdotgg/t3code/blob/d19039aeef6942e6eb204856c43b5354c0333e2d/docs/architecture/overview.md)
+- [T3 Code connection runtime](https://github.com/pingdotgg/t3code/blob/d19039aeef6942e6eb204856c43b5354c0333e2d/docs/architecture/connection-runtime.md)
+- [T3 Code provider adapter contract](https://github.com/pingdotgg/t3code/blob/d19039aeef6942e6eb204856c43b5354c0333e2d/apps/server/src/provider/Services/ProviderAdapter.ts)
+- [T3 Code canonical runtime event schemas](https://github.com/pingdotgg/t3code/blob/d19039aeef6942e6eb204856c43b5354c0333e2d/packages/contracts/src/providerRuntime.ts)
+- [T3 Code orchestration contracts](https://github.com/pingdotgg/t3code/blob/d19039aeef6942e6eb204856c43b5354c0333e2d/packages/contracts/src/orchestration.ts)
 
 ## Platform architecture
 
@@ -170,10 +224,48 @@ The shared TypeScript application remains the product core:
   native-host, Pi, extension, persistence, and product-API boundaries.
 - Platform selection happens through Layers at composition roots, not through
   platform checks scattered through components.
+- A schema-only contracts module defines commands, events, snapshots, RPC
+  payloads, interface documents, and capability manifests without importing
+  runtime implementations.
+- A shared client-runtime module owns Effect workflows, environment
+  supervision, subscriptions, projections, and platform capability contracts.
+  Surface applications provide Layers and render state; they do not recreate
+  connection or shaping policy.
 
 One codebase means one repository, one shared product model, and one shared
 interface implementation. It does not prohibit small platform adapters in
 Rust, Swift, or Kotlin where the operating system requires them.
+
+### Runtime environments and connection ownership
+
+A Flect runtime environment is one authority that owns Pi, interface history,
+product connections, capabilities, and local persistence. The environment may
+be embedded beside a desktop client or reached through an approved remote
+transport by a browser or mobile client.
+
+Each connected environment receives one scoped `EnvironmentSupervisor`
+service. It is the only owner of desired connection state, authentication
+preparation, retries, active transport scope, and reconnection. Components,
+hooks, query caches, and subscriptions never start their own retry loops.
+
+The client boundary separates:
+
+- finite queries for bounded reads;
+- durable subscriptions for snapshots followed by live events; and
+- idempotent commands for requested state transitions.
+
+Connection health and domain-data freshness remain separate. Cached interface
+state may be rendered while offline, but it never proves that the runtime is
+connected. A transport is connected only after an authenticated application
+probe succeeds. Interface, agent, and product-data subscriptions may each be
+`empty`, `cached`, `synchronizing`, `live`, or failed without falsely changing
+transport state.
+
+Every durable subscription accepts the last applied sequence, replays later
+events, emits a synchronization marker, and then continues live. Clients
+deduplicate by sequence. This closes the race between fetching a snapshot and
+subscribing, and makes browser, desktop, and mobile reconnection behavior
+consistent.
 
 ### Browser host
 
@@ -361,6 +453,35 @@ resolution through `ModelRuntime`. It does not share the two session managers,
 settings managers, resource loaders, prompts, extension lists, or mutable
 session histories.
 
+### Canonical agent boundary
+
+Pi remains Flect's only model and agent backend. Flect does not recreate Pi's
+provider registry. A narrow `AgentRuntime` Effect service adapts Pi's SDK
+events and session operations into Flect-owned canonical contracts.
+
+The boundary distinguishes three representations:
+
+1. Pi-native events exist only inside the runtime adapter.
+2. `FlectAgentEvent` normalizes session, turn, content, tool, approval, usage,
+   interruption, completion, and failure lifecycles.
+3. `FlectDomainEvent` records product meaning such as a shaping request,
+   proposal, preview, acceptance, revision activation, recovery, or user
+   action.
+
+Guardian and Shaper events use the same canonical vocabulary but carry an
+explicit actor and trust-domain identity. Provider names, provider-native
+request identifiers, and resumption cursors remain optional metadata at the
+runtime boundary; they do not determine the product model. Raw Pi or provider
+payloads are diagnostic data and are not persisted by default.
+
+Each durable agent session has a runtime binding containing its role, session
+identity, resumption cursor when supported, status, and last-seen metadata.
+The initial in-memory milestone implements the same service contract without
+claiming restart recovery. Once persistence is added, resumption is
+capability-driven and fails closed to a new isolated session when the saved
+cursor is absent or invalid. Effect `Scope` owns every session, event stream,
+and subprocess so closing a session or runtime cannot leave an orphaned agent.
+
 ## Effect-first UI shaping
 
 Effect is the default architecture for shaping the interface, not merely the
@@ -376,6 +497,9 @@ Effect Schema defines:
 - `UiPatch` and `UiChangeProposal`;
 - `CapabilityGrant`;
 - `UiShapeEvent`;
+- `FlectCommand`, `FlectDomainEvent`, `FlectEventMetadata`, and
+  `FlectCommandReceipt`;
+- snapshots, monotonic sequence cursors, and synchronization markers;
 - preview and validation results; and
 - typed shaping, conflict, capability, persistence, and recovery failures.
 
@@ -392,6 +516,11 @@ The shaping kernel consists of focused `Context.Service` capabilities:
 - `ComponentRegistry` resolves approved component and action manifests.
 - `PreviewRuntime` renders an isolated proposed revision.
 - `RevisionJournal` records attributable transitions and known-good markers.
+- `EventJournal` appends durable domain events and reads them by sequence.
+- `ProjectionPipeline` derives interface, agent, history, and recovery read
+  models from committed events.
+- `RuntimeReceiptBus` publishes typed completion milestones for runtime
+  coordination and deterministic tests.
 - `GuardianAgent` and `ShaperAgent` expose their distinct agent workflows.
 - `NativeHost` exposes authorized platform capabilities.
 
@@ -419,6 +548,48 @@ lacks the required capability or when a platform boundary is implemented in a
 non-TypeScript language. That adapter must still terminate in an Effect
 service and use the shared schemas.
 
+### Commands, events, and projections
+
+State-changing intent enters the application as a schema-decoded command with
+a unique command identifier, actor, correlation identifier, and exact base
+revision where relevant. A pure decider evaluates the command against the
+current projection and produces one or more event values or a typed rejection.
+Side effects never live in the decider.
+
+The runtime atomically:
+
+1. rejects or recognizes an already processed command identifier;
+2. appends the resulting events with monotonic sequence, causation, and
+   attribution metadata;
+3. persists any associated immutable interface revision;
+4. advances the affected projections; and
+5. stores the command receipt.
+
+Queue-backed reactors perform work requested by committed events, such as
+calling the Shaper, rendering a preview, invoking a product API, or asking the
+Guardian for an explanation. Their results re-enter through commands and
+events. A failed side effect therefore becomes visible history without
+partially mutating the authoritative state.
+
+The append-only event journal is the local foundation for the company or
+personal history described in the product vision. Clients subscribe only to
+the event channels and filters required by the active interface. Nostr may
+later be implemented as a signed replication and subscription adapter over
+the canonical event model; Nostr event kinds, relay exposure, identity,
+authorization, redaction, retention, and deletion require a separate reviewed
+design. The local domain model must not depend on one relay transport.
+
+Likewise, an advanced user or product may receive a scoped, read-only query
+capability over approved projections. Arbitrary raw SQL from browser or
+user-shaped code is not a default capability because it would bypass schema,
+authorization, privacy, and migration boundaries.
+
+Typed milestone receipts include at least `turn_quiesced`, `preview_ready`,
+`revision_committed`, `interface_ready`, and `recovery_completed`. Runtime
+coordination and tests wait on receipts or worker drains instead of polling
+state or sleeping. Receipts do not replace durable domain events; they signal
+that asynchronous consequences of those events have settled.
+
 ### Change flow
 
 1. The user asks the Shaper to change the interface.
@@ -431,9 +602,11 @@ service and use the shared schemas.
 5. `PreviewRuntime` produces an isolated preview without changing the active
    revision.
 6. The user accepts or rejects the proposal.
-7. Acceptance atomically appends a revision and advances the active pointer.
-8. A `Stream<UiShapeEvent>` updates React and records an attributable event.
-9. A render or migration failure leaves the previous revision active and
+7. Acceptance dispatches an idempotent command.
+8. The command atomically appends the attributable domain event and immutable
+   revision, advances projections, and stores its receipt.
+9. A sequenced `Stream<UiShapeEvent>` updates React from the projection.
+10. A render or migration failure leaves the previous revision active and
    exposes recovery through safe mode.
 
 React renders the validated active revision and preview state. Pi, React,
@@ -495,6 +668,12 @@ revision's failure count.
   rollback remain available.
 - If no model is authenticated, browser, native shell, safe mode, and manual
   interface selection still work.
+- If connectivity is lost, the single environment supervisor releases the
+  active transport, preserves decoded cached projections, and resumes from the
+  last applied sequence when connectivity returns.
+- If a reactor fails after its initiating event commits, the failure is
+  recorded as a domain event and no hidden partial state is treated as
+  successful.
 
 ## Verification strategy
 
@@ -514,6 +693,14 @@ revision's failure count.
 - Prove invalid, unauthorized, unsupported, and stale patches leave the active
   revision unchanged.
 - Prove accepted patches append an attributable revision atomically.
+- Prove duplicate command identifiers cannot apply a revision or product
+  action twice.
+- Prove rebuilding projections from the event journal produces the same
+  observable state.
+- Prove snapshot-plus-sequence subscription handoff neither drops nor
+  duplicates observable events.
+- Prove milestone tests wait on typed receipts or worker drains rather than
+  timing delays.
 - Prove the React renderer consumes only decoded interface state.
 - Prove safe mode restores a valid prior revision without Pi.
 
@@ -524,6 +711,8 @@ revision's failure count.
   behavior.
 - Contract-test the Effect RPC HTTP and Tauri/Stdio protocols against the same
   `RpcGroup`, including streaming errors, cancellation, and interruption.
+- Prove each environment has one retry owner and that cached data, transport
+  health, and subscription freshness remain distinct states.
 - Smoke-test desktop sidecar acquisition, streaming, cancellation, crash, and
   finalization on macOS, Windows, and Linux.
 - Test Tauri capability manifests so normal, remote-content, and safe-mode
@@ -537,16 +726,21 @@ revision's failure count.
 
 The architecture should be implemented as separately reviewable milestones:
 
-1. Add the Effect UI-shaping kernel, immutable revision journal, preview, and
-   deterministic safe-mode restore in the browser application.
-2. Split the existing Pi integration into Guardian and Shaper services under
+1. Add schema-only command, canonical event, receipt, snapshot, and
+   subscription contracts.
+2. Add the Effect event journal, pure decider, projection pipeline, immutable
+   revision journal, queue-backed reactors, and deterministic worker drains.
+3. Add the Effect UI-shaping kernel, isolated preview, sequenced client
+   projection, and deterministic safe-mode restore in the browser
+   application.
+4. Split the existing Pi integration into Guardian and Shaper services under
    an Effect supervisor, initially keeping both sessions in memory.
-3. Give the Shaper only typed UI-shaping tools and give the Guardian only
+5. Give the Shaper only typed UI-shaping tools and give the Guardian only
    typed recovery tools.
-4. Add the Tauri desktop host and a private sidecar transport while preserving
+6. Add the Tauri desktop host and a private sidecar transport while preserving
    the existing browser transport.
-5. Add a Swift bridge only with the first approved macOS-native capability.
-6. Add iOS and Android hosts as authenticated remote-runtime clients after the
+7. Add a Swift bridge only with the first approved macOS-native capability.
+8. Add iOS and Android hosts as authenticated remote-runtime clients after the
    remote authority design is approved.
 
 Each milestone must leave the repository runnable, tested, and fail-closed.
@@ -564,5 +758,9 @@ This design succeeds when:
   logic out of Effect;
 - Guardian and Shaper sessions are demonstrably isolated;
 - all UI shaping passes through typed Effect services;
+- canonical commands and events produce replayable, attributable history
+  without exposing provider-native payloads;
+- clients hydrate and reconnect without gaps through sequenced snapshots and
+  subscriptions;
 - invalid or broken customization cannot replace the protected launcher; and
 - deterministic safe mode and rollback work without any model.
