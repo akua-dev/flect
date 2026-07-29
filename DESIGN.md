@@ -129,8 +129,10 @@ Its rarity makes agency unmistakable.
 
 ## 3. Typography
 
-**Display Font:** SF Pro Display (with system sans-serif fallbacks)  
-**Body Font:** SF Pro Text (with system sans-serif fallbacks)  
+**Display Font:** SF Pro Display (with system sans-serif fallbacks)
+
+**Body Font:** SF Pro Text (with system sans-serif fallbacks)
+
 **Label/Mono Font:** SF Mono only for literal identifiers or diagnostic detail.
 
 **Character:** One familiar system family keeps the product quiet and coherent.
