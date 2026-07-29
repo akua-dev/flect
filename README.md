@@ -2,6 +2,8 @@
 
 > The interface that takes your shape.
 
+![An adaptive surface unfolding from a protected core into interface layers](assets/flect-hero.png)
+
 Flect is an open-source, agent-native shell for interfaces that shape
 themselves.
 
