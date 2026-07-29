@@ -38,7 +38,9 @@ describe("QuickJS extension realm", () => {
             typeof Promise,
             typeof Proxy,
             typeof eval,
-            typeof Function
+            typeof Function,
+            typeof AsyncFunction,
+            typeof AsyncGeneratorFunction
           ].join(",")
         })`,
         input: {},
@@ -46,7 +48,7 @@ describe("QuickJS extension realm", () => {
 
       assert.strictEqual(
         result.intents[0]?.type === "set-text" ? result.intents[0].text : "",
-        Array.from({ length: 12 }, () => "undefined").join(","),
+        Array.from({ length: 14 }, () => "undefined").join(","),
       );
     }),
   );

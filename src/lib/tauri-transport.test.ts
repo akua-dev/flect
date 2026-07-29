@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Layer, Ref } from "effect";
-import { FlectClient } from "./api";
+import { Deferred, Effect, Exit, Fiber, Layer, Ref } from "effect";
+import { FlectClient, FlectUnavailableError } from "./api";
 import {
   makeTauriFlectClientLayer,
   TauriBridge,
@@ -62,6 +62,65 @@ describe("Tauri RPC transport", () => {
         assert.strictEqual(result.status, "ready");
         assert.strictEqual(sent.length, 1);
         assert.strictEqual(releases, 1);
+      }),
+  );
+
+  it.effect(
+    "fails pending calls when the private runtime stops",
+    () =>
+      Effect.gen(function* () {
+        const listener = yield* Ref.make<
+          ((payload: unknown) => void) | undefined
+        >(undefined);
+        const requestSent = yield* Deferred.make<void>();
+
+        const bridge: TauriBridgeShape = {
+          listen: (handler) =>
+            Ref.set(listener, handler).pipe(Effect.as(Effect.void)),
+          send: (request) =>
+            Effect.gen(function* () {
+              if (
+                typeof request === "object" &&
+                request !== null &&
+                "id" in request
+              ) {
+                yield* Deferred.succeed(requestSent, undefined);
+                const active = yield* Ref.get(listener);
+                active?.({
+                  _tag: "ClientProtocolError",
+                  error: {
+                    _tag: "RpcClientError",
+                    reason: {
+                      _tag: "RpcClientDefect",
+                      message: "The private runtime is unavailable.",
+                      cause: null,
+                    },
+                  },
+                });
+              }
+              yield* Effect.never;
+            }),
+        };
+
+        const result = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const client = yield* FlectClient;
+            const pending = yield* Effect.forkScoped(client.status);
+            yield* Deferred.await(requestSent);
+            return yield* Fiber.await(pending);
+          }).pipe(
+            Effect.provide(
+              makeTauriFlectClientLayer().pipe(
+                Layer.provide(Layer.succeed(TauriBridge)(bridge)),
+              ),
+            ),
+          ),
+        );
+
+        assert.isTrue(Exit.isFailure(result));
+        if (Exit.isFailure(result) && result.cause._tag === "Fail") {
+          assert.instanceOf(result.cause.error, FlectUnavailableError);
+        }
       }),
   );
 });

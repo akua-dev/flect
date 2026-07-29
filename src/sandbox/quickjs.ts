@@ -77,7 +77,9 @@ const hardeningProgram = `
       "Promise",
       "Proxy",
       "eval",
-      "Function"
+      "Function",
+      "AsyncFunction",
+      "AsyncGeneratorFunction"
     ]) {
       deny(name);
     }

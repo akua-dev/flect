@@ -97,6 +97,16 @@ const rejectedProposalSnapshot = ShapingSnapshot.make({
   }),
 });
 
+const initializedCustomSnapshot = ShapingSnapshot.make({
+  ...snapshot,
+  lastEvent: ShapingEvent.make({
+    version: 1,
+    sequence: 0,
+    type: "initialized",
+    revisionId: snapshot.active.id,
+  }),
+});
+
 const makeStorage = (initial: string | null = null) => {
   const value = Ref.makeUnsafe<string | null>(initial);
   const reads = Ref.makeUnsafe(0);
@@ -223,6 +233,25 @@ describe("InterfaceRepository", () => {
 
   it.layer(rejectedProposalLayer)((it) => {
     it.effect("rejects snapshots with a non-pending proposal", () =>
+      Effect.gen(function* () {
+        const repository = yield* InterfaceRepository;
+        const loaded = yield* repository.load;
+
+        assert.strictEqual(loaded.snapshot, undefined);
+        assert.strictEqual(loaded.recovered, true);
+      }),
+    );
+  });
+
+  const initializedCustomStorage = makeStorage(
+    JSON.stringify(initializedCustomSnapshot),
+  );
+  const initializedCustomLayer = makeInterfaceRepositoryLayer({
+    safeMode: false,
+  }).pipe(Layer.provide(initializedCustomStorage.layer));
+
+  it.layer(initializedCustomLayer)((it) => {
+    it.effect("rejects initialized events for customized revisions", () =>
       Effect.gen(function* () {
         const repository = yield* InterfaceRepository;
         const loaded = yield* repository.load;

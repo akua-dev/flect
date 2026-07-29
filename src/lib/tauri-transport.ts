@@ -69,6 +69,21 @@ const isFromServerEncoded = (
         "_tag" in payload.exit &&
         (payload.exit._tag === "Success" || payload.exit._tag === "Failure")
       );
+    case "ClientProtocolError":
+      return (
+        "error" in payload &&
+        typeof payload.error === "object" &&
+        payload.error !== null &&
+        "_tag" in payload.error &&
+        payload.error._tag === "RpcClientError" &&
+        "reason" in payload.error &&
+        typeof payload.error.reason === "object" &&
+        payload.error.reason !== null &&
+        "_tag" in payload.error.reason &&
+        payload.error.reason._tag === "RpcClientDefect" &&
+        "message" in payload.error.reason &&
+        typeof payload.error.reason.message === "string"
+      );
     default:
       return false;
   }

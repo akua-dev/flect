@@ -157,5 +157,21 @@ export const validateShapingSnapshot = Effect.fn(
     return yield* Effect.fail(invalidRevision());
   }
 
+  if (snapshot.lastEvent.type === "initialized") {
+    if (
+      snapshot.lastEvent.sequence !== 0 ||
+      snapshot.lastEvent.revisionId !== snapshot.active.id ||
+      snapshot.active.id !== "built-in" ||
+      snapshot.lastKnownGood.id !== "built-in" ||
+      snapshot.proposal !== undefined ||
+      snapshot.safeMode ||
+      snapshot.disabledExtensions.length > 0
+    ) {
+      return yield* Effect.fail(invalidRevision());
+    }
+  } else if (snapshot.lastEvent.sequence === 0) {
+    return yield* Effect.fail(invalidRevision());
+  }
+
   return snapshot;
 });

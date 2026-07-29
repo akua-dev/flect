@@ -52,6 +52,24 @@ pub fn require_runtime_child<T>(child: Option<&mut T>) -> Result<&mut T, String>
     child.ok_or_else(|| RUNTIME_UNAVAILABLE.to_owned())
 }
 
+fn runtime_unavailable_response() -> Value {
+    serde_json::json!({
+        "_tag": "ClientProtocolError",
+        "error": {
+            "_tag": "RpcClientError",
+            "reason": {
+                "_tag": "RpcClientDefect",
+                "message": RUNTIME_UNAVAILABLE,
+                "cause": null
+            }
+        }
+    })
+}
+
+fn emit_runtime_unavailable(handle: &tauri::AppHandle) {
+    let _ = handle.emit("flect://rpc", runtime_unavailable_response());
+}
+
 #[tauri::command]
 fn rpc_send(request: Value, runtime: State<'_, RuntimeChild>) -> Result<(), String> {
     let encoded = encode_rpc_request(&request)?;
@@ -121,6 +139,7 @@ fn start_runtime(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 _ => {}
             }
         }
+        emit_runtime_unavailable(&handle);
     });
 
     eprintln!("Flect private runtime started.");
@@ -152,7 +171,7 @@ pub fn run() {
 mod tests {
     use super::{
         decode_rpc_response, encode_rpc_request, require_runtime_child, validate_rpc_request,
-        MAX_RPC_MESSAGE_BYTES,
+        runtime_unavailable_response, MAX_RPC_MESSAGE_BYTES,
     };
     use serde_json::json;
 
@@ -238,6 +257,17 @@ mod tests {
         assert_eq!(
             require_runtime_child(unavailable),
             Err("The private runtime is unavailable.".to_owned())
+        );
+    }
+
+    #[test]
+    fn encodes_runtime_unavailability_as_a_protocol_error() {
+        let response = runtime_unavailable_response();
+
+        assert_eq!(response["_tag"], "ClientProtocolError");
+        assert_eq!(
+            response["error"]["reason"]["message"],
+            "The private runtime is unavailable."
         );
     }
 }
