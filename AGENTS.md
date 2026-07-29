@@ -58,3 +58,11 @@ Repository-wide constraints:
 
 When a rule is specific to one subtree, move it to that subtree's `AGENTS.md`
 instead of expanding this file.
+
+## Design context
+
+Read `PRODUCT.md` for Flect's users, positioning, personality, and product
+principles. Read `DESIGN.md` before changing the visible shell; its tokens are
+normative. The working interface uses the product register: familiar
+affordances, restrained color, accessible state, and consistency over
+decorative novelty.

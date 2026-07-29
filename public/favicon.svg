@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <title>Flect</title>
+  <rect width="32" height="32" rx="8" fill="#080808"/>
+  <path d="M8 8h7.5A8.5 8.5 0 0 1 24 16.5V24h-7.5A8.5 8.5 0 0 1 8 15.5V8Z" fill="none" stroke="#d04a9d" stroke-width="2"/>
+</svg>
