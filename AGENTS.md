@@ -25,6 +25,19 @@ Repository-wide constraints:
 - Compose Layers once at the runtime edge. React components may own rendering
   state, but data access and business workflows must enter through an Effect
   runtime rather than Promise-shaped application services.
+- Use Effect as the default architecture for UI shaping. Interface documents,
+  component manifests, layout and action definitions, patches, revisions,
+  shaping events, validation failures, and recovery requests use Effect
+  Schema at their trust boundaries. Component discovery, proposal,
+  validation, preview, persistence, migration, rollback, and repair enter
+  through `Context.Service` capabilities with named Layers. Live shaping and
+  agent events use `Stream`, and long-lived interface state uses Effect
+  concurrency primitives where shared state is required.
+- React renders validated interface state and may own ephemeral interaction
+  state. It must not become a parallel application architecture. Pi, React,
+  Tauri, Rust, Swift, extensions, and product integrations may request UI
+  changes only through the same Effect UI-shaping capabilities; none may write
+  interface state directly.
 - Use `@effect/vitest` for Effect behavior and test Layers for dependencies.
   Prefer Effect platform modules for HTTP, Bun, browser, configuration,
   resources, cancellation, and observability when the capability exists.
@@ -43,12 +56,26 @@ Repository-wide constraints:
   user-modifiable interface documents and extensions.
 - Fail closed to the built-in launcher when customized interface state is
   invalid or unsupported.
+- Keep the Guardian and Shaper Pi trust domains separate. The Guardian uses
+  immutable bundled instructions and required recovery capabilities only; it
+  must never load user extensions or user-modifiable prompts. The Shaper may
+  receive explicitly approved UI-shaping capabilities, but it cannot modify
+  the Guardian, safe mode, recovery code, or revision journal.
+- A shared Pi `ModelRuntime` may resolve models and provider authentication,
+  but Guardian and Shaper sessions use separate `SessionManager`,
+  `SettingsManager`, and `ResourceLoader` instances. An Effect supervisor owns
+  their acquisition, communication, interruption, and disposal. Deterministic
+  validation and rollback must remain available when either agent or every
+  model provider is unavailable.
 - Pi tools are denied by default. Adding a tool or product capability requires
   an explicit, inspectable, revocable capability design.
 - Do not execute agent-generated JavaScript or third-party extension code
   until a reviewed sandbox and recovery design exists.
 - Keep runtime automation in TypeScript. Prefer native browser, Bun, Pi, and
   provider interfaces over repository-owned wrappers or shadow state.
+- Keep platform behavior behind Effect services and Layers. The browser,
+  Tauri host, and macOS Swift code are adapters to shared application
+  capabilities, not alternate homes for product workflows or interface state.
 - Test observable behavior through exported contracts, HTTP requests, and the
   rendered interface. Do not assert that source files contain selected text.
 - Treat documentation as guidance, not proof that a boundary or lifecycle is
