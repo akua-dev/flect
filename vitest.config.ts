@@ -10,6 +10,12 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    include: [
+      "shared/**/*.test.ts",
+      "server/**/*.test.ts",
+      "src/**/*.test.ts",
+      "src/**/*.test.tsx",
+    ],
     restoreMocks: true,
   },
 });
