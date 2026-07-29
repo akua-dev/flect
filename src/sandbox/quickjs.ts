@@ -86,55 +86,96 @@ const hardeningProgram = `
   })()
 `;
 
+const disposeEvaluation = (
+  result: ReturnType<
+    ReturnType<QuickJSWASMModule["newRuntime"]>["newContext"]
+  >["evalCode"] extends (...arguments_: ReadonlyArray<never>) => infer Output
+    ? Output
+    : never,
+) => {
+  if (result.error) {
+    result.error.dispose();
+    return false;
+  }
+  result.value.dispose();
+  return true;
+};
+
 const executeInModule = Effect.fn("Flect.Sandbox.executeInModule")(
-  (module: QuickJSWASMModule, source: string, serializedInput: string) => {
-    let interrupted = false;
-    return Effect.try({
+  (module: QuickJSWASMModule, source: string, serializedInput: string) =>
+    Effect.try({
       try: () => {
+        const runtime = module.newRuntime();
+        runtime.setMemoryLimit(MEMORY_LIMIT_BYTES);
+        runtime.setMaxStackSize(STACK_LIMIT_BYTES);
         const startedAt = performance.now();
-        const result = module.evalCode(
-          `${hardeningProgram}
+        let interrupted = false;
+        runtime.setInterruptHandler(() => {
+          interrupted = performance.now() - startedAt >= DEADLINE_MILLISECONDS;
+          return interrupted;
+        });
+        let disposeRuntime = true;
+
+        const context = runtime.newContext({
+          intrinsics: {
+            BaseObjects: true,
+            JSON: true,
+          },
+        });
+
+        try {
+          const hardened = context.evalCode(hardeningProgram, "harden.js", {
+            type: "global",
+            strict: true,
+          });
+          if (!disposeEvaluation(hardened)) {
+            throw sandboxFailure("execution");
+          }
+
+          const program = `
             "use strict";
             const __input = ${serializedInput};
             const __extension = (${source});
             const __value = __extension(__input);
             JSON.stringify(Array.isArray(__value) ? __value : [__value]);
-          `,
-          {
-            memoryLimitBytes: MEMORY_LIMIT_BYTES,
-            maxStackSizeBytes: STACK_LIMIT_BYTES,
-            shouldInterrupt: () => {
-              interrupted =
-                performance.now() - startedAt >= DEADLINE_MILLISECONDS;
-              return interrupted;
-            },
-          },
-        );
-        if (typeof result !== "string") {
-          throw sandboxFailure("execution");
+          `;
+          const evaluated = context.evalCode(program, "extension.js", {
+            type: "global",
+            strict: true,
+          });
+          if (evaluated.error) {
+            disposeRuntime = false;
+            if (interrupted) {
+              evaluated.error.dispose();
+              throw sandboxFailure("deadline");
+            }
+            runtime.setMemoryLimit(-1);
+            runtime.setMaxStackSize(0);
+            const detail = context.dump(evaluated.error);
+            evaluated.error.dispose();
+            const memoryExhausted =
+              typeof detail === "object" &&
+              detail !== null &&
+              "message" in detail &&
+              typeof detail.message === "string" &&
+              detail.message.toLowerCase().includes("memory");
+            throw sandboxFailure(
+              detail === null || memoryExhausted ? "memory" : "execution",
+            );
+          }
+          return evaluated.value.consume((handle) => context.getString(handle));
+        } finally {
+          context.dispose();
+          if (disposeRuntime) {
+            runtime.dispose();
+          }
         }
-        return result;
       },
-      catch: (error) => {
-        if (error instanceof SandboxExecutionFailed) {
-          return error;
-        }
-        if (interrupted) {
-          return sandboxFailure("deadline");
-        }
-        const detail =
-          typeof error === "object" &&
-          error !== null &&
-          "message" in error &&
-          typeof error.message === "string"
-            ? error.message.toLowerCase()
-            : "";
-        return sandboxFailure(
-          detail.includes("memory") ? "memory" : "execution",
-        );
-      },
-    });
-  },
+      catch: (error) =>
+        error instanceof SandboxExecutionFailed
+          ? error
+          : sandboxFailure("execution"),
+    }),
 );
 
 export const executeQuickJsExtension = Effect.fn(
