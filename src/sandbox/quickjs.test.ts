@@ -53,6 +53,40 @@ describe("QuickJS extension realm", () => {
     }),
   );
 
+  it.effect("blocks every dynamic function constructor family", () =>
+    Effect.gen(function* () {
+      const result = yield* executeQuickJsExtension({
+        extensionId: "constructor-check",
+        source: `() => {
+          const attempts = [
+            () => (function () {}).constructor("return 1")(),
+            () => (function* () {}).constructor("return 2")().next().value,
+            () => (async function () {}).constructor("return 3")(),
+            () => (async function* () {}).constructor("return 4")()
+          ];
+          return {
+            type: "set-text",
+            target: "constructor-check",
+            text: attempts.map((attempt) => {
+              try {
+                attempt();
+                return "escaped";
+              } catch {
+                return "blocked";
+              }
+            }).join(",")
+          };
+        }`,
+        input: {},
+      });
+
+      assert.strictEqual(
+        result.intents[0]?.type === "set-text" ? result.intents[0].text : "",
+        "blocked,blocked,blocked,blocked",
+      );
+    }),
+  );
+
   it.effect("interrupts computations that exceed the inner deadline", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(

@@ -107,6 +107,37 @@ const initializedCustomSnapshot = ShapingSnapshot.make({
   }),
 });
 
+const forgedBuiltInSnapshot = ShapingSnapshot.make({
+  version: 1,
+  active: InterfaceRevision.make({
+    version: 1,
+    id: RevisionId.make("built-in"),
+    status: "accepted",
+    source: "built-in",
+    document: InterfaceDocument.make({
+      ...defaultInterfaceDocument,
+      name: "Forged built-in",
+    }),
+    createdAt: 0,
+  }),
+  lastKnownGood: InterfaceRevision.make({
+    version: 1,
+    id: RevisionId.make("built-in"),
+    status: "accepted",
+    source: "built-in",
+    document: defaultInterfaceDocument,
+    createdAt: 0,
+  }),
+  safeMode: false,
+  disabledExtensions: [],
+  lastEvent: ShapingEvent.make({
+    version: 1,
+    sequence: 0,
+    type: "initialized",
+    revisionId: RevisionId.make("built-in"),
+  }),
+});
+
 const makeStorage = (initial: string | null = null) => {
   const value = Ref.makeUnsafe<string | null>(initial);
   const reads = Ref.makeUnsafe(0);
@@ -252,6 +283,25 @@ describe("InterfaceRepository", () => {
 
   it.layer(initializedCustomLayer)((it) => {
     it.effect("rejects initialized events for customized revisions", () =>
+      Effect.gen(function* () {
+        const repository = yield* InterfaceRepository;
+        const loaded = yield* repository.load;
+
+        assert.strictEqual(loaded.snapshot, undefined);
+        assert.strictEqual(loaded.recovered, true);
+      }),
+    );
+  });
+
+  const forgedBuiltInStorage = makeStorage(
+    JSON.stringify(forgedBuiltInSnapshot),
+  );
+  const forgedBuiltInLayer = makeInterfaceRepositoryLayer({
+    safeMode: false,
+  }).pipe(Layer.provide(forgedBuiltInStorage.layer));
+
+  it.layer(forgedBuiltInLayer)((it) => {
+    it.effect("rejects forged built-in initialization state", () =>
       Effect.gen(function* () {
         const repository = yield* InterfaceRepository;
         const loaded = yield* repository.load;

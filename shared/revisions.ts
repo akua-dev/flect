@@ -1,5 +1,6 @@
-import { Effect, Schema, type SchemaAST } from "effect";
+import { Effect, Equal, Schema, type SchemaAST } from "effect";
 import {
+  defaultInterfaceDocument,
   InterfaceDocument,
   validateInterfaceDocument,
 } from "./interface-document";
@@ -119,6 +120,14 @@ const isProposalStatus = (
 ): status is "proposed" | "previewed" =>
   status === "proposed" || status === "previewed";
 
+const isInitialRevision = (revision: InterfaceRevision) =>
+  revision.id === "built-in" &&
+  revision.parentId === undefined &&
+  revision.status === "accepted" &&
+  revision.source === "built-in" &&
+  revision.createdAt === 0 &&
+  Equal.equals(revision.document, defaultInterfaceDocument);
+
 export const validateShapingSnapshot = Effect.fn(
   "Flect.ShapingSnapshot.validate",
 )(function* (
@@ -161,8 +170,9 @@ export const validateShapingSnapshot = Effect.fn(
     if (
       snapshot.lastEvent.sequence !== 0 ||
       snapshot.lastEvent.revisionId !== snapshot.active.id ||
-      snapshot.active.id !== "built-in" ||
-      snapshot.lastKnownGood.id !== "built-in" ||
+      snapshot.lastEvent.extensionId !== undefined ||
+      !isInitialRevision(snapshot.active) ||
+      !isInitialRevision(snapshot.lastKnownGood) ||
       snapshot.proposal !== undefined ||
       snapshot.safeMode ||
       snapshot.disabledExtensions.length > 0

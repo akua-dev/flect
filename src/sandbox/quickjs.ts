@@ -51,7 +51,9 @@ const hardeningProgram = `
     };
     const functionPrototypes = [
       Object.getPrototypeOf(function () {}),
-      Object.getPrototypeOf(function* () {})
+      Object.getPrototypeOf(function* () {}),
+      Object.getPrototypeOf(async function () {}),
+      Object.getPrototypeOf(async function* () {})
     ];
     for (const prototype of functionPrototypes) {
       const constructor = prototype.constructor;
@@ -77,9 +79,7 @@ const hardeningProgram = `
       "Promise",
       "Proxy",
       "eval",
-      "Function",
-      "AsyncFunction",
-      "AsyncGeneratorFunction"
+      "Function"
     ]) {
       deny(name);
     }
@@ -121,7 +121,7 @@ const executeInModule = Effect.fn("Flect.Sandbox.executeInModule")(
             BaseObjects: true,
             Eval: true,
             JSON: true,
-            Promise: false,
+            Promise: true,
           },
         });
 
