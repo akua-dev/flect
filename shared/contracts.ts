@@ -1,92 +1,224 @@
-import { z } from "zod";
+import { Effect, Schema, type SchemaAST } from "effect";
 
-const nonEmptyText = z.string().trim().min(1);
+const NonEmptyText = Schema.Trim.check(Schema.isMinLength(1));
+const PromptText = NonEmptyText.check(Schema.isMaxLength(100_000));
 
-export const modelSummarySchema = z
-  .object({
-    provider: nonEmptyText,
-    id: nonEmptyText,
-    name: nonEmptyText,
-  })
-  .strict();
+const strictOptions: SchemaAST.ParseOptions = {
+  errors: "all",
+  onExcessProperty: "error",
+};
 
-export type ModelSummary = z.infer<typeof modelSummarySchema>;
+export class ContractDecodeError extends Schema.TaggedErrorClass<ContractDecodeError>()(
+  "ContractDecodeError",
+  {
+    message: Schema.Literal("Invalid contract value."),
+  },
+) {}
 
-export const runtimeStatusSchema = z
-  .object({
-    version: z.literal(1),
-    status: z.enum(["ready", "unavailable"]),
-    message: nonEmptyText.optional(),
-  })
-  .strict();
+const invalidContract = () =>
+  new ContractDecodeError({ message: "Invalid contract value." });
 
-export type RuntimeStatus = z.infer<typeof runtimeStatusSchema>;
+export class ModelSummary extends Schema.Class<ModelSummary>("ModelSummary")({
+  provider: NonEmptyText,
+  id: NonEmptyText,
+  name: NonEmptyText,
+}) {}
 
-export const modelSelectionSchema = z
-  .object({
-    provider: nonEmptyText,
-    id: nonEmptyText,
-  })
-  .strict();
+export class RuntimeStatus extends Schema.Class<RuntimeStatus>("RuntimeStatus")(
+  {
+    version: Schema.Literal(1),
+    status: Schema.Literals(["ready", "unavailable"]),
+    message: Schema.optionalKey(NonEmptyText),
+  },
+) {}
 
-export const sessionSelectionSchema = z
-  .object({
-    model: modelSelectionSchema.optional(),
-  })
-  .strict();
+export class ModelSelection extends Schema.Class<ModelSelection>(
+  "ModelSelection",
+)({
+  provider: NonEmptyText,
+  id: NonEmptyText,
+}) {}
 
-export type SessionSelection = z.infer<typeof sessionSelectionSchema>;
+export class SessionSelection extends Schema.Class<SessionSelection>(
+  "SessionSelection",
+)({
+  model: Schema.optionalKey(ModelSelection),
+}) {}
 
-export const promptRequestSchema = z
-  .object({
-    text: nonEmptyText.max(100_000),
-  })
-  .strict();
+export class PromptRequest extends Schema.Class<PromptRequest>("PromptRequest")(
+  {
+    text: PromptText,
+  },
+) {}
 
-export const flectEventSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("turn_started") }).strict(),
-  z
-    .object({
-      type: z.literal("text_delta"),
-      delta: z.string(),
-    })
-    .strict(),
-  z.object({ type: z.literal("turn_completed") }).strict(),
-  z.object({ type: z.literal("cancelled") }).strict(),
-  z
-    .object({
-      type: z.literal("error"),
-      message: nonEmptyText,
-    })
-    .strict(),
+export class TurnStarted extends Schema.Class<TurnStarted>("TurnStarted")({
+  type: Schema.Literal("turn_started"),
+}) {}
+
+export class TextDelta extends Schema.Class<TextDelta>("TextDelta")({
+  type: Schema.Literal("text_delta"),
+  delta: Schema.String,
+}) {}
+
+export class TurnCompleted extends Schema.Class<TurnCompleted>("TurnCompleted")(
+  {
+    type: Schema.Literal("turn_completed"),
+  },
+) {}
+
+export class TurnCancelled extends Schema.Class<TurnCancelled>("TurnCancelled")(
+  {
+    type: Schema.Literal("cancelled"),
+  },
+) {}
+
+export class TurnError extends Schema.Class<TurnError>("TurnError")({
+  type: Schema.Literal("error"),
+  message: NonEmptyText,
+}) {}
+
+export const FlectEvent = Schema.Union([
+  TurnStarted,
+  TextDelta,
+  TurnCompleted,
+  TurnCancelled,
+  TurnError,
 ]);
+export type FlectEvent = typeof FlectEvent.Type;
 
-export type FlectEvent = z.infer<typeof flectEventSchema>;
+export class ModelsResponse extends Schema.Class<ModelsResponse>(
+  "ModelsResponse",
+)({
+  version: Schema.Literal(1),
+  models: Schema.Array(ModelSummary),
+}) {}
 
-export const modelsResponseSchema = z
-  .object({
-    version: z.literal(1),
-    models: z.array(modelSummarySchema),
-  })
-  .strict();
+export class SessionResponse extends Schema.Class<SessionResponse>(
+  "SessionResponse",
+)({
+  version: Schema.Literal(1),
+  sessionId: NonEmptyText,
+}) {}
 
-export const sessionResponseSchema = z
-  .object({
-    version: z.literal(1),
-    sessionId: nonEmptyText,
-  })
-  .strict();
+export class CancelResponse extends Schema.Class<CancelResponse>(
+  "CancelResponse",
+)({
+  version: Schema.Literal(1),
+  status: Schema.Literal("cancelled"),
+}) {}
 
-export const cancelResponseSchema = z
-  .object({
-    version: z.literal(1),
-    status: z.literal("cancelled"),
-  })
-  .strict();
+export class PublicErrorResponse extends Schema.Class<PublicErrorResponse>(
+  "PublicErrorResponse",
+)({
+  version: Schema.Literal(1),
+  error: NonEmptyText,
+}) {}
 
-export const publicErrorSchema = z
-  .object({
-    version: z.literal(1),
-    error: nonEmptyText,
-  })
-  .strict();
+export class SessionNotFound extends Schema.TaggedErrorClass<SessionNotFound>()(
+  "SessionNotFound",
+  {
+    sessionId: NonEmptyText,
+    message: Schema.Literal("Session not found."),
+  },
+) {}
+
+export class NoModelAvailable extends Schema.TaggedErrorClass<NoModelAvailable>()(
+  "NoModelAvailable",
+  {
+    message: Schema.Literal("No authenticated model is available."),
+  },
+) {}
+
+export class PiOperationFailed extends Schema.TaggedErrorClass<PiOperationFailed>()(
+  "PiOperationFailed",
+  {
+    operation: Schema.Literals([
+      "initialize",
+      "list_models",
+      "create_session",
+      "prompt",
+      "cancel",
+    ]),
+    message: Schema.Literal(
+      "The model runtime could not complete the request.",
+    ),
+  },
+) {}
+
+export const FlectRuntimeError = Schema.Union([
+  SessionNotFound,
+  NoModelAvailable,
+  PiOperationFailed,
+]);
+export type FlectRuntimeError = typeof FlectRuntimeError.Type;
+
+export const decodeModelSummary = Effect.fn(
+  "Flect.Contracts.decodeModelSummary",
+)((input: unknown) =>
+  Schema.decodeUnknownEffect(
+    ModelSummary,
+    strictOptions,
+  )(input).pipe(Effect.mapError(invalidContract)),
+);
+
+export const decodeRuntimeStatus = Effect.fn(
+  "Flect.Contracts.decodeRuntimeStatus",
+)((input: unknown) =>
+  Schema.decodeUnknownEffect(
+    RuntimeStatus,
+    strictOptions,
+  )(input).pipe(Effect.mapError(invalidContract)),
+);
+
+export const decodeSessionSelection = Effect.fn(
+  "Flect.Contracts.decodeSessionSelection",
+)((input: unknown) =>
+  Schema.decodeUnknownEffect(
+    SessionSelection,
+    strictOptions,
+  )(input).pipe(Effect.mapError(invalidContract)),
+);
+
+export const decodePromptRequest = Effect.fn(
+  "Flect.Contracts.decodePromptRequest",
+)((input: unknown) =>
+  Schema.decodeUnknownEffect(
+    PromptRequest,
+    strictOptions,
+  )(input).pipe(Effect.mapError(invalidContract)),
+);
+
+export const decodeFlectEvent = Effect.fn("Flect.Contracts.decodeFlectEvent")(
+  (input: unknown) =>
+    Schema.decodeUnknownEffect(
+      FlectEvent,
+      strictOptions,
+    )(input).pipe(Effect.mapError(invalidContract)),
+);
+
+export const decodeModelsResponse = Effect.fn(
+  "Flect.Contracts.decodeModelsResponse",
+)((input: unknown) =>
+  Schema.decodeUnknownEffect(
+    ModelsResponse,
+    strictOptions,
+  )(input).pipe(Effect.mapError(invalidContract)),
+);
+
+export const decodeSessionResponse = Effect.fn(
+  "Flect.Contracts.decodeSessionResponse",
+)((input: unknown) =>
+  Schema.decodeUnknownEffect(
+    SessionResponse,
+    strictOptions,
+  )(input).pipe(Effect.mapError(invalidContract)),
+);
+
+export const decodeCancelResponse = Effect.fn(
+  "Flect.Contracts.decodeCancelResponse",
+)((input: unknown) =>
+  Schema.decodeUnknownEffect(
+    CancelResponse,
+    strictOptions,
+  )(input).pipe(Effect.mapError(invalidContract)),
+);

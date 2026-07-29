@@ -1,40 +1,51 @@
-import { describe, expect, it, vi } from "vitest";
-import type {
-  FlectEvent,
+import { describe, expect, it, vi } from "@effect/vitest";
+import { Effect, Stream } from "effect";
+import {
+  ModelSummary,
+  ModelsResponse,
   RuntimeStatus,
   SessionSelection,
+  TextDelta,
+  TurnCompleted,
+  TurnStarted,
 } from "../shared/contracts";
-import { createApp } from "./app";
-import type { FlectRuntime } from "./runtime";
+import { createApp, type FlectWebApp } from "./app";
+import type { FlectRuntimeShape } from "./runtime";
 
-function createFakeRuntime(): FlectRuntime {
+function createFakeRuntime(): FlectRuntimeShape {
   return {
-    status: async (): Promise<RuntimeStatus> => ({
-      version: 1,
-      status: "ready",
-    }),
-    listModels: async () => [
-      {
+    status: Effect.succeed(new RuntimeStatus({ version: 1, status: "ready" })),
+    listModels: Effect.succeed([
+      new ModelSummary({
         provider: "openai-codex",
         id: "gpt-5.6",
         name: "GPT-5.6",
-      },
-    ],
-    createSession: vi.fn(async (_selection?: SessionSelection) => "session-1"),
-    prompt: vi.fn(
-      async (
-        _sessionId: string,
-        _text: string,
-        emit: (event: FlectEvent) => void,
-      ) => {
-        emit({ type: "turn_started" });
-        emit({ type: "text_delta", delta: "Shaped" });
-        emit({ type: "turn_completed" });
-      },
+      }),
+    ]),
+    createSession: vi.fn(() => Effect.succeed("session-1")),
+    prompt: vi.fn(() =>
+      Stream.make(
+        new TurnStarted({ type: "turn_started" }),
+        new TextDelta({ type: "text_delta", delta: "Shaped" }),
+        new TurnCompleted({ type: "turn_completed" }),
+      ),
     ),
-    cancel: vi.fn(async () => undefined),
+    cancel: vi.fn(() => Effect.void),
   };
 }
+
+const useApp = (runtime: FlectRuntimeShape) =>
+  Effect.acquireRelease(
+    Effect.sync(() => createApp(runtime)),
+    (app) => Effect.promise(() => app.dispose()),
+  );
+
+const send = (app: FlectWebApp, request: Request) =>
+  Effect.promise(() => app.handler(request));
+
+const readJson = (response: Response) => Effect.promise(() => response.json());
+
+const readText = (response: Response) => Effect.promise(() => response.text());
 
 function request(
   path: string,
@@ -52,145 +63,177 @@ function request(
   });
 }
 
-describe("createApp", () => {
-  it("returns strict runtime and model responses", async () => {
-    const app = createApp(createFakeRuntime());
+describe("Flect HTTP application", () => {
+  it.effect("returns schema-encoded runtime and model responses", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const status = yield* send(app, request("/api/runtime"));
+      const models = yield* send(app, request("/api/models"));
 
-    const status = await app(request("/api/runtime"));
-    const models = await app(request("/api/models"));
-
-    expect(status.status).toBe(200);
-    await expect(status.json()).resolves.toEqual({
-      version: 1,
-      status: "ready",
-    });
-    await expect(models.json()).resolves.toEqual({
-      version: 1,
-      models: [
-        {
-          provider: "openai-codex",
-          id: "gpt-5.6",
-          name: "GPT-5.6",
-        },
-      ],
-    });
-  });
-
-  it("creates a selected session", async () => {
-    const runtime = createFakeRuntime();
-    const app = createApp(runtime);
-
-    const response = await app(
-      request("/api/sessions", {
-        method: "POST",
-        body: JSON.stringify({
-          model: { provider: "openai-codex", id: "gpt-5.6" },
+      expect(status.status).toBe(200);
+      expect(yield* readJson(status)).toEqual({
+        version: 1,
+        status: "ready",
+      });
+      expect(yield* readJson(models)).toEqual(
+        new ModelsResponse({
+          version: 1,
+          models: [
+            new ModelSummary({
+              provider: "openai-codex",
+              id: "gpt-5.6",
+              name: "GPT-5.6",
+            }),
+          ],
         }),
-      }),
-    );
+      );
+    }),
+  );
 
-    expect(response.status).toBe(201);
-    await expect(response.json()).resolves.toEqual({
-      version: 1,
-      sessionId: "session-1",
-    });
-    expect(runtime.createSession).toHaveBeenCalledWith({
-      model: { provider: "openai-codex", id: "gpt-5.6" },
-    });
-  });
-
-  it("streams public events as SSE", async () => {
-    const app = createApp(createFakeRuntime());
-
-    const response = await app(
-      request("/api/sessions/session-1/prompts", {
-        method: "POST",
-        body: JSON.stringify({ text: "Shape this" }),
-      }),
-    );
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toContain("text/event-stream");
-    await expect(response.text()).resolves.toBe(
-      [
-        'data: {"type":"turn_started"}',
-        "",
-        'data: {"type":"text_delta","delta":"Shaped"}',
-        "",
-        'data: {"type":"turn_completed"}',
-        "",
-        "",
-      ].join("\n"),
-    );
-  });
-
-  it("cancels a session", async () => {
+  it.effect("creates a selected session from a strict schema body", () => {
     const runtime = createFakeRuntime();
-    const app = createApp(runtime);
-
-    const response = await app(
-      request("/api/sessions/session-1/cancel", { method: "POST" }),
-    );
-
-    expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toEqual({
-      version: 1,
-      status: "cancelled",
-    });
-    expect(runtime.cancel).toHaveBeenCalledWith("session-1");
-  });
-
-  it("rejects malformed JSON and blank prompts", async () => {
-    const app = createApp(createFakeRuntime());
-
-    const malformed = await app(
-      request("/api/sessions", { method: "POST", body: "{" }),
-    );
-    const blank = await app(
-      request("/api/sessions/session-1/prompts", {
-        method: "POST",
-        body: JSON.stringify({ text: "   " }),
-      }),
-    );
-
-    expect(malformed.status).toBe(400);
-    expect(blank.status).toBe(400);
-    await expect(blank.json()).resolves.toEqual({
-      version: 1,
-      error: "Invalid request",
-    });
-  });
-
-  it("rejects unexpected origins", async () => {
-    const app = createApp(createFakeRuntime());
-
-    const response = await app(
-      request("/api/runtime", undefined, "https://unexpected.example"),
-    );
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      version: 1,
-      error: "Origin not allowed",
-    });
-  });
-
-  it("never returns credential-shaped keys", async () => {
-    const app = createApp(createFakeRuntime());
-    const responses = await Promise.all([
-      app(request("/api/runtime")),
-      app(request("/api/models")),
-      app(
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
         request("/api/sessions", {
           method: "POST",
-          body: JSON.stringify({}),
+          body: JSON.stringify({
+            model: { provider: "openai-codex", id: "gpt-5.6" },
+          }),
         }),
-      ),
-    ]);
+      );
 
-    for (const response of responses) {
-      const body = JSON.stringify(await response.json());
-      expect(body).not.toMatch(/token|secret|credential|apiKey/i);
-    }
+      expect(response.status).toBe(201);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        sessionId: "session-1",
+      });
+      expect(runtime.createSession).toHaveBeenCalledWith(
+        new SessionSelection({
+          model: { provider: "openai-codex", id: "gpt-5.6" },
+        }),
+      );
+    });
   });
+
+  it.effect("streams schema-encoded public events as SSE", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/prompts", {
+          method: "POST",
+          body: JSON.stringify({ text: "Shape this" }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toContain(
+        "text/event-stream",
+      );
+      expect(yield* readText(response)).toBe(
+        [
+          'data: {"type":"turn_started"}',
+          "",
+          'data: {"type":"text_delta","delta":"Shaped"}',
+          "",
+          'data: {"type":"turn_completed"}',
+          "",
+          "",
+        ].join("\n"),
+      );
+    }),
+  );
+
+  it.effect("cancels a session through the Effect service", () => {
+    const runtime = createFakeRuntime();
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/cancel", { method: "POST" }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        status: "cancelled",
+      });
+      expect(runtime.cancel).toHaveBeenCalledWith("session-1");
+    });
+  });
+
+  it.effect("rejects malformed JSON, blank prompts, and excess fields", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const malformed = yield* send(
+        app,
+        request("/api/sessions", { method: "POST", body: "{" }),
+      );
+      const blank = yield* send(
+        app,
+        request("/api/sessions/session-1/prompts", {
+          method: "POST",
+          body: JSON.stringify({ text: "   " }),
+        }),
+      );
+      const excessive = yield* send(
+        app,
+        request("/api/sessions", {
+          method: "POST",
+          body: JSON.stringify({ credential: "not-a-real-secret" }),
+        }),
+      );
+
+      expect(malformed.status).toBe(400);
+      expect(blank.status).toBe(400);
+      expect(excessive.status).toBe(400);
+      expect(yield* readJson(blank)).toEqual({
+        version: 1,
+        error: "Invalid request",
+      });
+      expect(JSON.stringify(yield* readJson(excessive))).not.toContain(
+        "not-a-real-secret",
+      );
+    }),
+  );
+
+  it.effect("rejects unexpected origins in global middleware", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const response = yield* send(
+        app,
+        request("/api/runtime", undefined, "https://unexpected.example"),
+      );
+
+      expect(response.status).toBe(403);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        error: "Origin not allowed",
+      });
+    }),
+  );
+
+  it.effect("never returns credential-shaped keys", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const responses = yield* Effect.all([
+        send(app, request("/api/runtime")),
+        send(app, request("/api/models")),
+        send(
+          app,
+          request("/api/sessions", {
+            method: "POST",
+            body: JSON.stringify({}),
+          }),
+        ),
+      ]);
+
+      for (const response of responses) {
+        const body = JSON.stringify(yield* readJson(response));
+        expect(body).not.toMatch(/token|secret|credential|apiKey/i);
+      }
+    }),
+  );
 });

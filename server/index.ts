@@ -1,12 +1,22 @@
-import { createApp } from "./app";
-import { createPiRuntime } from "./pi-runtime";
+import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
+import { Layer } from "effect";
+import { HttpRouter } from "effect/unstable/http";
+import { makeFlectHttpApp } from "./app";
+import { FlectRuntimeLive, PiSdkLive } from "./pi-runtime";
 
-const runtime = await createPiRuntime();
+const RuntimeLive = FlectRuntimeLive.pipe(Layer.provide(PiSdkLive));
 
-Bun.serve({
-  hostname: "127.0.0.1",
-  port: 3210,
-  fetch: createApp(runtime),
-});
+const ApplicationLive = makeFlectHttpApp().pipe(
+  HttpRouter.provideRequest(RuntimeLive),
+);
 
-console.info("Flect runtime listening on http://127.0.0.1:3210");
+const ServerLive = HttpRouter.serve(ApplicationLive).pipe(
+  Layer.provide(
+    BunHttpServer.layer({
+      hostname: "127.0.0.1",
+      port: 3210,
+    }),
+  ),
+);
+
+Layer.launch(ServerLive).pipe(BunRuntime.runMain);

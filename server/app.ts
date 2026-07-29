@@ -1,15 +1,21 @@
-import type { z } from "zod";
+import { Effect, Layer, Option, Schema, type SchemaAST, Stream } from "effect";
 import {
-  cancelResponseSchema,
-  flectEventSchema,
-  modelsResponseSchema,
-  promptRequestSchema,
-  publicErrorSchema,
-  runtimeStatusSchema,
-  sessionResponseSchema,
-  sessionSelectionSchema,
+  HttpRouter,
+  HttpServerRequest,
+  HttpServerResponse,
+} from "effect/unstable/http";
+import {
+  CancelResponse,
+  FlectEvent,
+  ModelsResponse,
+  PromptRequest,
+  PublicErrorResponse,
+  RuntimeStatus,
+  SessionResponse,
+  SessionSelection,
+  TurnError,
 } from "../shared/contracts";
-import type { FlectRuntime } from "./runtime";
+import { FlectRuntime, type FlectRuntimeShape } from "./runtime";
 
 const defaultAllowedOrigins = new Set([
   "http://127.0.0.1:5173",
@@ -20,127 +26,171 @@ const defaultAllowedOrigins = new Set([
   "http://localhost:3210",
 ]);
 
-type Schema<T> = z.ZodType<T>;
+const strictOptions: SchemaAST.ParseOptions = {
+  errors: "all",
+  onExcessProperty: "error",
+};
 
-function json<T>(schema: Schema<T>, value: T, status = 200): Response {
-  return Response.json(schema.parse(value), { status });
-}
+class SessionPathParams extends Schema.Class<SessionPathParams>(
+  "SessionPathParams",
+)({
+  sessionId: Schema.NonEmptyString,
+}) {}
 
-function error(message: string, status: number): Response {
-  return json(publicErrorSchema, { version: 1, error: message }, status);
-}
+const runtimeJson = HttpServerResponse.schemaJson(RuntimeStatus);
+const modelsJson = HttpServerResponse.schemaJson(ModelsResponse);
+const sessionJson = HttpServerResponse.schemaJson(SessionResponse);
+const cancelJson = HttpServerResponse.schemaJson(CancelResponse);
+const publicErrorJson = HttpServerResponse.schemaJson(PublicErrorResponse);
+const encodeEventJson = Schema.encodeEffect(Schema.fromJsonString(FlectEvent));
 
-async function parseJson<T>(
-  request: Request,
-  schema: Schema<T>,
-): Promise<T | undefined> {
-  try {
-    const parsed = schema.safeParse(await request.json());
-    return parsed.success ? parsed.data : undefined;
-  } catch {
-    return undefined;
-  }
-}
+const publicError = Effect.fn("Flect.Http.publicError")(
+  (message: string, status: number) =>
+    publicErrorJson(new PublicErrorResponse({ version: 1, error: message }), {
+      status,
+    }).pipe(Effect.orDie),
+);
 
-function sessionPath(
-  pathname: string,
-  action: "prompts" | "cancel",
-): string | undefined {
-  const match = pathname.match(new RegExp(`^/api/sessions/([^/]+)/${action}$`));
-  return match?.[1] ? decodeURIComponent(match[1]) : undefined;
+const invalidRequest = () => publicError("Invalid request", 400);
+const runtimeFailure = () =>
+  publicError("The local runtime could not complete this request.", 500);
+
+const decodeBody = <A, R>(schema: Schema.ConstraintDecoder<A, R>) =>
+  HttpServerRequest.schemaBodyJson(schema, strictOptions).pipe(Effect.option);
+
+const sessionPath = HttpRouter.schemaPathParams(
+  SessionPathParams,
+  strictOptions,
+).pipe(Effect.option);
+
+const runtimeRoute = HttpRouter.add(
+  "GET",
+  "/api/runtime",
+  Effect.gen(function* () {
+    const runtime = yield* FlectRuntime;
+    const status = yield* runtime.status;
+    return yield* runtimeJson(status);
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
+const modelsRoute = HttpRouter.add(
+  "GET",
+  "/api/models",
+  Effect.gen(function* () {
+    const runtime = yield* FlectRuntime;
+    const models = yield* runtime.listModels;
+    return yield* modelsJson(new ModelsResponse({ version: 1, models }));
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
+const createSessionRoute = HttpRouter.add(
+  "POST",
+  "/api/sessions",
+  Effect.gen(function* () {
+    const decoded = yield* decodeBody(SessionSelection);
+    if (Option.isNone(decoded)) {
+      return yield* invalidRequest();
+    }
+
+    const runtime = yield* FlectRuntime;
+    const sessionId = yield* runtime.createSession(decoded.value);
+    return yield* sessionJson(new SessionResponse({ version: 1, sessionId }), {
+      status: 201,
+    });
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
+const promptRoute = HttpRouter.add(
+  "POST",
+  "/api/sessions/:sessionId/prompts",
+  Effect.gen(function* () {
+    const path = yield* sessionPath;
+    const prompt = yield* decodeBody(PromptRequest);
+    if (Option.isNone(path) || Option.isNone(prompt)) {
+      return yield* invalidRequest();
+    }
+
+    const runtime = yield* FlectRuntime;
+    const fallback =
+      'data: {"type":"error","message":"The local runtime could not complete this request."}\n\n';
+    const events = runtime.prompt(path.value.sessionId, prompt.value.text).pipe(
+      Stream.catch(() =>
+        Stream.succeed(
+          new TurnError({
+            type: "error",
+            message: "The local runtime could not complete this request.",
+          }),
+        ),
+      ),
+      Stream.mapEffect((event) => encodeEventJson(event)),
+      Stream.map((json) => `data: ${json}\n\n`),
+      Stream.catch(() => Stream.succeed(fallback)),
+      Stream.encodeText,
+    );
+
+    return HttpServerResponse.stream(events, {
+      contentType: "text/event-stream; charset=utf-8",
+      headers: {
+        "cache-control": "no-store",
+      },
+    });
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
+const cancelRoute = HttpRouter.add(
+  "POST",
+  "/api/sessions/:sessionId/cancel",
+  Effect.gen(function* () {
+    const path = yield* sessionPath;
+    if (Option.isNone(path)) {
+      return yield* invalidRequest();
+    }
+
+    const runtime = yield* FlectRuntime;
+    yield* runtime.cancel(path.value.sessionId);
+    return yield* cancelJson(
+      new CancelResponse({ version: 1, status: "cancelled" }),
+    );
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
+const makeOriginMiddleware = (allowedOrigins: ReadonlySet<string>) =>
+  HttpRouter.middleware(
+    (httpEffect) =>
+      Effect.gen(function* () {
+        const request = yield* HttpServerRequest.HttpServerRequest;
+        const origin = request.headers.origin;
+        if (origin && !allowedOrigins.has(origin)) {
+          return yield* publicError("Origin not allowed", 403);
+        }
+        return yield* httpEffect;
+      }),
+    { global: true },
+  );
+
+export const makeFlectHttpApp = (
+  allowedOrigins: ReadonlySet<string> = defaultAllowedOrigins,
+) =>
+  Layer.mergeAll(
+    runtimeRoute,
+    modelsRoute,
+    createSessionRoute,
+    promptRoute,
+    cancelRoute,
+    makeOriginMiddleware(allowedOrigins),
+  );
+
+export interface FlectWebApp {
+  readonly handler: (request: Request) => Promise<Response>;
+  readonly dispose: () => Promise<void>;
 }
 
 export function createApp(
-  runtime: FlectRuntime,
-  allowedOrigins = defaultAllowedOrigins,
-): (request: Request) => Promise<Response> {
-  return async (request) => {
-    const origin = request.headers.get("origin");
-    if (origin && !allowedOrigins.has(origin)) {
-      return error("Origin not allowed", 403);
-    }
-
-    const { pathname } = new URL(request.url);
-
-    try {
-      if (request.method === "GET" && pathname === "/api/runtime") {
-        return json(runtimeStatusSchema, await runtime.status());
-      }
-
-      if (request.method === "GET" && pathname === "/api/models") {
-        return json(modelsResponseSchema, {
-          version: 1,
-          models: await runtime.listModels(),
-        });
-      }
-
-      if (request.method === "POST" && pathname === "/api/sessions") {
-        const selection = await parseJson(request, sessionSelectionSchema);
-        if (!selection) {
-          return error("Invalid request", 400);
-        }
-
-        return json(
-          sessionResponseSchema,
-          {
-            version: 1,
-            sessionId: await runtime.createSession(selection),
-          },
-          201,
-        );
-      }
-
-      const promptSessionId = sessionPath(pathname, "prompts");
-      if (request.method === "POST" && promptSessionId) {
-        const prompt = await parseJson(request, promptRequestSchema);
-        if (!prompt) {
-          return error("Invalid request", 400);
-        }
-
-        const encoder = new TextEncoder();
-        const stream = new ReadableStream<Uint8Array>({
-          async start(controller) {
-            try {
-              await runtime.prompt(promptSessionId, prompt.text, (event) => {
-                const publicEvent = flectEventSchema.parse(event);
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify(publicEvent)}\n\n`),
-                );
-              });
-            } catch {
-              const publicEvent = {
-                type: "error" as const,
-                message: "The local runtime could not complete this request.",
-              };
-              controller.enqueue(
-                encoder.encode(`data: ${JSON.stringify(publicEvent)}\n\n`),
-              );
-            } finally {
-              controller.close();
-            }
-          },
-        });
-
-        return new Response(stream, {
-          headers: {
-            "cache-control": "no-store",
-            "content-type": "text/event-stream; charset=utf-8",
-          },
-        });
-      }
-
-      const cancelSessionId = sessionPath(pathname, "cancel");
-      if (request.method === "POST" && cancelSessionId) {
-        await runtime.cancel(cancelSessionId);
-        return json(cancelResponseSchema, {
-          version: 1,
-          status: "cancelled",
-        });
-      }
-
-      return error("Not found", 404);
-    } catch {
-      return error("The local runtime could not complete this request.", 500);
-    }
-  };
+  runtime: FlectRuntimeShape,
+  allowedOrigins: ReadonlySet<string> = defaultAllowedOrigins,
+): FlectWebApp {
+  const appLayer = makeFlectHttpApp(allowedOrigins).pipe(
+    HttpRouter.provideRequest(Layer.succeed(FlectRuntime)(runtime)),
+  );
+  return HttpRouter.toWebHandler(appLayer, { disableLogger: true });
 }

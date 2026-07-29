@@ -1,72 +1,103 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect } from "effect";
 import {
-  flectEventSchema,
-  modelSummarySchema,
-  promptRequestSchema,
-  runtimeStatusSchema,
-  sessionSelectionSchema,
+  decodeFlectEvent,
+  decodeModelSummary,
+  decodePromptRequest,
+  decodeRuntimeStatus,
+  decodeSessionSelection,
+  ModelSummary,
+  PromptRequest,
+  RuntimeStatus,
+  SessionSelection,
 } from "./contracts";
 
 describe("runtime contracts", () => {
-  it("accepts a public model summary", () => {
-    expect(
-      modelSummarySchema.parse({
+  it.effect("decodes a public model summary into its schema class", () =>
+    Effect.gen(function* () {
+      const model = yield* decodeModelSummary({
         provider: "openai-codex",
         id: "gpt-5.6",
         name: "GPT-5.6",
-      }),
-    ).toEqual({
-      provider: "openai-codex",
-      id: "gpt-5.6",
-      name: "GPT-5.6",
-    });
-  });
+      });
 
-  it("rejects credential-shaped model fields", () => {
-    expect(() =>
-      modelSummarySchema.parse({
-        provider: "openai-codex",
-        id: "gpt-5.6",
-        name: "GPT-5.6",
-        apiKey: "not-a-real-secret",
-      }),
-    ).toThrow();
-  });
+      expect(model).toEqual(
+        new ModelSummary({
+          provider: "openai-codex",
+          id: "gpt-5.6",
+          name: "GPT-5.6",
+        }),
+      );
+    }),
+  );
 
-  it("rejects credential-shaped event fields", () => {
-    expect(() =>
-      flectEventSchema.parse({
-        type: "error",
-        message: "The model could not complete this turn.",
-        credential: "not-a-real-secret",
-      }),
-    ).toThrow();
-  });
+  it.effect("rejects credential-shaped model fields", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        decodeModelSummary({
+          provider: "openai-codex",
+          id: "gpt-5.6",
+          name: "GPT-5.6",
+          apiKey: "not-a-real-secret",
+        }),
+      );
 
-  it("requires non-empty prompts", () => {
-    expect(() => promptRequestSchema.parse({ text: "   " })).toThrow();
-    expect(promptRequestSchema.parse({ text: "Shape this" })).toEqual({
-      text: "Shape this",
-    });
-  });
+      expect(error.message).toBe("Invalid contract value.");
+      expect(error.message).not.toContain("not-a-real-secret");
+    }),
+  );
 
-  it("supports automatic and explicit model selection", () => {
-    expect(sessionSelectionSchema.parse({})).toEqual({});
-    expect(
-      sessionSelectionSchema.parse({
+  it.effect("rejects credential-shaped event fields", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        decodeFlectEvent({
+          type: "error",
+          message: "The model could not complete this turn.",
+          credential: "not-a-real-secret",
+        }),
+      );
+
+      expect(error.message).toBe("Invalid contract value.");
+      expect(error.message).not.toContain("not-a-real-secret");
+    }),
+  );
+
+  it.effect("trims prompts and requires visible text", () =>
+    Effect.gen(function* () {
+      yield* Effect.flip(decodePromptRequest({ text: "   " }));
+
+      const prompt = yield* decodePromptRequest({ text: "  Shape this  " });
+      expect(prompt).toEqual(new PromptRequest({ text: "Shape this" }));
+    }),
+  );
+
+  it.effect("supports automatic and explicit model selection", () =>
+    Effect.gen(function* () {
+      const automatic = yield* decodeSessionSelection({});
+      const explicit = yield* decodeSessionSelection({
         model: { provider: "anthropic", id: "claude-sonnet" },
-      }),
-    ).toEqual({
-      model: { provider: "anthropic", id: "claude-sonnet" },
-    });
-  });
+      });
 
-  it("keeps runtime status versioned", () => {
-    expect(
-      runtimeStatusSchema.parse({
+      expect(automatic).toEqual(new SessionSelection({}));
+      expect(explicit).toEqual(
+        new SessionSelection({
+          model: { provider: "anthropic", id: "claude-sonnet" },
+        }),
+      );
+    }),
+  );
+
+  it.effect("keeps runtime status versioned", () =>
+    Effect.gen(function* () {
+      const status = yield* decodeRuntimeStatus({
         version: 1,
         status: "ready",
-      }),
-    ).toEqual({ version: 1, status: "ready" });
-  });
+      });
+
+      expect(status).toEqual(
+        new RuntimeStatus({ version: 1, status: "ready" }),
+      );
+      yield* Effect.flip(decodeRuntimeStatus({ version: 2, status: "ready" }));
+    }),
+  );
 });

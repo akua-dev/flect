@@ -1,36 +1,47 @@
-import { z } from "zod";
+import { Effect, Schema } from "effect";
 
-export const interfaceDocumentSchema = z
-  .object({
-    version: z.literal(1),
-    headline: z.string().trim().min(1).max(80),
-    placeholder: z.string().trim().min(1).max(120),
-    secondaryActions: z.array(z.enum(["open", "extensions", "connect"])).max(3),
-  })
-  .strict();
+const DisplayText = (maximum: number) =>
+  Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(maximum));
 
-export type InterfaceDocument = z.infer<typeof interfaceDocumentSchema>;
+export class InterfaceDocument extends Schema.Class<InterfaceDocument>(
+  "InterfaceDocument",
+)({
+  version: Schema.Literal(1),
+  headline: DisplayText(80),
+  placeholder: DisplayText(120),
+  secondaryActions: Schema.Array(
+    Schema.Literals(["open", "extensions", "connect"]),
+  ).check(Schema.isMaxLength(3)),
+}) {}
 
-const builtInInterfaceDocument: InterfaceDocument = {
-  version: 1,
-  headline: "What should we shape?",
-  placeholder: "Build, change, or connect anything",
-  secondaryActions: ["open", "extensions", "connect"],
-};
+export const defaultInterfaceDocument: InterfaceDocument = Object.freeze(
+  new InterfaceDocument({
+    version: 1,
+    headline: "What should we shape?",
+    placeholder: "Build, change, or connect anything",
+    secondaryActions: ["open", "extensions", "connect"],
+  }),
+);
 
-export const defaultInterfaceDocument = Object.freeze(builtInInterfaceDocument);
+const decodeDocument = Schema.decodeUnknownEffect(InterfaceDocument, {
+  errors: "all",
+  onExcessProperty: "error",
+});
 
-export function parseInterfaceDocument(
-  raw: string | null | undefined,
-): InterfaceDocument {
-  if (!raw) {
+export const decodeInterfaceDocument = Effect.fn(
+  "Flect.InterfaceDocument.decode",
+)(function* (raw: string | null | undefined) {
+  if (raw === null || raw === undefined) {
     return defaultInterfaceDocument;
   }
 
-  try {
-    const parsed = interfaceDocumentSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : defaultInterfaceDocument;
-  } catch {
-    return defaultInterfaceDocument;
-  }
-}
+  const decoded = Effect.try({
+    try: () => JSON.parse(raw),
+    catch: () => undefined,
+  }).pipe(
+    Effect.flatMap((input) => decodeDocument(input)),
+    Effect.orElseSucceed(() => defaultInterfaceDocument),
+  );
+
+  return yield* decoded;
+});

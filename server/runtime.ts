@@ -1,18 +1,31 @@
+import { Context, type Effect, type Stream } from "effect";
 import type {
   FlectEvent,
+  FlectRuntimeError,
   ModelSummary,
   RuntimeStatus,
   SessionSelection,
 } from "../shared/contracts";
 
-export interface FlectRuntime {
-  status(): Promise<RuntimeStatus>;
-  listModels(): Promise<ModelSummary[]>;
-  createSession(selection?: SessionSelection): Promise<string>;
-  prompt(
+export interface FlectRuntimeShape {
+  readonly status: Effect.Effect<RuntimeStatus>;
+  readonly listModels: Effect.Effect<
+    ReadonlyArray<ModelSummary>,
+    FlectRuntimeError
+  >;
+  readonly createSession: (
+    selection: SessionSelection,
+  ) => Effect.Effect<string, FlectRuntimeError>;
+  readonly prompt: (
     sessionId: string,
     text: string,
-    emit: (event: FlectEvent) => void,
-  ): Promise<void>;
-  cancel(sessionId: string): Promise<void>;
+  ) => Stream.Stream<FlectEvent, FlectRuntimeError>;
+  readonly cancel: (
+    sessionId: string,
+  ) => Effect.Effect<void, FlectRuntimeError>;
 }
+
+export class FlectRuntime extends Context.Service<
+  FlectRuntime,
+  FlectRuntimeShape
+>()("flect/server/FlectRuntime") {}

@@ -1,52 +1,73 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "@effect/vitest";
+import { Effect } from "effect";
 import {
+  decodeInterfaceDocument,
   defaultInterfaceDocument,
-  parseInterfaceDocument,
+  InterfaceDocument,
 } from "./interface-document";
 
-describe("parseInterfaceDocument", () => {
-  it("falls back for malformed JSON", () => {
-    expect(parseInterfaceDocument("{bad json")).toBe(defaultInterfaceDocument);
-  });
+describe("interface document", () => {
+  it.effect("loads a valid version-one document", () =>
+    Effect.gen(function* () {
+      const document = yield* decodeInterfaceDocument(
+        JSON.stringify({
+          version: 1,
+          headline: "Shape your workspace",
+          placeholder: "Describe the interface you need",
+          secondaryActions: ["open", "connect"],
+        }),
+      );
 
-  it("falls back for unsupported versions", () => {
-    expect(
-      parseInterfaceDocument(
+      expect(document).toEqual(
+        new InterfaceDocument({
+          version: 1,
+          headline: "Shape your workspace",
+          placeholder: "Describe the interface you need",
+          secondaryActions: ["open", "connect"],
+        }),
+      );
+    }),
+  );
+
+  it.effect("fails closed for malformed JSON", () =>
+    Effect.gen(function* () {
+      const document = yield* decodeInterfaceDocument("{bad json");
+      expect(document).toBe(defaultInterfaceDocument);
+    }),
+  );
+
+  it.effect("fails closed for unsupported versions and excess fields", () =>
+    Effect.gen(function* () {
+      const unsupported = yield* decodeInterfaceDocument(
         JSON.stringify({
           version: 2,
           headline: "Replace the protected core",
-          placeholder: "Unsafe",
+          placeholder: "Anything",
           secondaryActions: [],
         }),
-      ),
-    ).toBe(defaultInterfaceDocument);
-  });
-
-  it("falls back for unrecognized actions", () => {
-    expect(
-      parseInterfaceDocument(
+      );
+      const excessive = yield* decodeInterfaceDocument(
         JSON.stringify({
           version: 1,
-          headline: "What should we shape?",
-          placeholder: "Build anything",
-          secondaryActions: ["run-code"],
+          headline: "Replace the protected core",
+          placeholder: "Anything",
+          secondaryActions: [],
+          runtimeEndpoint: "https://unexpected.example",
         }),
-      ),
-    ).toBe(defaultInterfaceDocument);
-  });
+      );
 
-  it("accepts a valid version-one document", () => {
-    const document = {
-      version: 1 as const,
-      headline: "Where should we begin?",
-      placeholder: "Describe an interface",
-      secondaryActions: ["open", "connect"] as const,
-    };
+      expect(unsupported).toBe(defaultInterfaceDocument);
+      expect(excessive).toBe(defaultInterfaceDocument);
+    }),
+  );
 
-    expect(parseInterfaceDocument(JSON.stringify(document))).toEqual(document);
-  });
+  it.effect("uses the built-in document when no custom state exists", () =>
+    Effect.gen(function* () {
+      const missing = yield* decodeInterfaceDocument(null);
+      const undefinedState = yield* decodeInterfaceDocument(undefined);
 
-  it("returns the built-in document when no stored state exists", () => {
-    expect(parseInterfaceDocument(null)).toBe(defaultInterfaceDocument);
-  });
+      expect(missing).toBe(defaultInterfaceDocument);
+      expect(undefinedState).toBe(defaultInterfaceDocument);
+    }),
+  );
 });
