@@ -10,6 +10,7 @@ const MAX_RPC_MESSAGE_BYTES: usize = 1024 * 1024;
 const INVALID_REQUEST: &str = "Invalid private runtime request.";
 const INVALID_RESPONSE: &str = "Invalid private runtime response.";
 const OVERSIZED_REQUEST: &str = "Private runtime request is too large.";
+const OVERSIZED_RESPONSE: &str = "Private runtime response is too large.";
 const RUNTIME_UNAVAILABLE: &str = "The private runtime is unavailable.";
 
 #[derive(Default)]
@@ -41,6 +42,9 @@ pub fn encode_rpc_request(request: &Value) -> Result<Vec<u8>, String> {
 }
 
 pub fn decode_rpc_response(line: &[u8]) -> Result<Value, &'static str> {
+    if line.len() > MAX_RPC_MESSAGE_BYTES {
+        return Err(OVERSIZED_RESPONSE);
+    }
     serde_json::from_slice(line).map_err(|_| INVALID_RESPONSE)
 }
 
@@ -86,16 +90,25 @@ fn start_runtime(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         while let Some(event) = events.recv().await {
             match event {
                 CommandEvent::Stdout(line) => {
-                    if let Ok(payload) = decode_rpc_response(&line) {
-                        let response_type = payload
-                            .as_object()
-                            .and_then(|object| object.get("_tag"))
-                            .and_then(Value::as_str)
-                            .unwrap_or("unknown");
-                        eprintln!("Flect private runtime response received: {response_type}.");
-                        let _ = handle.emit("flect://rpc", payload);
-                    } else {
-                        eprintln!("Flect private runtime returned an invalid frame.");
+                    match decode_rpc_response(&line) {
+                        Ok(payload) => {
+                            let response_type = payload
+                                .as_object()
+                                .and_then(|object| object.get("_tag"))
+                                .and_then(Value::as_str)
+                                .unwrap_or("unknown");
+                            eprintln!("Flect private runtime response received: {response_type}.");
+                            let _ = handle.emit("flect://rpc", payload);
+                        }
+                        Err(reason) => {
+                            eprintln!("Flect private runtime returned an invalid frame: {reason}");
+                            if let Ok(mut guard) = handle.state::<RuntimeChild>().0.lock() {
+                                if let Some(child) = guard.take() {
+                                    let _ = child.kill();
+                                }
+                            }
+                            break;
+                        }
                     }
                 }
                 CommandEvent::Stderr(_) | CommandEvent::Error(_) => {
@@ -139,6 +152,7 @@ pub fn run() {
 mod tests {
     use super::{
         decode_rpc_response, encode_rpc_request, require_runtime_child, validate_rpc_request,
+        MAX_RPC_MESSAGE_BYTES,
     };
     use serde_json::json;
 
@@ -206,6 +220,14 @@ mod tests {
         assert_eq!(
             decode_rpc_response(b"{not-json"),
             Err("Invalid private runtime response.")
+        );
+    }
+
+    #[test]
+    fn rejects_oversized_sidecar_frames() {
+        assert_eq!(
+            decode_rpc_response(&vec![b' '; MAX_RPC_MESSAGE_BYTES + 1]),
+            Err("Private runtime response is too large.")
         );
     }
 

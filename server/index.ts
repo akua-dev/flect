@@ -1,9 +1,12 @@
 import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
+import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
 import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { makeFlectHttpApp } from "./app";
 import { FlectRuntimeLive, PiSdkLive } from "./pi-runtime";
 import { FlectTestRuntimeLive } from "./test-runtime";
+
+registerBunOAuthFlows();
 
 const RuntimeLive =
   process.env.FLECT_TEST_MODE === "1"

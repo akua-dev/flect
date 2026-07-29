@@ -5,6 +5,7 @@ import {
   InterfaceDocument,
 } from "../../shared/interface-document";
 import {
+  consumeLegacyInterfaceDocument,
   InterfaceStorage,
   InterfaceStorageError,
   type InterfaceStorageShape,
@@ -20,6 +21,7 @@ const withStorage = <A, E>(
       Layer.succeed(InterfaceStorage)({
         read,
         write: () => Effect.void,
+        remove: () => Effect.void,
       }),
     ),
   );
@@ -128,4 +130,45 @@ describe("loadInterfaceDocument", () => {
       }),
     );
   });
+
+  it.effect("does not restore legacy state after migration", () => {
+    const read = vi.fn((key: string) =>
+      Effect.succeed(key === "flect.interface.v1.migrated" ? "1" : null),
+    );
+    return withStorage(
+      read,
+      Effect.gen(function* () {
+        const document = yield* loadInterfaceDocument({ safeMode: false });
+
+        expect(document).toBe(defaultInterfaceDocument);
+        expect(read).toHaveBeenCalledWith("flect.interface.v1.migrated");
+        expect(read).not.toHaveBeenCalledWith("flect.interface.v1");
+      }),
+    );
+  });
+
+  it.effect("marks legacy state consumed after migration", () =>
+    Effect.gen(function* () {
+      const writes: Array<readonly [string, string]> = [];
+      const removed: Array<string> = [];
+      yield* consumeLegacyInterfaceDocument().pipe(
+        Effect.provide(
+          Layer.succeed(InterfaceStorage)({
+            read: () => Effect.succeed(null),
+            write: (key, value) =>
+              Effect.sync(() => {
+                writes.push([key, value]);
+              }),
+            remove: (key) =>
+              Effect.sync(() => {
+                removed.push(key);
+              }),
+          }),
+        ),
+      );
+
+      expect(writes).toEqual([["flect.interface.v1.migrated", "1"]]);
+      expect(removed).toEqual(["flect.interface.v1"]);
+    }),
+  );
 });

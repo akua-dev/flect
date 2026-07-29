@@ -48,6 +48,55 @@ const snapshot = ShapingSnapshot.make({
   }),
 });
 
+const duplicateNodeSnapshot = ShapingSnapshot.make({
+  ...snapshot,
+  active: InterfaceRevision.make({
+    ...snapshot.active,
+    document: InterfaceDocument.make({
+      version: 2,
+      name: "Invalid workspace",
+      root: {
+        id: "root",
+        type: "stack",
+        direction: "column",
+        gap: "lg",
+        children: [
+          {
+            id: "duplicate",
+            type: "text",
+            text: "First",
+            style: "body",
+          },
+          {
+            id: "duplicate",
+            type: "text",
+            text: "Second",
+            style: "body",
+          },
+        ],
+      },
+    }),
+  }),
+});
+
+const invalidActiveStatusSnapshot = ShapingSnapshot.make({
+  ...snapshot,
+  active: InterfaceRevision.make({
+    ...snapshot.active,
+    status: "proposed",
+  }),
+});
+
+const rejectedProposalSnapshot = ShapingSnapshot.make({
+  ...snapshot,
+  proposal: InterfaceRevision.make({
+    ...snapshot.active,
+    id: RevisionId.make("proposal-1"),
+    parentId: snapshot.active.id,
+    status: "rejected",
+  }),
+});
+
 const makeStorage = (initial: string | null = null) => {
   const value = Ref.makeUnsafe<string | null>(initial);
   const reads = Ref.makeUnsafe(0);
@@ -65,6 +114,7 @@ const makeStorage = (initial: string | null = null) => {
         Ref.update(writes, (count) => count + 1).pipe(
           Effect.andThen(Ref.set(value, next)),
         ),
+      remove: () => Effect.void,
     }),
   };
 };
@@ -116,6 +166,63 @@ describe("InterfaceRepository", () => {
 
   it.layer(corruptLayer)((it) => {
     it.effect("fails closed when the persisted journal is corrupt", () =>
+      Effect.gen(function* () {
+        const repository = yield* InterfaceRepository;
+        const loaded = yield* repository.load;
+
+        assert.strictEqual(loaded.snapshot, undefined);
+        assert.strictEqual(loaded.recovered, true);
+      }),
+    );
+  });
+
+  const invalidDocumentStorage = makeStorage(
+    JSON.stringify(duplicateNodeSnapshot),
+  );
+  const invalidDocumentLayer = makeInterfaceRepositoryLayer({
+    safeMode: false,
+  }).pipe(Layer.provide(invalidDocumentStorage.layer));
+
+  it.layer(invalidDocumentLayer)((it) => {
+    it.effect("rejects schema-valid documents with invalid trees", () =>
+      Effect.gen(function* () {
+        const repository = yield* InterfaceRepository;
+        const loaded = yield* repository.load;
+
+        assert.strictEqual(loaded.snapshot, undefined);
+        assert.strictEqual(loaded.recovered, true);
+      }),
+    );
+  });
+
+  const invalidActiveStatusStorage = makeStorage(
+    JSON.stringify(invalidActiveStatusSnapshot),
+  );
+  const invalidActiveStatusLayer = makeInterfaceRepositoryLayer({
+    safeMode: false,
+  }).pipe(Layer.provide(invalidActiveStatusStorage.layer));
+
+  it.layer(invalidActiveStatusLayer)((it) => {
+    it.effect("rejects snapshots with an unaccepted active revision", () =>
+      Effect.gen(function* () {
+        const repository = yield* InterfaceRepository;
+        const loaded = yield* repository.load;
+
+        assert.strictEqual(loaded.snapshot, undefined);
+        assert.strictEqual(loaded.recovered, true);
+      }),
+    );
+  });
+
+  const rejectedProposalStorage = makeStorage(
+    JSON.stringify(rejectedProposalSnapshot),
+  );
+  const rejectedProposalLayer = makeInterfaceRepositoryLayer({
+    safeMode: false,
+  }).pipe(Layer.provide(rejectedProposalStorage.layer));
+
+  it.layer(rejectedProposalLayer)((it) => {
+    it.effect("rejects snapshots with a non-pending proposal", () =>
       Effect.gen(function* () {
         const repository = yield* InterfaceRepository;
         const loaded = yield* repository.load;

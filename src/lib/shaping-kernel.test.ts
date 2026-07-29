@@ -51,6 +51,7 @@ const makePersistentHarness = (initial: string | null = null) => {
   const storage = Layer.succeed(InterfaceStorage)({
     read: () => Ref.get(stored),
     write: (_key, value) => Ref.set(stored, value),
+    remove: () => Effect.void,
   });
   const repository = makeInterfaceRepositoryLayer({
     safeMode: false,

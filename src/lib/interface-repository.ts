@@ -1,21 +1,14 @@
-import { Context, Effect, Layer, Option, Schema, type SchemaAST } from "effect";
-import { ShapingSnapshot } from "../../shared/revisions";
+import { Context, Effect, Layer, Option, Schema } from "effect";
+import {
+  ShapingSnapshot,
+  validateShapingSnapshot,
+} from "../../shared/revisions";
 import {
   InterfaceStorage,
   type InterfaceStorageError,
 } from "./interface-store";
 
 const REVISION_JOURNAL_KEY = "flect.revisions.v1";
-
-const strictOptions: SchemaAST.ParseOptions = {
-  errors: "all",
-  onExcessProperty: "error",
-};
-
-const decodeSnapshot = Schema.decodeUnknownEffect(
-  ShapingSnapshot,
-  strictOptions,
-);
 
 class InvalidRevisionJournal extends Schema.TaggedErrorClass<InvalidRevisionJournal>()(
   "InvalidRevisionJournal",
@@ -87,7 +80,9 @@ export const makeInterfaceRepositoryLayer = ({
           });
         }
 
-        const decoded = yield* decodeSnapshot(input.value).pipe(Effect.option);
+        const decoded = yield* validateShapingSnapshot(input.value).pipe(
+          Effect.option,
+        );
         const snapshot = Option.getOrUndefined(decoded);
 
         return InterfaceRepositoryLoad.make({

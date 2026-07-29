@@ -9,7 +9,10 @@ import type { RevisionId } from "../shared/revisions";
 import { Launcher } from "./components/launcher";
 import type { ShapingController } from "./components/shaper-panel";
 import { useAgentSession } from "./hooks/use-agent-session";
-import { loadInterfaceDocument } from "./lib/interface-store";
+import {
+  consumeLegacyInterfaceDocument,
+  loadInterfaceDocument,
+} from "./lib/interface-store";
 import { browserRuntime, shapingRuntime } from "./lib/runtime";
 import { ShapingKernel } from "./lib/shaping-kernel";
 import { ExtensionExecution } from "./sandbox/extension-execution";
@@ -79,6 +82,9 @@ export function App() {
           const restored = yield* kernel.propose(legacy, "user");
           yield* kernel.preview(restored.id);
           const accepted = yield* kernel.accept(restored.id);
+          yield* Effect.promise(() =>
+            browserRuntime.runPromise(consumeLegacyInterfaceDocument()),
+          );
           return {
             document: accepted.document,
             protectedMode: false,

@@ -49,11 +49,12 @@ const hardeningProgram = `
         enumerable: false
       });
     };
-    const functionConstructors = [
-      Object.getPrototypeOf(function () {}).constructor,
-      Object.getPrototypeOf(function* () {}).constructor
+    const functionPrototypes = [
+      Object.getPrototypeOf(function () {}),
+      Object.getPrototypeOf(function* () {})
     ];
-    for (const constructor of functionConstructors) {
+    for (const prototype of functionPrototypes) {
+      const constructor = prototype.constructor;
       Object.defineProperty(constructor.prototype, "constructor", {
         value: undefined,
         writable: false,
@@ -118,6 +119,7 @@ const executeInModule = Effect.fn("Flect.Sandbox.executeInModule")(
             BaseObjects: true,
             Eval: true,
             JSON: true,
+            Promise: false,
           },
         });
 

@@ -47,6 +47,7 @@ function createFakeRuntime({
   const storage: InterfaceStorageShape = {
     read: () => Effect.succeed(null),
     write: () => Effect.void,
+    remove: () => Effect.void,
   };
   const runtime: FlectBrowserRuntime = ManagedRuntime.make(
     Layer.merge(

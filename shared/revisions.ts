@@ -1,5 +1,8 @@
 import { Effect, Schema, type SchemaAST } from "effect";
-import { InterfaceDocument } from "./interface-document";
+import {
+  InterfaceDocument,
+  validateInterfaceDocument,
+} from "./interface-document";
 
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
@@ -101,3 +104,58 @@ export const validateInterfaceRevision = Effect.fn(
     strictOptions,
   )(input).pipe(Effect.mapError(invalidRevision)),
 );
+
+const validateRevisionDocument = Effect.fn(
+  "Flect.ShapingSnapshot.validateRevisionDocument",
+)((revision: InterfaceRevision) =>
+  validateInterfaceDocument(revision.document).pipe(
+    Effect.mapError(() => invalidRevision()),
+    Effect.as(revision),
+  ),
+);
+
+const isProposalStatus = (
+  status: InterfaceRevision["status"],
+): status is "proposed" | "previewed" =>
+  status === "proposed" || status === "previewed";
+
+export const validateShapingSnapshot = Effect.fn(
+  "Flect.ShapingSnapshot.validate",
+)(function* (
+  input: unknown,
+): Effect.fn.Return<ShapingSnapshot, InvalidRevision, never> {
+  const snapshot = yield* Schema.decodeUnknownEffect(
+    ShapingSnapshot,
+    strictOptions,
+  )(input).pipe(Effect.mapError(invalidRevision));
+
+  yield* validateRevisionDocument(snapshot.active);
+  yield* validateRevisionDocument(snapshot.lastKnownGood);
+
+  if (
+    snapshot.active.status !== "accepted" ||
+    snapshot.lastKnownGood.status !== "accepted"
+  ) {
+    return yield* Effect.fail(invalidRevision());
+  }
+
+  if (snapshot.proposal !== undefined) {
+    yield* validateRevisionDocument(snapshot.proposal);
+    if (
+      !isProposalStatus(snapshot.proposal.status) ||
+      snapshot.proposal.source === "built-in" ||
+      snapshot.proposal.parentId !== snapshot.active.id
+    ) {
+      return yield* Effect.fail(invalidRevision());
+    }
+  }
+
+  if (
+    new Set(snapshot.disabledExtensions).size !==
+    snapshot.disabledExtensions.length
+  ) {
+    return yield* Effect.fail(invalidRevision());
+  }
+
+  return snapshot;
+});
