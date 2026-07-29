@@ -62,3 +62,31 @@ export const flectEventSchema = z.discriminatedUnion("type", [
 ]);
 
 export type FlectEvent = z.infer<typeof flectEventSchema>;
+
+export const modelsResponseSchema = z
+  .object({
+    version: z.literal(1),
+    models: z.array(modelSummarySchema),
+  })
+  .strict();
+
+export const sessionResponseSchema = z
+  .object({
+    version: z.literal(1),
+    sessionId: nonEmptyText,
+  })
+  .strict();
+
+export const cancelResponseSchema = z
+  .object({
+    version: z.literal(1),
+    status: z.literal("cancelled"),
+  })
+  .strict();
+
+export const publicErrorSchema = z
+  .object({
+    version: z.literal(1),
+    error: nonEmptyText,
+  })
+  .strict();
