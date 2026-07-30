@@ -14,6 +14,7 @@ import {
   Option,
   Queue,
   Ref,
+  Semaphore,
   Stream,
 } from "effect";
 import {
@@ -302,6 +303,8 @@ type SessionRecord = {
   readonly session: PiSession;
   readonly guardian: PiSession;
   readonly cancelled: Ref.Ref<boolean>;
+  readonly sessionOperation: Semaphore.Semaphore;
+  readonly guardianOperation: Semaphore.Semaphore;
   readonly sequence: number;
 };
 
@@ -309,6 +312,36 @@ const PUBLIC_TURN_ERROR = "The model could not complete this turn.";
 const MAX_SHAPER_RESPONSE_BYTES = 256 * 1024;
 const MAX_GUARDIAN_RESPONSE_BYTES = 16 * 1024;
 const MAX_ACTIVE_SESSIONS = 32;
+
+const makeBoundedResponse = (
+  limit: number,
+  abort: () => Effect.Effect<void, PiOperationFailed>,
+) => {
+  const encoder = new TextEncoder();
+  const chunks: Array<string> = [];
+  let byteLength = 0;
+  let exceeded = false;
+
+  const append = (delta: string) => {
+    if (exceeded) {
+      return;
+    }
+    const nextByteLength = byteLength + encoder.encode(delta).byteLength;
+    if (nextByteLength > limit) {
+      exceeded = true;
+      Effect.runFork(abort().pipe(Effect.catch(() => Effect.void)));
+      return;
+    }
+    byteLength = nextByteLength;
+    chunks.push(delta);
+  };
+
+  return {
+    append,
+    isExceeded: () => exceeded,
+    text: () => chunks.join(""),
+  };
+};
 
 const shapePrompt = (
   instruction: string,
@@ -428,6 +461,8 @@ export const FlectRuntimeLive = Layer.effect(
 
       const pair = yield* pi.createAgentPair(model, protectedAgentPolicies);
       const cancelled = yield* Ref.make(false);
+      const sessionOperation = yield* Semaphore.make(1);
+      const guardianOperation = yield* Semaphore.make(1);
       const sequence = yield* Ref.getAndUpdate(
         sessionSequence,
         (current) => current + 1,
@@ -436,6 +471,8 @@ export const FlectRuntimeLive = Layer.effect(
         session: pair.shaper,
         guardian: pair.guardian,
         cancelled,
+        sessionOperation,
+        guardianOperation,
         sequence,
       };
       const evicted = yield* Ref.modify(sessions, (current) => {
@@ -491,29 +528,32 @@ export const FlectRuntimeLive = Layer.effect(
     const diagnoseRecovery = Effect.fn("Flect.Runtime.diagnoseRecovery")(
       function* (sessionId: string, reason: RecoveryReason) {
         const record = yield* findSession(sessionId);
-        const chunks: Array<string> = [];
-        const unsubscribe = yield* record.guardian.subscribe((event) => {
-          chunks.push(event.delta);
-        });
+        return yield* record.guardianOperation.withPermit(
+          Effect.gen(function* () {
+            const response = makeBoundedResponse(
+              MAX_GUARDIAN_RESPONSE_BYTES,
+              record.guardian.abort,
+            );
+            const unsubscribe = yield* record.guardian.subscribe((event) => {
+              response.append(event.delta);
+            });
 
-        yield* record.guardian.prompt(guardianPrompt(reason)).pipe(
-          Effect.mapError(() => piFailure("diagnose")),
-          Effect.ensuring(Effect.sync(() => unsubscribe())),
+            yield* record.guardian.prompt(guardianPrompt(reason)).pipe(
+              Effect.mapError(() => piFailure("diagnose")),
+              Effect.ensuring(Effect.sync(() => unsubscribe())),
+            );
+
+            const message = response.text().trim();
+            if (response.isExceeded() || message.length === 0) {
+              return yield* Effect.fail(piFailure("diagnose"));
+            }
+
+            return GuardianDiagnostic.make({
+              version: 1,
+              message,
+            });
+          }),
         );
-
-        const message = chunks.join("").trim();
-        if (
-          message.length === 0 ||
-          new TextEncoder().encode(message).byteLength >
-            MAX_GUARDIAN_RESPONSE_BYTES
-        ) {
-          return yield* Effect.fail(piFailure("diagnose"));
-        }
-
-        return GuardianDiagnostic.make({
-          version: 1,
-          message,
-        });
       },
     );
 
@@ -527,67 +567,71 @@ export const FlectRuntimeLive = Layer.effect(
       Stream.fromEffect(findSession(sessionId)).pipe(
         Stream.flatMap((record) =>
           Stream.callback((queue) =>
-            Effect.gen(function* () {
-              const completed = yield* Ref.make(false);
-              yield* Ref.set(record.cancelled, false);
-              Queue.offerUnsafe(
-                queue,
-                new TurnStarted({ type: "turn_started" }),
-              );
-
-              const unsubscribe = yield* record.session.subscribe((event) => {
+            record.sessionOperation.withPermit(
+              Effect.gen(function* () {
+                const completed = yield* Ref.make(false);
+                yield* Ref.set(record.cancelled, false);
                 Queue.offerUnsafe(
                   queue,
-                  new TextDelta({
-                    type: "text_delta",
-                    delta: event.delta,
-                  }),
+                  new TurnStarted({ type: "turn_started" }),
                 );
-              });
 
-              yield* Effect.addFinalizer((_exit) =>
-                Effect.sync(() => unsubscribe()),
-              );
-              yield* Effect.addFinalizer((_exit) =>
-                Ref.get(completed).pipe(
-                  Effect.flatMap((isComplete) =>
-                    isComplete
-                      ? Effect.void
-                      : record.session
-                          .abort()
-                          .pipe(Effect.catch(() => Effect.void)),
+                const unsubscribe = yield* record.session.subscribe((event) => {
+                  Queue.offerUnsafe(
+                    queue,
+                    new TextDelta({
+                      type: "text_delta",
+                      delta: event.delta,
+                    }),
+                  );
+                });
+
+                const turn = Effect.gen(function* () {
+                  const terminal = yield* record.session.prompt(text).pipe(
+                    Effect.matchEffect({
+                      onFailure: () =>
+                        Ref.get(record.cancelled).pipe(
+                          Effect.map((cancelled) =>
+                            cancelled
+                              ? new TurnCancelled({ type: "cancelled" })
+                              : new TurnError({
+                                  type: "error",
+                                  message: PUBLIC_TURN_ERROR,
+                                }),
+                          ),
+                        ),
+                      onSuccess: () =>
+                        Ref.get(record.cancelled).pipe(
+                          Effect.map((cancelled) =>
+                            cancelled
+                              ? new TurnCancelled({ type: "cancelled" })
+                              : new TurnCompleted({ type: "turn_completed" }),
+                          ),
+                        ),
+                    }),
+                  );
+
+                  Queue.offerUnsafe(queue, terminal);
+                  yield* Ref.set(completed, true);
+                  Queue.endUnsafe(queue);
+                });
+
+                yield* turn.pipe(
+                  Effect.ensuring(Effect.sync(() => unsubscribe())),
+                  Effect.ensuring(
+                    Ref.get(completed).pipe(
+                      Effect.flatMap((isComplete) =>
+                        isComplete
+                          ? Effect.void
+                          : record.session
+                              .abort()
+                              .pipe(Effect.catch(() => Effect.void)),
+                      ),
+                    ),
                   ),
-                ),
-              );
-
-              const terminal = yield* record.session.prompt(text).pipe(
-                Effect.matchEffect({
-                  onFailure: () =>
-                    Ref.get(record.cancelled).pipe(
-                      Effect.map((cancelled) =>
-                        cancelled
-                          ? new TurnCancelled({ type: "cancelled" })
-                          : new TurnError({
-                              type: "error",
-                              message: PUBLIC_TURN_ERROR,
-                            }),
-                      ),
-                    ),
-                  onSuccess: () =>
-                    Ref.get(record.cancelled).pipe(
-                      Effect.map((cancelled) =>
-                        cancelled
-                          ? new TurnCancelled({ type: "cancelled" })
-                          : new TurnCompleted({ type: "turn_completed" }),
-                      ),
-                    ),
-                }),
-              );
-
-              Queue.offerUnsafe(queue, terminal);
-              yield* Ref.set(completed, true);
-              Queue.endUnsafe(queue);
-            }),
+                );
+              }),
+            ),
           ),
         ),
       );
@@ -606,16 +650,26 @@ export const FlectRuntimeLive = Layer.effect(
       document: InterfaceDocument,
     ) {
       const record = yield* findSession(sessionId);
-      const chunks: Array<string> = [];
-      const unsubscribe = yield* record.session.subscribe((event) => {
-        chunks.push(event.delta);
-      });
+      return yield* record.sessionOperation.withPermit(
+        Effect.gen(function* () {
+          const response = makeBoundedResponse(
+            MAX_SHAPER_RESPONSE_BYTES,
+            record.session.abort,
+          );
+          const unsubscribe = yield* record.session.subscribe((event) => {
+            response.append(event.delta);
+          });
 
-      yield* record.session
-        .prompt(shapePrompt(instruction, document))
-        .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
+          yield* record.session
+            .prompt(shapePrompt(instruction, document))
+            .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
 
-      return yield* parseShaperDocument(chunks.join(""));
+          if (response.isExceeded()) {
+            return yield* Effect.fail(piFailure("shape"));
+          }
+          return yield* parseShaperDocument(response.text());
+        }),
+      );
     });
 
     return {

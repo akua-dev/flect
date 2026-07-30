@@ -343,7 +343,7 @@ const makeShapingKernel = (
         const next: KernelState = {
           ...state,
           active: recovered,
-          lastKnownGood: state.active,
+          lastKnownGood: recovered,
           proposal: undefined,
           safeMode: false,
           failureCounts: new Map(),

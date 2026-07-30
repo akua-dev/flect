@@ -69,7 +69,10 @@ const defaultPrompt: PromptNode = {
 };
 
 function RuntimeState({ status }: { readonly status: AgentSessionStatus }) {
-  const ready = status !== "booting" && status !== "unavailable";
+  const ready =
+    status !== "booting" &&
+    status !== "unavailable" &&
+    status !== "setup-required";
   return (
     <span aria-live="polite" className="runtime-state" role="status">
       <span
@@ -77,6 +80,8 @@ function RuntimeState({ status }: { readonly status: AgentSessionStatus }) {
       />
       {status === "booting"
         ? "Finding Pi"
+        : status === "setup-required"
+          ? "Pi setup needed"
         : ready
           ? "Pi ready"
           : "Runtime offline"}
@@ -175,6 +180,23 @@ export function Launcher({
           >
             <RefreshIcon />
             Try again
+          </button>
+        </div>
+      )}
+
+      {session.status === "setup-required" && (
+        <div className="runtime-alert" role="alert">
+          <div>
+            <strong>Pi setup needed</strong>
+            <p>{session.error}</p>
+          </div>
+          <button
+            className="retry-button"
+            onClick={() => void session.refresh()}
+            type="button"
+          >
+            <RefreshIcon />
+            Check again
           </button>
         </div>
       )}

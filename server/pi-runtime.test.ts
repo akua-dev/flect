@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Layer, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import {
   ModelSummary,
   PiOperationFailed,
@@ -22,6 +22,9 @@ import { FlectRuntime } from "./runtime";
 type FakeOptions = {
   readonly promptFailure?: boolean;
   readonly promptResponse?: string;
+  readonly guardianResponse?: string;
+  readonly promptGate?: Deferred.Deferred<void>;
+  readonly promptStarted?: Deferred.Deferred<void>;
 };
 
 function createFakePi(options: FakeOptions = {}) {
@@ -41,13 +44,21 @@ function createFakePi(options: FakeOptions = {}) {
             message: "The model runtime could not complete the request.",
           }),
         )
-      : Effect.sync(() =>
-          listener?.(options.promptResponse ?? "A shaped response"),
-        ),
+      : Effect.gen(function* () {
+          if (options.promptStarted !== undefined) {
+            yield* Deferred.succeed(options.promptStarted, undefined);
+          }
+          if (options.promptGate !== undefined) {
+            yield* Deferred.await(options.promptGate);
+          }
+          listener?.(options.promptResponse ?? "A shaped response");
+        }),
   );
   const guardianPrompt = vi.fn(() =>
     Effect.sync(() =>
-      guardianListener?.("The protected launcher remains available."),
+      guardianListener?.(
+        options.guardianResponse ?? "The protected launcher remains available.",
+      ),
     ),
   );
 
@@ -205,6 +216,60 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
+  it.effect("serializes prompts and shaping on one protected session", () => {
+    const promptStarted = Deferred.makeUnsafe<void>();
+    const promptGate = Deferred.makeUnsafe<void>();
+    const fake = createFakePi({
+      promptGate,
+      promptStarted,
+      promptResponse: JSON.stringify(defaultInterfaceDocument),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const promptFiber = yield* runtime
+        .prompt(sessionId, "Keep talking")
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(promptStarted);
+
+      const shapeFiber = yield* runtime
+        .shape(sessionId, "Shape this", defaultInterfaceDocument)
+        .pipe(Effect.forkChild);
+      yield* Effect.yieldNow;
+      expect(fake.prompt).toHaveBeenCalledOnce();
+
+      yield* Deferred.succeed(promptGate, undefined);
+      yield* Fiber.join(promptFiber);
+      yield* Fiber.join(shapeFiber);
+
+      expect(fake.prompt).toHaveBeenCalledTimes(2);
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("aborts and bounds oversized Shaper responses", () => {
+    const fake = createFakePi({
+      promptResponse: "x".repeat(256 * 1024 + 1),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const error = yield* runtime
+        .shape(sessionId, "Make it huge", defaultInterfaceDocument)
+        .pipe(Effect.flip);
+      yield* Effect.yieldNow;
+
+      expect(error).toEqual(
+        new PiOperationFailed({
+          operation: "shape",
+          message: "The model runtime could not complete the request.",
+        }),
+      );
+      expect(fake.abort).toHaveBeenCalledOnce();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
   it.effect("fails closed when Shaper returns an invalid document", () => {
     const fake = createFakePi({
       promptResponse: '{"version":2,"name":"Unsafe","root":{"type":"script"}}',
@@ -272,6 +337,29 @@ describe("FlectRuntimeLive", () => {
       expect(fake.guardianPrompt).toHaveBeenCalledOnce();
       expect(fake.guardianUnsubscribe).toHaveBeenCalledOnce();
       expect(fake.prompt).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("aborts and bounds oversized Guardian diagnostics", () => {
+    const fake = createFakePi({
+      guardianResponse: "x".repeat(16 * 1024 + 1),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const error = yield* runtime
+        .diagnoseRecovery(sessionId, "rollback-failed")
+        .pipe(Effect.flip);
+      yield* Effect.yieldNow;
+
+      expect(error).toEqual(
+        new PiOperationFailed({
+          operation: "diagnose",
+          message: "The model runtime could not complete the request.",
+        }),
+      );
+      expect(fake.guardianAbort).toHaveBeenCalledOnce();
     }).pipe(Effect.provide(fake.layer));
   });
 

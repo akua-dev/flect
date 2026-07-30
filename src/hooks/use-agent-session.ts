@@ -17,6 +17,7 @@ export type AgentSessionStatus =
   | "submitting"
   | "streaming"
   | "error"
+  | "setup-required"
   | "unavailable";
 
 export interface ConversationMessage {
@@ -137,6 +138,15 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         );
       }
 
+      if (availableModels.length === 0) {
+        yield* Effect.sync(() => {
+          setModels(availableModels);
+          setStatus("setup-required");
+          setError("Sign in to a Pi provider, then try again.");
+        });
+        return;
+      }
+
       yield* Effect.sync(() => {
         setModels(availableModels);
         setStatus("ready");
@@ -229,7 +239,10 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   const submit = useCallback(
     (text: string): Promise<void> => {
       const prompt = text.trim();
-      if (!prompt || status === "submitting" || status === "streaming") {
+      if (
+        !prompt ||
+        (status !== "ready" && status !== "error")
+      ) {
         return Promise.resolve();
       }
 
@@ -342,7 +355,11 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
       setSelectedModel(model);
       setError(undefined);
       setStatus((current) =>
-        current === "booting" || current === "unavailable" ? current : "ready",
+        current === "booting" ||
+          current === "unavailable" ||
+          current === "setup-required"
+          ? current
+          : "ready",
       );
     },
     [releaseSession, runtime],

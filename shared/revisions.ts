@@ -148,6 +148,15 @@ export const validateShapingSnapshot = Effect.fn(
     return yield* Effect.fail(invalidRevision());
   }
 
+  if (
+    [snapshot.active, snapshot.lastKnownGood].some(
+      (revision) =>
+        revision.source === "built-in" && !isInitialRevision(revision),
+    )
+  ) {
+    return yield* Effect.fail(invalidRevision());
+  }
+
   if (snapshot.proposal !== undefined) {
     yield* validateRevisionDocument(snapshot.proposal);
     if (

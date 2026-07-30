@@ -195,6 +195,33 @@ describe("Launcher", () => {
     expect(session.refresh).toHaveBeenCalledOnce();
   });
 
+  it("guides Pi setup and disables the composer without authenticated models", async () => {
+    const session = controller({
+      status: "setup-required",
+      models: [],
+      error: "Sign in to a Pi provider, then try again.",
+    });
+    const user = userEvent.setup();
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={session}
+        shaping={shaping()}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Pi setup needed");
+    expect(
+      screen.getByText("Sign in to a Pi provider, then try again."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("textbox", { name: "Describe what to shape" }),
+    ).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Check again" }));
+    expect(session.refresh).toHaveBeenCalledOnce();
+  });
+
   it("identifies the protected shell and uses safe default copy", () => {
     const unsafeDocument = InterfaceDocument.make({
       version: 2,

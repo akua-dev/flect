@@ -107,7 +107,7 @@ describe("ShapingKernel", () => {
       version: 1,
       id: RevisionId.make("revision-1"),
       status: "accepted",
-      source: "built-in",
+      source: "user",
       document: defaultInterfaceDocument,
       createdAt: 1,
     }),
@@ -226,8 +226,13 @@ describe("ShapingKernel", () => {
 
         const snapshot = yield* kernel.snapshot;
         assert.deepStrictEqual(snapshot.active.document, firstDocument);
+        assert.deepStrictEqual(snapshot.lastKnownGood.document, firstDocument);
         assert.strictEqual(snapshot.safeMode, false);
         assert.strictEqual(snapshot.lastEvent.type, "revision-rolled-back");
+
+        yield* kernel.enterSafeMode;
+        const recovered = yield* kernel.snapshot;
+        assert.deepStrictEqual(recovered.active.document, firstDocument);
       }),
     );
   });

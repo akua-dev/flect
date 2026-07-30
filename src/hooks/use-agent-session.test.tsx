@@ -89,6 +89,23 @@ describe("useAgentSession", () => {
     await runtime.dispose();
   });
 
+  it("requires Pi setup when no authenticated models are available", async () => {
+    const { client, runtime } = createFakeRuntime({ models: [] });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+
+    await waitFor(() => expect(result.current.status).toBe("setup-required"));
+
+    expect(result.current.error).toBe(
+      "Sign in to a Pi provider, then try again.",
+    );
+    await act(async () => {
+      await result.current.submit("This must not create a session");
+    });
+    expect(client.createSession).not.toHaveBeenCalled();
+    unmount();
+    await runtime.dispose();
+  });
+
   it("creates one session and appends streamed text", async () => {
     const { client, runtime } = createFakeRuntime();
     const { result, unmount } = renderHook(() => useAgentSession(runtime));
