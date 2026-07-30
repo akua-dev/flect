@@ -285,9 +285,6 @@ const shapeRoute = HttpRouter.add(
       headers: { "cache-control": "no-store" },
     });
   }).pipe(
-    Effect.catchTag("SessionBusy", () =>
-      publicError("The session is busy.", 409),
-    ),
     Effect.catchTag("InvalidInterfaceDocument", () => invalidRequest()),
     Effect.catch(() => runtimeFailure()),
   ),

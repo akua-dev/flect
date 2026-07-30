@@ -270,20 +270,25 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
             ),
           ),
           Stream.mapError(shapeFailure(sessionId)),
-          Stream.mapEffect((event) => {
-            if (event.type === "shape_busy") {
-              return Effect.fail(
-                new SessionBusy({
-                  sessionId,
-                  message: "The session is busy.",
-                }),
-              );
-            }
-            if (event.type === "shape_error") {
-              return Effect.fail(unavailable());
-            }
-            return Effect.succeed(event);
-          }),
+          Stream.mapEffect(
+            (event): Effect.Effect<
+              ShapeEvent,
+              FlectUnavailableError | SessionBusy
+            > => {
+              if (event.type === "shape_busy") {
+                return Effect.fail(
+                  new SessionBusy({
+                    sessionId,
+                    message: "The session is busy.",
+                  }),
+                );
+              }
+              if (event.type === "shape_error") {
+                return Effect.fail(unavailable());
+              }
+              return Effect.succeed(event);
+            },
+          ),
         );
 
       const diagnoseRecovery = Effect.fn("Flect.Client.diagnoseRecovery")(
