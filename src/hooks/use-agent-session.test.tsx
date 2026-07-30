@@ -46,9 +46,7 @@ function createFakeRuntime({
       { type: "turn_completed" as const },
     ]),
   shape = (_sessionId, _instruction, document) =>
-    Stream.succeed(
-      ShapeCompleted.make({ type: "shape_completed", document }),
-    ),
+    Stream.succeed(ShapeCompleted.make({ type: "shape_completed", document })),
   cancel = () => Effect.void,
   completeShellRequest = () => Effect.void,
   shellExecute = () =>
@@ -256,7 +254,10 @@ describe("useAgentSession", () => {
     await waitFor(() => expect(result.current.status).toBe("ready"));
 
     await act(async () => {
-      await result.current.shape("Use the browser shell", defaultInterfaceDocument);
+      await result.current.shape(
+        "Use the browser shell",
+        defaultInterfaceDocument,
+      );
     });
 
     expect(shell.execute).toHaveBeenCalledWith("bun run src/index.ts");

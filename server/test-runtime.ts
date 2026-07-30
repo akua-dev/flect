@@ -118,7 +118,9 @@ export const FlectTestRuntimeLive = Layer.effect(
               document: shapedDocument(document),
             }),
           ),
-          Stream.mapEffect((event) => Effect.succeed(event).pipe(Effect.delay("100 millis"))),
+          Stream.mapEffect((event) =>
+            Effect.succeed(event).pipe(Effect.delay("100 millis")),
+          ),
         ),
       cancel: () => Effect.void,
       completeShellRequest: (_sessionId, requestId, result) =>

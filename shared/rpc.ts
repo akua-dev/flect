@@ -12,7 +12,6 @@ import {
   SessionSelection,
   ShapeEvent,
 } from "./contracts";
-import { InterfaceDocument } from "./interface-document";
 
 const Identifier = Schema.Trim.check(
   Schema.isMinLength(1),

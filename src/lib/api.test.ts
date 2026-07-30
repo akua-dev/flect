@@ -271,16 +271,14 @@ describe("FlectClient", () => {
       ...defaultInterfaceDocument,
       name: "Focused Flect",
     });
-    const fetcher = vi
-      .fn<typeof fetch>()
-      .mockResolvedValue(
-        chunkedSse([
-          `data: ${JSON.stringify({
-            type: "shape_completed",
-            document: shaped,
-          })}\n\n`,
-        ]),
-      );
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      chunkedSse([
+        `data: ${JSON.stringify({
+          type: "shape_completed",
+          document: shaped,
+        })}\n\n`,
+      ]),
+    );
 
     return withClient(
       fetcher,

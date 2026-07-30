@@ -213,7 +213,10 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   );
 
   const executeShellRequest = useCallback(
-    (sessionId: string, event: { readonly requestId: string; readonly command: string }) =>
+    (
+      sessionId: string,
+      event: { readonly requestId: string; readonly command: string },
+    ) =>
       Effect.gen(function* () {
         const client = yield* FlectClient;
         const shell = yield* SandboxedShell;
@@ -229,11 +232,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
             ),
           ),
         );
-        yield* client.completeShellRequest(
-          sessionId,
-          event.requestId,
-          result,
-        );
+        yield* client.completeShellRequest(sessionId, event.requestId, result);
       }),
     [],
   );

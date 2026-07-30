@@ -195,7 +195,9 @@ QuickJS-NG WebAssembly runtime for each request. The wrapper applies:
 
 - 256 KiB source, 1 MiB input, and 1 MiB output limits;
 - a 16 MiB heap and 512 KiB stack;
-- a 100 ms QuickJS interrupt deadline and 2 second outer worker deadline;
+- a 100 ms QuickJS interrupt deadline that starts after context creation and
+  fixed hardening, so it measures only untrusted extension evaluation, plus a
+  2 second outer worker deadline for the overall request;
 - no module loader or host callbacks; and
 - no `fetch`, DOM, storage, IndexedDB, navigator, process, Bun, Tauri, Date,
   Promise, Proxy, dynamic evaluation, or function constructor authority.

@@ -272,7 +272,8 @@ const shapeRoute = HttpRouter.add(
           Stream.succeed(
             new ShapeError({
               type: "shape_error",
-              message: "The local Flect runtime could not complete this request.",
+              message:
+                "The local Flect runtime could not complete this request.",
             }),
           ),
         ),

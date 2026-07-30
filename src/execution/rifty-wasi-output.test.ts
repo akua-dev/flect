@@ -1,5 +1,8 @@
 import { assert, describe, it } from "@effect/vitest";
-import { makeBoundedWasiOutput, WasiOutputLimitExceeded } from "./rifty-wasi-output";
+import {
+  makeBoundedWasiOutput,
+  WasiOutputLimitExceeded,
+} from "./rifty-wasi-output";
 
 describe("bounded WASI output", () => {
   it("fails during stdout emission instead of retaining over-limit output", () => {

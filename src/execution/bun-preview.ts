@@ -171,7 +171,9 @@ export const makeBunPreviewLayer = (options?: {
                       orElse: () =>
                         (registration.onTimeout ?? Effect.void).pipe(
                           Effect.catch(() => Effect.void),
-                          Effect.as(response(504, "Preview handler timed out.")),
+                          Effect.as(
+                            response(504, "Preview handler timed out."),
+                          ),
                         ),
                     }),
                     Effect.flatMap((value) =>

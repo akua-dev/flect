@@ -31,9 +31,9 @@ import {
   RuntimeStatus,
   SessionBusy,
   SessionNotFound,
+  type SessionSelection,
   ShapeCompleted,
   type ShapeEvent,
-  type SessionSelection,
   TextDelta,
   TurnCancelled,
   TurnCompleted,
@@ -422,55 +422,53 @@ const makeOperationController = Effect.fn(
     yield* Deferred.succeed(operation.done, undefined);
   });
 
-  const cancelActive = Effect.fn("Flect.Runtime.cancelActiveOperation")(
-    () =>
-      Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const operation = yield* Ref.modify(state, (current) => {
-            if (
-              current.active === undefined || current.cancelling !== undefined
-            ) {
-              return [undefined, current] satisfies readonly [
-                undefined,
-                OperationState,
-              ];
-            }
-            return [
-              current.active,
-              { ...current, cancelling: current.active },
-            ] satisfies readonly [ActiveOperation, OperationState];
-          });
-          if (operation === undefined) {
-            return;
+  const cancelActive = Effect.fn("Flect.Runtime.cancelActiveOperation")(() =>
+    Effect.uninterruptibleMask((restore) =>
+      Effect.gen(function* () {
+        const operation = yield* Ref.modify(state, (current) => {
+          if (
+            current.active === undefined ||
+            current.cancelling !== undefined
+          ) {
+            return [undefined, current] satisfies readonly [
+              undefined,
+              OperationState,
+            ];
           }
+          return [
+            current.active,
+            { ...current, cancelling: current.active },
+          ] satisfies readonly [ActiveOperation, OperationState];
+        });
+        if (operation === undefined) {
+          return;
+        }
 
-          const releaseClaim = Deferred.poll(operation.done).pipe(
-            Effect.flatMap((settled) =>
-              Ref.update(state, (current) =>
-                current.cancelling === operation
-                  ? {
-                      ...current,
-                      active: Option.isSome(settled)
-                        ? undefined
-                        : current.active,
-                      cancelling: undefined,
-                    }
-                  : current,
-              ),
+        const releaseClaim = Deferred.poll(operation.done).pipe(
+          Effect.flatMap((settled) =>
+            Ref.update(state, (current) =>
+              current.cancelling === operation
+                ? {
+                    ...current,
+                    active: Option.isSome(settled) ? undefined : current.active,
+                    cancelling: undefined,
+                  }
+                : current,
             ),
-          );
+          ),
+        );
 
-          yield* restore(
-            Effect.gen(function* () {
-              const interruptResult = yield* Effect.result(operation.interrupt);
-              if (interruptResult._tag === "Failure") {
-                return yield* Effect.fail(interruptResult.failure);
-              }
-              yield* Deferred.await(operation.done);
-            }),
-          ).pipe(Effect.ensuring(releaseClaim));
-        }),
-      ),
+        yield* restore(
+          Effect.gen(function* () {
+            const interruptResult = yield* Effect.result(operation.interrupt);
+            if (interruptResult._tag === "Failure") {
+              return yield* Effect.fail(interruptResult.failure);
+            }
+            yield* Deferred.await(operation.done);
+          }),
+        ).pipe(Effect.ensuring(releaseClaim));
+      }),
+    ),
   );
 
   const close = Effect.fn("Flect.Runtime.closeOperationController")(

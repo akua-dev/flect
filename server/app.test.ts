@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Stream } from "effect";
 import { BunCommandResult } from "../shared/bun-command";
 import {
-  GuardianDiagnostic,
   AgentShellRequest,
+  GuardianDiagnostic,
   ModelSummary,
   ModelsResponse,
   RuntimeStatus,
@@ -419,9 +419,7 @@ describe("Flect HTTP application", () => {
       expect(output).toContain(
         'data: {"type":"shell_request","requestId":"shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2","command":"bun run src/index.ts"}',
       );
-      expect(output).toContain(
-        'data: {"type":"shape_completed","document":',
-      );
+      expect(output).toContain('data: {"type":"shape_completed","document":');
       expect(runtime.completeShellRequest).toHaveBeenCalledWith(
         "session-1",
         requestId,

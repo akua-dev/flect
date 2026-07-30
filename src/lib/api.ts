@@ -271,7 +271,9 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
           ),
           Stream.mapError(shapeFailure(sessionId)),
           Stream.mapEffect(
-            (event): Effect.Effect<
+            (
+              event,
+            ): Effect.Effect<
               ShapeEvent,
               FlectUnavailableError | SessionBusy
             > => {

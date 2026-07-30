@@ -95,45 +95,48 @@ describe("BunPreview", () => {
       }),
     );
 
-    it.effect("reclaims timed out ownership before a later run reuses the port", () =>
-      Effect.gen(function* () {
-        const preview = yield* BunPreview;
-        let reclaimed = 0;
-        yield* preview.register({
-          runId: "run-timeout",
-          port: 3006,
-          handler: () => Effect.never,
-          onTimeout: Effect.sync(() => {
-            reclaimed += 1;
-          }).pipe(
-            Effect.andThen(preview.stop("run-timeout").pipe(Effect.ignore)),
-          ),
-        });
+    it.effect(
+      "reclaims timed out ownership before a later run reuses the port",
+      () =>
+        Effect.gen(function* () {
+          const preview = yield* BunPreview;
+          let reclaimed = 0;
+          yield* preview.register({
+            runId: "run-timeout",
+            port: 3006,
+            handler: () => Effect.never,
+            onTimeout: Effect.sync(() => {
+              reclaimed += 1;
+            }).pipe(
+              Effect.andThen(preview.stop("run-timeout").pipe(Effect.ignore)),
+            ),
+          });
 
-        const timedOut = yield* preview.request(request("run-timeout", 3006)).pipe(
-          Effect.forkChild({ startImmediately: true }),
-        );
-        yield* TestClock.adjust("2 seconds");
-        const response = yield* Fiber.join(timedOut);
+          const timedOut = yield* preview
+            .request(request("run-timeout", 3006))
+            .pipe(Effect.forkChild({ startImmediately: true }));
+          yield* TestClock.adjust("2 seconds");
+          const response = yield* Fiber.join(timedOut);
 
-        assert.strictEqual(response.status, 504);
-        assert.strictEqual(reclaimed, 1);
-        assert.strictEqual(
-          (yield* preview.request(request("run-timeout", 3006))).status,
-          503,
-        );
+          assert.strictEqual(response.status, 504);
+          assert.strictEqual(reclaimed, 1);
+          assert.strictEqual(
+            (yield* preview.request(request("run-timeout", 3006))).status,
+            503,
+          );
 
-        yield* preview.register({
-          runId: "run-healthy-after-timeout",
-          port: 3006,
-          handler: () => Effect.succeed({ status: 200, headers: {}, body: "healthy" }),
-        });
-        const healthy = yield* preview.request(
-          request("run-healthy-after-timeout", 3006),
-        );
-        assert.strictEqual(healthy.status, 200);
-        assert.strictEqual(healthy.body, "healthy");
-      }),
+          yield* preview.register({
+            runId: "run-healthy-after-timeout",
+            port: 3006,
+            handler: () =>
+              Effect.succeed({ status: 200, headers: {}, body: "healthy" }),
+          });
+          const healthy = yield* preview.request(
+            request("run-healthy-after-timeout", 3006),
+          );
+          assert.strictEqual(healthy.status, 200);
+          assert.strictEqual(healthy.body, "healthy");
+        }),
     );
   });
 

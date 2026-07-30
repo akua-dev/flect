@@ -17,8 +17,8 @@ import {
 } from "../shared/interface-document";
 import {
   FlectRuntimeLive,
-  type PiEvent,
   type PiAgentPair,
+  type PiEvent,
   PiSdk,
   type PiSession,
   type PiSessionPolicy,
@@ -575,7 +575,10 @@ describe("FlectRuntimeLive", () => {
         );
         const promptFiber = yield* runtime
           .prompt(sessionId, "Keep talking")
-          .pipe(Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+          .pipe(
+            Stream.runCollect,
+            Effect.forkChild({ startImmediately: true }),
+          );
         yield* Deferred.await(promptStarted);
 
         const cancelFiber = yield* runtime
@@ -816,9 +819,9 @@ describe("FlectRuntimeLive", () => {
     return Effect.gen(function* () {
       const runtime = yield* FlectRuntime;
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
-        const shapeFiber = yield* runtime
-          .shape(sessionId, "Shape this", defaultInterfaceDocument)
-          .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+      const shapeFiber = yield* runtime
+        .shape(sessionId, "Shape this", defaultInterfaceDocument)
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
       yield* Deferred.await(promptStarted);
 
       const closeFiber = yield* runtime
