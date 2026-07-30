@@ -197,6 +197,7 @@ const decodeCurrentDocument = Schema.decodeUnknownEffect(
   InterfaceDocument,
   strictOptions,
 );
+const encodeCurrentDocument = Schema.encodeEffect(InterfaceDocument);
 
 class LegacyInterfaceDocument extends Schema.Class<LegacyInterfaceDocument>(
   "LegacyInterfaceDocument",
@@ -327,6 +328,15 @@ export const validateInterfaceDocument = Effect.fn(
   );
   yield* validateTree(document.root);
   return document;
+});
+
+export const encodeInterfaceDocument = Effect.fn(
+  "Flect.InterfaceDocument.encode",
+)(function* (document: InterfaceDocument) {
+  const validated = yield* validateInterfaceDocument(document);
+  return yield* encodeCurrentDocument(validated).pipe(
+    Effect.mapError(invalidDocument),
+  );
 });
 
 export const decodeInterfaceDocument = Effect.fn(

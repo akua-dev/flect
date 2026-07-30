@@ -23,7 +23,10 @@ import {
   ShapeRequest,
   ShapeResponse,
 } from "../../shared/contracts";
-import type { InterfaceDocument } from "../../shared/interface-document";
+import {
+  encodeInterfaceDocument,
+  type InterfaceDocument,
+} from "../../shared/interface-document";
 
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
@@ -199,13 +202,20 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
 
       const shape = Effect.fn("Flect.Client.shape")(
         (sessionId: string, instruction: string, document: InterfaceDocument) =>
-          HttpClientRequest.post(
-            `/sessions/${encodeURIComponent(sessionId)}/shape`,
-          ).pipe(
-            HttpClientRequest.schemaBodyJson(ShapeRequest)(
-              new ShapeRequest({ instruction, document }),
+          encodeInterfaceDocument(document).pipe(
+            Effect.flatMap((encodedDocument) =>
+              HttpClientRequest.post(
+                `/sessions/${encodeURIComponent(sessionId)}/shape`,
+              ).pipe(
+                HttpClientRequest.schemaBodyJson(ShapeRequest)(
+                  ShapeRequest.make({
+                    instruction,
+                    document: encodedDocument,
+                  }),
+                ),
+                Effect.flatMap(transport.execute),
+              ),
             ),
-            Effect.flatMap(transport.execute),
             Effect.flatMap(
               HttpClientResponse.schemaBodyJson(ShapeResponse, strictOptions),
             ),

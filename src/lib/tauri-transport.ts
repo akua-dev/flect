@@ -11,6 +11,7 @@ import type {
   FromServerEncoded,
 } from "effect/unstable/rpc/RpcMessage";
 import type { FlectRuntimeError } from "../../shared/contracts";
+import { encodeInterfaceDocument } from "../../shared/interface-document";
 import { FlectRpcs } from "../../shared/rpc";
 import {
   FlectClient,
@@ -192,7 +193,18 @@ export const makeTauriFlectClientLayer = () =>
               ),
             ),
         shape: (sessionId, instruction, document) =>
-          mapSessionError(rpc.Shape({ sessionId, instruction, document })),
+          encodeInterfaceDocument(document).pipe(
+            Effect.mapError(unavailable),
+            Effect.flatMap((encodedDocument) =>
+              mapSessionError(
+                rpc.Shape({
+                  sessionId,
+                  instruction,
+                  document: encodedDocument,
+                }),
+              ),
+            ),
+          ),
         cancel: (sessionId) =>
           mapError(rpc.Cancel({ sessionId })).pipe(Effect.asVoid),
         diagnoseRecovery: (sessionId, reason) =>
