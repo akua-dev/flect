@@ -197,6 +197,7 @@ describe("FlectRuntimeLive", () => {
         { type: "turn_completed" },
       ]);
       expect(fake.unsubscribe).toHaveBeenCalledOnce();
+      expect(fake.abort).not.toHaveBeenCalled();
     }).pipe(Effect.provide(fake.layer));
   });
 

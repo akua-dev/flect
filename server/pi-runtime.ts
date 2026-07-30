@@ -788,6 +788,7 @@ export const FlectRuntimeLive = Layer.effect(
                   });
 
                   const terminal = yield* turn.pipe(
+                    Effect.tap(() => Ref.set(completed, true)),
                     Effect.ensuring(Effect.sync(() => unsubscribe())),
                     Effect.ensuring(
                       Ref.get(completed).pipe(
@@ -801,7 +802,6 @@ export const FlectRuntimeLive = Layer.effect(
                       ),
                     ),
                   );
-                  yield* Ref.set(completed, true);
                   return terminal;
                 }),
               );
