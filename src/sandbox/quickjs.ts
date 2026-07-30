@@ -108,12 +108,7 @@ const executeInModule = Effect.fn("Flect.Sandbox.executeInModule")(
         const runtime = module.newRuntime();
         runtime.setMemoryLimit(MEMORY_LIMIT_BYTES);
         runtime.setMaxStackSize(STACK_LIMIT_BYTES);
-        const startedAt = performance.now();
         let interrupted = false;
-        runtime.setInterruptHandler(() => {
-          interrupted = performance.now() - startedAt >= DEADLINE_MILLISECONDS;
-          return interrupted;
-        });
         let disposeRuntime = true;
 
         const context = runtime.newContext({
@@ -133,6 +128,13 @@ const executeInModule = Effect.fn("Flect.Sandbox.executeInModule")(
           if (!disposeEvaluation(hardened)) {
             throw sandboxFailure("execution");
           }
+
+          const startedAt = performance.now();
+          runtime.setInterruptHandler(() => {
+            interrupted =
+              performance.now() - startedAt >= DEADLINE_MILLISECONDS;
+            return interrupted;
+          });
 
           const program = `
             "use strict";
