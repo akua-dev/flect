@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Fiber } from "effect";
+import { Deferred, Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import { BunPreview, makeBunPreviewLayer } from "./bun-preview";
 
@@ -72,6 +72,42 @@ describe("BunPreview", () => {
         assert.strictEqual(response.status, 503);
         assert.strictEqual(restarted.status, 200);
         assert.strictEqual(restarted.body, "restarted");
+      }),
+    );
+
+    it.effect("releases an interrupted registration before port reuse", () =>
+      Effect.gen(function* () {
+        const preview = yield* BunPreview;
+        const registered = yield* Deferred.make<void>();
+        const running = yield* Effect.acquireUseRelease(
+          preview.register({
+            runId: "run-interrupted",
+            port: 3005,
+            handler: () =>
+              Effect.succeed({ status: 200, headers: {}, body: "live" }),
+          }),
+          () =>
+            Deferred.succeed(registered, undefined).pipe(
+              Effect.andThen(Effect.never),
+            ),
+          () => preview.stop("run-interrupted"),
+        ).pipe(Effect.forkChild);
+
+        yield* Deferred.await(registered);
+        yield* Fiber.interrupt(running);
+        const restarted = yield* preview.register({
+          runId: "run-restarted-after-interrupt",
+          port: 3005,
+          handler: () =>
+            Effect.succeed({ status: 200, headers: {}, body: "restarted" }),
+        });
+        const response = yield* preview.request(
+          request("run-restarted-after-interrupt", 3005),
+        );
+
+        assert.strictEqual(restarted.previewUrl, "/preview/3005/");
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(response.body, "restarted");
       }),
     );
   });

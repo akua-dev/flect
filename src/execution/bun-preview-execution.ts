@@ -555,6 +555,11 @@ export const BunPreviewExecutionLive = Layer.effect(
       ),
     );
 
+    const clearActive = (runId: string) =>
+      Ref.update(active, (current) =>
+        current?.runId === runId ? undefined : current,
+      );
+
     const serviceWorkerMessage = (event: MessageEvent) => {
       if (
         event.data?.type !== "flect-preview-request" ||
@@ -612,20 +617,17 @@ export const BunPreviewExecutionLive = Layer.effect(
             try: () => createRealm(makeWorkerSource(bundle)),
             catch: previewFailure,
           });
-          let registered = false;
           let committed = false;
           const release = Effect.gen(function* () {
             yield* Effect.sync(() => realm.stop()).pipe(
               Effect.catchDefect(() => Effect.void),
             );
-            if (registered) {
-              yield* preview.stop(runId).pipe(Effect.ignore);
-              yield* Effect.tryPromise({
-                try: () => stopPreviewRoute(runId, realm.port),
-                catch: () => undefined,
-              }).pipe(Effect.ignore);
-            }
-            yield* Ref.set(active, undefined);
+            yield* preview.stop(runId).pipe(Effect.ignore);
+            yield* Effect.tryPromise({
+              try: () => stopPreviewRoute(runId, realm.port),
+              catch: () => undefined,
+            }).pipe(Effect.ignore);
+            yield* clearActive(runId);
           }).pipe(
             Effect.catch(() => Effect.void),
             Effect.catchDefect(() => Effect.void),
@@ -647,8 +649,6 @@ export const BunPreviewExecutionLive = Layer.effect(
                   ),
                 ),
             });
-            registered = true;
-
             yield* Effect.tryPromise({
               try: () => registerPreviewRoute(runId, realm.port),
               catch: previewFailure,
