@@ -1,11 +1,4 @@
-import {
-  copyFile,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  rm,
-} from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -15,6 +8,13 @@ const root = resolve(import.meta.dirname, "..");
 const runtimeUrl = "http://127.0.0.1:3210/api/runtime";
 const shellUrl = "http://127.0.0.1:5173";
 const viewport = { width: 1716, height: 916 };
+const stableCaptureStyles = `
+  *, *::before, *::after {
+    animation: none !important;
+    caret-color: transparent !important;
+    transition: none !important;
+  }
+`;
 
 const paths = {
   launcher: resolve(root, "assets/screenshots/flect-launcher.png"),
@@ -130,6 +130,7 @@ const captureScreenshots = async () => {
     const page = await context.newPage();
     await waitForShell(page);
     await clearInterfaceState(page);
+    await page.addStyleTag({ content: stableCaptureStyles });
     await page.screenshot({
       path: paths.launcher,
       animations: "disabled",
@@ -147,57 +148,144 @@ const captureScreenshots = async () => {
 };
 
 const recordDemo = async (videoDirectory: string) => {
+  const frameDirectory = resolve(videoDirectory, "frames");
+  const normalizedFrameDirectory = resolve(videoDirectory, "normalized-frames");
+  const normalizedStateDirectory = resolve(videoDirectory, "normalized-states");
+  await mkdir(frameDirectory, { recursive: true });
+  await mkdir(normalizedFrameDirectory, { recursive: true });
+  await mkdir(normalizedStateDirectory, { recursive: true });
+  const sequenceFrames: Array<string> = [];
+  let frameNumber = 0;
   const browser = await chromium.launch();
   try {
     const context = await browser.newContext({
       viewport,
       reducedMotion: "no-preference",
-      recordVideo: {
-        dir: videoDirectory,
-        size: { width: 1280, height: 684 },
-      },
     });
     const page = await context.newPage();
-    const video = page.video();
-    if (video === null) {
-      throw new Error("Playwright did not create a release demo video.");
-    }
+    const captureFrames = async (count: number) => {
+      const state = resolve(
+        frameDirectory,
+        `state-${String(frameNumber).padStart(4, "0")}.png`,
+      );
+      const normalizedStateWebp = resolve(
+        normalizedStateDirectory,
+        `state-${String(frameNumber).padStart(4, "0")}.webp`,
+      );
+      const normalizedState = resolve(
+        normalizedStateDirectory,
+        `state-${String(frameNumber).padStart(4, "0")}.png`,
+      );
+      await page.screenshot({ path: state, animations: "disabled" });
+      await run([
+        "cwebp",
+        "-quiet",
+        "-q",
+        "72",
+        "-resize",
+        "1280",
+        "684",
+        state,
+        "-o",
+        normalizedStateWebp,
+      ]);
+      await run([
+        "dwebp",
+        "-quiet",
+        normalizedStateWebp,
+        "-o",
+        normalizedState,
+      ]);
+      for (let index = 0; index < count; index += 1) {
+        const frame = resolve(
+          normalizedFrameDirectory,
+          `demo-${String(frameNumber).padStart(4, "0")}.png`,
+        );
+        await copyFile(normalizedState, frame);
+        sequenceFrames.push(frame);
+        frameNumber += 1;
+      }
+    };
 
     await waitForShell(page);
     await clearInterfaceState(page);
-    await page.waitForTimeout(900);
+    await page.addStyleTag({
+      content: stableCaptureStyles,
+    });
+    await page.mouse.move(1, 1);
+    await captureFrames(14);
 
     await page.getByRole("button", { name: "Shape interface" }).click();
     const instruction = page.getByLabel("Describe the interface change");
     await instruction.waitFor();
     await page.getByText("Extensions isolated").waitFor();
-    await page.waitForTimeout(650);
-    await instruction.pressSequentially(
-      "Make the headline say Focused workspace",
-      { delay: 28 },
-    );
-    await page.waitForTimeout(700);
+    await instruction.evaluate((element) => {
+      element.setAttribute("spellcheck", "false");
+    });
+    await captureFrames(10);
+
+    const shapingInstruction = "Make the headline say Focused workspace";
+    await instruction.fill(shapingInstruction);
+    await page.getByRole("heading", { name: "Shape with Pi" }).click();
+    await captureFrames(35);
 
     await page.getByRole("button", { name: "Propose change" }).click();
     await page.getByRole("heading", { name: "Focused workspace" }).waitFor();
     await page.getByText("Previewing a validated proposal").waitFor();
-    await page.waitForTimeout(1_000);
+    await page.mouse.move(1, 1);
+    await captureFrames(15);
 
     await page.getByRole("button", { name: "Keep change" }).click();
     await page
       .getByText("Previewing a validated proposal")
       .waitFor({ state: "detached" });
-    await page.waitForTimeout(700);
+    await page.mouse.move(1, 1);
+    await captureFrames(10);
+
     await page.reload({ waitUntil: "networkidle" });
     await page.getByRole("heading", { name: "Focused workspace" }).waitFor();
-    await page.waitForTimeout(1_100);
-
-    await page.close();
+    await page.addStyleTag({
+      content: stableCaptureStyles,
+    });
+    await page.mouse.move(1, 1);
+    await captureFrames(17);
     await context.close();
-    await copyFile(await video.path(), paths.webm);
   } finally {
     await browser.close();
   }
+
+  if (sequenceFrames.length === 0) {
+    throw new Error("Playwright did not capture release demo frames.");
+  }
+  await run([
+    "ffmpeg",
+    "-y",
+    "-framerate",
+    "15",
+    "-i",
+    resolve(normalizedFrameDirectory, "demo-%04d.png"),
+    "-map_metadata",
+    "-1",
+    "-fflags",
+    "+bitexact",
+    "-c:v",
+    "libvpx",
+    "-deadline",
+    "best",
+    "-cpu-used",
+    "0",
+    "-crf",
+    "18",
+    "-b:v",
+    "0",
+    "-pix_fmt",
+    "yuv420p",
+    "-threads",
+    "1",
+    "-an",
+    paths.webm,
+  ]);
+  return sequenceFrames;
 };
 
 const captureHero = async () => {
@@ -218,24 +306,9 @@ const captureHero = async () => {
   }
 };
 
-const convertDemo = async (videoDirectory: string) => {
-  const frameDirectory = resolve(videoDirectory, "frames");
-  await mkdir(frameDirectory, { recursive: true });
-  await run([
-    "ffmpeg",
-    "-y",
-    "-i",
-    paths.webm,
-    "-vf",
-    "fps=15,scale=1280:-2:flags=lanczos",
-    resolve(frameDirectory, "frame-%04d.png"),
-  ]);
-  const frames = (await readdir(frameDirectory))
-    .filter((name) => name.endsWith(".png"))
-    .sort()
-    .map((name) => resolve(frameDirectory, name));
+const convertDemo = async (frames: ReadonlyArray<string>) => {
   if (frames.length === 0) {
-    throw new Error("FFmpeg did not produce any release demo frames.");
+    throw new Error("Playwright did not produce any release demo frames.");
   }
   await run([
     "img2webp",
@@ -258,10 +331,14 @@ const convertDemo = async (videoDirectory: string) => {
     "-y",
     "-i",
     paths.webm,
-    "-vf",
-    "scale=1280:-2:flags=lanczos",
+    "-map_metadata",
+    "-1",
+    "-fflags",
+    "+bitexact",
     "-c:v",
     "libx264",
+    "-threads",
+    "1",
     "-pix_fmt",
     "yuv420p",
     "-movflags",
@@ -311,9 +388,9 @@ try {
   await waitForServer(shellUrl, preview, "Flect production preview");
 
   await captureScreenshots();
-  await recordDemo(videoDirectory);
+  const demoFrames = await recordDemo(videoDirectory);
   await captureHero();
-  await convertDemo(videoDirectory);
+  await convertDemo(demoFrames);
 
   const heroBytes = await readFile(paths.hero);
   console.log(

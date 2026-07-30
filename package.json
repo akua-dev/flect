@@ -13,6 +13,7 @@
     "build:sidecar": "bun scripts/build-sidecar.ts",
     "build:desktop": "bun run build:sidecar && tauri build",
     "media:release": "bun scripts/capture-release-media.ts",
+    "media:verify-reproducible": "FLECT_VERIFY_MEDIA_REPRODUCIBILITY=1 vitest run tests/media/release-media-repro.test.ts",
     "preview": "vite preview",
     "release:package": "bun scripts/package-release.ts",
     "release:verify": "bunx vitest run scripts/package-release.test.ts",
