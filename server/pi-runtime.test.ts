@@ -31,6 +31,8 @@ type FakeOptions = {
   readonly promptStarted?: Deferred.Deferred<void>;
   readonly pendingPromptStarted?: Deferred.Deferred<void>;
   readonly abortStarted?: Deferred.Deferred<void>;
+  readonly abortGate?: Deferred.Deferred<void>;
+  readonly pairObserved?: Deferred.Deferred<void>;
 };
 
 function createFakePi(options: FakeOptions = {}) {
@@ -40,19 +42,24 @@ function createFakePi(options: FakeOptions = {}) {
   let releasePendingPrompt: (() => void) | undefined;
   const unsubscribe = vi.fn();
   const guardianUnsubscribe = vi.fn();
-  const abort = vi.fn(() => {
-    if (options.abortFailure) {
-      return Effect.fail(
-        new PiOperationFailed({
-          operation: "cancel",
-          message: "The model runtime could not complete the request.",
-        }),
-      );
-    }
-    return options.abortStarted === undefined
-      ? Effect.void
-      : Deferred.succeed(options.abortStarted, undefined).pipe(Effect.asVoid);
-  });
+  const abort = vi.fn(() =>
+    Effect.gen(function* () {
+      if (options.abortStarted !== undefined) {
+        yield* Deferred.succeed(options.abortStarted, undefined);
+      }
+      if (options.abortGate !== undefined) {
+        yield* Deferred.await(options.abortGate);
+      }
+      if (options.abortFailure) {
+        return yield* Effect.fail(
+          new PiOperationFailed({
+            operation: "cancel",
+            message: "The model runtime could not complete the request.",
+          }),
+        );
+      }
+    }),
+  );
   const guardianAbort = vi.fn(() => Effect.void);
   const dispose = vi.fn(() => undefined);
   const guardianDispose = vi.fn(() => undefined);
@@ -110,7 +117,12 @@ function createFakePi(options: FakeOptions = {}) {
         return unsubscribe;
       }),
     prompt,
-    abort,
+    get abort() {
+      if (options.pairObserved !== undefined) {
+        Effect.runSync(Deferred.succeed(options.pairObserved, undefined));
+      }
+      return abort;
+    },
     dispose: Effect.sync(dispose),
   };
 
@@ -215,6 +227,27 @@ describe("FlectRuntimeLive", () => {
       );
     }).pipe(Effect.provide(fake.layer));
   });
+
+  it.effect(
+    "disposes a Pi pair when session registration is interrupted",
+    () => {
+      const pairObserved = Deferred.makeUnsafe<void>();
+      const fake = createFakePi({ pairObserved });
+
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const createFiber = yield* runtime
+          .createSession(new SessionSelection({}))
+          .pipe(Effect.forkChild({ startImmediately: true }));
+
+        yield* Deferred.await(pairObserved);
+        yield* Fiber.interrupt(createFiber);
+
+        expect(fake.dispose).toHaveBeenCalledOnce();
+        expect(fake.guardianDispose).toHaveBeenCalledOnce();
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 
   it.effect("maps Pi text deltas into a public Effect Stream", () => {
     const fake = createFakePi();
@@ -426,6 +459,86 @@ describe("FlectRuntimeLive", () => {
       }).pipe(Effect.provide(fake.layer));
     },
   );
+
+  it.effect("aborts Pi work when the request consumer is interrupted", () => {
+    const promptStarted = Deferred.makeUnsafe<void>();
+    const promptGate = Deferred.makeUnsafe<void>();
+    const abortStarted = Deferred.makeUnsafe<void>();
+    const fake = createFakePi({
+      promptGate,
+      promptStarted,
+      abortStarted,
+      promptResponse: JSON.stringify(defaultInterfaceDocument),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const shapeFiber = yield* runtime
+        .shape(sessionId, "Shape this", defaultInterfaceDocument)
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(promptStarted);
+
+      yield* Fiber.interrupt(shapeFiber);
+      yield* Deferred.await(abortStarted);
+      expect(fake.abort).toHaveBeenCalledOnce();
+
+      const busy = yield* runtime
+        .prompt(sessionId, "Do not overlap")
+        .pipe(Stream.runDrain, Effect.flip);
+      expect(busy).toEqual(
+        new SessionBusy({
+          sessionId,
+          message: "The session is busy.",
+        }),
+      );
+
+      yield* Deferred.succeed(promptGate, undefined);
+      yield* Effect.yieldNow;
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("holds the session slot while cancellation is claimed", () => {
+    const promptStarted = Deferred.makeUnsafe<void>();
+    const promptGate = Deferred.makeUnsafe<void>();
+    const abortStarted = Deferred.makeUnsafe<void>();
+    const abortGate = Deferred.makeUnsafe<void>();
+    const fake = createFakePi({
+      promptGate,
+      promptStarted,
+      abortStarted,
+      abortGate,
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const promptFiber = yield* runtime
+        .prompt(sessionId, "Keep talking")
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(promptStarted);
+
+      const cancelFiber = yield* runtime
+        .cancel(sessionId)
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(abortStarted);
+      yield* Deferred.succeed(promptGate, undefined);
+      yield* Fiber.join(promptFiber);
+
+      const busy = yield* runtime
+        .prompt(sessionId, "Do not abort this newer turn")
+        .pipe(Stream.runDrain, Effect.flip);
+      expect(busy).toEqual(
+        new SessionBusy({
+          sessionId,
+          message: "The session is busy.",
+        }),
+      );
+
+      yield* Deferred.succeed(abortGate, undefined);
+      yield* Fiber.join(cancelFiber);
+    }).pipe(Effect.provide(fake.layer));
+  });
 
   it.effect(
     "keeps an interrupted Pi promise occupying its session slot",

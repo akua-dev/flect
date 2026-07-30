@@ -57,7 +57,10 @@ export const ExtensionExecutionLive = Layer.effect(
           grants: ReadonlyArray<ExtensionCapability>,
         ) {
           const snapshot = yield* kernel.snapshot;
-          if (snapshot.disabledExtensions.includes(manifest.id)) {
+          if (
+            snapshot.safeMode ||
+            snapshot.disabledExtensions.includes(manifest.id)
+          ) {
             return yield* Effect.fail(
               ExtensionDisabled.make({
                 extensionId: manifest.id,

@@ -287,6 +287,7 @@ export const PiSdkLive = Layer.effect(
       const guardian = yield* createProtectedSession(policies.guardian);
       const shaper = yield* createProtectedSession(policies.shaper).pipe(
         Effect.tapError(() => guardian.dispose),
+        Effect.onInterrupt(() => guardian.dispose),
       );
 
       return {
@@ -314,6 +315,7 @@ type ActiveOperation = {
 type OperationState = {
   readonly closed: boolean;
   readonly active: ActiveOperation | undefined;
+  readonly cancelling: ActiveOperation | undefined;
 };
 
 type OperationController = {
@@ -321,7 +323,9 @@ type OperationController = {
     operation: ActiveOperation,
   ) => Effect.Effect<void, SessionBusy | SessionNotFound>;
   readonly finish: (operation: ActiveOperation) => Effect.Effect<void>;
-  readonly active: Effect.Effect<ActiveOperation | undefined>;
+  readonly cancelActive: (
+    kind: OperationKind,
+  ) => Effect.Effect<void, PiOperationFailed>;
   readonly interruptActive: Effect.Effect<void>;
   readonly close: Effect.Effect<void>;
 };
@@ -335,6 +339,7 @@ const makeOperationController = Effect.fn(
   const state = yield* Ref.make<OperationState>({
     closed: false,
     active: undefined,
+    cancelling: undefined,
   });
 
   const start = Effect.fn("Flect.Runtime.startOperation")(function* (
@@ -377,11 +382,65 @@ const makeOperationController = Effect.fn(
   ) {
     yield* Ref.update(state, (current) =>
       current.active === operation
-        ? { ...current, active: undefined }
+        ? current.cancelling === operation
+          ? current
+          : { ...current, active: undefined }
         : current,
     );
     yield* Deferred.succeed(operation.done, undefined);
   });
+
+  const cancelActive = Effect.fn("Flect.Runtime.cancelActiveOperation")(
+    (kind: OperationKind) =>
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          const operation = yield* Ref.modify(state, (current) => {
+            if (
+              current.active?.kind !== kind ||
+              current.cancelling !== undefined
+            ) {
+              return [undefined, current] satisfies readonly [
+                undefined,
+                OperationState,
+              ];
+            }
+            return [
+              current.active,
+              { ...current, cancelling: current.active },
+            ] satisfies readonly [ActiveOperation, OperationState];
+          });
+          if (operation === undefined) {
+            return;
+          }
+
+          const releaseClaim = Deferred.poll(operation.done).pipe(
+            Effect.flatMap((settled) =>
+              Ref.update(state, (current) =>
+                current.cancelling === operation
+                  ? {
+                      ...current,
+                      active: Option.isSome(settled)
+                        ? undefined
+                        : current.active,
+                      cancelling: undefined,
+                    }
+                  : current,
+              ),
+            ),
+          );
+
+          yield* restore(
+            Effect.gen(function* () {
+              const interruptResult = yield* Effect.result(operation.interrupt);
+              if (interruptResult._tag === "Failure") {
+                return yield* Effect.fail(interruptResult.failure);
+              }
+              yield* Deferred.await(operation.done);
+            }),
+          ).pipe(Effect.ensuring(releaseClaim));
+        }),
+      ),
+  );
 
   const close = Effect.fn("Flect.Runtime.closeOperationController")(
     function* () {
@@ -415,7 +474,7 @@ const makeOperationController = Effect.fn(
   return {
     start,
     finish,
-    active: Ref.get(state).pipe(Effect.map((current) => current.active)),
+    cancelActive,
     interruptActive: interruptActive(),
     close: close(),
   } satisfies OperationController;
@@ -433,7 +492,11 @@ const executeOperation = <A, E>(
         .pipe(Effect.ensuring(controller.finish(operation)))
         .pipe(Effect.forkDetach);
       operation.fiber = fiber;
-      return yield* restore(Fiber.join(fiber));
+      return yield* restore(Fiber.join(fiber)).pipe(
+        Effect.onInterrupt(() =>
+          operation.interrupt.pipe(Effect.catch(() => Effect.void)),
+        ),
+      );
     }),
   );
 
@@ -616,59 +679,83 @@ export const FlectRuntimeLive = Layer.effect(
       }
 
       const pair = yield* pi.createAgentPair(model, protectedAgentPolicies);
-      const sessionOperation = yield* makeOperationController(
-        pair.shaper.sessionId,
-        pair.shaper.abort,
-      );
-      const guardianOperation = yield* makeOperationController(
-        pair.guardian.sessionId,
-        pair.guardian.abort,
-      );
-      const sequence = yield* Ref.getAndUpdate(
-        sessionSequence,
-        (current) => current + 1,
-      );
-      const record: SessionRecord = {
-        session: pair.shaper,
-        guardian: pair.guardian,
-        sessionOperation,
-        guardianOperation,
-        sequence,
-      };
-      yield* Effect.uninterruptible(
-        Effect.gen(function* () {
-          const evicted = yield* Ref.modify(sessions, (current) => {
-            const replaced = HashMap.get(current, pair.shaper.sessionId);
-            let oldest: SessionRecord | undefined;
-            if (
-              Option.isNone(replaced) &&
-              HashMap.size(current) >= MAX_ACTIVE_SESSIONS
-            ) {
-              for (const candidate of HashMap.values(current)) {
-                if (
-                  oldest === undefined ||
-                  candidate.sequence < oldest.sequence
-                ) {
-                  oldest = candidate;
+      return yield* Effect.gen(function* () {
+        const shaperAbort = pair.shaper.abort;
+        yield* Effect.yieldNow;
+        const sessionOperation = yield* makeOperationController(
+          pair.shaper.sessionId,
+          shaperAbort,
+        );
+        const guardianOperation = yield* makeOperationController(
+          pair.guardian.sessionId,
+          pair.guardian.abort,
+        );
+        const sequence = yield* Ref.getAndUpdate(
+          sessionSequence,
+          (current) => current + 1,
+        );
+        const record: SessionRecord = {
+          session: pair.shaper,
+          guardian: pair.guardian,
+          sessionOperation,
+          guardianOperation,
+          sequence,
+        };
+        yield* Effect.uninterruptible(
+          Effect.gen(function* () {
+            const evicted = yield* Ref.modify(sessions, (current) => {
+              const replaced = HashMap.get(current, pair.shaper.sessionId);
+              let oldest: SessionRecord | undefined;
+              if (
+                Option.isNone(replaced) &&
+                HashMap.size(current) >= MAX_ACTIVE_SESSIONS
+              ) {
+                for (const candidate of HashMap.values(current)) {
+                  if (
+                    oldest === undefined ||
+                    candidate.sequence < oldest.sequence
+                  ) {
+                    oldest = candidate;
+                  }
                 }
               }
+              const evictedRecord = Option.getOrUndefined(replaced) ?? oldest;
+              const withoutEvicted =
+                evictedRecord === undefined
+                  ? current
+                  : HashMap.remove(current, evictedRecord.session.sessionId);
+              return [
+                evictedRecord,
+                HashMap.set(withoutEvicted, pair.shaper.sessionId, record),
+              ];
+            });
+            if (evicted !== undefined) {
+              yield* disposeSessionRecord(evicted);
             }
-            const evictedRecord = Option.getOrUndefined(replaced) ?? oldest;
-            const withoutEvicted =
-              evictedRecord === undefined
-                ? current
-                : HashMap.remove(current, evictedRecord.session.sessionId);
-            return [
-              evictedRecord,
-              HashMap.set(withoutEvicted, pair.shaper.sessionId, record),
-            ];
-          });
-          if (evicted !== undefined) {
-            yield* disposeSessionRecord(evicted);
-          }
-        }),
+          }),
+        );
+        return pair.shaper.sessionId;
+      }).pipe(
+        Effect.onInterrupt(() =>
+          Effect.uninterruptible(
+            Ref.update(sessions, (current) => {
+              const registered = HashMap.get(current, pair.shaper.sessionId);
+              return Option.isSome(registered) &&
+                registered.value.session === pair.shaper &&
+                registered.value.guardian === pair.guardian
+                ? HashMap.remove(current, pair.shaper.sessionId)
+                : current;
+            }).pipe(
+              Effect.andThen(
+                Effect.all([pair.shaper.dispose, pair.guardian.dispose], {
+                  concurrency: "unbounded",
+                  discard: true,
+                }),
+              ),
+            ),
+          ),
+        ),
       );
-      return pair.shaper.sessionId;
     });
 
     const closeSession = Effect.fn("Flect.Runtime.closeSession")(function* (
@@ -840,11 +927,7 @@ export const FlectRuntimeLive = Layer.effect(
       sessionId: string,
     ) {
       const record = yield* findSession(sessionId);
-      const operation = yield* record.sessionOperation.active;
-      if (operation?.kind === "prompt") {
-        yield* operation.interrupt;
-        yield* Deferred.await(operation.done);
-      }
+      yield* record.sessionOperation.cancelActive("prompt");
     });
 
     const shape = Effect.fn("Flect.Runtime.shape")(function* (

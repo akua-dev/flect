@@ -1,11 +1,11 @@
-import { Effect } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExtensionManifest } from "../shared/extensions";
 import {
   defaultInterfaceDocument,
   type InterfaceDocument,
 } from "../shared/interface-document";
-import type { RevisionId } from "../shared/revisions";
+import type { RevisionId, ShapingSnapshot } from "../shared/revisions";
 import { Launcher } from "./components/launcher";
 import type { ShapingController } from "./components/shaper-panel";
 import {
@@ -60,63 +60,72 @@ export function App() {
   useEffect(() => {
     let mounted = true;
 
-    void shapingRuntime
-      .runPromise(
-        Effect.gen(function* () {
-          const kernel = yield* ShapingKernel;
-          const snapshot = yield* kernel.snapshot;
-          if (safeMode) {
-            yield* kernel.enterSafeMode;
-            return {
-              document: defaultInterfaceDocument,
-              protectedMode: true,
-            };
-          }
-          if (snapshot.safeMode) {
-            return {
-              document: defaultInterfaceDocument,
-              protectedMode: true,
-            };
-          }
-          if (snapshot.lastEvent.type !== "initialized") {
-            return {
-              document: snapshot.active.document,
-              protectedMode: snapshot.safeMode,
-            };
-          }
+    const applySnapshot = (snapshot: ShapingSnapshot) => {
+      if (!mounted) {
+        return;
+      }
+      const preview =
+        snapshot.proposal?.status === "previewed"
+          ? snapshot.proposal
+          : undefined;
+      setDocument(
+        snapshot.safeMode
+          ? defaultInterfaceDocument
+          : (preview?.document ?? snapshot.active.document),
+      );
+      setProtectedMode(snapshot.safeMode);
+      setProposalId(preview?.id);
+      if (snapshot.safeMode) {
+        shapeRequestRef.current += 1;
+        setShapingStatus("idle");
+        setShapingError(undefined);
+      }
+    };
 
-          const legacy = yield* Effect.promise(() =>
-            browserRuntime.runPromise(
-              loadInterfaceDocument({ safeMode: false }),
-            ),
-          );
-          const restored = yield* kernel.propose(legacy, "user");
-          yield* kernel.preview(restored.id);
-          const accepted = yield* kernel.accept(restored.id);
-          yield* Effect.promise(() =>
-            browserRuntime.runPromise(consumeLegacyInterfaceDocument()),
-          );
-          return {
-            document: accepted.document,
-            protectedMode: false,
-          };
+    const observeKernel = Effect.gen(function* () {
+      const kernel = yield* ShapingKernel;
+      const snapshot = yield* kernel.snapshot;
+      if (safeMode) {
+        yield* kernel.enterSafeMode;
+      } else if (
+        !snapshot.safeMode &&
+        snapshot.lastEvent.type === "initialized"
+      ) {
+        const legacy = yield* Effect.promise(() =>
+          browserRuntime.runPromise(loadInterfaceDocument({ safeMode: false })),
+        );
+        const restored = yield* kernel.propose(legacy, "user");
+        yield* kernel.preview(restored.id);
+        yield* kernel.accept(restored.id);
+        yield* Effect.promise(() =>
+          browserRuntime.runPromise(consumeLegacyInterfaceDocument()),
+        );
+      }
+
+      yield* kernel.snapshot.pipe(
+        Effect.tap((current) => Effect.sync(() => applySnapshot(current))),
+      );
+      yield* kernel.changes.pipe(
+        Stream.runForEach((current) =>
+          Effect.sync(() => applySnapshot(current)),
+        ),
+      );
+    }).pipe(
+      Effect.catch(() =>
+        Effect.sync(() => {
+          if (mounted) {
+            setDocument(defaultInterfaceDocument);
+            setProtectedMode(true);
+            setProposalId(undefined);
+          }
         }),
-      )
-      .then((restored) => {
-        if (mounted) {
-          setDocument(restored.document);
-          setProtectedMode(restored.protectedMode);
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setDocument(defaultInterfaceDocument);
-          setProtectedMode(true);
-        }
-      });
+      ),
+    );
+    const observer = shapingRuntime.runFork(observeKernel);
 
     return () => {
       mounted = false;
+      shapingRuntime.runFork(Fiber.interrupt(observer));
     };
   }, []);
 
@@ -244,6 +253,8 @@ export function App() {
       return;
     }
     shapeRequestRef.current += 1;
+    decisionInFlightRef.current = true;
+    setShapingStatus("shaping");
     try {
       const recovered = await shapingRuntime.runPromise(
         Effect.gen(function* () {
@@ -265,6 +276,8 @@ export function App() {
       }
       setShapingStatus("error");
       setShapingError(message);
+    } finally {
+      decisionInFlightRef.current = false;
     }
   }, [session.diagnoseRecovery, session.status, shapingStatus]);
 

@@ -116,4 +116,64 @@ describe("interface revisions", () => {
         assert.strictEqual(lastKnownGoodError._tag, "InvalidRevision");
       }),
   );
+
+  it.effect("rejects impossible safe-mode event and state combinations", () =>
+    Effect.gen(function* () {
+      const initial = {
+        version: 1 as const,
+        id: "built-in",
+        status: "accepted" as const,
+        source: "built-in" as const,
+        document: defaultInterfaceDocument,
+        createdAt: 0,
+      };
+      const custom = {
+        version: 1 as const,
+        id: "revision-1",
+        parentId: "built-in",
+        status: "accepted" as const,
+        source: "shaper" as const,
+        document: defaultInterfaceDocument,
+        createdAt: 1,
+      };
+      const invalidSnapshots = [
+        {
+          version: 1 as const,
+          active: custom,
+          lastKnownGood: initial,
+          safeMode: false,
+          disabledExtensions: [],
+          lastEvent: {
+            version: 1 as const,
+            sequence: 2,
+            type: "safe-mode-entered" as const,
+            revisionId: "built-in",
+          },
+        },
+        {
+          version: 1 as const,
+          active: custom,
+          lastKnownGood: custom,
+          safeMode: true,
+          disabledExtensions: ["weather-card"],
+          lastEvent: {
+            version: 1 as const,
+            sequence: 3,
+            type: "recovery-requested" as const,
+            revisionId: "revision-1",
+            extensionId: "weather-card",
+          },
+        },
+      ];
+
+      const errors = yield* Effect.forEach(invalidSnapshots, (snapshot) =>
+        validateShapingSnapshot(snapshot).pipe(Effect.flip),
+      );
+
+      assert.deepStrictEqual(
+        errors.map((error) => error._tag),
+        ["InvalidRevision", "InvalidRevision"],
+      );
+    }),
+  );
 });

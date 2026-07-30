@@ -175,11 +175,12 @@ export const validateShapingSnapshot = Effect.fn(
     return yield* Effect.fail(invalidRevision());
   }
 
-  if (snapshot.lastEvent.type === "initialized") {
+  const event = snapshot.lastEvent;
+  if (event.type === "initialized") {
     if (
-      snapshot.lastEvent.sequence !== 0 ||
-      snapshot.lastEvent.revisionId !== snapshot.active.id ||
-      snapshot.lastEvent.extensionId !== undefined ||
+      event.sequence !== 0 ||
+      event.revisionId !== snapshot.active.id ||
+      event.extensionId !== undefined ||
       !isInitialRevision(snapshot.active) ||
       !isInitialRevision(snapshot.lastKnownGood) ||
       snapshot.proposal !== undefined ||
@@ -188,7 +189,78 @@ export const validateShapingSnapshot = Effect.fn(
     ) {
       return yield* Effect.fail(invalidRevision());
     }
-  } else if (snapshot.lastEvent.sequence === 0) {
+  } else if (event.sequence === 0) {
+    return yield* Effect.fail(invalidRevision());
+  }
+
+  const hasRevisionOnly =
+    event.revisionId !== undefined && event.extensionId === undefined;
+  const hasExtensionOnly =
+    event.revisionId === undefined && event.extensionId !== undefined;
+  const isBuiltInSafeState =
+    snapshot.safeMode &&
+    isInitialRevision(snapshot.active) &&
+    snapshot.proposal === undefined;
+
+  const eventMatchesState = (() => {
+    switch (event.type) {
+      case "initialized":
+        return true;
+      case "revision-proposed":
+        return (
+          !snapshot.safeMode &&
+          hasRevisionOnly &&
+          snapshot.proposal?.status === "proposed" &&
+          snapshot.proposal.id === event.revisionId
+        );
+      case "revision-previewed":
+        return (
+          !snapshot.safeMode &&
+          hasRevisionOnly &&
+          snapshot.proposal?.status === "previewed" &&
+          snapshot.proposal.id === event.revisionId
+        );
+      case "revision-accepted":
+        return (
+          !snapshot.safeMode &&
+          hasRevisionOnly &&
+          snapshot.proposal === undefined &&
+          snapshot.active.id === event.revisionId
+        );
+      case "revision-rejected":
+        return (
+          !snapshot.safeMode &&
+          hasRevisionOnly &&
+          snapshot.proposal === undefined
+        );
+      case "revision-rolled-back":
+        return (
+          !snapshot.safeMode &&
+          hasRevisionOnly &&
+          snapshot.proposal === undefined &&
+          snapshot.active.id === event.revisionId &&
+          snapshot.lastKnownGood.id === event.revisionId &&
+          snapshot.active.source === "recovery"
+        );
+      case "extension-failed":
+        return !snapshot.safeMode && hasExtensionOnly;
+      case "recovery-requested":
+        return (
+          isBuiltInSafeState &&
+          event.revisionId === snapshot.lastKnownGood.id &&
+          event.extensionId !== undefined &&
+          snapshot.disabledExtensions.includes(event.extensionId)
+        );
+      case "safe-mode-entered":
+        return (
+          isBuiltInSafeState &&
+          hasRevisionOnly &&
+          event.revisionId === snapshot.lastKnownGood.id
+        );
+    }
+  })();
+
+  if (!eventMatchesState) {
     return yield* Effect.fail(invalidRevision());
   }
 

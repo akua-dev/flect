@@ -64,6 +64,8 @@ describe("ExtensionExecution", () => {
         Effect.gen(function* () {
           const execution = yield* ExtensionExecution;
           const kernel = yield* ShapingKernel;
+          yield* Ref.set(sandboxCalls, 0);
+          yield* Ref.set(adapterCalls, 0);
 
           const failures = yield* Effect.forEach([1, 2, 3], () =>
             execution
@@ -90,6 +92,24 @@ describe("ExtensionExecution", () => {
           assert.strictEqual(yield* Ref.get(sandboxCalls), 3);
           assert.strictEqual(yield* Ref.get(adapterCalls), 0);
         }),
+    );
+
+    it.effect("does not execute extensions while safe mode is active", () =>
+      Effect.gen(function* () {
+        const execution = yield* ExtensionExecution;
+        const kernel = yield* ShapingKernel;
+        yield* Ref.set(sandboxCalls, 0);
+        yield* Ref.set(adapterCalls, 0);
+        yield* kernel.enterSafeMode;
+
+        const disabled = yield* execution
+          .execute(deniedManifest, {}, ["interface:propose"])
+          .pipe(Effect.flip);
+
+        assert.strictEqual(disabled._tag, "ExtensionDisabled");
+        assert.strictEqual(yield* Ref.get(sandboxCalls), 0);
+        assert.strictEqual(yield* Ref.get(adapterCalls), 0);
+      }),
     );
   });
 });
