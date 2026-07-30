@@ -823,6 +823,7 @@ export const FlectRuntimeLive = Layer.effect(
       const operation = yield* record.sessionOperation.active;
       if (operation?.kind === "prompt") {
         yield* operation.interrupt;
+        yield* Deferred.await(operation.done);
       }
     });
 
