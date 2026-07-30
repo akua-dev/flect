@@ -737,7 +737,7 @@ export const FlectRuntimeLive = Layer.effect(
                 done: yield* Deferred.make<void>(),
               };
 
-              yield* executeOperation(
+              const terminal = yield* executeOperation(
                 record.sessionOperation,
                 operation,
                 Effect.gen(function* () {
@@ -760,7 +760,7 @@ export const FlectRuntimeLive = Layer.effect(
                   );
 
                   const turn = Effect.gen(function* () {
-                    const terminal = yield* record.session.prompt(text).pipe(
+                    return yield* record.session.prompt(text).pipe(
                       Effect.matchEffect({
                         onFailure: () =>
                           Ref.get(cancelled).pipe(
@@ -785,13 +785,9 @@ export const FlectRuntimeLive = Layer.effect(
                           ),
                       }),
                     );
-
-                    Queue.offerUnsafe(queue, terminal);
-                    yield* Ref.set(completed, true);
-                    Queue.endUnsafe(queue);
                   });
 
-                  yield* turn.pipe(
+                  const terminal = yield* turn.pipe(
                     Effect.ensuring(Effect.sync(() => unsubscribe())),
                     Effect.ensuring(
                       Ref.get(completed).pipe(
@@ -805,8 +801,12 @@ export const FlectRuntimeLive = Layer.effect(
                       ),
                     ),
                   );
+                  yield* Ref.set(completed, true);
+                  return terminal;
                 }),
               );
+              Queue.offerUnsafe(queue, terminal);
+              Queue.endUnsafe(queue);
             }).pipe(
               Effect.catch((error) =>
                 Queue.fail(queue, error).pipe(Effect.asVoid),

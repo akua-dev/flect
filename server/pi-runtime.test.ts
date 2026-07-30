@@ -200,6 +200,28 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
+  it.effect("releases a prompt operation before returning its terminal event", () => {
+    const fake = createFakePi({
+      promptResponse: JSON.stringify(defaultInterfaceDocument),
+    });
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+
+      const events = yield* runtime
+        .prompt(sessionId, "Keep talking")
+        .pipe(Stream.runCollect);
+      expect(events.at(-1)).toEqual({ type: "turn_completed" });
+
+      const shaped = yield* runtime.shape(
+        sessionId,
+        "Shape this",
+        defaultInterfaceDocument,
+      );
+      expect(shaped).toEqual(defaultInterfaceDocument);
+    }).pipe(Effect.provide(fake.layer));
+  });
+
   it.effect("validates a Shaper proposal before returning it", () => {
     const shaped = InterfaceDocument.make({
       ...defaultInterfaceDocument,

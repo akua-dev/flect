@@ -39,11 +39,13 @@ function createFakeRuntime({
       { type: "turn_completed" as const },
     ]),
   shape = (_sessionId, _instruction, document) => Effect.succeed(document),
+  cancel = () => Effect.void,
 }: {
   readonly createSession?: FlectClientShape["createSession"];
   readonly models?: ReadonlyArray<ModelSummary>;
   readonly prompt?: FlectClientShape["prompt"];
   readonly shape?: FlectClientShape["shape"];
+  readonly cancel?: FlectClientShape["cancel"];
 } = {}) {
   const client: FlectClientShape = {
     status: Effect.succeed(new RuntimeStatus({ version: 1, status: "ready" })),
@@ -52,7 +54,7 @@ function createFakeRuntime({
     closeSession: vi.fn(() => Effect.void),
     prompt: vi.fn(prompt),
     shape: vi.fn(shape),
-    cancel: vi.fn(() => Effect.void),
+    cancel: vi.fn(cancel),
     diagnoseRecovery: vi.fn(() =>
       Effect.succeed(
         new GuardianDiagnostic({
@@ -321,6 +323,37 @@ describe("useAgentSession", () => {
     expect(client.cancel).toHaveBeenCalledWith("session-1");
     expect(streamInterrupted).toBe(true);
     expect(result.current.status).toBe("ready");
+    unmount();
+    await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
+    await runtime.dispose();
+  });
+
+  it("keeps the session active when cancellation is rejected", async () => {
+    const { client, runtime } = createFakeRuntime({
+      prompt: () => Stream.never,
+      cancel: () =>
+        Effect.fail(
+          new FlectUnavailableError({
+            message: "The local Flect runtime is unavailable.",
+          }),
+        ),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    act(() => {
+      void result.current.submit("Keep this prompt");
+    });
+    await waitFor(() => expect(client.prompt).toHaveBeenCalledOnce());
+
+    await act(async () => {
+      await result.current.cancel();
+    });
+
+    expect(result.current.status).toBe("cancelling");
+    expect(result.current.error).toBe(
+      "The response could not be stopped. Try again.",
+    );
     unmount();
     await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
     await runtime.dispose();

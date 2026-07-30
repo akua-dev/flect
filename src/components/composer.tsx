@@ -1,6 +1,9 @@
 import { useRef, useState } from "react";
 import type { ModelSummary } from "../../shared/contracts";
-import type { AgentSessionStatus } from "../hooks/use-agent-session";
+import {
+  isAgentSessionActive,
+  type AgentSessionStatus,
+} from "../hooks/use-agent-session";
 import {
   AddIcon,
   ArrowUpIcon,
@@ -35,7 +38,7 @@ export function Composer({
 }: ComposerProps) {
   const [prompt, setPrompt] = useState("");
   const composingRef = useRef(false);
-  const isActive = status === "submitting" || status === "streaming";
+  const isActive = isAgentSessionActive(status);
   const isUnavailable =
     disabled ||
     status === "booting" ||
@@ -50,9 +53,11 @@ export function Composer({
         ? "Start the local runtime before shaping."
         : status === "setup-required"
           ? "Sign in to a Pi provider before shaping."
-          : prompt.trim().length === 0
-            ? "Enter a prompt to enable Shape."
-            : "Press Enter to shape. Press Shift Enter for a new line.";
+          : status === "cancelling"
+            ? "Stopping the current response."
+            : prompt.trim().length === 0
+              ? "Enter a prompt to enable Shape."
+              : "Press Enter to shape. Press Shift Enter for a new line.";
 
   const submit = async () => {
     const nextPrompt = prompt.trim();

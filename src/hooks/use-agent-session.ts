@@ -17,12 +17,15 @@ export type AgentSessionStatus =
   | "ready"
   | "submitting"
   | "streaming"
+  | "cancelling"
   | "error"
   | "setup-required"
   | "unavailable";
 
 export const isAgentSessionActive = (status: AgentSessionStatus) =>
-  status === "submitting" || status === "streaming";
+  status === "submitting" ||
+  status === "streaming" ||
+  status === "cancelling";
 
 export interface ConversationMessage {
   readonly id: string;
@@ -91,6 +94,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   const requestRef = useRef<
     Fiber.Fiber<void, FlectUnavailableError | SessionBusy> | undefined
   >(undefined);
+  const cancellingRef = useRef(false);
 
   const releaseSession = useCallback(
     (expectedId: string) =>
@@ -327,8 +331,14 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   );
 
   const cancel = useCallback((): Promise<void> => {
+    if (cancellingRef.current) {
+      return Promise.resolve();
+    }
+
     const request = requestRef.current;
     const sessionId = sessionRef.current?.id;
+    cancellingRef.current = true;
+    setStatus("cancelling");
 
     const cancelRequest = Effect.gen(function* () {
       if (request) {
@@ -340,11 +350,23 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         yield* client.cancel(sessionId);
       }
     }).pipe(
-      Effect.catch(() => Effect.void),
-      Effect.ensuring(
+      Effect.tap(() =>
         Effect.sync(() => {
           requestRef.current = undefined;
+          setError(undefined);
           setStatus("ready");
+        }),
+      ),
+      Effect.catch(() =>
+        Effect.sync(() => {
+          requestRef.current = undefined;
+          setError("The response could not be stopped. Try again.");
+          setStatus("cancelling");
+        }),
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          cancellingRef.current = false;
         }),
       ),
     );

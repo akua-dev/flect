@@ -164,6 +164,27 @@ describe("Launcher", () => {
     ).toBeDisabled();
   });
 
+  it("keeps shaping disabled while a prompt cancellation is pending", async () => {
+    const user = userEvent.setup();
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={controller({ status: "cancelling" })}
+        shaping={shaping()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Shape interface" }));
+
+    expect(
+      screen.getByRole("button", { name: "Propose change" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Roll back last change" }),
+    ).toBeDisabled();
+  });
+
   it("does not present a completed empty assistant turn as still responding", () => {
     const session = controller({
       status: "ready",
