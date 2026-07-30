@@ -164,7 +164,11 @@ export function App() {
   );
 
   const acceptShape = useCallback(async () => {
-    if (proposalId === undefined) {
+    if (
+      proposalId === undefined ||
+      isAgentSessionActive(session.status) ||
+      shapingStatus === "shaping"
+    ) {
       return;
     }
     try {
@@ -182,10 +186,14 @@ export function App() {
       setShapingStatus("error");
       setShapingError("The revision could not be accepted safely.");
     }
-  }, [proposalId]);
+  }, [proposalId, session.status, shapingStatus]);
 
   const rejectShape = useCallback(async () => {
-    if (proposalId === undefined) {
+    if (
+      proposalId === undefined ||
+      isAgentSessionActive(session.status) ||
+      shapingStatus === "shaping"
+    ) {
       return;
     }
     try {
@@ -204,7 +212,7 @@ export function App() {
       setShapingStatus("error");
       setShapingError("The proposal could not be rejected safely.");
     }
-  }, [proposalId]);
+  }, [proposalId, session.status, shapingStatus]);
 
   const rollbackShape = useCallback(async () => {
     if (isAgentSessionActive(session.status) || shapingStatus === "shaping") {

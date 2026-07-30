@@ -101,6 +101,7 @@ export function ShaperPanel({
           <div className="revision-card__actions">
             <button
               className="shaper-primary"
+              disabled={operationActive}
               onClick={() => void controller.accept()}
               type="button"
             >
@@ -108,6 +109,7 @@ export function ShaperPanel({
             </button>
             <button
               className="shaper-secondary"
+              disabled={operationActive}
               onClick={() => void controller.reject()}
               type="button"
             >

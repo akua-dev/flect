@@ -137,4 +137,36 @@ describe("ShaperPanel", () => {
     ).toBeDisabled();
     expect(rollback).not.toHaveBeenCalled();
   });
+
+  it("prevents preview decisions while a prompt is active", async () => {
+    const user = userEvent.setup();
+    const accept = vi.fn(() => Promise.resolve());
+    const reject = vi.fn(() => Promise.resolve());
+    render(
+      <ShaperPanel
+        agentStatus="streaming"
+        controller={{
+          status: "preview",
+          isolation: "ready",
+          verifyIsolation: () => Promise.resolve(),
+          request: () => Promise.resolve(),
+          accept,
+          reject,
+          rollback: () => Promise.resolve(),
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    const keepButton = screen.getByRole("button", { name: "Keep change" });
+    const rejectButton = screen.getByRole("button", { name: "Reject" });
+    expect(keepButton).toBeDisabled();
+    expect(rejectButton).toBeDisabled();
+
+    await user.click(keepButton);
+    await user.click(rejectButton);
+
+    expect(accept).not.toHaveBeenCalled();
+    expect(reject).not.toHaveBeenCalled();
+  });
 });
