@@ -13,6 +13,7 @@ export default defineConfig({
     include: [
       "shared/**/*.test.ts",
       "server/**/*.test.ts",
+      "scripts/**/*.test.ts",
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
       "tests/media/**/*.test.ts",
