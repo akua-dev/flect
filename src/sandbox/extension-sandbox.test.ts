@@ -4,6 +4,7 @@ import { TestClock } from "effect/testing";
 import { SandboxResult, SetTextIntent } from "../../shared/sandbox";
 import {
   ExtensionSandbox,
+  makeSandboxWorkerHandle,
   makeExtensionSandboxTestLayer,
 } from "./extension-sandbox";
 
@@ -63,5 +64,29 @@ describe("ExtensionSandbox", () => {
         assert.strictEqual(released, 1);
       }),
     );
+  });
+
+  it.effect("maps a synchronous postMessage failure to invalid input", () => {
+    const worker = {
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      postMessage: (_message: unknown) => {
+        throw new Error("DataCloneError");
+      },
+    } satisfies Pick<
+      Worker,
+      "addEventListener" | "removeEventListener" | "postMessage"
+    >;
+
+    return Effect.gen(function* () {
+      const error = yield* makeSandboxWorkerHandle(worker)
+        .run({
+          ...request,
+          input: { callback: () => undefined },
+        })
+        .pipe(Effect.flip);
+
+      assert.strictEqual(error.reason, "invalid-input");
+    });
   });
 });

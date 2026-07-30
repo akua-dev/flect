@@ -1,5 +1,8 @@
 import { Effect, Schema, type SchemaAST } from "effect";
-import { InterfaceDocument } from "./interface-document";
+import {
+  InterfaceDocument,
+  InvalidInterfaceDocument,
+} from "./interface-document";
 
 const NonEmptyText = Schema.Trim.check(Schema.isMinLength(1));
 const PromptText = NonEmptyText.check(Schema.isMaxLength(100_000));
@@ -208,6 +211,7 @@ export const FlectRuntimeError = Schema.Union([
   SessionBusy,
   NoModelAvailable,
   PiOperationFailed,
+  InvalidInterfaceDocument,
 ]);
 export type FlectRuntimeError = typeof FlectRuntimeError.Type;
 

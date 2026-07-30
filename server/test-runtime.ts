@@ -10,6 +10,7 @@ import {
 import {
   type InterfaceDocument,
   InterfaceDocument as InterfaceDocumentSchema,
+  validateInterfaceDocument,
 } from "../shared/interface-document";
 import { FlectRuntime } from "./runtime";
 
@@ -78,8 +79,11 @@ export const FlectTestRuntimeLive = Layer.succeed(FlectRuntime)({
       }),
       TurnCompleted.make({ type: "turn_completed" }),
     ),
-  shape: (_sessionId, _instruction, document) =>
-    Effect.succeed(shapedDocument(document)).pipe(Effect.delay("100 millis")),
+  shape: (_sessionId, _instruction, input) =>
+    validateInterfaceDocument(input).pipe(
+      Effect.map(shapedDocument),
+      Effect.delay("100 millis"),
+    ),
   cancel: () => Effect.void,
   diagnoseRecovery: () =>
     Effect.succeed(

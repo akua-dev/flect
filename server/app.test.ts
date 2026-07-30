@@ -73,10 +73,12 @@ const readText = (response: Response) => Effect.promise(() => response.text());
 function request(
   path: string,
   init?: RequestInit,
-  origin = "http://127.0.0.1:5173",
+  origin: string | null = "http://127.0.0.1:5173",
 ) {
   const headers = new Headers(init?.headers);
-  headers.set("origin", origin);
+  if (origin !== null) {
+    headers.set("origin", origin);
+  }
   if (init?.body) {
     headers.set("content-type", "application/json");
   }
@@ -377,6 +379,19 @@ describe("Flect HTTP application", () => {
         app,
         request("/api/runtime", undefined, "https://unexpected.example"),
       );
+
+      expect(response.status).toBe(403);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        error: "Origin not allowed",
+      });
+    }),
+  );
+
+  it.effect("rejects requests without an origin", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const response = yield* send(app, request("/api/runtime", undefined, null));
 
       expect(response.status).toBe(403);
       expect(yield* readJson(response)).toEqual({

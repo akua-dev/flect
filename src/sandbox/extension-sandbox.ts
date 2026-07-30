@@ -63,7 +63,9 @@ const decodeResponse = Schema.decodeUnknownEffect(
   strictOptions,
 );
 
-const makeWorkerHandle = (worker: Worker): SandboxWorkerHandle => ({
+export const makeSandboxWorkerHandle = (
+  worker: Worker,
+): SandboxWorkerHandle => ({
   run: Effect.fn("Flect.SandboxWorker.run")((request) =>
     Effect.callback<SandboxResult, SandboxExecutionFailed>((resume) => {
       const id = `request-${crypto.randomUUID().replaceAll("-", "")}`;
@@ -104,12 +106,16 @@ const makeWorkerHandle = (worker: Worker): SandboxWorkerHandle => ({
 
       worker.addEventListener("message", onMessage);
       worker.addEventListener("error", onError);
-      worker.postMessage(
-        SandboxWorkerRequest.make({
-          id,
-          request,
-        }),
-      );
+      try {
+        worker.postMessage(
+          SandboxWorkerRequest.make({
+            id,
+            request,
+          }),
+        );
+      } catch {
+        settle(Effect.fail(sandboxFailure("invalid-input")));
+      }
 
       return Effect.sync(cleanup);
     }),
@@ -130,7 +136,7 @@ export const SandboxWorkerFactoryLive = Layer.succeed(SandboxWorkerFactory)({
       Effect.sync(() => {
         worker.terminate();
       }),
-  ).pipe(Effect.map(makeWorkerHandle)),
+  ).pipe(Effect.map(makeSandboxWorkerHandle)),
 });
 
 export const ExtensionSandboxLive = Layer.effect(

@@ -10,6 +10,7 @@ import {
   Context,
   Deferred,
   Effect,
+  Fiber,
   HashMap,
   Layer,
   Option,
@@ -307,6 +308,7 @@ type ActiveOperation = {
   readonly kind: OperationKind;
   readonly interrupt: Effect.Effect<void, PiOperationFailed>;
   readonly done: Deferred.Deferred<void>;
+  fiber: Fiber.Fiber<unknown, unknown> | undefined;
 };
 
 type OperationState = {
@@ -320,6 +322,7 @@ type OperationController = {
   ) => Effect.Effect<void, SessionBusy | SessionNotFound>;
   readonly finish: (operation: ActiveOperation) => Effect.Effect<void>;
   readonly active: Effect.Effect<ActiveOperation | undefined>;
+  readonly interruptActive: Effect.Effect<void>;
   readonly close: Effect.Effect<void>;
 };
 
@@ -400,10 +403,20 @@ const makeOperationController = Effect.fn(
     },
   );
 
+  const interruptActive = Effect.fn(
+    "Flect.Runtime.interruptActiveOperation",
+  )(function* () {
+    const active = yield* Ref.get(state);
+    if (active?.fiber !== undefined) {
+      yield* Fiber.interrupt(active.fiber).pipe(Effect.asVoid);
+    }
+  });
+
   return {
     start,
     finish,
     active: Ref.get(state).pipe(Effect.map((current) => current.active)),
+    interruptActive: interruptActive(),
     close: close(),
   } satisfies OperationController;
 });
@@ -413,12 +426,16 @@ const executeOperation = <A, E>(
   operation: ActiveOperation,
   effect: Effect.Effect<A, E>,
 ): Effect.Effect<A, E | SessionBusy | SessionNotFound> =>
-  controller
-    .start(operation)
-    .pipe(
-      Effect.andThen(effect),
-      Effect.ensuring(controller.finish(operation)),
-    );
+  Effect.uninterruptibleMask((restore) =>
+    Effect.gen(function* () {
+      yield* controller.start(operation);
+      const fiber = yield* effect
+        .pipe(Effect.ensuring(controller.finish(operation)))
+        .pipe(Effect.forkDetach);
+      operation.fiber = fiber;
+      return yield* restore(Fiber.join(fiber));
+    }),
+  );
 
 type SessionRecord = {
   readonly session: PiSession;
@@ -519,12 +536,13 @@ export const FlectRuntimeLive = Layer.effect(
     const sessions = yield* Ref.make(HashMap.empty<string, SessionRecord>());
     const sessionSequence = yield* Ref.make(0);
 
-    const closeOperation = (
-      operation: Effect.Effect<void, PiOperationFailed>,
-    ) =>
-      operation.pipe(
+    const closeOperation = (controller: OperationController) =>
+      controller.close.pipe(
         Effect.interruptible,
         Effect.timeoutOption(SESSION_DISPOSAL_TIMEOUT),
+        Effect.flatMap((result) =>
+          Option.isNone(result) ? controller.interruptActive : Effect.void,
+        ),
         Effect.asVoid,
         Effect.catch(() => Effect.void),
       );
@@ -535,8 +553,8 @@ export const FlectRuntimeLive = Layer.effect(
       Effect.uninterruptible(
         Effect.all(
           [
-            closeOperation(record.sessionOperation.close),
-            closeOperation(record.guardianOperation.close),
+            closeOperation(record.sessionOperation),
+            closeOperation(record.guardianOperation),
           ],
           { concurrency: "unbounded", discard: true },
         ).pipe(
@@ -687,6 +705,7 @@ export const FlectRuntimeLive = Layer.effect(
           kind: "diagnose",
           interrupt: Effect.suspend(() => record.guardian.abort()),
           done: yield* Deferred.make<void>(),
+          fiber: undefined,
         };
         return yield* executeOperation(
           record.guardianOperation,
@@ -735,6 +754,7 @@ export const FlectRuntimeLive = Layer.effect(
                   yield* record.session.abort();
                 }),
                 done: yield* Deferred.make<void>(),
+                fiber: undefined,
               };
 
               const terminal = yield* executeOperation(
@@ -830,13 +850,15 @@ export const FlectRuntimeLive = Layer.effect(
     const shape = Effect.fn("Flect.Runtime.shape")(function* (
       sessionId: string,
       instruction: string,
-      document: InterfaceDocument,
+      input: unknown,
     ) {
+      const document = yield* validateInterfaceDocument(input);
       const record = yield* findSession(sessionId);
       const operation: ActiveOperation = {
         kind: "shape",
         interrupt: Effect.suspend(() => record.session.abort()),
         done: yield* Deferred.make<void>(),
+        fiber: undefined,
       };
       return yield* executeOperation(
         record.sessionOperation,

@@ -144,9 +144,9 @@ const makeShapingKernel = (
               : initialEvent,
           }
         : {
-            active: restored.active,
+            active: restored.safeMode ? initialRevision : restored.active,
             lastKnownGood: restored.lastKnownGood,
-            proposal: restored.proposal,
+            proposal: restored.safeMode ? undefined : restored.proposal,
             safeMode: restored.safeMode,
             disabledExtensions: restored.disabledExtensions,
             failureCounts: new Map(),
@@ -365,7 +365,7 @@ const makeShapingKernel = (
         yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
           const next: KernelState = {
             ...state,
-            active: state.lastKnownGood,
+            active: initialRevision,
             proposal: undefined,
             safeMode: true,
             sequence: state.sequence + 1,
@@ -404,7 +404,7 @@ const makeShapingKernel = (
 
         const next: KernelState = {
           ...state,
-          active: shouldRecover ? state.lastKnownGood : state.active,
+          active: shouldRecover ? initialRevision : state.active,
           proposal: shouldRecover ? undefined : state.proposal,
           safeMode: shouldRecover || state.safeMode,
           disabledExtensions,

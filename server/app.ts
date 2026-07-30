@@ -228,6 +228,7 @@ const shapeRoute = HttpRouter.add(
     Effect.catchTag("SessionBusy", () =>
       publicError("The session is busy.", 409),
     ),
+    Effect.catchTag("InvalidInterfaceDocument", () => invalidRequest()),
     Effect.catch(() => runtimeFailure()),
   ),
 );
@@ -238,7 +239,7 @@ const makeOriginMiddleware = (allowedOrigins: ReadonlySet<string>) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest;
         const origin = request.headers.origin;
-        if (origin && !allowedOrigins.has(origin)) {
+        if (origin === undefined || !allowedOrigins.has(origin)) {
           return yield* publicError("Origin not allowed", 403);
         }
         return yield* httpEffect;

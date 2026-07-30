@@ -11,6 +11,7 @@ import {
 import {
   defaultInterfaceDocument,
   InterfaceDocument,
+  InvalidInterfaceDocument,
 } from "../shared/interface-document";
 import {
   FlectRuntimeLive,
@@ -22,45 +23,77 @@ import {
 import { FlectRuntime } from "./runtime";
 
 type FakeOptions = {
+  readonly abortFailure?: boolean;
   readonly promptFailure?: boolean;
   readonly promptResponse?: string;
   readonly guardianResponse?: string;
   readonly promptGate?: Deferred.Deferred<void>;
   readonly promptStarted?: Deferred.Deferred<void>;
+  readonly pendingPromptStarted?: Deferred.Deferred<void>;
   readonly abortStarted?: Deferred.Deferred<void>;
 };
 
 function createFakePi(options: FakeOptions = {}) {
   let listener: ((delta: string) => void) | undefined;
   let guardianListener: ((delta: string) => void) | undefined;
+  let promptCalls = 0;
+  let releasePendingPrompt: (() => void) | undefined;
   const unsubscribe = vi.fn();
   const guardianUnsubscribe = vi.fn();
-  const abort = vi.fn(() =>
-    options.abortStarted === undefined
+  const abort = vi.fn(() => {
+    if (options.abortFailure) {
+      return Effect.fail(
+        new PiOperationFailed({
+          operation: "cancel",
+          message: "The model runtime could not complete the request.",
+        }),
+      );
+    }
+    return options.abortStarted === undefined
       ? Effect.void
-      : Deferred.succeed(options.abortStarted, undefined).pipe(Effect.asVoid),
-  );
+      : Deferred.succeed(options.abortStarted, undefined).pipe(Effect.asVoid);
+  });
   const guardianAbort = vi.fn(() => Effect.void);
   const dispose = vi.fn(() => undefined);
   const guardianDispose = vi.fn(() => undefined);
-  const prompt = vi.fn((_: string) =>
-    options.promptFailure
-      ? Effect.fail(
-          new PiOperationFailed({
-            operation: "prompt",
-            message: "The model runtime could not complete the request.",
-          }),
-        )
-      : Effect.gen(function* () {
-          if (options.promptStarted !== undefined) {
-            yield* Deferred.succeed(options.promptStarted, undefined);
-          }
-          if (options.promptGate !== undefined) {
-            yield* Deferred.await(options.promptGate);
-          }
-          listener?.(options.promptResponse ?? "A shaped response");
+  const prompt = vi.fn((_: string) => {
+    promptCalls += 1;
+    if (options.promptFailure) {
+      return Effect.fail(
+        new PiOperationFailed({
+          operation: "prompt",
+          message: "The model runtime could not complete the request.",
         }),
-  );
+      );
+    }
+    const pendingPromptStarted = options.pendingPromptStarted;
+    if (pendingPromptStarted !== undefined && promptCalls === 1) {
+      const pending = new Promise<void>((resolve) => {
+        releasePendingPrompt = resolve;
+      });
+      return Effect.gen(function* () {
+        yield* Deferred.succeed(pendingPromptStarted, undefined);
+        yield* Effect.tryPromise({
+          try: () => pending,
+          catch: () =>
+            new PiOperationFailed({
+              operation: "prompt",
+              message: "The model runtime could not complete the request.",
+            }),
+        });
+        listener?.(options.promptResponse ?? "A shaped response");
+      });
+    }
+    return Effect.gen(function* () {
+      if (options.promptStarted !== undefined) {
+        yield* Deferred.succeed(options.promptStarted, undefined);
+      }
+      if (options.promptGate !== undefined) {
+        yield* Deferred.await(options.promptGate);
+      }
+      listener?.(options.promptResponse ?? "A shaped response");
+    });
+  });
   const guardianPrompt = vi.fn(() =>
     Effect.sync(() =>
       guardianListener?.(
@@ -128,6 +161,7 @@ function createFakePi(options: FakeOptions = {}) {
     guardianUnsubscribe,
     layer: FlectRuntimeLive.pipe(Layer.provide(layer)),
     prompt,
+    releasePendingPrompt: () => releasePendingPrompt?.(),
     unsubscribe,
   };
 }
@@ -251,6 +285,49 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
+  it.effect("validates the Shaper input before starting Pi work", () => {
+    const fake = createFakePi();
+    const invalidDocument = {
+      version: 2,
+      name: "Invalid",
+      root: {
+        id: "root",
+        type: "stack",
+        direction: "column",
+        gap: "lg",
+        children: [
+          {
+            id: "duplicate",
+            type: "text",
+            text: "One",
+            style: "body",
+          },
+          {
+            id: "duplicate",
+            type: "text",
+            text: "Two",
+            style: "body",
+          },
+        ],
+      },
+    };
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const error = yield* runtime
+        .shape(sessionId, "Keep this safe", invalidDocument)
+        .pipe(Effect.flip);
+
+      expect(error).toEqual(
+        InvalidInterfaceDocument.make({
+          message: "The interface document is invalid.",
+        }),
+      );
+      expect(fake.prompt).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
   it.effect("rejects shaping while a prompt is active", () => {
     const promptStarted = Deferred.makeUnsafe<void>();
     const promptGate = Deferred.makeUnsafe<void>();
@@ -349,6 +426,47 @@ describe("FlectRuntimeLive", () => {
       }).pipe(Effect.provide(fake.layer));
     },
   );
+
+  it.effect("keeps an interrupted Pi promise occupying its session slot", () => {
+    const pendingPromptStarted = Deferred.makeUnsafe<void>();
+    const fake = createFakePi({
+      abortFailure: true,
+      pendingPromptStarted,
+      promptResponse: JSON.stringify(defaultInterfaceDocument),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const promptFiber = yield* runtime
+        .prompt(sessionId, "Keep talking")
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(pendingPromptStarted);
+
+      const cancelError = yield* runtime.cancel(sessionId).pipe(Effect.flip);
+      expect(cancelError).toEqual(
+        new PiOperationFailed({
+          operation: "cancel",
+          message: "The model runtime could not complete the request.",
+        }),
+      );
+      yield* Fiber.interrupt(promptFiber);
+
+      const busy = yield* runtime
+        .shape(sessionId, "Start another request", defaultInterfaceDocument)
+        .pipe(Effect.flip);
+      expect(busy).toEqual(
+        new SessionBusy({
+          sessionId,
+          message: "The session is busy.",
+        }),
+      );
+      expect(fake.prompt).toHaveBeenCalledOnce();
+
+      fake.releasePendingPrompt();
+      yield* Effect.yieldNow;
+    }).pipe(Effect.provide(fake.layer));
+  });
 
   it.effect(
     "rejects conflicts and waits before disposing an active session",

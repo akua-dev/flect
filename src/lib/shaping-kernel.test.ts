@@ -137,6 +137,42 @@ describe("ShapingKernel", () => {
     );
   });
 
+  const safeModeRestoredSnapshot = ShapingSnapshot.make({
+    version: restoredSnapshot.version,
+    active: restoredSnapshot.active,
+    lastKnownGood: restoredSnapshot.lastKnownGood,
+    safeMode: true,
+    disabledExtensions: restoredSnapshot.disabledExtensions,
+    lastEvent: ShapingEvent.make({
+      version: 1,
+      sequence: 5,
+      type: "safe-mode-entered",
+      revisionId: restoredSnapshot.active.id,
+    }),
+  });
+
+  it.layer(
+    makePersistentHarness(JSON.stringify(safeModeRestoredSnapshot)),
+  )((it) => {
+    it.effect("restores safe mode on the built-in document", () =>
+      Effect.gen(function* () {
+        const kernel = yield* ShapingKernel;
+        const snapshot = yield* kernel.snapshot;
+
+        assert.deepStrictEqual(
+          snapshot.active.document,
+          defaultInterfaceDocument,
+        );
+        assert.deepStrictEqual(
+          snapshot.lastKnownGood.document,
+          defaultInterfaceDocument,
+        );
+        assert.strictEqual(snapshot.safeMode, true);
+        assert.strictEqual(snapshot.proposal, undefined);
+      }),
+    );
+  });
+
   it.layer(makePersistentHarness())((it) => {
     it.effect("persists accepted revisions as one journal transaction", () =>
       Effect.gen(function* () {
@@ -232,7 +268,11 @@ describe("ShapingKernel", () => {
 
         yield* kernel.enterSafeMode;
         const recovered = yield* kernel.snapshot;
-        assert.deepStrictEqual(recovered.active.document, firstDocument);
+        assert.deepStrictEqual(
+          recovered.active.document,
+          defaultInterfaceDocument,
+        );
+        assert.deepStrictEqual(recovered.lastKnownGood.document, firstDocument);
       }),
     );
   });

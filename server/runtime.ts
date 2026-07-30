@@ -29,7 +29,7 @@ export interface FlectRuntimeShape {
   readonly shape: (
     sessionId: string,
     instruction: string,
-    document: InterfaceDocument,
+    document: unknown,
   ) => Effect.Effect<InterfaceDocument, FlectRuntimeError>;
   readonly cancel: (
     sessionId: string,

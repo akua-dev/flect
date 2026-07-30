@@ -49,6 +49,7 @@ export function App() {
   const [protectedMode, setProtectedMode] = useState(safeMode);
   const session = useAgentSession();
   const shapeRequestRef = useRef(0);
+  const decisionInFlightRef = useRef(false);
   const [shapingStatus, setShapingStatus] =
     useState<ShapingController["status"]>("idle");
   const [shapingError, setShapingError] = useState<string>();
@@ -66,6 +67,12 @@ export function App() {
           const snapshot = yield* kernel.snapshot;
           if (safeMode) {
             yield* kernel.enterSafeMode;
+            return {
+              document: defaultInterfaceDocument,
+              protectedMode: true,
+            };
+          }
+          if (snapshot.safeMode) {
             return {
               document: defaultInterfaceDocument,
               protectedMode: true,
@@ -120,7 +127,11 @@ export function App() {
         setShapingError("Leave safe mode before shaping the interface.");
         return;
       }
-      if (isAgentSessionActive(session.status) || shapingStatus === "shaping") {
+      if (
+        isAgentSessionActive(session.status) ||
+        shapingStatus === "shaping" ||
+        decisionInFlightRef.current
+      ) {
         return;
       }
 
@@ -167,10 +178,13 @@ export function App() {
     if (
       proposalId === undefined ||
       isAgentSessionActive(session.status) ||
-      shapingStatus === "shaping"
+      shapingStatus === "shaping" ||
+      decisionInFlightRef.current
     ) {
       return;
     }
+    decisionInFlightRef.current = true;
+    setShapingStatus("shaping");
     try {
       const accepted = await shapingRuntime.runPromise(
         Effect.gen(function* () {
@@ -185,6 +199,8 @@ export function App() {
     } catch {
       setShapingStatus("error");
       setShapingError("The revision could not be accepted safely.");
+    } finally {
+      decisionInFlightRef.current = false;
     }
   }, [proposalId, session.status, shapingStatus]);
 
@@ -192,10 +208,13 @@ export function App() {
     if (
       proposalId === undefined ||
       isAgentSessionActive(session.status) ||
-      shapingStatus === "shaping"
+      shapingStatus === "shaping" ||
+      decisionInFlightRef.current
     ) {
       return;
     }
+    decisionInFlightRef.current = true;
+    setShapingStatus("shaping");
     try {
       await shapingRuntime
         .runPromise(
@@ -211,11 +230,17 @@ export function App() {
     } catch {
       setShapingStatus("error");
       setShapingError("The proposal could not be rejected safely.");
+    } finally {
+      decisionInFlightRef.current = false;
     }
   }, [proposalId, session.status, shapingStatus]);
 
   const rollbackShape = useCallback(async () => {
-    if (isAgentSessionActive(session.status) || shapingStatus === "shaping") {
+    if (
+      isAgentSessionActive(session.status) ||
+      shapingStatus === "shaping" ||
+      decisionInFlightRef.current
+    ) {
       return;
     }
     shapeRequestRef.current += 1;
