@@ -407,8 +407,8 @@ const makeOperationController = Effect.fn(
     "Flect.Runtime.interruptActiveOperation",
   )(function* () {
     const active = yield* Ref.get(state);
-    if (active?.fiber !== undefined) {
-      yield* Fiber.interrupt(active.fiber).pipe(Effect.asVoid);
+    if (active.active?.fiber !== undefined) {
+      yield* Fiber.interrupt(active.active.fiber).pipe(Effect.asVoid);
     }
   });
 

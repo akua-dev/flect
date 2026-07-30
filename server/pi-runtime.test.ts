@@ -576,6 +576,7 @@ describe("FlectRuntimeLive", () => {
       yield* Deferred.await(abortStarted);
       yield* TestClock.adjust("2 seconds");
       yield* Fiber.join(closeFiber);
+      expect(shapeFiber.pollUnsafe()).not.toBeUndefined();
 
       expect(fake.dispose).toHaveBeenCalledOnce();
       expect(fake.guardianDispose).toHaveBeenCalledOnce();

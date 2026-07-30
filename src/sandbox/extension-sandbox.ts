@@ -23,6 +23,11 @@ const sandboxFailure = (reason: SandboxExecutionFailed["reason"]) =>
     message: "Extension execution failed safely.",
   });
 
+type SandboxWorker = Pick<
+  Worker,
+  "addEventListener" | "removeEventListener" | "postMessage"
+>;
+
 interface SandboxWorkerHandle {
   readonly run: (
     request: QuickJsExtensionRequest,
@@ -64,7 +69,7 @@ const decodeResponse = Schema.decodeUnknownEffect(
 );
 
 export const makeSandboxWorkerHandle = (
-  worker: Worker,
+  worker: SandboxWorker,
 ): SandboxWorkerHandle => ({
   run: Effect.fn("Flect.SandboxWorker.run")((request) =>
     Effect.callback<SandboxResult, SandboxExecutionFailed>((resume) => {

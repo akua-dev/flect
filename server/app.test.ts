@@ -388,15 +388,15 @@ describe("Flect HTTP application", () => {
     }),
   );
 
-  it.effect("rejects requests without an origin", () =>
+  it.effect("accepts requests without an origin", () =>
     Effect.gen(function* () {
       const app = yield* useApp(createFakeRuntime());
       const response = yield* send(app, request("/api/runtime", undefined, null));
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(200);
       expect(yield* readJson(response)).toEqual({
         version: 1,
-        error: "Origin not allowed",
+        status: "ready",
       });
     }),
   );
