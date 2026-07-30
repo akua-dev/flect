@@ -18,8 +18,10 @@ import {
   RuntimeStatus,
   SessionResponse,
   SessionSelection,
+  ShapeBusy,
+  ShapeError,
+  ShapeEvent,
   ShapeRequest,
-  ShapeResponse,
   TurnBusy,
   TurnError,
 } from "../shared/contracts";
@@ -51,11 +53,13 @@ const modelsJson = HttpServerResponse.schemaJson(ModelsResponse);
 const sessionJson = HttpServerResponse.schemaJson(SessionResponse);
 const closeJson = HttpServerResponse.schemaJson(CloseSessionResponse);
 const cancelJson = HttpServerResponse.schemaJson(CancelResponse);
-const shapeJson = HttpServerResponse.schemaJson(ShapeResponse);
 const guardianJson = HttpServerResponse.schemaJson(GuardianDiagnostic);
 const shellResultJson = HttpServerResponse.schemaJson(AgentShellResultAccepted);
 const publicErrorJson = HttpServerResponse.schemaJson(PublicErrorResponse);
 const encodeEventJson = Schema.encodeEffect(Schema.fromJsonString(FlectEvent));
+const encodeShapeEventJson = Schema.encodeEffect(
+  Schema.fromJsonString(ShapeEvent),
+);
 
 const publicError = Effect.fn("Flect.Http.publicError")(
   (message: string, status: number) =>
@@ -253,14 +257,33 @@ const shapeRoute = HttpRouter.add(
     const document = yield* validateInterfaceDocument(shape.value.document);
 
     const runtime = yield* FlectRuntime;
-    const shaped = yield* runtime.shape(
-      path.value.sessionId,
-      shape.value.instruction,
-      document,
-    );
-    return yield* shapeJson(
-      new ShapeResponse({ version: 1, document: shaped }),
-    );
+    const events = runtime
+      .shape(path.value.sessionId, shape.value.instruction, document)
+      .pipe(
+        Stream.catchTag("SessionBusy", () =>
+          Stream.succeed(
+            new ShapeBusy({
+              type: "shape_busy",
+              message: "The session is busy.",
+            }),
+          ),
+        ),
+        Stream.catch(() =>
+          Stream.succeed(
+            new ShapeError({
+              type: "shape_error",
+              message: "The local Flect runtime could not complete this request.",
+            }),
+          ),
+        ),
+        Stream.mapEffect((event) => encodeShapeEventJson(event)),
+        Stream.map((json) => `data: ${json}\n\n`),
+        Stream.encodeText,
+      );
+    return HttpServerResponse.stream(events, {
+      contentType: "text/event-stream; charset=utf-8",
+      headers: { "cache-control": "no-store" },
+    });
   }).pipe(
     Effect.catchTag("SessionBusy", () =>
       publicError("The session is busy.", 409),

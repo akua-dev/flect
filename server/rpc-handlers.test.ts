@@ -7,6 +7,7 @@ import {
   ModelSummary,
   RuntimeStatus,
   SessionSelection,
+  ShapeCompleted,
   TextDelta,
   TurnCompleted,
   TurnStarted,
@@ -37,10 +38,13 @@ const runtimeLayer = Layer.succeed(FlectRuntime)({
       TurnCompleted.make({ type: "turn_completed" }),
     ),
   shape: () =>
-    Effect.succeed(
-      InterfaceDocument.make({
-        ...defaultInterfaceDocument,
-        name: "Focused Flect",
+    Stream.succeed(
+      ShapeCompleted.make({
+        type: "shape_completed",
+        document: InterfaceDocument.make({
+          ...defaultInterfaceDocument,
+          name: "Focused Flect",
+        }),
       }),
     ),
   cancel: () => Effect.void,
@@ -92,11 +96,13 @@ describe("Flect RPC handlers", () => {
         const sessionId = yield* client.CreateSession(
           SessionSelection.make({}),
         );
-        const shaped = yield* client.Shape({
-          sessionId,
-          instruction: "Make this more focused",
-          document: defaultInterfaceDocument,
-        });
+        const shaped = yield* client
+          .Shape({
+            sessionId,
+            instruction: "Make this more focused",
+            document: defaultInterfaceDocument,
+          })
+          .pipe(Stream.runCollect);
         yield* client.Cancel({ sessionId });
         yield* client.CompleteShellRequest({
           sessionId,
@@ -117,7 +123,11 @@ describe("Flect RPC handlers", () => {
         assert.strictEqual(status.status, "ready");
         assert.strictEqual(models[0]?.name, "GPT-5.6");
         assert.strictEqual(sessionId, "session-1");
-        assert.strictEqual(shaped.name, "Focused Flect");
+        assert.strictEqual(shaped[0]?.type, "shape_completed");
+        assert.strictEqual(
+          shaped[0]?.type === "shape_completed" ? shaped[0].document.name : "",
+          "Focused Flect",
+        );
         assert.strictEqual(
           diagnostic.message,
           "The protected launcher remains available.",
@@ -143,11 +153,13 @@ describe("Flect RPC handlers", () => {
     Effect.gen(function* () {
       const client = yield* RpcTest.makeClient(FlectRpcs);
       const error = yield* Effect.flip(
-        client.Shape({
-          sessionId: "session-1",
-          instruction: "Make this more focused",
-          document: deeplyNestedDocument(2_000) as never,
-        }),
+        client
+          .Shape({
+            sessionId: "session-1",
+            instruction: "Make this more focused",
+            document: deeplyNestedDocument(2_000) as never,
+          })
+          .pipe(Stream.runDrain),
       );
 
       assert.strictEqual(error._tag, "InvalidInterfaceDocument");

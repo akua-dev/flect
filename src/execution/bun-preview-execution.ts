@@ -250,7 +250,14 @@ const makeWorkerSource = (bundle: string) => `
   let handler;
   let active = true;
   let selectedPort = 3000;
+  const activeRequests = new Map();
   const send = (value) => globalThis.postMessage(value);
+  const abortRequests = () => {
+    for (const controller of activeRequests.values()) {
+      controller.abort();
+    }
+    activeRequests.clear();
+  };
   const boundedHeaders = (headers) => {
     const output = {};
     let count = 0;
@@ -281,6 +288,7 @@ const makeWorkerSource = (bundle: string) => `
         stop() {
           active = false;
           handler = undefined;
+          abortRequests();
         },
       });
     },
@@ -290,7 +298,12 @@ const makeWorkerSource = (bundle: string) => `
     if (frame && frame.type === "stop") {
       active = false;
       handler = undefined;
+      abortRequests();
       close();
+      return;
+    }
+    if (frame && frame.type === "cancel" && typeof frame.id === "string") {
+      activeRequests.get(frame.id)?.abort();
       return;
     }
     if (!frame || frame.type !== "request" || typeof frame.id !== "string") {
@@ -300,10 +313,13 @@ const makeWorkerSource = (bundle: string) => `
       send({ type: "response", id: frame.id, response: { status: 503, headers: {}, body: "Preview stopped." } });
       return;
     }
+    const controller = new AbortController();
+    activeRequests.set(frame.id, controller);
     try {
       const init = {
         method: frame.request.method,
         headers: frame.request.headers,
+        signal: controller.signal,
       };
       if (frame.request.method !== "GET" && frame.request.method !== "HEAD") {
         init.body = frame.request.body;
@@ -317,17 +333,23 @@ const makeWorkerSource = (bundle: string) => `
       if (body.length > ${BODY_LIMIT}) {
         throw new Error("response body exceeded its limit");
       }
-      send({
-        type: "response",
-        id: frame.id,
-        response: {
-          status: value.status,
-          headers: boundedHeaders(value.headers),
-          body,
-        },
-      });
+      if (!controller.signal.aborted) {
+        send({
+          type: "response",
+          id: frame.id,
+          response: {
+            status: value.status,
+            headers: boundedHeaders(value.headers),
+            body,
+          },
+        });
+      }
     } catch {
-      send({ type: "response", id: frame.id, response: { status: 502, headers: {}, body: "Preview handler failed." } });
+      if (!controller.signal.aborted) {
+        send({ type: "response", id: frame.id, response: { status: 502, headers: {}, body: "Preview handler failed." } });
+      }
+    } finally {
+      activeRequests.delete(frame.id);
     }
   });
   try {
@@ -342,11 +364,15 @@ const makeWorkerSource = (bundle: string) => `
 })();
 `;
 
+interface RealmRequest {
+  readonly id: string;
+  readonly promise: Promise<typeof BunPreviewResponse.Encoded>;
+}
+
 interface RealmHandle {
   readonly port: number;
-  readonly request: (
-    request: unknown,
-  ) => Promise<typeof BunPreviewResponse.Encoded>;
+  readonly request: (request: unknown) => RealmRequest;
+  readonly cancel: (requestId: string) => void;
   readonly stop: () => void;
 }
 
@@ -437,15 +463,33 @@ const createRealm = (source: string): Promise<RealmHandle> =>
         globalThis.removeEventListener("message", onFrameReady);
         resolve({
           port: frame.port,
-          request: (request) =>
-            new Promise((requestResolve, requestReject) => {
-              const id = `request-${crypto.randomUUID().replaceAll("-", "")}`;
-              pending.set(id, {
-                resolve: requestResolve,
-                reject: requestReject,
-              });
-              channel.port1.postMessage({ type: "request", id, request });
-            }),
+          request: (request) => {
+            const id = `request-${crypto.randomUUID().replaceAll("-", "")}`;
+            const promise = new Promise<typeof BunPreviewResponse.Encoded>(
+              (requestResolve, requestReject) => {
+                pending.set(id, {
+                  resolve: requestResolve,
+                  reject: requestReject,
+                });
+                channel.port1.postMessage({ type: "request", id, request });
+              },
+            );
+            return { id, promise };
+          },
+          cancel: (requestId) => {
+            const request = pending.get(requestId);
+            if (request === undefined) {
+              return;
+            }
+            pending.delete(requestId);
+            try {
+              channel.port1.postMessage({ type: "cancel", id: requestId });
+            } catch {
+              request.reject(new Error("Preview request cancelled."));
+              return;
+            }
+            request.reject(new Error("Preview request cancelled."));
+          },
           stop: () => {
             channel.port1.postMessage({ type: "stop" });
             cleanup();
@@ -654,17 +698,23 @@ export const BunPreviewExecutionLive = Layer.effect(
             const registration = yield* preview.register({
               runId,
               port: realm.port,
-              handler: (input) =>
-                Effect.tryPromise({
-                  try: () => realm.request(input),
+              handler: (input) => {
+                const pending = realm.request(input);
+                return Effect.tryPromise({
+                  try: () => pending.promise,
                   catch: previewFailure,
                 }).pipe(
+                  Effect.onInterrupt(() =>
+                    Effect.sync(() => realm.cancel(pending.id)),
+                  ),
                   Effect.flatMap((output) =>
                     Schema.decodeUnknownEffect(BunPreviewResponse)(output).pipe(
                       Effect.mapError(previewFailure),
                     ),
                   ),
-                ),
+                );
+              },
+              onTimeout: release,
             });
             yield* Effect.tryPromise({
               try: () => registerPreviewRoute(runId, realm.port),

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import { validateInterfaceDocument } from "../shared/interface-document";
 import { FlectRpcs } from "../shared/rpc";
 import { FlectRuntime } from "./runtime";
@@ -16,8 +16,8 @@ export const makeFlectRpcHandlers = () =>
         Shape: ({ sessionId, instruction, document }) =>
           Effect.gen(function* () {
             const validated = yield* validateInterfaceDocument(document);
-            return yield* runtime.shape(sessionId, instruction, validated);
-          }),
+            return runtime.shape(sessionId, instruction, validated);
+          }).pipe(Stream.unwrap),
         Cancel: ({ sessionId }) => runtime.cancel(sessionId),
         CompleteShellRequest: ({ sessionId, requestId, result }) =>
           runtime.completeShellRequest(sessionId, requestId, result),

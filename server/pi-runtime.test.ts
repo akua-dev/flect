@@ -8,6 +8,7 @@ import {
   SessionBusy,
   SessionNotFound,
   SessionSelection,
+  ShapeCompleted,
 } from "../shared/contracts";
 import {
   defaultInterfaceDocument,
@@ -16,6 +17,7 @@ import {
 } from "../shared/interface-document";
 import {
   FlectRuntimeLive,
+  type PiEvent,
   type PiAgentPair,
   PiSdk,
   type PiSession,
@@ -34,10 +36,16 @@ type FakeOptions = {
   readonly abortStarted?: Deferred.Deferred<void>;
   readonly abortGate?: Deferred.Deferred<void>;
   readonly pairObserved?: Deferred.Deferred<void>;
+  readonly shellRequest?: {
+    readonly requestId: string;
+    readonly command: string;
+    readonly started: Deferred.Deferred<void>;
+    readonly completed: Deferred.Deferred<BunCommandResult>;
+  };
 };
 
 function createFakePi(options: FakeOptions = {}) {
-  let listener: ((delta: string) => void) | undefined;
+  let listener: ((event: PiEvent) => void) | undefined;
   let guardianListener: ((delta: string) => void) | undefined;
   let promptCalls = 0;
   let releasePendingPrompt: (() => void) | undefined;
@@ -89,7 +97,10 @@ function createFakePi(options: FakeOptions = {}) {
               message: "The model runtime could not complete the request.",
             }),
         });
-        listener?.(options.promptResponse ?? "A shaped response");
+        listener?.({
+          type: "text_delta",
+          delta: options.promptResponse ?? "A shaped response",
+        });
       });
     }
     return Effect.gen(function* () {
@@ -99,7 +110,19 @@ function createFakePi(options: FakeOptions = {}) {
       if (options.promptGate !== undefined) {
         yield* Deferred.await(options.promptGate);
       }
-      listener?.(options.promptResponse ?? "A shaped response");
+      if (options.shellRequest !== undefined && promptCalls === 1) {
+        yield* Deferred.succeed(options.shellRequest.started, undefined);
+        listener?.({
+          type: "shell_request",
+          requestId: options.shellRequest.requestId,
+          command: options.shellRequest.command,
+        });
+        yield* Deferred.await(options.shellRequest.completed);
+      }
+      listener?.({
+        type: "text_delta",
+        delta: options.promptResponse ?? "A shaped response",
+      });
     });
   });
   const guardianPrompt = vi.fn(() =>
@@ -109,13 +132,20 @@ function createFakePi(options: FakeOptions = {}) {
       ),
     ),
   );
-  const completeShellRequest = vi.fn(() => Effect.void);
+  const completeShellRequest = vi.fn(
+    (_requestId: string, result: BunCommandResult) =>
+      options.shellRequest === undefined
+        ? Effect.void
+        : Deferred.succeed(options.shellRequest.completed, result).pipe(
+            Effect.asVoid,
+          ),
+  );
 
   const session: PiSession = {
     sessionId: "session-1",
     subscribe: (next) =>
       Effect.sync(() => {
-        listener = (delta) => next({ type: "text_delta", delta });
+        listener = next;
         return unsubscribe;
       }),
     prompt,
@@ -320,12 +350,15 @@ describe("FlectRuntimeLive", () => {
           .pipe(Stream.runCollect);
         expect(events.at(-1)).toEqual({ type: "turn_completed" });
 
-        const shaped = yield* runtime.shape(
-          sessionId,
-          "Shape this",
-          defaultInterfaceDocument,
-        );
-        expect(shaped).toEqual(defaultInterfaceDocument);
+        const shaped = yield* runtime
+          .shape(sessionId, "Shape this", defaultInterfaceDocument)
+          .pipe(Stream.runCollect);
+        expect(shaped).toEqual([
+          ShapeCompleted.make({
+            type: "shape_completed",
+            document: defaultInterfaceDocument,
+          }),
+        ]);
       }).pipe(Effect.provide(fake.layer));
     },
   );
@@ -342,14 +375,67 @@ describe("FlectRuntimeLive", () => {
     return Effect.gen(function* () {
       const runtime = yield* FlectRuntime;
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
-      const result = yield* runtime.shape(
+      const result = yield* runtime
+        .shape(sessionId, "Make this more focused", defaultInterfaceDocument)
+        .pipe(Stream.runCollect);
+
+      expect(result).toEqual([
+        ShapeCompleted.make({ type: "shape_completed", document: shaped }),
+      ]);
+      expect(fake.prompt).toHaveBeenCalledOnce();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("services a browser shell request during shaping", () => {
+    const shellRequest = {
+      requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+      command: "bun run src/index.ts",
+      started: Deferred.makeUnsafe<void>(),
+      completed: Deferred.makeUnsafe<BunCommandResult>(),
+    };
+    const shaped = InterfaceDocument.make({
+      ...defaultInterfaceDocument,
+      name: "Shell-assisted Flect",
+    });
+    const fake = createFakePi({
+      shellRequest,
+      promptResponse: JSON.stringify(shaped),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const fiber = yield* runtime
+        .shape(sessionId, "Use the browser shell", defaultInterfaceDocument)
+        .pipe(Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+
+      yield* Deferred.await(shellRequest.started);
+      expect(fiber.pollUnsafe()).toBeUndefined();
+
+      const result = BunCommandResult.make({
+        version: 1,
+        exitCode: 0,
+        stdout: "42\n",
+        stderr: "",
+      });
+      yield* runtime.completeShellRequest(
         sessionId,
-        "Make this more focused",
-        defaultInterfaceDocument,
+        shellRequest.requestId,
+        result,
       );
 
-      expect(result).toEqual(shaped);
-      expect(fake.prompt).toHaveBeenCalledOnce();
+      expect(yield* Fiber.join(fiber)).toEqual([
+        {
+          type: "shell_request",
+          requestId: shellRequest.requestId,
+          command: shellRequest.command,
+        },
+        ShapeCompleted.make({ type: "shape_completed", document: shaped }),
+      ]);
+      expect(fake.completeShellRequest).toHaveBeenCalledWith(
+        shellRequest.requestId,
+        result,
+      );
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -385,7 +471,7 @@ describe("FlectRuntimeLive", () => {
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
       const error = yield* runtime
         .shape(sessionId, "Keep this safe", invalidDocument)
-        .pipe(Effect.flip);
+        .pipe(Stream.runDrain, Effect.flip);
 
       expect(error).toEqual(
         InvalidInterfaceDocument.make({
@@ -415,7 +501,7 @@ describe("FlectRuntimeLive", () => {
 
       const shapeError = yield* runtime
         .shape(sessionId, "Shape this", defaultInterfaceDocument)
-        .pipe(Effect.flip);
+        .pipe(Stream.runDrain, Effect.flip);
       expect(shapeError).toEqual(
         new SessionBusy({
           sessionId,
@@ -447,7 +533,7 @@ describe("FlectRuntimeLive", () => {
         );
         const shapeFiber = yield* runtime
           .shape(sessionId, "Shape this", defaultInterfaceDocument)
-          .pipe(Effect.forkChild({ startImmediately: true }));
+          .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
         yield* Deferred.await(promptStarted);
 
         yield* runtime.cancel(sessionId);
@@ -511,7 +597,7 @@ describe("FlectRuntimeLive", () => {
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
       const shapeFiber = yield* runtime
         .shape(sessionId, "Shape this", defaultInterfaceDocument)
-        .pipe(Effect.forkChild({ startImmediately: true }));
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
       yield* Deferred.await(promptStarted);
 
       yield* Fiber.interrupt(shapeFiber);
@@ -606,7 +692,7 @@ describe("FlectRuntimeLive", () => {
 
         const busy = yield* runtime
           .shape(sessionId, "Start another request", defaultInterfaceDocument)
-          .pipe(Effect.flip);
+          .pipe(Stream.runDrain, Effect.flip);
         expect(busy).toEqual(
           new SessionBusy({
             sessionId,
@@ -639,7 +725,7 @@ describe("FlectRuntimeLive", () => {
         );
         const shapeFiber = yield* runtime
           .shape(sessionId, "Shape this", defaultInterfaceDocument)
-          .pipe(Effect.forkChild({ startImmediately: true }));
+          .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
         yield* Deferred.await(promptStarted);
 
         const busy = yield* runtime
@@ -683,7 +769,7 @@ describe("FlectRuntimeLive", () => {
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
       const shapeFiber = yield* runtime
         .shape(sessionId, "Shape this", defaultInterfaceDocument)
-        .pipe(Effect.forkChild({ startImmediately: true }));
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
       yield* Deferred.await(promptStarted);
 
       const closeFiber = yield* runtime
@@ -718,9 +804,9 @@ describe("FlectRuntimeLive", () => {
     return Effect.gen(function* () {
       const runtime = yield* FlectRuntime;
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
-      const shapeFiber = yield* runtime
-        .shape(sessionId, "Shape this", defaultInterfaceDocument)
-        .pipe(Effect.forkChild({ startImmediately: true }));
+        const shapeFiber = yield* runtime
+          .shape(sessionId, "Shape this", defaultInterfaceDocument)
+          .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
       yield* Deferred.await(promptStarted);
 
       const closeFiber = yield* runtime
@@ -747,7 +833,7 @@ describe("FlectRuntimeLive", () => {
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
       const error = yield* runtime
         .shape(sessionId, "Make it huge", defaultInterfaceDocument)
-        .pipe(Effect.flip);
+        .pipe(Stream.runDrain, Effect.flip);
       yield* Effect.yieldNow;
 
       expect(error).toEqual(
@@ -770,7 +856,7 @@ describe("FlectRuntimeLive", () => {
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
       const error = yield* runtime
         .shape(sessionId, "Run a script", defaultInterfaceDocument)
-        .pipe(Effect.flip);
+        .pipe(Stream.runDrain, Effect.flip);
 
       expect(error).toEqual(
         new PiOperationFailed({

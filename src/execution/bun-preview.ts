@@ -70,6 +70,7 @@ export interface BunPreviewRegistration {
     BunPreviewResponse | typeof BunPreviewResponse.Encoded,
     BunCommandFailed
   >;
+  readonly onTimeout?: Effect.Effect<void>;
 }
 
 export interface BunPreviewShape {
@@ -168,8 +169,9 @@ export const makeBunPreviewLayer = (options?: {
                       duration:
                         options?.handlerDeadline ?? DEFAULT_HANDLER_DEADLINE,
                       orElse: () =>
-                        Effect.succeed(
-                          response(504, "Preview handler timed out."),
+                        (registration.onTimeout ?? Effect.void).pipe(
+                          Effect.catch(() => Effect.void),
+                          Effect.as(response(504, "Preview handler timed out.")),
                         ),
                     }),
                     Effect.flatMap((value) =>

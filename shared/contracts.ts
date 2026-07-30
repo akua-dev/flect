@@ -135,6 +135,33 @@ export class AgentShellRequest extends Schema.Class<AgentShellRequest>(
   command: ShellCommandText,
 }) {}
 
+export class ShapeCompleted extends Schema.Class<ShapeCompleted>(
+  "ShapeCompleted",
+)({
+  type: Schema.Literal("shape_completed"),
+  document: InterfaceDocument,
+}) {}
+
+export class ShapeBusy extends Schema.Class<ShapeBusy>("ShapeBusy")({
+  type: Schema.Literal("shape_busy"),
+  message: Schema.Literal("The session is busy."),
+}) {}
+
+export class ShapeError extends Schema.Class<ShapeError>("ShapeError")({
+  type: Schema.Literal("shape_error"),
+  message: Schema.Literal(
+    "The local Flect runtime could not complete this request.",
+  ),
+}) {}
+
+export const ShapeEvent = Schema.Union([
+  AgentShellRequest,
+  ShapeCompleted,
+  ShapeBusy,
+  ShapeError,
+]);
+export type ShapeEvent = typeof ShapeEvent.Type;
+
 export const FlectEvent = Schema.Union([
   TurnStarted,
   TextDelta,

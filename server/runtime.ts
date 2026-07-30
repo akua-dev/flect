@@ -8,8 +8,8 @@ import type {
   RecoveryReason,
   RuntimeStatus,
   SessionSelection,
+  ShapeEvent,
 } from "../shared/contracts";
-import type { InterfaceDocument } from "../shared/interface-document";
 
 export interface FlectRuntimeShape {
   readonly status: Effect.Effect<RuntimeStatus>;
@@ -31,7 +31,7 @@ export interface FlectRuntimeShape {
     sessionId: string,
     instruction: string,
     document: unknown,
-  ) => Effect.Effect<InterfaceDocument, FlectRuntimeError>;
+  ) => Stream.Stream<ShapeEvent, FlectRuntimeError>;
   readonly cancel: (
     sessionId: string,
   ) => Effect.Effect<void, FlectRuntimeError>;

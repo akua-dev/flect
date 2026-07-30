@@ -7,6 +7,7 @@ import {
   RuntimeStatus,
   SessionBusy,
   SessionSelection,
+  ShapeCompleted,
 } from "../../shared/contracts";
 import {
   defaultInterfaceDocument,
@@ -272,19 +273,30 @@ describe("FlectClient", () => {
     });
     const fetcher = vi
       .fn<typeof fetch>()
-      .mockResolvedValue(jsonResponse({ version: 1, document: shaped }));
+      .mockResolvedValue(
+        chunkedSse([
+          `data: ${JSON.stringify({
+            type: "shape_completed",
+            document: shaped,
+          })}\n\n`,
+        ]),
+      );
 
     return withClient(
       fetcher,
       Effect.gen(function* () {
         const client = yield* FlectClient;
-        const result = yield* client.shape(
-          "session-1",
-          "Make this more focused",
-          defaultInterfaceDocument,
-        );
+        const result = yield* client
+          .shape(
+            "session-1",
+            "Make this more focused",
+            defaultInterfaceDocument,
+          )
+          .pipe(Stream.runCollect);
 
-        expect(result).toEqual(shaped);
+        expect(result).toEqual([
+          ShapeCompleted.make({ type: "shape_completed", document: shaped }),
+        ]);
         const [input, init] = fetcher.mock.calls[0] ?? [];
         expect(String(input)).toBe(
           "http://flect.local/api/sessions/session-1/shape",
@@ -311,7 +323,7 @@ describe("FlectClient", () => {
             "Make this more focused",
             defaultInterfaceDocument,
           )
-          .pipe(Effect.flip);
+          .pipe(Stream.runCollect, Effect.flip);
 
         expect(error).toEqual(
           new SessionBusy({

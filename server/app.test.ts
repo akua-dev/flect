@@ -1,13 +1,15 @@
 import { describe, expect, it, vi } from "@effect/vitest";
-import { Effect, Stream } from "effect";
+import { Deferred, Effect, Fiber, Stream } from "effect";
 import { BunCommandResult } from "../shared/bun-command";
 import {
   GuardianDiagnostic,
+  AgentShellRequest,
   ModelSummary,
   ModelsResponse,
   RuntimeStatus,
   SessionBusy,
   SessionSelection,
+  ShapeCompleted,
   TextDelta,
   TurnCompleted,
   TurnStarted,
@@ -39,10 +41,13 @@ function createFakeRuntime(): FlectRuntimeShape {
       ),
     ),
     shape: vi.fn(() =>
-      Effect.succeed(
-        InterfaceDocument.make({
-          ...defaultInterfaceDocument,
-          name: "Focused Flect",
+      Stream.succeed(
+        ShapeCompleted.make({
+          type: "shape_completed",
+          document: InterfaceDocument.make({
+            ...defaultInterfaceDocument,
+            name: "Focused Flect",
+          }),
         }),
       ),
     ),
@@ -324,13 +329,18 @@ describe("Flect HTTP application", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(yield* readJson(response)).toEqual({
-        version: 1,
-        document: {
-          ...defaultInterfaceDocument,
-          name: "Focused Flect",
-        },
-      });
+      expect(response.headers.get("content-type")).toContain(
+        "text/event-stream",
+      );
+      expect(yield* readText(response)).toBe(
+        `data: ${JSON.stringify({
+          type: "shape_completed",
+          document: {
+            ...defaultInterfaceDocument,
+            name: "Focused Flect",
+          },
+        })}\n\n`,
+      );
       expect(runtime.shape).toHaveBeenCalledWith(
         "session-1",
         "Make this more focused",
@@ -339,11 +349,97 @@ describe("Flect HTTP application", () => {
     });
   });
 
+  it.effect("keeps a Shaper shell request alive until HTTP completion", () => {
+    const shellSeen = Deferred.makeUnsafe<void>();
+    const shellReleased = Deferred.makeUnsafe<void>();
+    const requestId = "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2";
+    const runtime = {
+      ...createFakeRuntime(),
+      shape: vi.fn(() =>
+        Stream.succeed(
+          AgentShellRequest.make({
+            type: "shell_request",
+            requestId,
+            command: "bun run src/index.ts",
+          }),
+        ).pipe(
+          Stream.tap(() => Deferred.succeed(shellSeen, undefined)),
+          Stream.concat(
+            Stream.fromEffect(Deferred.await(shellReleased)).pipe(
+              Stream.map(() =>
+                ShapeCompleted.make({
+                  type: "shape_completed",
+                  document: defaultInterfaceDocument,
+                }),
+              ),
+            ),
+          ),
+        ),
+      ),
+      completeShellRequest: vi.fn(() =>
+        Deferred.succeed(shellReleased, undefined).pipe(Effect.asVoid),
+      ),
+    } satisfies FlectRuntimeShape;
+
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/shape", {
+          method: "POST",
+          body: JSON.stringify({
+            instruction: "Use the browser shell before shaping",
+            document: defaultInterfaceDocument,
+          }),
+        }),
+      );
+      const body = yield* readText(response).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* Deferred.await(shellSeen);
+
+      const shellResult = yield* send(
+        app,
+        request("/api/sessions/session-1/shell-results", {
+          method: "POST",
+          body: JSON.stringify({
+            requestId,
+            result: {
+              version: 1,
+              exitCode: 0,
+              stdout: "42\n",
+              stderr: "",
+            },
+          }),
+        }),
+      );
+
+      expect(shellResult.status).toBe(200);
+      const output = yield* Fiber.join(body);
+      expect(output).toContain(
+        'data: {"type":"shell_request","requestId":"shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2","command":"bun run src/index.ts"}',
+      );
+      expect(output).toContain(
+        'data: {"type":"shape_completed","document":',
+      );
+      expect(runtime.completeShellRequest).toHaveBeenCalledWith(
+        "session-1",
+        requestId,
+        BunCommandResult.make({
+          version: 1,
+          exitCode: 0,
+          stdout: "42\n",
+          stderr: "",
+        }),
+      );
+    });
+  });
+
   it.effect("returns a conflict response for a busy shaping session", () => {
     const runtime = {
       ...createFakeRuntime(),
       shape: vi.fn(() =>
-        Effect.fail(
+        Stream.fail(
           new SessionBusy({
             sessionId: "session-1",
             message: "The session is busy.",
@@ -365,11 +461,10 @@ describe("Flect HTTP application", () => {
         }),
       );
 
-      expect(response.status).toBe(409);
-      expect(yield* readJson(response)).toEqual({
-        version: 1,
-        error: "The session is busy.",
-      });
+      expect(response.status).toBe(200);
+      expect(yield* readText(response)).toBe(
+        'data: {"type":"shape_busy","message":"The session is busy."}\n\n',
+      );
     });
   });
 

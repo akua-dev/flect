@@ -217,12 +217,13 @@ design.
 ## Browser agent shell and Bun compatibility
 
 Shaper's only Pi tool is a custom tool named `bash`; Pi's native host Bash is
-not enabled. A tool call becomes a strict `shell_request` event on the existing
-prompt stream. The browser or Tauri WebView runs it in the role-owned
+not enabled. A tool call becomes a strict `shell_request` event on the agent
+operation stream. The browser or Tauri WebView runs it in the role-owned
 `SandboxedShell`, then returns a bounded `BunCommandResult` through HTTP or
-private Effect RPC while the Pi tool awaits the response. The bridge times out,
-cleans up on interruption and session disposal, and never carries a filesystem
-handle or credential.
+private Effect RPC while the Pi tool awaits the response. Prompt turns and
+Shaper proposals both carry this typed event; the bridge times out, cleans up
+on interruption and session disposal, and never carries a filesystem handle or
+credential.
 
 `SandboxedShell` uses `just-bash@3.2.0` with a memory VFS, hardened execution
 limits, and one reserved `bun` command. Static AST rewriting prevents aliases,

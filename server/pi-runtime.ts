@@ -31,6 +31,8 @@ import {
   RuntimeStatus,
   SessionBusy,
   SessionNotFound,
+  ShapeCompleted,
+  type ShapeEvent,
   type SessionSelection,
   TextDelta,
   TurnCancelled,
@@ -980,44 +982,74 @@ export const FlectRuntimeLive = Layer.effect(
       yield* record.sessionOperation.cancelActive("prompt");
     });
 
-    const shape = Effect.fn("Flect.Runtime.shape")(function* (
+    const makeShape = Effect.fn("Flect.Runtime.makeShape")(function* (
       sessionId: string,
       instruction: string,
       input: unknown,
     ) {
       const document = yield* validateInterfaceDocument(input);
       const record = yield* findSession(sessionId);
-      const operation: ActiveOperation = {
-        kind: "shape",
-        interrupt: Effect.suspend(() => record.session.abort()),
-        done: yield* Deferred.make<void>(),
-        fiber: undefined,
-      };
-      return yield* executeOperation(
-        record.sessionOperation,
-        operation,
+      return Stream.callback<ShapeEvent, FlectRuntimeError>((queue) =>
         Effect.gen(function* () {
-          const response = makeBoundedResponse(
-            MAX_SHAPER_RESPONSE_BYTES,
-            record.session.abort,
+          const operation: ActiveOperation = {
+            kind: "shape",
+            interrupt: Effect.suspend(() => record.session.abort()),
+            done: yield* Deferred.make<void>(),
+            fiber: undefined,
+          };
+          const shaped = yield* executeOperation(
+            record.sessionOperation,
+            operation,
+            Effect.gen(function* () {
+              const response = makeBoundedResponse(
+                MAX_SHAPER_RESPONSE_BYTES,
+                record.session.abort,
+              );
+              const unsubscribe = yield* record.session.subscribe((event) => {
+                if (event.type === "text_delta") {
+                  response.append(event.delta);
+                } else {
+                  Queue.offerUnsafe(
+                    queue,
+                    new AgentShellRequest({
+                      type: "shell_request",
+                      requestId: event.requestId,
+                      command: event.command,
+                    }),
+                  );
+                }
+              });
+
+              yield* record.session
+                .prompt(shapePrompt(instruction, document))
+                .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
+
+              if (response.isExceeded()) {
+                return yield* Effect.fail(piFailure("shape"));
+              }
+              return yield* parseShaperDocument(response.text());
+            }),
           );
-          const unsubscribe = yield* record.session.subscribe((event) => {
-            if (event.type === "text_delta") {
-              response.append(event.delta);
-            }
-          });
-
-          yield* record.session
-            .prompt(shapePrompt(instruction, document))
-            .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
-
-          if (response.isExceeded()) {
-            return yield* Effect.fail(piFailure("shape"));
-          }
-          return yield* parseShaperDocument(response.text());
-        }),
+          Queue.offerUnsafe(
+            queue,
+            new ShapeCompleted({ type: "shape_completed", document: shaped }),
+          );
+          Queue.endUnsafe(queue);
+        }).pipe(
+          Effect.catch((error) => Queue.fail(queue, error).pipe(Effect.asVoid)),
+          Effect.onError((cause) =>
+            Queue.failCause(queue, cause).pipe(Effect.asVoid),
+          ),
+        ),
       );
     });
+
+    const shape = (
+      sessionId: string,
+      instruction: string,
+      input: unknown,
+    ): Stream.Stream<ShapeEvent, FlectRuntimeError> =>
+      Stream.unwrap(makeShape(sessionId, instruction, input));
 
     return {
       status: Effect.succeed(

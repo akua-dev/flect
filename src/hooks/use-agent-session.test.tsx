@@ -11,6 +11,7 @@ import {
   ModelSummary,
   RuntimeStatus,
   SessionBusy,
+  ShapeCompleted,
 } from "../../shared/contracts";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
 import {
@@ -44,7 +45,10 @@ function createFakeRuntime({
       { type: "text_delta" as const, delta: "A shaped response" },
       { type: "turn_completed" as const },
     ]),
-  shape = (_sessionId, _instruction, document) => Effect.succeed(document),
+  shape = (_sessionId, _instruction, document) =>
+    Stream.succeed(
+      ShapeCompleted.make({ type: "shape_completed", document }),
+    ),
   cancel = () => Effect.void,
   completeShellRequest = () => Effect.void,
   shellExecute = () =>
@@ -225,10 +229,50 @@ describe("useAgentSession", () => {
     await runtime.dispose();
   });
 
+  it("services a Shaper shell request through the browser shell", async () => {
+    const shellResult = BunCommandResult.make({
+      version: 1,
+      exitCode: 0,
+      stdout: "42\n",
+      stderr: "",
+    });
+    const { client, runtime, shell } = createFakeRuntime({
+      shape: (_sessionId, _instruction, document) =>
+        Stream.concat(
+          Stream.succeed(
+            AgentShellRequest.make({
+              type: "shell_request",
+              requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+              command: "bun run src/index.ts",
+            }),
+          ),
+          Stream.succeed(
+            ShapeCompleted.make({ type: "shape_completed", document }),
+          ),
+        ),
+      shellExecute: () => Effect.succeed(shellResult),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.shape("Use the browser shell", defaultInterfaceDocument);
+    });
+
+    expect(shell.execute).toHaveBeenCalledWith("bun run src/index.ts");
+    expect(client.completeShellRequest).toHaveBeenCalledWith(
+      "session-1",
+      "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+      shellResult,
+    );
+    unmount();
+    await runtime.dispose();
+  });
+
   it("preserves the session after a busy Shaper conflict", async () => {
     const { client, runtime } = createFakeRuntime({
       shape: () =>
-        Effect.fail(
+        Stream.fail(
           new SessionBusy({
             sessionId: "session-1",
             message: "The session is busy.",
@@ -258,7 +302,7 @@ describe("useAgentSession", () => {
   it("releases the session after a fatal Shaper failure", async () => {
     const { client, runtime } = createFakeRuntime({
       shape: () =>
-        Effect.fail(
+        Stream.fail(
           new FlectUnavailableError({
             message: "The local Flect runtime is unavailable.",
           }),

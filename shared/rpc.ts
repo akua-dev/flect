@@ -10,6 +10,7 @@ import {
   RecoveryReason,
   RuntimeStatus,
   SessionSelection,
+  ShapeEvent,
 } from "./contracts";
 import { InterfaceDocument } from "./interface-document";
 
@@ -83,8 +84,9 @@ export class Shape extends Rpc.make("Shape", {
     ),
     document: Schema.Unknown,
   },
-  success: InterfaceDocument,
+  success: ShapeEvent,
   error: FlectRuntimeError,
+  stream: true,
 }) {}
 
 export class DiagnoseRecovery extends Rpc.make("DiagnoseRecovery", {

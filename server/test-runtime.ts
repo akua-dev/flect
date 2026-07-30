@@ -5,6 +5,7 @@ import {
   GuardianDiagnostic,
   ModelSummary,
   RuntimeStatus,
+  ShapeCompleted,
   TextDelta,
   TurnCompleted,
   TurnStarted,
@@ -110,9 +111,14 @@ export const FlectTestRuntimeLive = Layer.effect(
           }),
         ),
       shape: (_sessionId, _instruction, input) =>
-        validateInterfaceDocument(input).pipe(
-          Effect.map(shapedDocument),
-          Effect.delay("100 millis"),
+        Stream.fromEffect(validateInterfaceDocument(input)).pipe(
+          Stream.map((document) =>
+            ShapeCompleted.make({
+              type: "shape_completed",
+              document: shapedDocument(document),
+            }),
+          ),
+          Stream.mapEffect((event) => Effect.succeed(event).pipe(Effect.delay("100 millis"))),
         ),
       cancel: () => Effect.void,
       completeShellRequest: (_sessionId, requestId, result) =>

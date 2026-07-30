@@ -193,15 +193,19 @@ export const makeTauriFlectClientLayer = () =>
               ),
             ),
         shape: (sessionId, instruction, document) =>
-          encodeInterfaceDocument(document).pipe(
-            Effect.mapError(unavailable),
-            Effect.flatMap((encodedDocument) =>
-              mapSessionError(
+          Stream.unwrap(
+            encodeInterfaceDocument(document).pipe(
+              Effect.mapError(unavailable),
+              Effect.map((encodedDocument) =>
                 rpc.Shape({
                   sessionId,
                   instruction,
                   document: encodedDocument,
-                }),
+                }).pipe(
+                  Stream.mapError((error) =>
+                    error._tag === "SessionBusy" ? error : unavailable(),
+                  ),
+                ),
               ),
             ),
           ),

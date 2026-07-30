@@ -23,8 +23,8 @@ import {
   SessionBusy,
   SessionResponse,
   SessionSelection,
+  ShapeEvent,
   ShapeRequest,
-  ShapeResponse,
 } from "../../shared/contracts";
 import {
   encodeInterfaceDocument,
@@ -49,12 +49,14 @@ const unavailable = () =>
   });
 
 const shapeFailure = (sessionId: string) => (error: unknown) =>
-  HttpClientError.isHttpClientError(error) && error.response?.status === 409
-    ? new SessionBusy({
-        sessionId,
-        message: "The session is busy.",
-      })
-    : unavailable();
+  error instanceof SessionBusy
+    ? error
+    : HttpClientError.isHttpClientError(error) && error.response?.status === 409
+      ? new SessionBusy({
+          sessionId,
+          message: "The session is busy.",
+        })
+      : unavailable();
 
 const diagnoseFailure = (sessionId: string) => (error: unknown) =>
   HttpClientError.isHttpClientError(error) && error.response?.status === 409
@@ -84,7 +86,7 @@ export interface FlectClientShape {
     sessionId: string,
     instruction: string,
     document: InterfaceDocument,
-  ) => Effect.Effect<InterfaceDocument, FlectUnavailableError | SessionBusy>;
+  ) => Stream.Stream<ShapeEvent, FlectUnavailableError | SessionBusy>;
   readonly cancel: (
     sessionId: string,
   ) => Effect.Effect<void, FlectUnavailableError>;
@@ -106,6 +108,11 @@ export class FlectClient extends Context.Service<
 
 const decodeEventJson = Schema.decodeUnknownEffect(
   Schema.fromJsonString(FlectEvent),
+  strictOptions,
+);
+
+const decodeShapeEventJson = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(ShapeEvent),
   strictOptions,
 );
 
@@ -229,8 +236,12 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
         ),
       );
 
-      const shape = Effect.fn("Flect.Client.shape")(
-        (sessionId: string, instruction: string, document: InterfaceDocument) =>
+      const shape = (
+        sessionId: string,
+        instruction: string,
+        document: InterfaceDocument,
+      ) =>
+        Stream.unwrap(
           encodeInterfaceDocument(document).pipe(
             Effect.flatMap((encodedDocument) =>
               HttpClientRequest.post(
@@ -245,13 +256,35 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
                 Effect.flatMap(transport.execute),
               ),
             ),
-            Effect.flatMap(
-              HttpClientResponse.schemaBodyJson(ShapeResponse, strictOptions),
-            ),
-            Effect.map((response) => response.document),
+            Effect.map((result) => result.stream),
             Effect.mapError(shapeFailure(sessionId)),
           ),
-      );
+        ).pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.filter((line) => line.startsWith("data:")),
+          Stream.map((line) => line.slice(5).trimStart()),
+          Stream.mapEffect((json) =>
+            decodeShapeEventJson(json).pipe(
+              Effect.mapError(() => unavailable()),
+            ),
+          ),
+          Stream.mapError(shapeFailure(sessionId)),
+          Stream.mapEffect((event) => {
+            if (event.type === "shape_busy") {
+              return Effect.fail(
+                new SessionBusy({
+                  sessionId,
+                  message: "The session is busy.",
+                }),
+              );
+            }
+            if (event.type === "shape_error") {
+              return Effect.fail(unavailable());
+            }
+            return Effect.succeed(event);
+          }),
+        );
 
       const diagnoseRecovery = Effect.fn("Flect.Client.diagnoseRecovery")(
         (sessionId: string, reason: RecoveryReason) =>

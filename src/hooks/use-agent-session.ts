@@ -1,4 +1,4 @@
-import { Effect, Fiber, Stream } from "effect";
+import { Effect, Fiber, Option, Stream } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BunCommandResult } from "../../shared/bun-command";
 import {
@@ -212,6 +212,32 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
     [selection, selectionKey],
   );
 
+  const executeShellRequest = useCallback(
+    (sessionId: string, event: { readonly requestId: string; readonly command: string }) =>
+      Effect.gen(function* () {
+        const client = yield* FlectClient;
+        const shell = yield* SandboxedShell;
+        const result = yield* shell.execute(event.command).pipe(
+          Effect.catch(() =>
+            Effect.succeed(
+              BunCommandResult.make({
+                version: 1,
+                exitCode: 1,
+                stdout: "",
+                stderr: "bash: command failed safely\n",
+              }),
+            ),
+          ),
+        );
+        yield* client.completeShellRequest(
+          sessionId,
+          event.requestId,
+          result,
+        );
+      }),
+    [],
+  );
+
   const handleEvent = useCallback(
     (
       assistantId: string,
@@ -223,27 +249,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
       FlectClient | SandboxedShell
     > => {
       if (event.type === "shell_request") {
-        return Effect.gen(function* () {
-          const client = yield* FlectClient;
-          const shell = yield* SandboxedShell;
-          const result = yield* shell.execute(event.command).pipe(
-            Effect.catch(() =>
-              Effect.succeed(
-                BunCommandResult.make({
-                  version: 1,
-                  exitCode: 1,
-                  stdout: "",
-                  stderr: "bash: command failed safely\n",
-                }),
-              ),
-            ),
-          );
-          yield* client.completeShellRequest(
-            sessionId,
-            event.requestId,
-            result,
-          );
-        });
+        return executeShellRequest(sessionId, event);
       }
       return Effect.sync(() => {
         switch (event.type) {
@@ -277,7 +283,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         }
       });
     },
-    [],
+    [executeShellRequest],
   );
 
   const submit = useCallback(
@@ -348,18 +354,40 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         Effect.gen(function* () {
           const client = yield* FlectClient;
           const sessionId = yield* ensureSession();
-          return yield* client
+          const shaped = yield* client
             .shape(sessionId, instruction, document)
             .pipe(
+              Stream.runFoldEffect(
+                () => Option.none<InterfaceDocument>(),
+                (current, event) => {
+                  if (event.type === "shell_request") {
+                    return executeShellRequest(sessionId, event).pipe(
+                      Effect.as(current),
+                    );
+                  }
+                  return event.type === "shape_completed"
+                    ? Effect.succeed(Option.some(event.document))
+                    : Effect.succeed(current);
+                },
+              ),
               Effect.tapError((failure) =>
                 failure._tag === "SessionBusy"
                   ? Effect.void
                   : releaseSession(sessionId),
               ),
             );
+          return yield* Option.match(shaped, {
+            onNone: () =>
+              Effect.fail(
+                new FlectUnavailableError({
+                  message: "The local Flect runtime is unavailable.",
+                }),
+              ),
+            onSome: Effect.succeed,
+          });
         }),
       ),
-    [ensureSession, releaseSession, runtime],
+    [ensureSession, executeShellRequest, releaseSession, runtime],
   );
 
   const cancel = useCallback((): Promise<void> => {

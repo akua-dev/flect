@@ -9,9 +9,9 @@ import {
   WasiWorkerRequest,
   WasiWorkerSuccess,
 } from "../../shared/browser-execution";
+import { makeBoundedWasiOutput } from "./rifty-wasi-output";
 
 const worker = globalThis as unknown as DedicatedWorkerGlobalScope;
-const OUTPUT_LIMIT = 1_048_576;
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
   onExcessProperty: "error",
@@ -32,37 +32,43 @@ worker.addEventListener("message", (event: MessageEvent<unknown>) => {
   void Effect.runPromise(
     decodeRequest(event.data).pipe(
       Effect.flatMap((frame) =>
-        Effect.tryPromise({
-          try: () =>
-            runWasi(frame.request.module, {
-              args: [...frame.request.args],
-              env: { ...frame.request.env },
-              preopens: {},
-            }),
-          catch: failure,
-        }).pipe(
-          Effect.flatMap((result) =>
-            Schema.decodeUnknownEffect(WasiExecutionResult)({
-              version: 1,
-              exitCode: result.exitCode,
-              stdout: result.stdout.slice(0, OUTPUT_LIMIT + 1),
-              stderr: result.stderr.slice(0, OUTPUT_LIMIT + 1),
-            }),
-          ),
-          Effect.map((result) =>
-            WasiWorkerSuccess.make({
-              type: "success",
-              id: frame.id,
-              result,
-            }),
-          ),
-          Effect.catch(() =>
-            Effect.succeed(
-              WasiWorkerFailure.make({
-                type: "failure",
-                id: frame.id,
-                error: failure(),
-              }),
+        Effect.sync(makeBoundedWasiOutput).pipe(
+          Effect.flatMap((output) =>
+            Effect.tryPromise({
+              try: () =>
+                runWasi(frame.request.module, {
+                  args: [...frame.request.args],
+                  env: { ...frame.request.env },
+                  preopens: {},
+                  stdout: output.stdout,
+                  stderr: output.stderr,
+                }),
+              catch: failure,
+            }).pipe(
+              Effect.flatMap((result) =>
+                Schema.decodeUnknownEffect(WasiExecutionResult)({
+                  version: 1,
+                  exitCode: result.exitCode,
+                  stdout: output.stdoutText(),
+                  stderr: output.stderrText(),
+                }),
+              ),
+              Effect.map((result) =>
+                WasiWorkerSuccess.make({
+                  type: "success",
+                  id: frame.id,
+                  result,
+                }),
+              ),
+              Effect.catch(() =>
+                Effect.succeed(
+                  WasiWorkerFailure.make({
+                    type: "failure",
+                    id: frame.id,
+                    error: failure(),
+                  }),
+                ),
+              ),
             ),
           ),
         ),

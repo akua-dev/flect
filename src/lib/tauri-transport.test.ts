@@ -8,6 +8,7 @@ import {
   Layer,
   Ref,
   Result,
+  Stream,
 } from "effect";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
 import { FlectClient, FlectUnavailableError } from "./api";
@@ -100,12 +101,19 @@ describe("Tauri RPC transport", () => {
             ) {
               const active = yield* Ref.get(listener);
               active?.({
+                _tag: "Chunk",
+                requestId: request.id,
+                values: [
+                  {
+                    type: "shape_completed",
+                    document: encodedDocument,
+                  },
+                ],
+              });
+              active?.({
                 _tag: "Exit",
                 requestId: request.id,
-                exit: {
-                  _tag: "Success",
-                  value: encodedDocument,
-                },
+                exit: { _tag: "Success", value: null },
               });
             }
           }),
@@ -114,11 +122,9 @@ describe("Tauri RPC transport", () => {
       const result = yield* Effect.scoped(
         Effect.gen(function* () {
           const client = yield* FlectClient;
-          return yield* client.shape(
-            "session-1",
-            "Keep this focused",
-            defaultInterfaceDocument,
-          );
+          return yield* client
+            .shape("session-1", "Keep this focused", defaultInterfaceDocument)
+            .pipe(Stream.runCollect);
         }).pipe(
           Effect.provide(
             makeTauriFlectClientLayer().pipe(
@@ -129,8 +135,12 @@ describe("Tauri RPC transport", () => {
       );
 
       const sent = yield* Ref.get(requests);
-      assert.strictEqual(result.name, defaultInterfaceDocument.name);
-      assert.strictEqual(sent.length, 1);
+      assert.strictEqual(result[0]?.type, "shape_completed");
+      assert.strictEqual(
+        result[0]?.type === "shape_completed" ? result[0].document.name : "",
+        defaultInterfaceDocument.name,
+      );
+      assert.strictEqual(sent.length, 2);
 
       const request = sent[0];
       assert.isTrue(
