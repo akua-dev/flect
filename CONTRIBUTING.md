@@ -19,9 +19,11 @@ bun run prepare
 bunx playwright install chromium
 ```
 
-`prepare` maintains an ignored checkout of the exact Effect source version used
-by Flect in `.repos/effect`. Use that checkout and the pinned upstream versions
-listed in `ARCHITECTURE.md` rather than guessing from older examples.
+`prepare` creates or updates an ignored checkout of the exact Effect source
+version used by Flect in `.repos/effect`, then verifies the pinned commit. Use
+that checkout and the pinned upstream versions listed in `ARCHITECTURE.md`
+rather than guessing from older examples. `check:effect` performs the
+non-mutating verification and is included in `bun run check`.
 
 ## Development
 
@@ -54,6 +56,9 @@ Credential-free:
 ```bash
 bun run check:all
 ```
+
+The check begins with `bun run check:effect`, which confirms that the local
+Effect source checkout is at the pinned commit without changing it.
 
 This runs:
 

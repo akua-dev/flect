@@ -21,7 +21,8 @@
     "typecheck": "tsc -b",
     "lint": "biome check .",
     "format": "biome format --write .",
-    "check": "bun run lint && bun run typecheck && bun run test",
+    "check:effect": "./scripts/prepare-effect.sh --check",
+    "check": "bun run check:effect && bun run lint && bun run typecheck && bun run test",
     "check:all": "bun run check && bun run test:e2e && cargo test --manifest-path src-tauri/Cargo.toml && bun run build:desktop -- --bundles app"
   },
   "dependencies": {
