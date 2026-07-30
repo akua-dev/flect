@@ -7,14 +7,14 @@ const runtime = ManagedRuntime.make(
   FlectRuntimeLive.pipe(Layer.provide(PiSdkLive)),
 );
 
+const failSmoke = (message: string) => Effect.die(new Error(message));
+
 const smoke = Effect.gen(function* () {
   const flect = yield* FlectRuntime;
   const status = yield* flect.status;
   const models = yield* flect.listModels;
   if (status.status !== "ready" || models.length === 0) {
-    return yield* Effect.dieMessage(
-      "Flect Pi smoke test has no authenticated model.",
-    );
+    return yield* failSmoke("Flect Pi smoke test has no authenticated model.");
   }
 
   const sessionId = yield* flect.createSession(
@@ -29,7 +29,7 @@ const smoke = Effect.gen(function* () {
   );
 
   if (!completed || !receivedText) {
-    return yield* Effect.dieMessage(
+    return yield* failSmoke(
       "Flect Pi smoke test did not complete a private turn.",
     );
   }
