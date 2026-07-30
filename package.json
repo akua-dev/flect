@@ -41,6 +41,7 @@
     "@riftydev/runtime-wasi": "0.2.0",
     "@riftydev/vfs": "0.2.0",
     "@tauri-apps/api": "2.11.1",
+    "acorn": "8.18.0",
     "effect": "4.0.0-beta.102",
     "esbuild-wasm": "0.28.1",
     "just-bash": "3.2.0",

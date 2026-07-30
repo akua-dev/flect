@@ -6,6 +6,7 @@ import {
   makeBunPreviewLayer,
 } from "./bun-preview";
 import { loadBrowserEsbuild } from "./esbuild-browser";
+import { riftyCapabilityBoundarySource } from "./rifty-capability-boundary";
 
 const WORKSPACE_ROOT = "/workspace";
 const START_DEADLINE_MS = 10_000;
@@ -224,6 +225,7 @@ const bundleWorkspace = async (request: BunPreviewExecutionRequest) => {
 const makeWorkerSource = (bundle: string) => `
 (() => {
   "use strict";
+  ${riftyCapabilityBoundarySource}
   let handler;
   let active = true;
   let selectedPort = 3000;
@@ -239,7 +241,6 @@ const makeWorkerSource = (bundle: string) => `
     }
     return output;
   };
-  globalThis.fetch = () => Promise.reject(new Error("ambient network is disabled"));
   globalThis.Bun = Object.freeze({
     argv: Object.freeze(["bun"]),
     env: Object.freeze({}),
@@ -506,6 +507,19 @@ const registerPreviewRoute = async (runId: string, port: number) => {
   });
 };
 
+const stopPreviewRoute = async (runId: string, port: number) => {
+  if (!("serviceWorker" in navigator)) {
+    return;
+  }
+  const registration = await ensurePreviewServiceWorker();
+  const target = navigator.serviceWorker.controller ?? registration.active;
+  target?.postMessage({
+    type: "flect-preview-stop",
+    runId,
+    port,
+  });
+};
+
 export const BunPreviewExecutionLive = Layer.effect(
   BunPreviewExecution,
   Effect.gen(function* () {
@@ -558,66 +572,96 @@ export const BunPreviewExecutionLive = Layer.effect(
       | undefined
     >(undefined);
 
-    const stop = Effect.gen(function* () {
-      const current = yield* Ref.get(active);
-      if (current === undefined) {
-        return;
-      }
-      current.realm.stop();
-      yield* preview.stop(current.runId);
-      yield* Effect.promise(async () => {
-        const registration = await ensurePreviewServiceWorker();
-        registration.active?.postMessage({
-          type: "flect-preview-stop",
-          runId: current.runId,
-          port: current.realm.port,
-        });
-      }).pipe(Effect.ignore);
-      yield* Ref.set(active, undefined);
-    });
+    const stop = Effect.fn("Flect.BunPreviewExecution.stop")(() =>
+      Effect.gen(function* () {
+        const current = yield* Ref.get(active);
+        if (current === undefined) {
+          return;
+        }
+        yield* Effect.sync(() => current.realm.stop()).pipe(
+          Effect.catchDefect(() => Effect.void),
+        );
+        yield* preview.stop(current.runId).pipe(Effect.ignore);
+        yield* Effect.tryPromise({
+          try: () => stopPreviewRoute(current.runId, current.realm.port),
+          catch: () => undefined,
+        }).pipe(Effect.ignore);
+        yield* Ref.set(active, undefined);
+      }).pipe(
+        Effect.ensuring(Ref.set(active, undefined)),
+        Effect.catchDefect(() => Effect.void),
+      ),
+    );
 
     return {
       start: Effect.fn("Flect.BunPreviewExecution.start")((request) =>
         Effect.gen(function* () {
-          yield* stop;
+          yield* stop();
           const bundle = yield* Effect.tryPromise({
             try: () => bundleWorkspace(request),
             catch: previewFailure,
           });
+          const runId = `run-${crypto.randomUUID().replaceAll("-", "")}`;
           const realm = yield* Effect.tryPromise({
             try: () => createRealm(makeWorkerSource(bundle)),
             catch: previewFailure,
           });
-          const runId = `run-${crypto.randomUUID().replaceAll("-", "")}`;
-          const registration = yield* preview.register({
-            runId,
-            port: realm.port,
-            handler: (input) =>
-              Effect.tryPromise({
-                try: () => realm.request(input),
-                catch: previewFailure,
-              }).pipe(
-                Effect.flatMap((output) =>
-                  Schema.decodeUnknownEffect(BunPreviewResponse)(output).pipe(
-                    Effect.mapError(previewFailure),
+          let registered = false;
+          let committed = false;
+          const release = Effect.gen(function* () {
+            yield* Effect.sync(() => realm.stop()).pipe(
+              Effect.catchDefect(() => Effect.void),
+            );
+            if (registered) {
+              yield* preview.stop(runId).pipe(Effect.ignore);
+              yield* Effect.tryPromise({
+                try: () => stopPreviewRoute(runId, realm.port),
+                catch: () => undefined,
+              }).pipe(Effect.ignore);
+            }
+            yield* Ref.set(active, undefined);
+          }).pipe(
+            Effect.catch(() => Effect.void),
+            Effect.catchDefect(() => Effect.void),
+          );
+
+          return yield* Effect.gen(function* () {
+            const registration = yield* preview.register({
+              runId,
+              port: realm.port,
+              handler: (input) =>
+                Effect.tryPromise({
+                  try: () => realm.request(input),
+                  catch: previewFailure,
+                }).pipe(
+                  Effect.flatMap((output) =>
+                    Schema.decodeUnknownEffect(BunPreviewResponse)(output).pipe(
+                      Effect.mapError(previewFailure),
+                    ),
                   ),
                 ),
-              ),
-          });
-          yield* Ref.set(active, { runId, realm });
+            });
+            registered = true;
 
-          yield* Effect.tryPromise({
-            try: () => registerPreviewRoute(runId, realm.port),
-            catch: previewFailure,
-          });
+            yield* Effect.tryPromise({
+              try: () => registerPreviewRoute(runId, realm.port),
+              catch: previewFailure,
+            });
 
-          return {
-            previewUrl: registration.previewUrl,
-            port: realm.port,
-          };
+            yield* Ref.set(active, { runId, realm });
+            committed = true;
+            return {
+              previewUrl: registration.previewUrl,
+              port: realm.port,
+            };
+          }).pipe(
+            Effect.ensuring(
+              Effect.suspend(() => (committed ? Effect.void : release)),
+            ),
+          );
         }).pipe(Effect.catchDefect(() => Effect.fail(previewFailure()))),
       ),
-      stop,
+      stop: stop(),
     };
   }),
 ).pipe(Layer.provide(makeBunPreviewLayer()));

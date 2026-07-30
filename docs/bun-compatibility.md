@@ -36,6 +36,11 @@ socket. Flect returns `/preview/<port>/`, routes requests through a
 service-worker broker, and executes the handler in the run's isolated Worker.
 Requests, responses, headers, and bodies are schema checked and bounded.
 
+Rifty JavaScript Workers fail closed for browser fetch, storage, IndexedDB,
+cache, OPFS, File System Access, WebSocket, EventSource, worker-spawning, and
+other ambient browser capability surfaces. Disposable workspace files remain
+available only through the brokered Rifty VFS.
+
 Preview documents receive a response-enforced sandbox and restrictive CSP.
 Their origin is opaque, `connect-src` is denied, OPFS is unavailable, and no
 parent DOM, Flect storage, credential, Pi, Tauri, or native bridge is injected.

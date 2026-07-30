@@ -13,6 +13,7 @@ import { BunCommandFailed } from "../../shared/bun-command";
 const BODY_LIMIT = 1_048_576;
 const HEADER_LIMIT = 64;
 const DEFAULT_HANDLER_DEADLINE = "2 seconds";
+const STOPPED_PREVIEW_LIMIT = 256;
 
 const strict: SchemaAST.ParseOptions = {
   errors: "all",
@@ -85,10 +86,6 @@ export class BunPreview extends Context.Service<BunPreview, BunPreviewShape>()(
   "flect/BunPreview",
 ) {}
 
-interface RegisteredPreview extends BunPreviewRegistration {
-  readonly stopped: boolean;
-}
-
 const previewFailure = () =>
   BunCommandFailed.make({
     reason: "preview",
@@ -109,8 +106,9 @@ export const makeBunPreviewLayer = (options?: {
     BunPreview,
     Effect.gen(function* () {
       const registrations = yield* Ref.make<
-        ReadonlyMap<number, RegisteredPreview>
+        ReadonlyMap<number, BunPreviewRegistration>
       >(new Map());
+      const stopped = yield* Ref.make<ReadonlyMap<number, string>>(new Map());
       const mutation = yield* Semaphore.make(1);
 
       return {
@@ -121,19 +119,22 @@ export const makeBunPreviewLayer = (options?: {
               if (
                 current.has(registration.port) ||
                 [...current.values()].some(
-                  (candidate) =>
-                    candidate.runId === registration.runId &&
-                    !candidate.stopped,
+                  (candidate) => candidate.runId === registration.runId,
                 )
               ) {
                 return yield* Effect.fail(previewFailure());
               }
               const next = new Map(current);
-              next.set(registration.port, {
-                ...registration,
-                stopped: false,
-              });
+              next.set(registration.port, registration);
               yield* Ref.set(registrations, next);
+              yield* Ref.update(stopped, (currentStopped) => {
+                if (!currentStopped.has(registration.port)) {
+                  return currentStopped;
+                }
+                const nextStopped = new Map(currentStopped);
+                nextStopped.delete(registration.port);
+                return nextStopped;
+              });
               return {
                 previewUrl: `/preview/${registration.port}/`,
               };
@@ -154,10 +155,13 @@ export const makeBunPreviewLayer = (options?: {
                     registration === undefined ||
                     registration.runId !== request.runId
                   ) {
-                    return Effect.succeed(response(404, "Preview not found."));
-                  }
-                  if (registration.stopped) {
-                    return Effect.succeed(response(503, "Preview stopped."));
+                    return Ref.get(stopped).pipe(
+                      Effect.map((stoppedPreviews) =>
+                        stoppedPreviews.get(request.port) === request.runId
+                          ? response(503, "Preview stopped.")
+                          : response(404, "Preview not found."),
+                      ),
+                    );
                   }
                   return registration.handler(request).pipe(
                     Effect.timeoutOrElse({
@@ -195,14 +199,33 @@ export const makeBunPreviewLayer = (options?: {
         ),
         stop: Effect.fn("Flect.BunPreview.stop")((runId) =>
           mutation.withPermit(
-            Ref.update(registrations, (current) => {
+            Effect.gen(function* () {
+              const current = yield* Ref.get(registrations);
               const next = new Map(current);
-              for (const [port, registration] of next) {
+              const stoppedPorts: Array<number> = [];
+              for (const [port, registration] of current) {
                 if (registration.runId === runId) {
-                  next.set(port, { ...registration, stopped: true });
+                  next.delete(port);
+                  stoppedPorts.push(port);
                 }
               }
-              return next;
+              yield* Ref.set(registrations, next);
+              if (stoppedPorts.length > 0) {
+                yield* Ref.update(stopped, (currentStopped) => {
+                  const nextStopped = new Map(currentStopped);
+                  for (const port of stoppedPorts) {
+                    nextStopped.set(port, runId);
+                  }
+                  while (nextStopped.size > STOPPED_PREVIEW_LIMIT) {
+                    const oldest = nextStopped.keys().next().value;
+                    if (oldest === undefined) {
+                      break;
+                    }
+                    nextStopped.delete(oldest);
+                  }
+                  return nextStopped;
+                });
+              }
             }),
           ),
         ),

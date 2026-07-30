@@ -1,7 +1,12 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer, Ref } from "effect";
 import { InMemoryFs } from "just-bash/browser";
-import { BunCommandRequest, BunCommandResult } from "../../shared/bun-command";
+import {
+  BunCommandRequest,
+  BunCommandResult,
+  WorkspaceDelta,
+  WorkspaceFileWrite,
+} from "../../shared/bun-command";
 import {
   BunModuleExecution,
   type BunModuleOperation,
@@ -19,6 +24,11 @@ const result = (stdout: string) =>
     stderr: "",
   });
 
+const build = (stdout: string) => ({
+  result: result(stdout),
+  delta: WorkspaceDelta.make({ version: 1, files: [], byteLength: 0 }),
+});
+
 describe("Shell Bun command live composition", () => {
   it.effect("applies package deltas before the next module run", () =>
     Effect.gen(function* () {
@@ -33,7 +43,7 @@ describe("Shell Bun command live composition", () => {
           Ref.update(runs, (current) => [...current, operation]).pipe(
             Effect.as(result("42\n")),
           ),
-        build: () => Effect.succeed(result("/workspace/src/index.ts\n")),
+        build: () => Effect.succeed(build("/workspace/src/index.ts\n")),
         stop: () => Effect.succeed(result("Stopped\n")),
       });
       const layer = makeShellBunCommandLiveLayer({
@@ -85,7 +95,7 @@ describe("Shell Bun command live composition", () => {
     Effect.gen(function* () {
       const moduleLayer = Layer.succeed(BunModuleExecution)({
         run: () => Effect.succeed(result("42\n")),
-        build: () => Effect.succeed(result("/workspace/src/index.ts\n")),
+        build: () => Effect.succeed(build("/workspace/src/index.ts\n")),
         stop: () => Effect.succeed(result("Stopped\n")),
       });
       const shellLayer = makeLiveSandboxedShellLayer({
@@ -109,6 +119,60 @@ describe("Shell Bun command live composition", () => {
 
       assert.strictEqual(output.exitCode, 0);
       assert.strictEqual(output.stdout, "Installed 1 package.\n42\n");
+    }),
+  );
+
+  it.effect("applies typed build output to the disposable workspace", () =>
+    Effect.gen(function* () {
+      const fs = new InMemoryFs({
+        "/workspace/package.json": '{"name":"fixture"}\n',
+        "/workspace/src/index.ts": "console.log(42);\n",
+      });
+      const moduleLayer = Layer.succeed(BunModuleExecution)({
+        run: () => Effect.succeed(result("42\n")),
+        build: () =>
+          Effect.succeed({
+            result: result("/workspace/.flect-build/src/index.js\n"),
+            delta: WorkspaceDelta.make({
+              version: 1,
+              files: [
+                WorkspaceFileWrite.make({
+                  operation: "write",
+                  path: "/workspace/.flect-build/src/index.js",
+                  content: new TextEncoder().encode("console.log(42);\n"),
+                }),
+              ],
+              byteLength: "console.log(42);\n".length,
+            }),
+          }),
+        stop: () => Effect.succeed(result("Stopped\n")),
+      });
+      const layer = makeShellBunCommandLiveLayer({
+        fs,
+        moduleLayer,
+        packageFetch: fixtureRegistryFetch,
+        registryBaseUrl: "https://registry.flect.invalid",
+      });
+
+      const output = yield* Effect.gen(function* () {
+        const command = yield* BunCommand;
+        return yield* command.execute(
+          BunCommandRequest.make({
+            version: 1,
+            argv: ["build", "src/index.ts"],
+            cwd: "/workspace",
+          }),
+        );
+      }).pipe(Effect.provide(layer));
+      const built = yield* Effect.promise(() =>
+        fs.readFile("/workspace/.flect-build/src/index.js", "utf8"),
+      );
+
+      assert.strictEqual(
+        output.stdout,
+        "/workspace/.flect-build/src/index.js\n",
+      );
+      assert.strictEqual(built, "console.log(42);\n");
     }),
   );
 });

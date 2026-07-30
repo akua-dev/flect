@@ -164,9 +164,12 @@ export const makeShellBunCommandLiveLayer = (options: {
               args: call.args,
               workspace,
             };
-            return yield* call.operation === "run"
-              ? modules.run(operation)
-              : modules.build(operation);
+            if (call.operation === "run") {
+              return yield* modules.run(operation);
+            }
+            const built = yield* modules.build(operation);
+            yield* applyDelta(options.fs, built.delta);
+            return built.result;
           }
           const output = yield* packages[call.operation]({
             cwd: call.cwd,

@@ -1,5 +1,13 @@
+import { parse } from "acorn";
 import { Context, Deferred, Effect, Layer, Ref, Semaphore } from "effect";
-import { BunCommandFailed, BunCommandResult } from "../../shared/bun-command";
+import {
+  BunCommandFailed,
+  BunCommandResult,
+  WorkspaceDelta,
+  WorkspaceFileRemove,
+  WorkspaceFileWrite,
+  type WorkspaceFileChange,
+} from "../../shared/bun-command";
 import {
   BunPreviewExecution,
   BunPreviewExecutionLive,
@@ -43,6 +51,11 @@ interface BunModuleRuntimeOutput {
   readonly previewUrl?: string;
 }
 
+export interface BunModuleBuildResult {
+  readonly result: BunCommandResult;
+  readonly delta: WorkspaceDelta;
+}
+
 interface BunModuleRuntimeShape {
   readonly execute: (
     request: BunModuleRuntimeRequest,
@@ -61,7 +74,7 @@ export interface BunModuleExecutionShape {
   ) => Effect.Effect<BunCommandResult, BunCommandFailed>;
   readonly build: (
     operation: BunModuleOperation,
-  ) => Effect.Effect<BunCommandResult, BunCommandFailed>;
+  ) => Effect.Effect<BunModuleBuildResult, BunCommandFailed>;
   readonly stop: () => Effect.Effect<BunCommandResult, BunCommandFailed>;
 }
 
@@ -205,6 +218,212 @@ const loaderFor = (path: string): "js" | "jsx" | "ts" | "tsx" | "json" => {
     default:
       return "js";
   }
+};
+
+interface AstRecord {
+  readonly type: string;
+  readonly [key: string]: unknown;
+}
+
+const isAstRecord = (value: unknown): value is AstRecord => {
+  if (typeof value !== "object" || value === null || !("type" in value)) {
+    return false;
+  }
+  return typeof value.type === "string";
+};
+
+const identifierName = (value: unknown): string | undefined =>
+  isAstRecord(value) &&
+  value.type === "Identifier" &&
+  typeof value.name === "string"
+    ? value.name
+    : undefined;
+
+const stringLiteral = (value: unknown): string | undefined =>
+  isAstRecord(value) &&
+  value.type === "Literal" &&
+  typeof value.value === "string"
+    ? value.value
+    : undefined;
+
+const isBunServeMember = (value: unknown) => {
+  if (!isAstRecord(value) || value.type !== "MemberExpression") {
+    return false;
+  }
+  if (identifierName(value.object) !== "Bun") {
+    return false;
+  }
+  return (
+    identifierName(value.property) === "serve" ||
+    stringLiteral(value.property) === "serve"
+  );
+};
+
+const visitAst = (value: unknown, visit: (node: AstRecord) => void): void => {
+  if (!isAstRecord(value)) {
+    return;
+  }
+  visit(value);
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      for (const entry of child) {
+        visitAst(entry, visit);
+      }
+    } else {
+      visitAst(child, visit);
+    }
+  }
+};
+
+const bindingNames = (value: unknown): ReadonlyArray<string> => {
+  const identifier = identifierName(value);
+  if (identifier !== undefined) {
+    return [identifier];
+  }
+  if (!isAstRecord(value) || value.type !== "ObjectPattern") {
+    return [];
+  }
+  const names: Array<string> = [];
+  for (const property of Array.isArray(value.properties)
+    ? value.properties
+    : []) {
+    if (!isAstRecord(property) || property.type !== "Property") {
+      continue;
+    }
+    const key = identifierName(property.key) ?? stringLiteral(property.key);
+    if (key === "serve") {
+      names.push(...bindingNames(property.value));
+    }
+  }
+  return names;
+};
+
+const aliasedServeNames = (ast: unknown) => {
+  const aliases = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    visitAst(ast, (node) => {
+      if (node.type !== "VariableDeclarator") {
+        return;
+      }
+      const names = bindingNames(node.id);
+      if (names.length === 0) {
+        return;
+      }
+      if (isBunServeMember(node.init)) {
+        for (const name of names) {
+          if (!aliases.has(name)) {
+            aliases.add(name);
+            changed = true;
+          }
+        }
+        return;
+      }
+      if (identifierName(node.init) === "Bun") {
+        for (const name of names) {
+          if (!aliases.has(name)) {
+            aliases.add(name);
+            changed = true;
+          }
+        }
+        return;
+      }
+      if (
+        identifierName(node.init) !== undefined &&
+        aliases.has(identifierName(node.init) ?? "")
+      ) {
+        for (const name of names) {
+          if (!aliases.has(name)) {
+            aliases.add(name);
+            changed = true;
+          }
+        }
+      }
+    });
+  }
+  return aliases;
+};
+
+export const containsBunServeCall = (source: string): boolean => {
+  const ast = parse(source, {
+    ecmaVersion: "latest",
+    sourceType: "module",
+  });
+  const aliases = aliasedServeNames(ast);
+  let found = false;
+  visitAst(ast, (node) => {
+    if (node.type !== "CallExpression") {
+      return;
+    }
+    if (isBunServeMember(node.callee)) {
+      found = true;
+      return;
+    }
+    if (identifierName(node.callee) !== undefined) {
+      if (aliases.has(identifierName(node.callee) ?? "")) {
+        found = true;
+      }
+    }
+  });
+  return found;
+};
+
+export const detectsBunPreview = (
+  files: Readonly<Record<string, string | Uint8Array>>,
+) =>
+  Object.values(files).some((content) => {
+    if (typeof content !== "string") {
+      return false;
+    }
+    try {
+      return containsBunServeCall(content);
+    } catch {
+      return false;
+    }
+  });
+
+const buildDelta = (
+  operation: BunModuleOperation,
+  graph: PreparedModuleGraph,
+): WorkspaceDelta => {
+  const generated = new Map(
+    Object.entries(graph.files).filter(([path]) =>
+      path.startsWith(`${BUILD_ROOT}/`),
+    ),
+  );
+  const changes: Array<WorkspaceFileChange> = [];
+  let byteLength = 0;
+  for (const [path, source] of [...generated].sort(([left], [right]) =>
+    left.localeCompare(right),
+  )) {
+    const content =
+      typeof source === "string" ? encoder.encode(source) : source;
+    byteLength += content.byteLength;
+    changes.push(
+      WorkspaceFileWrite.make({
+        operation: "write",
+        path,
+        content,
+      }),
+    );
+  }
+  for (const path of Object.keys(operation.workspace.files)
+    .filter(
+      (candidate) =>
+        candidate.startsWith(`${BUILD_ROOT}/`) && !generated.has(candidate),
+    )
+    .sort()) {
+    changes.push(WorkspaceFileRemove.make({ operation: "remove", path }));
+  }
+  if (changes.length > 4_096 || byteLength > 67_108_864) {
+    throw workspaceFailure();
+  }
+  return WorkspaceDelta.make({
+    version: 1,
+    files: changes,
+    byteLength,
+  });
 };
 
 const prepareModuleGraph = async (
@@ -396,7 +615,15 @@ const makeBunModuleExecutionLayer = Layer.effect(
       run: Effect.fn("Flect.BunModuleExecution.run")(run),
       build: Effect.fn("Flect.BunModuleExecution.build")((operation) =>
         prepare(operation).pipe(
-          Effect.map((graph) => result(`${graph.modules.join("\n")}\n`)),
+          Effect.map((graph) => ({
+            result: result(
+              `${Object.keys(graph.files)
+                .filter((path) => path.startsWith(`${BUILD_ROOT}/`))
+                .sort()
+                .join("\n")}\n`,
+            ),
+            delta: buildDelta(operation, graph),
+          })),
         ),
       ),
       stop: Effect.fn("Flect.BunModuleExecution.stop")(() =>
@@ -433,41 +660,48 @@ const RiftyBunModuleRuntimeLive = Layer.effect(
     const preview = yield* BunPreviewExecution;
     return {
       execute: Effect.fn("Flect.BunModuleRuntime.execute")((request) => {
-        const servesPreview = Object.values(request.files).some(
-          (content) =>
-            typeof content === "string" && content.includes("Bun.serve"),
-        );
-        return servesPreview
-          ? preview
-              .start({
-                entry: request.entry,
-                files: request.files,
-              })
-              .pipe(
-                Effect.map(({ previewUrl }) => ({
-                  stdout: `Preview ready at ${previewUrl}\n`,
-                  stderr: "",
-                  previewUrl,
-                })),
-              )
-          : runtime
-              .runModule({
-                files: request.files,
-                entry: request.entry,
-                cwd: request.cwd,
-                args: request.args,
-              })
-              .pipe(
-                Effect.map(({ stdout, stderr }) => ({ stdout, stderr })),
-                Effect.mapError((error) =>
-                  failure(
-                    error.reason === "deadline" ? "deadline" : "execution",
-                    error.reason === "deadline"
-                      ? "The Bun-compatible module exceeded its deadline."
-                      : "The Bun-compatible module failed safely.",
-                  ),
+        const runModule = (previewProbe?: string) =>
+          runtime
+            .runModule({
+              files: request.files,
+              entry: request.entry,
+              cwd: request.cwd,
+              args: request.args,
+              ...(previewProbe === undefined ? {} : { previewProbe }),
+            })
+            .pipe(
+              Effect.map(({ stdout, stderr }) => ({ stdout, stderr })),
+              Effect.mapError((error) =>
+                failure(
+                  error.reason === "deadline" ? "deadline" : "execution",
+                  error.reason === "deadline"
+                    ? "The Bun-compatible module exceeded its deadline."
+                    : "The Bun-compatible module failed safely.",
                 ),
-              );
+              ),
+            );
+        if (!detectsBunPreview(request.files)) {
+          return runModule();
+        }
+        const marker = `flect-preview-${crypto.randomUUID().replaceAll("-", "")}`;
+        return runModule(marker).pipe(
+          Effect.flatMap((probe) =>
+            probe.stdout.includes(marker)
+              ? preview
+                  .start({
+                    entry: request.entry,
+                    files: request.files,
+                  })
+                  .pipe(
+                    Effect.map(({ previewUrl }) => ({
+                      stdout: `Preview ready at ${previewUrl}\n`,
+                      stderr: "",
+                      previewUrl,
+                    })),
+                  )
+              : Effect.succeed(probe),
+          ),
+        );
       }),
       stop: preview.stop.pipe(
         Effect.mapError(() =>

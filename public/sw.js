@@ -1,6 +1,8 @@
 const previews = new Map();
+const stoppedPreviews = new Map();
 const REQUEST_TIMEOUT_MS = 3_000;
 const BODY_LIMIT = 1_048_576;
+const STOPPED_PREVIEW_LIMIT = 256;
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());
@@ -30,7 +32,25 @@ self.addEventListener("message", (event) => {
       runId: frame.runId,
       clientId: event.source.id,
     });
+    stoppedPreviews.delete(frame.port);
     event.ports[0]?.postMessage({ type: "flect-preview-registered" });
+    return;
+  }
+  if (frame.type === "flect-preview-stop") {
+    const current = previews.get(frame.port);
+    if (current?.runId !== frame.runId) {
+      return;
+    }
+    previews.delete(frame.port);
+    stoppedPreviews.set(frame.port, frame.runId);
+    while (stoppedPreviews.size > STOPPED_PREVIEW_LIMIT) {
+      const oldest = stoppedPreviews.keys().next().value;
+      if (oldest === undefined) {
+        break;
+      }
+      stoppedPreviews.delete(oldest);
+    }
+    event.ports[0]?.postMessage({ type: "flect-preview-stopped" });
   }
 });
 
@@ -49,7 +69,13 @@ const previewResponse = (status, body, headers = {}) => {
 const routePreview = async (request, port, path) => {
   const registration = previews.get(port);
   if (!registration) {
-    return previewResponse(404, "Preview not found.");
+    const stopped = stoppedPreviews.has(port);
+    const stoppedNavigation = stopped && request.mode === "navigate";
+    return previewResponse(
+      stoppedNavigation ? 200 : stopped ? 503 : 404,
+      stopped ? "Preview stopped." : "Preview not found.",
+      stoppedNavigation ? { "x-flect-preview-status": "503" } : {},
+    );
   }
   const client = await self.clients.get(registration.clientId);
   if (!client) {

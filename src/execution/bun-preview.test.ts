@@ -48,7 +48,7 @@ describe("BunPreview", () => {
       }),
     );
 
-    it.effect("returns 503 after stop", () =>
+    it.effect("releases a port while preserving the stopped response", () =>
       Effect.gen(function* () {
         const preview = yield* BunPreview;
         yield* preview.register({
@@ -59,8 +59,19 @@ describe("BunPreview", () => {
         });
         yield* preview.stop("run-stop");
         const response = yield* preview.request(request("run-stop", 3002));
+        yield* preview.register({
+          runId: "run-restarted",
+          port: 3002,
+          handler: () =>
+            Effect.succeed({ status: 200, headers: {}, body: "restarted" }),
+        });
+        const restarted = yield* preview.request(
+          request("run-restarted", 3002),
+        );
 
         assert.strictEqual(response.status, 503);
+        assert.strictEqual(restarted.status, 200);
+        assert.strictEqual(restarted.body, "restarted");
       }),
     );
   });

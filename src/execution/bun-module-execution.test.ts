@@ -2,10 +2,12 @@ import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Ref } from "effect";
 import { TestClock } from "effect/testing";
 import type { BunCommandFailed } from "../../shared/bun-command";
+import { WorkspaceDelta } from "../../shared/bun-command";
 import {
   BunModuleExecution,
   type BunModuleRuntimeRequest,
   type BunWorkspace,
+  containsBunServeCall,
   makeBunModuleExecutionTestLayer,
 } from "./bun-module-execution";
 
@@ -59,7 +61,10 @@ describe("BunModuleExecution", () => {
 
       assert.strictEqual(run.exitCode, 0);
       assert.strictEqual(run.stdout, "42\n");
-      assert.strictEqual(build.stdout, "/workspace/src/index.ts\n");
+      assert.strictEqual(
+        build.result.stdout,
+        "/workspace/.flect-build/src/index.js\n",
+      );
       assert.strictEqual(yield* Ref.get(releases), 1);
 
       const [runtimeRequest] = yield* Ref.get(calls);
@@ -74,6 +79,23 @@ describe("BunModuleExecution", () => {
       assert.notInclude(
         runtimeRequest.files["/workspace/.flect-build/src/index.js"] ?? "",
         ": number",
+      );
+      assert.strictEqual(build.delta.files.length, 1);
+      assert.strictEqual(build.delta.files[0]?.operation, "write");
+    }),
+  );
+
+  it.effect("detects executable Bun.serve forms without matching text", () =>
+    Effect.sync(() => {
+      assert.isFalse(containsBunServeCall('const text = "Bun.serve";'));
+      assert.isFalse(containsBunServeCall("// Bun.serve({ fetch });"));
+      assert.isTrue(containsBunServeCall("Bun.serve({ fetch });"));
+      assert.isTrue(containsBunServeCall('Bun["serve"]({ fetch });'));
+      assert.isTrue(
+        containsBunServeCall("const serve = Bun.serve; serve({ fetch });"),
+      );
+      assert.isTrue(
+        containsBunServeCall("const { serve: start } = Bun; start({ fetch });"),
       );
     }),
   );

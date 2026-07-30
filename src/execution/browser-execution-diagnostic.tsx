@@ -14,6 +14,7 @@ import { executionRuntime } from "./runtime";
 interface DiagnosticState {
   readonly status: "running" | "passed" | "failed";
   readonly javascript: string;
+  readonly capabilities: string;
   readonly wasi: string;
   readonly packages: string;
   readonly release: string;
@@ -22,6 +23,7 @@ interface DiagnosticState {
 const initialState: DiagnosticState = {
   status: "running",
   javascript: "",
+  capabilities: "",
   wasi: "",
   packages: "",
   release: "pending",
@@ -45,6 +47,32 @@ export function BrowserExecutionDiagnostic() {
               source: "40 + 2",
             }),
           );
+          const capabilitiesResult = yield* javascript.evaluate(
+            JavaScriptExecutionRequest.make({
+              version: 1,
+              source: `const attempt = async action => {
+  try {
+    await action();
+    return "escaped";
+  } catch {
+    return "blocked";
+  }
+};
+Promise.all([
+  attempt(() => fetch("https://example.invalid/")),
+  attempt(() => globalThis.localStorage.getItem("flect")),
+  attempt(() => globalThis.sessionStorage.getItem("flect")),
+  attempt(() => globalThis.indexedDB.open("flect")),
+  attempt(() => globalThis.caches.open("flect")),
+  attempt(() => globalThis.navigator.storage.getDirectory()),
+  attempt(() => new WebSocket("wss://example.invalid/")),
+  attempt(() => new EventSource("https://example.invalid/")),
+  attempt(() => new Worker("data:text/javascript,void 0")),
+  attempt(() => importScripts("https://example.invalid/worker.js")),
+  attempt(() => globalThis.showOpenFilePicker())
+]).then(values => console.log(values.join(",")));`,
+            }),
+          );
           const wasiResult = yield* wasi.run(
             WasiExecutionRequest.make({
               version: 1,
@@ -66,6 +94,7 @@ export function BrowserExecutionDiagnostic() {
 
           return {
             javascript: javascriptResult.stdout.trim(),
+            capabilities: capabilitiesResult.stdout.trim(),
             wasi: String(wasiResult.exitCode),
             packages: String(packageResult.packageCount),
           };
@@ -85,6 +114,7 @@ export function BrowserExecutionDiagnostic() {
           setState({
             status: "failed",
             javascript: "",
+            capabilities: "",
             wasi: "",
             packages: "",
             release: "disposed",
@@ -104,6 +134,7 @@ export function BrowserExecutionDiagnostic() {
       aria-label="Browser execution diagnostic"
     >
       <output data-testid="execution-js">{state.javascript}</output>
+      <output data-testid="execution-capabilities">{state.capabilities}</output>
       <output data-testid="execution-wasi">{state.wasi}</output>
       <output data-testid="execution-packages">{state.packages}</output>
       <output data-testid="execution-release">{state.release}</output>

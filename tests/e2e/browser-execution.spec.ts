@@ -27,6 +27,9 @@ test("runs the pinned browser execution substrate in production Chromium", async
     timeout: 15_000,
   });
   await expect(page.getByTestId("execution-js")).toHaveText("42");
+  await expect(page.getByTestId("execution-capabilities")).toHaveText(
+    "blocked,blocked,blocked,blocked,blocked,blocked,blocked,blocked,blocked,blocked,blocked",
+  );
   await expect(page.getByTestId("execution-wasi")).toHaveText("0");
   await expect(page.getByTestId("execution-packages")).toHaveText("1");
   await expect(page.getByTestId("execution-release")).toHaveText("disposed");

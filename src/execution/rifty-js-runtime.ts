@@ -3,13 +3,13 @@ import {
   type RuntimeController,
   spawnRuntime,
 } from "@riftydev/runtime-js";
-import runtimeWorkerUrl from "@riftydev/runtime-js/worker?worker&url";
 import { Context, Effect, Layer, Ref, Schema, type Scope } from "effect";
 import {
   BrowserExecutionFailed,
   type JavaScriptExecutionRequest,
   JavaScriptExecutionResult,
 } from "../../shared/browser-execution";
+import riftyWorkerUrl from "./rifty-js-worker.ts?worker&url";
 
 const OUTER_DEADLINE = "2 seconds";
 const OUTPUT_LIMIT = 1_048_576;
@@ -67,6 +67,7 @@ export interface RiftyModuleExecutionRequest {
   readonly entry: string;
   readonly cwd: string;
   readonly args: ReadonlyArray<string>;
+  readonly previewProbe?: string;
 }
 
 const executionFailure = (
@@ -151,7 +152,7 @@ const makeRuntimeHandle = (
 const acquireLiveRuntime = Effect.acquireRelease(
   Effect.try({
     try: () => {
-      const runtime = spawnRuntime({ workerUrl: runtimeWorkerUrl });
+      const runtime = spawnRuntime({ workerUrl: riftyWorkerUrl });
       const chunks = {
         stdout: [] as Array<string>,
         stderr: [] as Array<string>,
@@ -257,9 +258,17 @@ const makeRiftyJavaScriptExecutionLayer = Layer.effect(
       runModule: Effect.fn("Flect.RiftyJavaScript.runModule")((request) =>
         execute(
           [
-            `globalThis.Bun = Object.freeze({ argv: ${JSON.stringify(["bun", request.entry, ...request.args])}, env: Object.freeze({}), version: "flect-browser/1" });`,
+            `globalThis.Bun = Object.freeze({ argv: ${JSON.stringify(["bun", request.entry, ...request.args])}, env: Object.freeze({}), version: "flect-browser/1"${request.previewProbe === undefined ? "" : ", serve() { globalThis.__flectPreviewRequested = true; return Object.freeze({ stop() {} }); }"} });`,
+            ...(request.previewProbe === undefined
+              ? []
+              : ["globalThis.__flectPreviewRequested = false;"]),
             `globalThis.__flectEntry = ${JSON.stringify(request.entry)};`,
             "await globalThis.__riftyImport(globalThis.__flectEntry);",
+            ...(request.previewProbe === undefined
+              ? []
+              : [
+                  `if (globalThis.__flectPreviewRequested === true) console.log(${JSON.stringify(request.previewProbe)});`,
+                ]),
           ].join("\n"),
           {
             cwd: request.cwd,
