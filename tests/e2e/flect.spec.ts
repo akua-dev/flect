@@ -336,4 +336,7 @@ test("supports keyboard submission and reduced motion", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Send message" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Stop response" }),
+  ).toBeHidden();
 });
