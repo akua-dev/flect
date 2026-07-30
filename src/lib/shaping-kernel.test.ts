@@ -91,6 +91,50 @@ describe("ShapingKernel", () => {
     );
   });
 
+  it.layer(makeShapingKernelTestLayer())((it) => {
+    it.effect("rejects proposals after safe mode wins the race", () =>
+      Effect.gen(function* () {
+        const kernel = yield* ShapingKernel;
+        yield* kernel.enterSafeMode;
+
+        const error = yield* kernel
+          .propose(customizedDocument("Unsafe replacement"), "shaper")
+          .pipe(Effect.flip);
+        const snapshot = yield* kernel.snapshot;
+
+        assert.strictEqual(error._tag, "InvalidRevisionTransition");
+        assert.strictEqual(snapshot.safeMode, true);
+        assert.strictEqual(snapshot.proposal, undefined);
+        assert.deepStrictEqual(
+          snapshot.active.document,
+          defaultInterfaceDocument,
+        );
+      }),
+    );
+  });
+
+  it.layer(makeShapingKernelTestLayer())((it) => {
+    it.effect("preserves an undecided proposal instead of replacing it", () =>
+      Effect.gen(function* () {
+        const kernel = yield* ShapingKernel;
+        const first = yield* kernel.propose(
+          customizedDocument("First proposal"),
+          "shaper",
+        );
+        yield* kernel.preview(first.id);
+
+        const error = yield* kernel
+          .propose(customizedDocument("Second proposal"), "shaper")
+          .pipe(Effect.flip);
+        const snapshot = yield* kernel.snapshot;
+
+        assert.strictEqual(error._tag, "InvalidRevisionTransition");
+        assert.strictEqual(snapshot.proposal?.id, first.id);
+        assert.strictEqual(snapshot.proposal?.status, "previewed");
+      }),
+    );
+  });
+
   const restoredDocument = customizedDocument("Restored workspace");
   const restoredSnapshot = ShapingSnapshot.make({
     version: 1,

@@ -13,17 +13,18 @@ describe("ShaperPanel", () => {
     const user = userEvent.setup();
     const request = vi.fn(() => Promise.resolve());
     const accept = vi.fn(() => Promise.resolve());
-    render(
+    const controller = {
+      status: "idle" as const,
+      isolation: "ready" as const,
+      verifyIsolation: () => Promise.resolve(),
+      request,
+      accept,
+      reject: () => Promise.resolve(),
+      rollback: () => Promise.resolve(),
+    };
+    const { rerender } = render(
       <ShaperPanel
-        controller={{
-          status: "preview",
-          isolation: "ready",
-          verifyIsolation: () => Promise.resolve(),
-          request,
-          accept,
-          reject: () => Promise.resolve(),
-          rollback: () => Promise.resolve(),
-        }}
+        controller={controller}
         agentStatus="ready"
         onClose={() => undefined}
       />,
@@ -34,6 +35,13 @@ describe("ShaperPanel", () => {
       "Make the workspace more focused",
     );
     await user.click(screen.getByRole("button", { name: "Propose change" }));
+    rerender(
+      <ShaperPanel
+        controller={{ ...controller, status: "preview" }}
+        agentStatus="ready"
+        onClose={() => undefined}
+      />,
+    );
     await user.click(screen.getByRole("button", { name: "Keep change" }));
 
     expect(request).toHaveBeenCalledWith("Make the workspace more focused");
@@ -41,6 +49,57 @@ describe("ShaperPanel", () => {
     expect(
       screen.getByText("Previewing a validated proposal"),
     ).toBeInTheDocument();
+  });
+
+  it("does not replace a proposal while its preview awaits a decision", async () => {
+    const user = userEvent.setup();
+    const request = vi.fn(() => Promise.resolve());
+    render(
+      <ShaperPanel
+        controller={{
+          status: "preview",
+          isolation: "ready",
+          verifyIsolation: () => Promise.resolve(),
+          request,
+          accept: () => Promise.resolve(),
+          reject: () => Promise.resolve(),
+          rollback: () => Promise.resolve(),
+        }}
+        agentStatus="ready"
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("Describe the interface change"),
+    ).toBeDisabled();
+    const propose = screen.getByRole("button", { name: "Propose change" });
+    expect(propose).toBeDisabled();
+    await user.click(propose);
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("hides rollback in the explicit read-only safe launcher", () => {
+    render(
+      <ShaperPanel
+        controller={{
+          status: "idle",
+          isolation: "ready",
+          rollbackAvailable: false,
+          verifyIsolation: () => Promise.resolve(),
+          request: () => Promise.resolve(),
+          accept: () => Promise.resolve(),
+          reject: () => Promise.resolve(),
+          rollback: () => Promise.resolve(),
+        }}
+        agentStatus="ready"
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Roll back last change" }),
+    ).not.toBeInTheDocument();
   });
 
   it("restores focus to the instruction after a preview decision", async () => {

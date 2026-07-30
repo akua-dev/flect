@@ -44,7 +44,7 @@ export interface ShapingKernelShape {
     source: Exclude<RevisionSource, "built-in">,
   ) => Effect.Effect<
     InterfaceRevision,
-    InvalidInterfaceDocument | InterfaceStorageError
+    InvalidInterfaceDocument | InvalidRevisionTransition | InterfaceStorageError
   >;
   readonly preview: (
     id: RevisionId,
@@ -188,31 +188,42 @@ const makeShapingKernel = (
       source: Exclude<RevisionSource, "built-in">,
     ) {
       const document = yield* validateInterfaceDocument(input);
-      return yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
-        const id = RevisionId.make(nextId());
-        const revision = InterfaceRevision.make({
-          version: 1,
-          id,
-          parentId: state.active.id,
-          status: "proposed",
-          source,
-          document,
-          createdAt: now(),
-        });
-        const next: KernelState = {
-          ...state,
-          proposal: revision,
-          sequence: state.sequence + 1,
-          lastEvent: eventFor(state, "revision-proposed", {
-            revisionId: revision.id,
-          }),
-        };
-        const transition: readonly [InterfaceRevision, KernelState] = [
-          revision,
-          next,
-        ];
-        return persist(next).pipe(Effect.as(transition));
-      });
+      return yield* SubscriptionRef.modifyEffect(
+        stateRef,
+        (
+          state,
+        ): Effect.Effect<
+          readonly [InterfaceRevision, KernelState],
+          InvalidRevisionTransition | InterfaceStorageError
+        > => {
+          const id = state.proposal?.id ?? RevisionId.make(nextId());
+          if (state.safeMode || state.proposal !== undefined) {
+            return Effect.fail(invalidTransition(id));
+          }
+          const revision = InterfaceRevision.make({
+            version: 1,
+            id,
+            parentId: state.active.id,
+            status: "proposed",
+            source,
+            document,
+            createdAt: now(),
+          });
+          const next: KernelState = {
+            ...state,
+            proposal: revision,
+            sequence: state.sequence + 1,
+            lastEvent: eventFor(state, "revision-proposed", {
+              revisionId: revision.id,
+            }),
+          };
+          const transition: readonly [InterfaceRevision, KernelState] = [
+            revision,
+            next,
+          ];
+          return persist(next).pipe(Effect.as(transition));
+        },
+      );
     });
 
     const preview = Effect.fn("Flect.ShapingKernel.preview")(function* (

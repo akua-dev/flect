@@ -59,6 +59,7 @@ test("previews, accepts, persists, and safely bypasses a shaped UI", async ({
     .getByLabel("Describe the interface change")
     .fill("Make the headline say Focused workspace");
   await page.getByRole("button", { name: "Propose change" }).click();
+  await expect(page.getByLabel("Describe the interface change")).toBeDisabled();
   await expect(
     page.getByRole("textbox", { name: "Describe what to shape" }),
   ).toBeDisabled();
@@ -96,6 +97,10 @@ test("previews, accepts, persists, and safely bypasses a shaped UI", async ({
   await expect(
     page.getByText("Custom interface state is bypassed."),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Shape interface" }).click();
+  await expect(
+    page.getByRole("button", { name: "Roll back last change" }),
+  ).toHaveCount(0);
 });
 
 test("rejects a preview without changing the active interface", async ({

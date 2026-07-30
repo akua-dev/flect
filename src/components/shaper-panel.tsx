@@ -7,6 +7,7 @@ import {
 export interface ShapingController {
   readonly status: "idle" | "shaping" | "preview" | "error";
   readonly error?: string;
+  readonly rollbackAvailable?: boolean;
   readonly isolation: "unchecked" | "checking" | "ready" | "unavailable";
   readonly verifyIsolation: () => Promise<void>;
   readonly request: (instruction: string) => Promise<void>;
@@ -30,6 +31,7 @@ export function ShaperPanel({
   const focusAfterPreview = useRef(false);
   const operationActive =
     controller.status === "shaping" || isAgentSessionActive(agentStatus);
+  const requestBlocked = operationActive || controller.status === "preview";
 
   useEffect(() => {
     if (
@@ -48,7 +50,7 @@ export function ShaperPanel({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const next = instruction.trim();
-    if (next && !operationActive) {
+    if (next && !requestBlocked) {
       void controller.request(next);
     }
   };
@@ -80,7 +82,7 @@ export function ShaperPanel({
           Describe the interface change
         </label>
         <textarea
-          disabled={operationActive}
+          disabled={requestBlocked}
           id="shaper-instruction"
           onChange={(event) => setInstruction(event.target.value)}
           placeholder="Make this a focused project dashboard…"
@@ -89,7 +91,7 @@ export function ShaperPanel({
         />
         <button
           className="shaper-primary"
-          disabled={!instruction.trim() || operationActive}
+          disabled={!instruction.trim() || requestBlocked}
           type="submit"
         >
           {controller.status === "shaping" ? "Shaping…" : "Propose change"}
@@ -131,14 +133,16 @@ export function ShaperPanel({
       )}
 
       <footer className="shaper-panel__footer">
-        <button
-          className="shaper-secondary"
-          disabled={operationActive}
-          onClick={() => void controller.rollback()}
-          type="button"
-        >
-          Roll back last change
-        </button>
+        {controller.rollbackAvailable !== false && (
+          <button
+            className="shaper-secondary"
+            disabled={operationActive}
+            onClick={() => void controller.rollback()}
+            type="button"
+          >
+            Roll back last change
+          </button>
+        )}
         <div className="trust-stack">
           <span>Guardian protected</span>
           <span aria-live="polite">

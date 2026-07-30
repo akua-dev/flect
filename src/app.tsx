@@ -139,6 +139,7 @@ export function App() {
       if (
         isAgentSessionActive(session.status) ||
         shapingStatus === "shaping" ||
+        shapingStatus === "preview" ||
         decisionInFlightRef.current
       ) {
         return;
@@ -316,6 +317,7 @@ export function App() {
       shaping={{
         status: shapingStatus,
         ...(shapingError === undefined ? {} : { error: shapingError }),
+        rollbackAvailable: !safeMode,
         isolation,
         verifyIsolation,
         request: requestShape,
