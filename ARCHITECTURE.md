@@ -74,18 +74,28 @@ node registry currently contains:
 
 Unknown types, unknown fields, duplicate node identifiers, unsupported
 versions, excessive nesting, and unsafe actions fail before React renders them.
-An `InterfaceDocument` contains no generated HTML, CSS, JSX, or executable code
-path.
+The raw tree is first checked by a non-recursive preflight with limits of 10
+levels, 100 nodes, and 30 children per stack before the recursive schema
+decoder runs. Persisted revision snapshots preflight their raw documents before
+recursive revision decoding, and browser HTTP plus private native RPC shape
+handlers validate their unknown document fields before passing them to the
+runtime. Trusted browser and native clients schema-encode validated documents
+before JSON transport. An `InterfaceDocument` contains no generated HTML, CSS,
+JSX, or executable code path.
 
 The `ShapingKernel` owns the active, proposed, previewed, accepted,
 last-known-good, rejected, and recovered revision transitions. A Shaper result
 is decoded as an unknown value and fully validated before it becomes a preview.
-Before committing a transition in memory, the kernel writes one versioned
-journal snapshot containing the active and last-known-good revisions, any
-proposal, disabled extensions, safe-mode state, and the latest sequenced event.
-Rejecting leaves the active document unchanged. Rollback and safe mode are
-deterministic and do not require Pi. The previous document-only storage key is
-read only as a one-time migration source when no journal exists.
+Ordinary transitions write one versioned journal snapshot before making the
+new state visible; the startup-only reconciliation of a persisted `proposed`
+revision is the exception. Reconciliation first creates the in-memory
+`previewed` state, then makes its repair write best-effort so a storage failure
+does not remove the visible preview or the safe-mode escape. Each journal
+snapshot contains the active and last-known-good revisions, any proposal,
+disabled extensions, safe-mode state, and the latest sequenced event. Rejecting
+leaves the active document unchanged. Rollback and safe mode are deterministic
+and do not require Pi. The previous document-only storage key is read only as a
+one-time migration source when no journal exists.
 
 The built-in launcher is compiled with the app. `?safe=1` bypasses customized
 storage without reading or writing it. Invalid persisted state fails closed to
