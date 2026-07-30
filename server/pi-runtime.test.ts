@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import {
   ModelSummary,
   PiOperationFailed,
@@ -355,6 +356,38 @@ describe("FlectRuntimeLive", () => {
       yield* Fiber.join(interruptedClose);
       expect(fake.dispose).toHaveBeenCalledOnce();
       expect(fake.guardianDispose).toHaveBeenCalledOnce();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("forces disposal after an unresponsive active operation", () => {
+    const promptStarted = Deferred.makeUnsafe<void>();
+    const promptGate = Deferred.makeUnsafe<void>();
+    const abortStarted = Deferred.makeUnsafe<void>();
+    const fake = createFakePi({
+      promptGate,
+      promptStarted,
+      abortStarted,
+      promptResponse: JSON.stringify(defaultInterfaceDocument),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const shapeFiber = yield* runtime
+        .shape(sessionId, "Shape this", defaultInterfaceDocument)
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(promptStarted);
+
+      const closeFiber = yield* runtime
+        .closeSession(sessionId)
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(abortStarted);
+      yield* TestClock.adjust("2 seconds");
+      yield* Fiber.join(closeFiber);
+
+      expect(fake.dispose).toHaveBeenCalledOnce();
+      expect(fake.guardianDispose).toHaveBeenCalledOnce();
+      yield* Fiber.interrupt(shapeFiber);
     }).pipe(Effect.provide(fake.layer));
   });
 

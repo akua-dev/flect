@@ -10,6 +10,7 @@ import type {
   FromClientEncoded,
   FromServerEncoded,
 } from "effect/unstable/rpc/RpcMessage";
+import type { FlectRuntimeError } from "../../shared/contracts";
 import { FlectRpcs } from "../../shared/rpc";
 import {
   FlectClient,
@@ -21,6 +22,15 @@ const unavailable = () =>
   FlectUnavailableError.make({
     message: "The local Flect runtime is unavailable.",
   });
+
+const mapShapeError = <A, R>(
+  effect: Effect.Effect<A, FlectRuntimeError, R>,
+) =>
+  effect.pipe(
+    Effect.mapError((error) =>
+      error._tag === "SessionBusy" ? error : unavailable(),
+    ),
+  );
 
 const rpcTransportError = () =>
   new RpcClientError({
@@ -176,7 +186,7 @@ export const makeTauriFlectClientLayer = () =>
         prompt: (sessionId, text) =>
           rpc.Prompt({ sessionId, text }).pipe(Stream.mapError(unavailable)),
         shape: (sessionId, instruction, document) =>
-          mapError(rpc.Shape({ sessionId, instruction, document })),
+          mapShapeError(rpc.Shape({ sessionId, instruction, document })),
         cancel: (sessionId) =>
           mapError(rpc.Cancel({ sessionId })).pipe(Effect.asVoid),
         diagnoseRecovery: (sessionId, reason) =>

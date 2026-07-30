@@ -5,6 +5,7 @@ import {
   ModelSummary,
   ModelsResponse,
   RuntimeStatus,
+  SessionBusy,
   SessionSelection,
   TextDelta,
   TurnCompleted,
@@ -232,6 +233,40 @@ describe("Flect HTTP application", () => {
         "Make this more focused",
         defaultInterfaceDocument,
       );
+    });
+  });
+
+  it.effect("returns a conflict response for a busy shaping session", () => {
+    const runtime = {
+      ...createFakeRuntime(),
+      shape: vi.fn(() =>
+        Effect.fail(
+          new SessionBusy({
+            sessionId: "session-1",
+            message: "The session is busy.",
+          }),
+        ),
+      ),
+    } satisfies FlectRuntimeShape;
+
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/shape", {
+          method: "POST",
+          body: JSON.stringify({
+            instruction: "Make this more focused",
+            document: defaultInterfaceDocument,
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(409);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        error: "The session is busy.",
+      });
     });
   });
 

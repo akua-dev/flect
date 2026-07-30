@@ -4,6 +4,7 @@ import { Effect, Fiber, Layer, Stream } from "effect";
 import {
   ModelSummary,
   RuntimeStatus,
+  SessionBusy,
   SessionSelection,
 } from "../../shared/contracts";
 import {
@@ -216,6 +217,29 @@ describe("FlectClient", () => {
           "http://flect.local/api/sessions/session-1/shape",
         );
         expect(init?.method).toBe("POST");
+      }),
+    );
+  });
+
+  it.effect("preserves a typed busy response for interface shaping", () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      jsonResponse({ version: 1, error: "The session is busy." }, 409),
+    );
+
+    return withClient(
+      fetcher,
+      Effect.gen(function* () {
+        const client = yield* FlectClient;
+        const error = yield* client
+          .shape("session-1", "Make this more focused", defaultInterfaceDocument)
+          .pipe(Effect.flip);
+
+        expect(error).toEqual(
+          new SessionBusy({
+            sessionId: "session-1",
+            message: "The session is busy.",
+          }),
+        );
       }),
     );
   });

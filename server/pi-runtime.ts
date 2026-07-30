@@ -425,6 +425,7 @@ const PUBLIC_TURN_ERROR = "The model could not complete this turn.";
 const MAX_SHAPER_RESPONSE_BYTES = 256 * 1024;
 const MAX_GUARDIAN_RESPONSE_BYTES = 16 * 1024;
 const MAX_ACTIVE_SESSIONS = 32;
+const SESSION_DISPOSAL_TIMEOUT = "2 seconds";
 
 const makeBoundedResponse = (
   limit: number,
@@ -511,12 +512,23 @@ export const FlectRuntimeLive = Layer.effect(
     const sessions = yield* Ref.make(HashMap.empty<string, SessionRecord>());
     const sessionSequence = yield* Ref.make(0);
 
+    const closeOperation = (operation: Effect.Effect<void, PiOperationFailed>) =>
+      operation.pipe(
+        Effect.interruptible,
+        Effect.timeoutOption(SESSION_DISPOSAL_TIMEOUT),
+        Effect.asVoid,
+        Effect.catch(() => Effect.void),
+      );
+
     const disposeSessionRecord = Effect.fn(
       "Flect.Runtime.disposeSessionRecord",
     )((record: SessionRecord) =>
       Effect.uninterruptible(
         Effect.all(
-          [record.sessionOperation.close, record.guardianOperation.close],
+          [
+            closeOperation(record.sessionOperation.close),
+            closeOperation(record.guardianOperation.close),
+          ],
           { concurrency: "unbounded", discard: true },
         ).pipe(
           Effect.andThen(

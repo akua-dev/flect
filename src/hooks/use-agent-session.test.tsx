@@ -8,6 +8,7 @@ import {
   GuardianDiagnostic,
   ModelSummary,
   RuntimeStatus,
+  SessionBusy,
 } from "../../shared/contracts";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
 import {
@@ -160,7 +161,37 @@ describe("useAgentSession", () => {
     await runtime.dispose();
   });
 
-  it("preserves the session after a Shaper failure", async () => {
+  it("preserves the session after a busy Shaper conflict", async () => {
+    const { client, runtime } = createFakeRuntime({
+      shape: () =>
+        Effect.fail(
+          new SessionBusy({
+            sessionId: "session-1",
+            message: "The session is busy.",
+          }),
+        ),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await expect(
+        result.current.shape("Make it focused", defaultInterfaceDocument),
+      ).rejects.toEqual(
+        new SessionBusy({
+          sessionId: "session-1",
+          message: "The session is busy.",
+        }),
+      );
+    });
+
+    expect(client.closeSession).not.toHaveBeenCalled();
+    unmount();
+    await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
+    await runtime.dispose();
+  });
+
+  it("releases the session after a fatal Shaper failure", async () => {
     const { client, runtime } = createFakeRuntime({
       shape: () =>
         Effect.fail(
@@ -182,9 +213,10 @@ describe("useAgentSession", () => {
       );
     });
 
-    expect(client.closeSession).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(client.closeSession).toHaveBeenCalledWith("session-1"),
+    );
     unmount();
-    await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
     await runtime.dispose();
   });
 

@@ -1,6 +1,7 @@
 import { Context, Effect, Layer, Schema, type SchemaAST, Stream } from "effect";
 import {
   HttpClient,
+  HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http";
@@ -16,6 +17,7 @@ import {
   type RecoveryReason,
   RecoveryRequest,
   RuntimeStatus,
+  SessionBusy,
   SessionResponse,
   SessionSelection,
   ShapeRequest,
@@ -40,6 +42,14 @@ const unavailable = () =>
     message: "The local Flect runtime is unavailable.",
   });
 
+const shapeFailure = (sessionId: string) => (error: unknown) =>
+  HttpClientError.isHttpClientError(error) && error.response?.status === 409
+    ? new SessionBusy({
+        sessionId,
+        message: "The session is busy.",
+      })
+    : unavailable();
+
 export interface FlectClientShape {
   readonly status: Effect.Effect<RuntimeStatus, FlectUnavailableError>;
   readonly models: Effect.Effect<
@@ -60,7 +70,7 @@ export interface FlectClientShape {
     sessionId: string,
     instruction: string,
     document: InterfaceDocument,
-  ) => Effect.Effect<InterfaceDocument, FlectUnavailableError>;
+  ) => Effect.Effect<InterfaceDocument, FlectUnavailableError | SessionBusy>;
   readonly cancel: (
     sessionId: string,
   ) => Effect.Effect<void, FlectUnavailableError>;
@@ -192,7 +202,7 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
               HttpClientResponse.schemaBodyJson(ShapeResponse, strictOptions),
             ),
             Effect.map((response) => response.document),
-            Effect.mapError(unavailable),
+            Effect.mapError(shapeFailure(sessionId)),
           ),
       );
 

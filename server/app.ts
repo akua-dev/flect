@@ -215,7 +215,12 @@ const shapeRoute = HttpRouter.add(
       shape.value.document,
     );
     return yield* shapeJson(new ShapeResponse({ version: 1, document }));
-  }).pipe(Effect.catch(() => runtimeFailure())),
+  }).pipe(
+    Effect.catchTag("SessionBusy", () =>
+      publicError("The session is busy.", 409),
+    ),
+    Effect.catch(() => runtimeFailure()),
+  ),
 );
 
 const makeOriginMiddleware = (allowedOrigins: ReadonlySet<string>) =>
