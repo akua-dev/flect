@@ -185,6 +185,35 @@ describe("Launcher", () => {
     ).toBeDisabled();
   });
 
+  it("shows cancellation failure feedback without unlocking shaping", async () => {
+    const user = userEvent.setup();
+    const session = controller({
+      status: "cancelling",
+      error: "The response could not be stopped. Try again.",
+    });
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={session}
+        shaping={shaping()}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The response could not be stopped. Try again.",
+    );
+    expect(screen.getByText("Response is still stopping")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(session.cancel).toHaveBeenCalledOnce();
+
+    await user.click(screen.getByRole("button", { name: "Shape interface" }));
+    expect(
+      screen.getByRole("button", { name: "Propose change" }),
+    ).toBeDisabled();
+  });
+
   it("does not present a completed empty assistant turn as still responding", () => {
     const session = controller({
       status: "ready",

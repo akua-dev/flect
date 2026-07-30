@@ -203,13 +203,28 @@ export function Launcher({
         </div>
       )}
 
-      {session.status === "error" && session.error && (
+      {(session.status === "error" || session.status === "cancelling") &&
+        session.error && (
         <div className="runtime-alert" role="alert">
           <div>
-            <strong>The turn stopped</strong>
+            <strong>
+              {session.status === "cancelling"
+                ? "Response is still stopping"
+                : "The turn stopped"}
+            </strong>
             <p>{session.error}</p>
           </div>
-          {session.lastPrompt && (
+          {session.status === "cancelling" ? (
+            <button
+              className="retry-button"
+              onClick={() => void session.cancel()}
+              type="button"
+            >
+              <RefreshIcon />
+              Try again
+            </button>
+          ) : (
+            session.lastPrompt && (
             <button
               className="retry-button"
               onClick={() => void session.submit(session.lastPrompt)}
@@ -218,6 +233,7 @@ export function Launcher({
               <RefreshIcon />
               Retry
             </button>
+            )
           )}
         </div>
       )}
