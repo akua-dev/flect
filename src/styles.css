@@ -752,7 +752,8 @@ textarea:focus-visible {
 
 .shaper-primary:disabled {
   cursor: default;
-  opacity: 0.42;
+  background: var(--surface-raised);
+  color: var(--quiet);
 }
 
 .shaper-secondary {
@@ -994,6 +995,26 @@ textarea:focus-visible {
   }
 }
 
+@media (max-width: 820px) {
+  .shell--shaping .workspace {
+    margin-right: 0;
+  }
+
+  .shaper-panel {
+    top: 6px;
+    right: 6px;
+    bottom: 6px;
+    left: 6px;
+    width: auto;
+  }
+
+  .shaper-panel > * {
+    width: min(520px, 100%);
+    margin-right: auto;
+    margin-left: auto;
+  }
+}
+
 @media (max-width: 720px) {
   .topbar {
     height: 58px;
@@ -1054,6 +1075,19 @@ textarea:focus-visible {
 
   .message--user {
     max-width: 88%;
+  }
+}
+
+@media (max-width: 480px) {
+  .shell:not(.shell--conversation) .composer-popover {
+    top: calc(100% + 8px);
+    bottom: auto;
+  }
+}
+
+@media (max-width: 360px) {
+  .composer-popover--models {
+    left: -52px;
   }
 }
 

@@ -246,9 +246,6 @@ export const defaultInterfaceDocument: InterfaceDocument = Object.freeze(
           direction: "row",
           gap: "sm",
           children: [
-            buttonForLegacyAction("open"),
-            buttonForLegacyAction("extensions"),
-            buttonForLegacyAction("connect"),
             {
               id: "shape-interface",
               type: "button",

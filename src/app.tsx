@@ -1,4 +1,4 @@
-import { Effect, Fiber, Stream } from "effect";
+import { Effect, Equal, Fiber, Stream } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExtensionManifest } from "../shared/extensions";
 import {
@@ -100,12 +100,14 @@ export function App() {
         const legacy = yield* Effect.promise(() =>
           browserRuntime.runPromise(loadInterfaceDocument({ safeMode: false })),
         );
-        const restored = yield* kernel.propose(legacy, "user");
-        yield* kernel.preview(restored.id);
-        yield* kernel.accept(restored.id);
-        yield* Effect.promise(() =>
-          browserRuntime.runPromise(consumeLegacyInterfaceDocument()),
-        );
+        if (!Equal.equals(legacy, defaultInterfaceDocument)) {
+          const restored = yield* kernel.propose(legacy, "user");
+          yield* kernel.preview(restored.id);
+          yield* kernel.accept(restored.id);
+          yield* Effect.promise(() =>
+            browserRuntime.runPromise(consumeLegacyInterfaceDocument()),
+          );
+        }
       }
 
       yield* kernel.snapshot.pipe(
