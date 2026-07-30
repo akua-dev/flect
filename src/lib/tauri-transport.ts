@@ -24,7 +24,7 @@ const unavailable = () =>
   });
 
 const mapShapeError = <A, R>(
-  effect: Effect.Effect<A, FlectRuntimeError, R>,
+  effect: Effect.Effect<A, FlectRuntimeError | RpcClientError, R>,
 ) =>
   effect.pipe(
     Effect.mapError((error) =>

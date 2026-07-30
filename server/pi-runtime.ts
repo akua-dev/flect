@@ -18,6 +18,7 @@ import {
   Stream,
 } from "effect";
 import {
+  type FlectEvent,
   type FlectRuntimeError,
   GuardianDiagnostic,
   ModelSummary,
@@ -719,7 +720,7 @@ export const FlectRuntimeLive = Layer.effect(
     > =>
       Stream.fromEffect(findSession(sessionId)).pipe(
         Stream.flatMap((record) =>
-          Stream.callback((queue) =>
+          Stream.callback<FlectEvent, FlectRuntimeError>((queue) =>
             Effect.gen(function* () {
               const cancelled = yield* Ref.make(false);
               const operation: ActiveOperation = {
