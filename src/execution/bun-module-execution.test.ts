@@ -2,7 +2,6 @@ import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Ref } from "effect";
 import { TestClock } from "effect/testing";
 import type { BunCommandFailed } from "../../shared/bun-command";
-import { WorkspaceDelta } from "../../shared/bun-command";
 import {
   BunModuleExecution,
   type BunModuleRuntimeRequest,

@@ -74,5 +74,7 @@ export const traversalRegistryFetch: Fetcher = (url) => {
       }),
     );
   }
-  return Promise.reject(new Error("Traversal fixture rejected an unknown URL."));
+  return Promise.reject(
+    new Error("Traversal fixture rejected an unknown URL."),
+  );
 };

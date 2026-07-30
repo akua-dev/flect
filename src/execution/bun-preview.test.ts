@@ -74,7 +74,6 @@ describe("BunPreview", () => {
         assert.strictEqual(restarted.body, "restarted");
       }),
     );
-
   });
 
   it.layer(makeBunPreviewLayer({ handlerDeadline: "2 seconds" }))((it) => {

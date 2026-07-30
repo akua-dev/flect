@@ -48,10 +48,7 @@ export interface BunPreviewExecutionRelease {
   readonly stopPreview: (
     runId: string,
   ) => Effect.Effect<void, BunCommandFailed>;
-  readonly stopRoute: (
-    runId: string,
-    port: number,
-  ) => Effect.Effect<void>;
+  readonly stopRoute: (runId: string, port: number) => Effect.Effect<void>;
   readonly clearActive: (runId: string) => Effect.Effect<void>;
 }
 
@@ -63,9 +60,7 @@ export const releaseBunPreviewExecution = Effect.fn(
       Effect.catchDefect(() => Effect.void),
     );
     yield* release.stopPreview(release.runId).pipe(Effect.ignore);
-    yield* release
-      .stopRoute(release.runId, release.port)
-      .pipe(Effect.ignore);
+    yield* release.stopRoute(release.runId, release.port).pipe(Effect.ignore);
     yield* release.clearActive(release.runId);
   }).pipe(
     Effect.catch(() => Effect.void),
@@ -99,15 +94,7 @@ const extension = (path: string) => {
   return dot < 0 ? "" : name.slice(dot);
 };
 
-const sourceExtensions = [
-  "",
-  ".js",
-  ".mjs",
-  ".ts",
-  ".tsx",
-  ".jsx",
-  ".json",
-];
+const sourceExtensions = ["", ".js", ".mjs", ".ts", ".tsx", ".jsx", ".json"];
 
 const resolveFile = (
   files: Readonly<Record<string, string | Uint8Array>>,

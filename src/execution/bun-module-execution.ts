@@ -4,9 +4,9 @@ import {
   BunCommandFailed,
   BunCommandResult,
   WorkspaceDelta,
+  type WorkspaceFileChange,
   WorkspaceFileRemove,
   WorkspaceFileWrite,
-  type WorkspaceFileChange,
 } from "../../shared/bun-command";
 import {
   BunPreviewExecution,

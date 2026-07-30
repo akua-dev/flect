@@ -155,7 +155,9 @@ console.log(existsSync("/workspace/.flect-memory-probe") ? "persistent" : "isola
     >
       <output data-testid="execution-js">{state.javascript}</output>
       <output data-testid="execution-capabilities">{state.capabilities}</output>
-      <output data-testid="execution-vfs-isolation">{state.vfsIsolation}</output>
+      <output data-testid="execution-vfs-isolation">
+        {state.vfsIsolation}
+      </output>
       <output data-testid="execution-wasi">{state.wasi}</output>
       <output data-testid="execution-packages">{state.packages}</output>
       <output data-testid="execution-release">{state.release}</output>

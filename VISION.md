@@ -243,7 +243,10 @@ over stdio instead of exposing it on localhost. Optional pure extension logic
 can run in a disposable, resource-limited QuickJS WebAssembly worker and return
 only inert typed intents.
 
-This slice intentionally does not run generated React, native extensions,
-shell commands, or product API capabilities. It proves the model,
-credential, shaping, preview, transport, logic-sandbox, and deterministic
-recovery boundaries on which the larger ecosystem can safely build.
+This slice intentionally does not run generated React, native extensions, or
+product API capabilities. Shaper may use the bounded browser-portable shell
+described in [`docs/bun-compatibility.md`](docs/bun-compatibility.md), but it
+does not grant host-shell, native-process, system-Bun, or ambient-network
+authority. The slice proves the model, credential, shaping, preview, transport,
+logic-sandbox, and deterministic recovery boundaries on which the larger
+ecosystem can safely build.

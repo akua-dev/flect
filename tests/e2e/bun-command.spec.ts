@@ -48,11 +48,14 @@ test("runs the browser Bun command and isolated preview in production Chromium",
   await expect(preview.getByTestId("network-denied")).toHaveText("true");
   await expect(preview.getByTestId("opfs-denied")).toHaveText("true");
 
-  const oversizedRequestStatus = await page.evaluate(async () =>
-    (await fetch("/preview/3417/", {
-      method: "POST",
-      body: "x".repeat(1_048_577),
-    })).status,
+  const oversizedRequestStatus = await page.evaluate(
+    async () =>
+      (
+        await fetch("/preview/3417/", {
+          method: "POST",
+          body: "x".repeat(1_048_577),
+        })
+      ).status,
   );
   expect(oversizedRequestStatus).toBe(413);
 

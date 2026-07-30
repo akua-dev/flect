@@ -1,9 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Ref } from "effect";
 import { BunPreview, makeBunPreviewLayer } from "./bun-preview";
-import {
-  releaseBunPreviewExecution,
-} from "./bun-preview-execution";
+import { releaseBunPreviewExecution } from "./bun-preview-execution";
 
 const request = (runId: string, port: number) => ({
   version: 1 as const,
@@ -23,8 +21,7 @@ describe("BunPreviewExecution", () => {
         Effect.gen(function* () {
           const preview = yield* BunPreview;
           const route = yield* Ref.make<
-            | { readonly runId: string; readonly port: number }
-            | undefined
+            { readonly runId: string; readonly port: number } | undefined
           >(undefined);
           const startupReachedRoute = yield* Deferred.make<void>();
           const runId = "run-interrupted";

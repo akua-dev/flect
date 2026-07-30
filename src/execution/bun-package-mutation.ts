@@ -1,7 +1,7 @@
 import {
+  type Fetcher,
   install,
   RegistryClient,
-  type Fetcher,
   type ResolvedPackage,
 } from "@riftydev/npm-client";
 import { MemoryVfs, normalizePath, type Vfs } from "@riftydev/vfs";
@@ -91,8 +91,7 @@ const isCanonicalRelativePath = (path: string) =>
   path
     .split("/")
     .every(
-      (segment) =>
-        segment.length > 0 && segment !== "." && segment !== "..",
+      (segment) => segment.length > 0 && segment !== "." && segment !== "..",
     );
 
 const isOwnedMutationPath = (path: string) => {
