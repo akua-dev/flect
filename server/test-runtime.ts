@@ -53,12 +53,6 @@ const shapedDocument = (_current: InterfaceDocument): InterfaceDocument =>
               label: "Shape interface",
               action: "shape",
             },
-            {
-              id: "rollback-interface",
-              type: "button",
-              label: "Roll back",
-              action: "rollback-revision",
-            },
           ],
         },
       ],

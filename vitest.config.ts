@@ -15,6 +15,7 @@ export default defineConfig({
       "server/**/*.test.ts",
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
+      "tests/media/**/*.test.ts",
     ],
     restoreMocks: true,
   },

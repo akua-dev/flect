@@ -12,6 +12,7 @@
     "build": "tsc -b && vite build",
     "build:sidecar": "bun scripts/build-sidecar.ts",
     "build:desktop": "bun run build:sidecar && tauri build",
+    "media:release": "bun scripts/capture-release-media.ts",
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
