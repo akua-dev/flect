@@ -55,6 +55,40 @@ An intention describes a requested result; it does not perform an effect.
 Logic cannot acquire network, filesystem, native, credential, model, module,
 or host-function authority by constructing a different return value.
 
+### Browser agent workspace
+
+Shaper may use one Pi-visible `bash` tool. Pi does not run a host shell: the
+tool call returns over the Flect transport to a role-owned just-bash workspace
+inside the browser or desktop WebView. Guardian remains tool-free.
+
+The workspace is disposable memory and has no handle to canonical interface
+state, OPFS, Git metadata, credentials, product APIs, Pi internals, Tauri, or
+the parent DOM. Its reserved Bun-compatible command may:
+
+- transform and run workspace JavaScript and TypeScript in disposable Rifty
+  Workers;
+- stage integrity-checked npm packages through the trusted registry broker;
+- build into a workspace-only output directory; and
+- register an isolated service-worker preview handler.
+
+Ambient guest network is denied. The package broker permits credential-free
+GET/HEAD access to the configured npm origin only. Package lifecycle scripts,
+native addons, native processes, system Bun, system shells, raw sockets, and
+Node compatibility are absent. A validated, bounded workspace delta is the
+only package-mutation result.
+
+Preview documents run with an opaque origin and restrictive response CSP. They
+cannot use OPFS or make outbound connections. Preview request and response
+messages are bounded and schema validated; stopping a run releases its Worker
+and iframe and tombstones its route.
+
+Rifty and just-bash are cooperative execution rather than hostile-code
+containment. They are useful machinery inside the boundary, not the boundary
+itself. Flect relies on disposable mirrors, separate realms, strict messages,
+typed brokers, deadlines, resource finalizers, deterministic validation, and
+recovery. The exact compatibility surface is documented in
+[`docs/bun-compatibility.md`](bun-compatibility.md).
+
 ### Capability broker
 
 The broker is the only route from an untrusted experience to product or host
@@ -179,14 +213,16 @@ The current vertical slice uses a closed schema-defined renderer rather than
 arbitrary UI capsules. It implements model-backed proposals, preview, keep,
 reject, a versioned revision journal, rollback, safe mode, separate Guardian
 and Shaper Pi sessions with explicit close and bounded retention, a
-resource-limited QuickJS logic worker, and a minimal capability broker. That
-broker requires both manifest declaration and an explicit grant supplied by
-the protected caller before invoking its current interface-local adapter;
-denied requests never reach the adapter. Repeated sandbox or broker failures
-disable the extension and request deterministic recovery.
+resource-limited QuickJS logic worker, a browser-resident agent shell with
+bounded Bun-compatible source/package/preview operations, and a minimal
+capability broker. That broker requires both manifest declaration and an
+explicit grant supplied by the protected caller before invoking its current
+interface-local adapter; denied requests never reach the adapter. Repeated
+sandbox or broker failures disable the extension and request deterministic
+recovery.
 
-Arbitrary generated React, the isolated capsule renderer, browser source
-building, product/API adapters, privileged native brokerage, sharing, signing,
-mobile hosts, and remote runtimes remain future work. See
+Arbitrary generated React activation, the isolated capsule renderer, canonical
+OPFS/Git source workspaces, product/API adapters, privileged native brokerage,
+sharing, signing, mobile hosts, and remote runtimes remain future work. See
 [`README.md`](../README.md) for the current user-facing status and
 [`VISION.md`](../VISION.md) for the complete destination.

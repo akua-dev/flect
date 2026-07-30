@@ -18,6 +18,10 @@ Browser or Tauri WebView -> Effect application kernel -> React renderer
              |                      +-> disposable QuickJS-NG/WASM Worker
              |                          -> typed inert intents only
              |
+             |                      +-> role-owned just-bash workspace
+             |                          -> reserved Bun-compatible command
+             |                          -> Rifty Workers and preview broker
+             |
              +-- browser development
              |      Effect HTTP + SSE
              |      -> origin-restricted 127.0.0.1 Bun runtime
@@ -113,8 +117,10 @@ then creates two isolated agent sessions:
   set of typed recovery reasons and returns a bounded plain-text diagnostic; it
   cannot write revisions or perform recovery.
 - **Shaper** receives the current validated document and a shaping instruction.
-  It has no ambient resources or tools and can only return a candidate value
-  for Flect to validate.
+  It has no ambient host resources. Its only Pi tool is Flect's custom `bash`,
+  which runs in a disposable browser workspace and returns through a typed
+  request/result bridge. A shaped document still returns as an untrusted
+  candidate for Flect to validate.
 
 Each session has its own in-memory `SessionManager`, `SettingsManager`, and
 `DefaultResourceLoader`. Their only shared object is the provider/model runtime.
@@ -166,7 +172,7 @@ handlers through Effect RPC NDJSON. It does not bind a TCP port.
 
 This RPC boundary owns Pi runtime operations: health, model discovery and
 selection, session creation and close, turns, interruption, shaping proposals,
-the narrow Guardian diagnostic, and their streams.
+the narrow Guardian diagnostic, browser-shell results, and their streams.
 The client Effect kernel deliberately owns the revision journal so browser and
 desktop hosts share one client-side state machine. Revision operations are not
 duplicated in the sidecar.
@@ -208,6 +214,55 @@ Product APIs, native effects, credentials, network access, and other privileged
 adapters still require a separately reviewed, explicit, revocable authorization
 design.
 
+## Browser agent shell and Bun compatibility
+
+Shaper's only Pi tool is a custom tool named `bash`; Pi's native host Bash is
+not enabled. A tool call becomes a strict `shell_request` event on the existing
+prompt stream. The browser or Tauri WebView runs it in the role-owned
+`SandboxedShell`, then returns a bounded `BunCommandResult` through HTTP or
+private Effect RPC while the Pi tool awaits the response. The bridge times out,
+cleans up on interruption and session disposal, and never carries a filesystem
+handle or credential.
+
+`SandboxedShell` uses `just-bash@3.2.0` with a memory VFS, hardened execution
+limits, and one reserved `bun` command. Static AST rewriting prevents aliases,
+functions, PATH changes, workspace files, packages, and extensions from
+shadowing that command. Direct-network, JavaScript-evaluation, Python, SQLite,
+and compression commands are excluded. The Vite build replaces the package's
+otherwise reachable `node:zlib` import with a fail-closed adapter, so compressed
+ripgrep input is unsupported without pulling Node compatibility into the
+browser.
+
+The Bun-compatible command supports `run`, `build`, `install`, `add`, `remove`,
+and `stop`. TypeScript-family source uses pinned `esbuild-wasm@0.28.1`; Flect
+does not claim exact Bun transpilation. Module execution uses
+`@riftydev/runtime-js@0.2.0`. Package mutation stages
+`@riftydev/npm-client@0.2.0` operations in `@riftydev/vfs@0.2.0`, verifies
+integrity, rejects lifecycle scripts and native addons, and applies only a
+bounded delta. The trusted browser adapter permits credential-free GET/HEAD
+requests only to `https://registry.npmjs.org`.
+
+`Bun.serve({ fetch })` registers a handler rather than opening a socket. A
+Flect service worker forwards `/preview/<port>/` requests to an opaque guest
+Worker. The response CSP permits scripts needed by the preview but denies
+connections, parent access, and undeclared resources; the guest has no OPFS,
+Flect storage, credentials, native bridge, or parent DOM. Effect scopes,
+deadlines, interruption, and finalizers own every Worker, iframe, active run,
+and preview.
+
+The role workspace is currently disposable memory. It is not the future
+canonical OPFS/libgit2 workspace, and changing it does not activate an
+interface revision. Rifty and just-bash are cooperative execution substrates,
+not hostile-code containment. The trust boundary is the isolated realm plus
+strict schemas, typed brokers, bounds, capability denial, validation, and
+deterministic recovery.
+
+Build-gated diagnostics still exercise fixed JavaScript, WASI Preview 1, npm
+fixture, Bun command, and preview flows. The ordinary composer is separately
+tested in production Chromium with a full Pi event -> browser shell -> result
+round trip. The exact surface is maintained in
+[`docs/bun-compatibility.md`](docs/bun-compatibility.md).
+
 ## Recovery and failure behavior
 
 - invalid interface state -> compiled launcher;
@@ -233,6 +288,9 @@ The implementation was checked against:
   `cccd029ae0124a33254b4094f1bc9c06cd43324e`;
 - `@earendil-works/pi-coding-agent` `0.82.1`, release commit
   `b4f293684bba718d59cc1157679bcf6157b3a7f5`;
+- Rifty leaf packages `0.2.0`, evaluated upstream commit
+  `207e0ee9f108d6457e2448c956b84c2758e62671`;
+- `just-bash` `3.2.0` and `esbuild-wasm` `0.28.1`;
 - Tauri CLI `2.11.4`, JavaScript API `2.11.1`, Rust crate `2.11.5`, and shell
   plugin `2.3.5`;
 - `quickjs-emscripten-core` and the QuickJS-NG release-sync variant `0.32.0`;

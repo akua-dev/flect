@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import { BunCommandResult } from "./bun-command";
 import {
   FlectEvent,
   FlectRuntimeError,
@@ -59,6 +60,20 @@ export class Cancel extends Rpc.make("Cancel", {
   error: FlectRuntimeError,
 }) {}
 
+export class CompleteShellRequest extends Rpc.make("CompleteShellRequest", {
+  payload: {
+    sessionId: Identifier,
+    requestId: Schema.String.check(
+      Schema.isMinLength(7),
+      Schema.isMaxLength(80),
+      Schema.isPattern(/^shell-[a-z0-9-]+$/),
+    ),
+    result: BunCommandResult,
+  },
+  success: Schema.Void,
+  error: FlectRuntimeError,
+}) {}
+
 export class Shape extends Rpc.make("Shape", {
   payload: {
     sessionId: Identifier,
@@ -89,5 +104,6 @@ export const FlectRpcs = RpcGroup.make(
   Prompt,
   Shape,
   Cancel,
+  CompleteShellRequest,
   DiagnoseRecovery,
 );

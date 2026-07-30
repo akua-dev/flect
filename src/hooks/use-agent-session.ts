@@ -1,5 +1,6 @@
 import { Effect, Fiber, Stream } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BunCommandResult } from "../../shared/bun-command";
 import {
   type FlectEvent,
   ModelSelection,
@@ -11,6 +12,7 @@ import {
 import type { InterfaceDocument } from "../../shared/interface-document";
 import { FlectClient, FlectUnavailableError } from "../lib/api";
 import { browserRuntime, type FlectBrowserRuntime } from "../lib/runtime";
+import { SandboxedShell } from "../shell/sandboxed-shell-service";
 
 export type AgentSessionStatus =
   | "booting"
@@ -211,8 +213,39 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   );
 
   const handleEvent = useCallback(
-    (assistantId: string, event: FlectEvent): Effect.Effect<void> =>
-      Effect.sync(() => {
+    (
+      assistantId: string,
+      sessionId: string,
+      event: FlectEvent,
+    ): Effect.Effect<
+      void,
+      FlectUnavailableError,
+      FlectClient | SandboxedShell
+    > => {
+      if (event.type === "shell_request") {
+        return Effect.gen(function* () {
+          const client = yield* FlectClient;
+          const shell = yield* SandboxedShell;
+          const result = yield* shell.execute(event.command).pipe(
+            Effect.catch(() =>
+              Effect.succeed(
+                BunCommandResult.make({
+                  version: 1,
+                  exitCode: 1,
+                  stdout: "",
+                  stderr: "bash: command failed safely\n",
+                }),
+              ),
+            ),
+          );
+          yield* client.completeShellRequest(
+            sessionId,
+            event.requestId,
+            result,
+          );
+        });
+      }
+      return Effect.sync(() => {
         switch (event.type) {
           case "turn_started":
             setStatus("streaming");
@@ -242,7 +275,8 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
             setError(event.message);
             break;
         }
-      }),
+      });
+    },
     [],
   );
 
@@ -270,7 +304,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
 
         yield* client.prompt(sessionId, prompt).pipe(
           Stream.runForEach((event) => {
-            const update = handleEvent(assistantId, event);
+            const update = handleEvent(assistantId, sessionId, event);
             return event.type === "error"
               ? update.pipe(Effect.andThen(releaseSession(sessionId)))
               : update;

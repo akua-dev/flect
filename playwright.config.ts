@@ -26,7 +26,7 @@ export default defineConfig({
     },
     {
       command:
-        "bun run build && bun run preview -- --host 127.0.0.1 --port 5173",
+        "VITE_FLECT_BUN_DIAGNOSTIC=1 VITE_FLECT_EXECUTION_DIAGNOSTIC=1 bun run build && bun run preview -- --host 127.0.0.1 --port 5173",
       url: "http://127.0.0.1:5173",
       reuseExistingServer: false,
       timeout: 30_000,

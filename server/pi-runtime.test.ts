@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
 import { TestClock } from "effect/testing";
+import { BunCommandResult } from "../shared/bun-command";
 import {
   ModelSummary,
   PiOperationFailed,
@@ -108,6 +109,7 @@ function createFakePi(options: FakeOptions = {}) {
       ),
     ),
   );
+  const completeShellRequest = vi.fn(() => Effect.void);
 
   const session: PiSession = {
     sessionId: "session-1",
@@ -117,6 +119,7 @@ function createFakePi(options: FakeOptions = {}) {
         return unsubscribe;
       }),
     prompt,
+    completeShellRequest,
     get abort() {
       if (options.pairObserved !== undefined) {
         Effect.runSync(Deferred.succeed(options.pairObserved, undefined));
@@ -134,6 +137,7 @@ function createFakePi(options: FakeOptions = {}) {
         return guardianUnsubscribe;
       }),
     prompt: guardianPrompt,
+    completeShellRequest: () => Effect.void,
     abort: guardianAbort,
     dispose: Effect.sync(guardianDispose),
   };
@@ -172,6 +176,7 @@ function createFakePi(options: FakeOptions = {}) {
     guardianPrompt,
     guardianUnsubscribe,
     layer: FlectRuntimeLive.pipe(Layer.provide(layer)),
+    completeShellRequest,
     prompt,
     releasePendingPrompt: () => releasePendingPrompt?.(),
     unsubscribe,
@@ -195,38 +200,43 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
-  it.effect("requests a protected tool-free in-memory Pi session", () => {
-    const fake = createFakePi();
-    return Effect.gen(function* () {
-      const runtime = yield* FlectRuntime;
-      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+  it.effect(
+    "keeps Guardian tool-free and gives Shaper only sandbox Bash",
+    () => {
+      const fake = createFakePi();
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const sessionId = yield* runtime.createSession(
+          new SessionSelection({}),
+        );
 
-      expect(sessionId).toBe("session-1");
-      expect(fake.createAgentPair).toHaveBeenCalledWith(
-        new ModelSummary({
-          provider: "openai-codex",
-          id: "gpt-5.6",
-          name: "GPT-5.6",
-        }),
-        {
-          guardian: {
-            role: "guardian",
-            noTools: "all",
-            storage: "memory",
-            extensions: "disabled",
-            userResources: "disabled",
+        expect(sessionId).toBe("session-1");
+        expect(fake.createAgentPair).toHaveBeenCalledWith(
+          new ModelSummary({
+            provider: "openai-codex",
+            id: "gpt-5.6",
+            name: "GPT-5.6",
+          }),
+          {
+            guardian: {
+              role: "guardian",
+              tools: "none",
+              storage: "memory",
+              extensions: "disabled",
+              userResources: "disabled",
+            },
+            shaper: {
+              role: "shaper",
+              tools: "sandbox-bash",
+              storage: "memory",
+              extensions: "disabled",
+              userResources: "disabled",
+            },
           },
-          shaper: {
-            role: "shaper",
-            noTools: "all",
-            storage: "memory",
-            extensions: "disabled",
-            userResources: "disabled",
-          },
-        },
-      );
-    }).pipe(Effect.provide(fake.layer));
-  });
+        );
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 
   it.effect(
     "disposes a Pi pair when session registration is interrupted",
@@ -265,6 +275,31 @@ describe("FlectRuntimeLive", () => {
       ]);
       expect(fake.unsubscribe).toHaveBeenCalledOnce();
       expect(fake.abort).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("returns browser sandbox results to the pending Pi tool", () => {
+    const fake = createFakePi();
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const result = BunCommandResult.make({
+        version: 1,
+        exitCode: 0,
+        stdout: "42\n",
+        stderr: "",
+      });
+
+      yield* runtime.completeShellRequest(
+        sessionId,
+        "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        result,
+      );
+
+      expect(fake.completeShellRequest).toHaveBeenCalledWith(
+        "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        result,
+      );
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -856,6 +891,7 @@ describe("FlectRuntimeLive", () => {
         sessionId,
         subscribe: () => Effect.succeed(() => undefined),
         prompt: () => Effect.void,
+        completeShellRequest: () => Effect.void,
         abort,
         dispose: Effect.sync(dispose),
       });

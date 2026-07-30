@@ -5,7 +5,10 @@ import {
   HttpClientRequest,
   HttpClientResponse,
 } from "effect/unstable/http";
+import type { BunCommandResult } from "../../shared/bun-command";
 import {
+  AgentShellResultAccepted,
+  AgentShellResultRequest,
   CancelResponse,
   CloseSessionResponse,
   decodePromptRequest,
@@ -84,6 +87,11 @@ export interface FlectClientShape {
   ) => Effect.Effect<InterfaceDocument, FlectUnavailableError | SessionBusy>;
   readonly cancel: (
     sessionId: string,
+  ) => Effect.Effect<void, FlectUnavailableError>;
+  readonly completeShellRequest: (
+    sessionId: string,
+    requestId: string,
+    result: BunCommandResult,
   ) => Effect.Effect<void, FlectUnavailableError>;
   readonly diagnoseRecovery: (
     sessionId: string,
@@ -200,6 +208,27 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
           ),
       );
 
+      const completeShellRequest = Effect.fn(
+        "Flect.Client.completeShellRequest",
+      )((sessionId: string, requestId: string, result: BunCommandResult) =>
+        HttpClientRequest.post(
+          `/sessions/${encodeURIComponent(sessionId)}/shell-results`,
+        ).pipe(
+          HttpClientRequest.schemaBodyJson(AgentShellResultRequest)(
+            AgentShellResultRequest.make({ requestId, result }),
+          ),
+          Effect.flatMap(transport.execute),
+          Effect.flatMap(
+            HttpClientResponse.schemaBodyJson(
+              AgentShellResultAccepted,
+              strictOptions,
+            ),
+          ),
+          Effect.asVoid,
+          Effect.mapError(unavailable),
+        ),
+      );
+
       const shape = Effect.fn("Flect.Client.shape")(
         (sessionId: string, instruction: string, document: InterfaceDocument) =>
           encodeInterfaceDocument(document).pipe(
@@ -251,6 +280,7 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
         prompt,
         shape,
         cancel,
+        completeShellRequest,
         diagnoseRecovery,
       };
     }),

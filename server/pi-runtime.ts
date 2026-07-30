@@ -18,7 +18,9 @@ import {
   Ref,
   Stream,
 } from "effect";
+import type { BunCommandResult } from "../shared/bun-command";
 import {
+  AgentShellRequest,
   type FlectEvent,
   type FlectRuntimeError,
   GuardianDiagnostic,
@@ -40,20 +42,27 @@ import {
   type InterfaceDocument,
   validateInterfaceDocument,
 } from "../shared/interface-document";
+import { makePiShellBridge } from "./pi-shell-bridge";
 import { FlectRuntime } from "./runtime";
 
 export type PiSessionPolicy = {
   readonly role: "guardian" | "shaper";
-  readonly noTools: "all";
+  readonly tools: "none" | "sandbox-bash";
   readonly storage: "memory";
   readonly extensions: "disabled";
   readonly userResources: "disabled";
 };
 
-export type PiEvent = {
-  readonly type: "text_delta";
-  readonly delta: string;
-};
+export type PiEvent =
+  | {
+      readonly type: "text_delta";
+      readonly delta: string;
+    }
+  | {
+      readonly type: "shell_request";
+      readonly requestId: string;
+      readonly command: string;
+    };
 
 export interface PiSession {
   readonly sessionId: string;
@@ -61,6 +70,10 @@ export interface PiSession {
     listener: (event: PiEvent) => void,
   ) => Effect.Effect<() => void>;
   readonly prompt: (text: string) => Effect.Effect<void, PiOperationFailed>;
+  readonly completeShellRequest: (
+    requestId: string,
+    result: BunCommandResult,
+  ) => Effect.Effect<void, PiOperationFailed>;
   readonly abort: () => Effect.Effect<void, PiOperationFailed>;
   readonly dispose: Effect.Effect<void>;
 }
@@ -91,14 +104,14 @@ export class PiSdk extends Context.Service<PiSdk, PiSdkShape>()(
 const protectedAgentPolicies = Object.freeze({
   guardian: Object.freeze({
     role: "guardian",
-    noTools: "all",
+    tools: "none",
     storage: "memory",
     extensions: "disabled",
     userResources: "disabled",
   } satisfies PiSessionPolicy),
   shaper: Object.freeze({
     role: "shaper",
-    noTools: "all",
+    tools: "sandbox-bash",
     storage: "memory",
     extensions: "disabled",
     userResources: "disabled",
@@ -109,7 +122,7 @@ const guardianSystemPrompt =
   "You are Flect Guardian, the protected recovery agent. You may reason about typed validation summaries and request deterministic recovery actions only. You cannot load user resources, modify the revision journal, execute extensions, or use shell, filesystem, browser, network, or process tools.";
 
 const shaperSystemPrompt =
-  "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may propose interface documents through explicitly supplied typed capabilities only. You cannot activate revisions, modify Guardian or safe mode, load user resources, execute extensions, or use shell, filesystem, browser, network, or process tools.";
+  "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may use the bash tool only inside Flect's disposable browser workspace. It cannot access the host filesystem, credentials, parent UI, canonical workspace, or ambient network; the reserved compatible bun command provides bounded run, build, package, preview, and stop operations. You cannot activate revisions, modify Guardian or safe mode, or load user resources and extensions.";
 
 const piFailure = (operation: PiOperationFailed["operation"]) =>
   new PiOperationFailed({
@@ -171,6 +184,15 @@ export const PiSdkLive = Layer.effect(
       )(function* (policy: PiSessionPolicy) {
         const settingsManager = SettingsManager.inMemory();
         const sessionManager = SessionManager.inMemory();
+        const listeners = new Set<(event: PiEvent) => void>();
+        const emit = (event: PiEvent) => {
+          for (const listener of listeners) {
+            listener(event);
+          }
+        };
+        const shellBridge = yield* makePiShellBridge((event) => {
+          emit(event);
+        });
         const resourceLoader = new DefaultResourceLoader({
           cwd: process.cwd(),
           agentDir: getAgentDir(),
@@ -196,7 +218,13 @@ export const PiSdkLive = Layer.effect(
             createAgentSession({
               modelRuntime,
               model: selected,
-              noTools: policy.noTools,
+              ...(policy.tools === "none"
+                ? { noTools: "all" }
+                : {
+                    noTools: "builtin",
+                    tools: ["bash"],
+                    customTools: [shellBridge.tool],
+                  }),
               sessionManager,
               settingsManager,
               resourceLoader,
@@ -204,7 +232,6 @@ export const PiSdkLive = Layer.effect(
           catch: () => piFailure("create_session"),
         });
 
-        const listeners = new Set<(event: PiEvent) => void>();
         let observedTextDelta = false;
         const unsubscribeFromPi = result.session.subscribe((event) => {
           if (
@@ -216,9 +243,7 @@ export const PiSdkLive = Layer.effect(
               type: "text_delta",
               delta: event.assistantMessageEvent.delta,
             } satisfies PiEvent;
-            for (const listener of listeners) {
-              listener(delta);
-            }
+            emit(delta);
           }
         });
 
@@ -257,23 +282,29 @@ export const PiSdkLive = Layer.effect(
                   type: "text_delta",
                   delta: text,
                 } satisfies PiEvent;
-                for (const listener of listeners) {
-                  listener(fallback);
-                }
+                emit(fallback);
               }
             }
           }),
+          completeShellRequest: Effect.fn(
+            "Flect.PiSession.completeShellRequest",
+          )((requestId: string, shellResult: BunCommandResult) =>
+            shellBridge.complete(requestId, shellResult),
+          ),
           abort: Effect.fn("Flect.PiSession.abort")(() =>
             Effect.tryPromise({
               try: () => result.session.abort(),
               catch: () => piFailure("cancel"),
             }),
           ),
-          dispose: Effect.sync(() => {
-            unsubscribeFromPi();
-            listeners.clear();
-            result.session.dispose();
-          }).pipe(
+          dispose: shellBridge.close.pipe(
+            Effect.andThen(
+              Effect.sync(() => {
+                unsubscribeFromPi();
+                listeners.clear();
+                result.session.dispose();
+              }),
+            ),
             Effect.andThen(
               Effect.tryPromise({
                 try: () => settingsManager.flush(),
@@ -803,7 +834,9 @@ export const FlectRuntimeLive = Layer.effect(
               record.guardian.abort,
             );
             const unsubscribe = yield* record.guardian.subscribe((event) => {
-              response.append(event.delta);
+              if (event.type === "text_delta") {
+                response.append(event.delta);
+              }
             });
 
             yield* record.guardian.prompt(guardianPrompt(reason)).pipe(
@@ -858,10 +891,16 @@ export const FlectRuntimeLive = Layer.effect(
                     (event) => {
                       Queue.offerUnsafe(
                         queue,
-                        new TextDelta({
-                          type: "text_delta",
-                          delta: event.delta,
-                        }),
+                        event.type === "text_delta"
+                          ? new TextDelta({
+                              type: "text_delta",
+                              delta: event.delta,
+                            })
+                          : new AgentShellRequest({
+                              type: "shell_request",
+                              requestId: event.requestId,
+                              command: event.command,
+                            }),
                       );
                     },
                   );
@@ -923,6 +962,17 @@ export const FlectRuntimeLive = Layer.effect(
         ),
       );
 
+    const completeShellRequest = Effect.fn(
+      "Flect.Runtime.completeShellRequest",
+    )(function* (
+      sessionId: string,
+      requestId: string,
+      result: BunCommandResult,
+    ) {
+      const record = yield* findSession(sessionId);
+      yield* record.session.completeShellRequest(requestId, result);
+    });
+
     const cancel = Effect.fn("Flect.Runtime.cancel")(function* (
       sessionId: string,
     ) {
@@ -952,7 +1002,9 @@ export const FlectRuntimeLive = Layer.effect(
             record.session.abort,
           );
           const unsubscribe = yield* record.session.subscribe((event) => {
-            response.append(event.delta);
+            if (event.type === "text_delta") {
+              response.append(event.delta);
+            }
           });
 
           yield* record.session
@@ -977,6 +1029,7 @@ export const FlectRuntimeLive = Layer.effect(
       prompt,
       shape,
       cancel,
+      completeShellRequest,
       diagnoseRecovery,
     };
   }),

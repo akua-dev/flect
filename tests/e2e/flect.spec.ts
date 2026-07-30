@@ -42,6 +42,11 @@ test("streams a Pi turn in a real browser", async ({ page }) => {
   await expect(
     page.getByText("Flect’s protected test runtime is ready."),
   ).toBeVisible();
+  await expect(
+    page.getByText(
+      /Browser sandbox returned: Flect browser workspace is ready/,
+    ),
+  ).toBeVisible();
 });
 
 test("uses the protected composer controls in a real browser", async ({

@@ -1,3 +1,4 @@
+.DS_Store
 .worktrees/
 .repos/effect
 node_modules/

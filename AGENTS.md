@@ -86,6 +86,18 @@ Repository-wide constraints:
   and keep the server-side session registry bounded with disposal on eviction.
 - Pi tools are denied by default. Adding a tool or product capability requires
   an explicit, inspectable, revocable capability design.
+- The current Shaper exception is Flect's single custom `bash` tool. Its calls
+  must cross the typed Flect transport to the role-owned browser
+  `SandboxedShell`; never substitute Pi's native Bash, a host shell, a native
+  process, or a system Bun executable.
+- Inside App/Shaper execution, Bun is available only as the reserved `bun`
+  command registered by `SandboxedShell`. Keep command routing, package
+  mutation, module execution, preview, cancellation, and results behind their
+  Effect services and schemas. Host Bun remains a repository-development tool.
+- Keep browser-shell workspaces disposable and separate from canonical
+  OPFS/Git, credentials, accepted interface state, and protected recovery.
+  Compression, direct-network, JavaScript-evaluation, Python, SQLite, native
+  addon, lifecycle-script, and host-process paths remain disabled.
 - Execute optional extension logic only through the reviewed QuickJS worker
   sandbox and recovery design. It may return schema-validated inert intents;
   it must not receive native, shell, filesystem, network, credential, Pi,

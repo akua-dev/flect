@@ -1,6 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer, Stream } from "effect";
 import * as RpcTest from "effect/unstable/rpc/RpcTest";
+import { BunCommandResult } from "../shared/bun-command";
 import {
   GuardianDiagnostic,
   ModelSummary,
@@ -43,6 +44,7 @@ const runtimeLayer = Layer.succeed(FlectRuntime)({
       }),
     ),
   cancel: () => Effect.void,
+  completeShellRequest: () => Effect.void,
   diagnoseRecovery: () =>
     Effect.succeed(
       GuardianDiagnostic.make({
@@ -96,6 +98,16 @@ describe("Flect RPC handlers", () => {
           document: defaultInterfaceDocument,
         });
         yield* client.Cancel({ sessionId });
+        yield* client.CompleteShellRequest({
+          sessionId,
+          requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+          result: BunCommandResult.make({
+            version: 1,
+            exitCode: 0,
+            stdout: "42\n",
+            stderr: "",
+          }),
+        });
         const diagnostic = yield* client.DiagnoseRecovery({
           sessionId,
           reason: "rollback-failed",

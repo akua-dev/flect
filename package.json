@@ -26,7 +26,8 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "check:effect": "./scripts/prepare-effect.sh --check",
-    "check": "bun run check:effect && bun run lint && bun run typecheck && bun run test",
+    "check:rifty": "bun scripts/verify-rifty-dependencies.ts",
+    "check": "bun run check:effect && bun run check:rifty && bun run lint && bun run typecheck && bun run test",
     "check:all": "bun run check && bun run test:e2e && cargo test --manifest-path src-tauri/Cargo.toml && bun run build:desktop -- --bundles app"
   },
   "dependencies": {
@@ -35,11 +36,18 @@
     "@effect/platform-browser": "4.0.0-beta.102",
     "@effect/platform-bun": "4.0.0-beta.102",
     "@jitl/quickjs-ng-wasmfile-release-sync": "0.32.0",
+    "@riftydev/npm-client": "0.2.0",
+    "@riftydev/runtime-js": "0.2.0",
+    "@riftydev/runtime-wasi": "0.2.0",
+    "@riftydev/vfs": "0.2.0",
     "@tauri-apps/api": "2.11.1",
     "effect": "4.0.0-beta.102",
+    "esbuild-wasm": "0.28.1",
+    "just-bash": "3.2.0",
     "quickjs-emscripten-core": "0.32.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "typebox": "1.1.38"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",

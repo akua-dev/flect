@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Stream } from "effect";
+import { BunCommandResult } from "../shared/bun-command";
 import {
   GuardianDiagnostic,
   ModelSummary,
@@ -46,6 +47,7 @@ function createFakeRuntime(): FlectRuntimeShape {
       ),
     ),
     cancel: vi.fn(() => Effect.void),
+    completeShellRequest: vi.fn(() => Effect.void),
     diagnoseRecovery: vi.fn(() =>
       Effect.succeed(
         new GuardianDiagnostic({
@@ -194,6 +196,47 @@ describe("Flect HTTP application", () => {
         ].join("\n"),
       );
     }),
+  );
+
+  it.effect(
+    "accepts a strict browser-shell result for the active agent",
+    () => {
+      const runtime = createFakeRuntime();
+      return Effect.gen(function* () {
+        const app = yield* useApp(runtime);
+        const response = yield* send(
+          app,
+          request("/api/sessions/session-1/shell-results", {
+            method: "POST",
+            body: JSON.stringify({
+              requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+              result: {
+                version: 1,
+                exitCode: 0,
+                stdout: "42\n",
+                stderr: "",
+              },
+            }),
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(yield* readJson(response)).toEqual({
+          version: 1,
+          status: "accepted",
+        });
+        expect(runtime.completeShellRequest).toHaveBeenCalledWith(
+          "session-1",
+          "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+          BunCommandResult.make({
+            version: 1,
+            exitCode: 0,
+            stdout: "42\n",
+            stderr: "",
+          }),
+        );
+      });
+    },
   );
 
   it.effect(

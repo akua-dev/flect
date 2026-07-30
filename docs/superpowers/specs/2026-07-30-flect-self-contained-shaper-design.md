@@ -2,7 +2,11 @@
 
 ## Status
 
-Approved conversationally on 2026-07-30. Written-spec review is pending.
+Approved conversationally on 2026-07-30. The Rifty-backed execution substrate,
+browser agent shell, Bun-compatible command, package mutation, preview broker,
+and Pi request/result bridge are implemented. Canonical OPFS/libgit2 Git,
+portable capsules, a separate App Agent, extension enablement, and accepted
+generated UI activation remain later slices.
 
 ## Outcome
 
@@ -13,15 +17,17 @@ separate Shaper that can load explicitly enabled Pi extensions, edit a real Git
 workspace, build the interface, and preview a proposed change without requiring
 a system Git installation or a terminal login.
 
-The release-quality outcome combines seven related changes:
+The release-quality outcome combines eight related changes:
 
 1. a composer and provider/model picker selectively ported from T3 Code;
 2. Pi authentication managed from inside Flect;
 3. one App Agent for using the running product;
 4. one extensible Shaper for editing it, supervised by a protected Guardian;
-5. portable Pi extensions packaged inside shareable `.flect` capsules; and
-6. a Git-backed OPFS workspace built with `@rolldown/browser`; and
-7. one full Bash surface per agent, routed into a role-specific sandbox.
+5. portable Pi extensions packaged inside shareable `.flect` capsules;
+6. a browser execution substrate assembled from pinned Rifty leaf packages;
+7. a real Git-backed OPFS workspace with a restricted
+   `@rolldown/browser` acceptance build; and
+8. one full Bash surface per agent, routed into a role-specific sandbox.
 
 The protected launcher, deterministic validation, capability enforcement, and
 last-known-good recovery stay outside the user-modifiable workspace.
@@ -72,15 +78,102 @@ Flect retains only the protected activation metadata Git cannot safely own:
 
 This record is a recovery pointer, not a parallel revision history.
 
+### Rifty is the execution substrate, not the trust boundary
+
+Flect adopts selected leaf packages from
+[Rifty](https://github.com/vanilla-wave/rifty) rather than implementing another
+browser-local Node-compatible runtime, process kernel, package installer, WASI
+host, and preview router from scratch.
+
+The research snapshot evaluated Rifty repository commit
+`207e0ee9f108d6457e2448c956b84c2758e62671` and the published `0.2.0`
+packages. Before implementation, Flect pins exact package versions and source
+commits, verifies their artifacts, and records the resulting dependency and
+license inventory. Floating `0.x` ranges are prohibited.
+
+The first implemented slice adopts these Rifty leaf packages behind its own
+Effect services:
+
+- `@riftydev/vfs` for compatible memory and OPFS filesystem primitives;
+- `@riftydev/runtime-js` for the bounded Node-compatible authoring runtime;
+- `@riftydev/runtime-wasi` for reviewed WASI Preview 1 command modules;
+- `@riftydev/npm-client` for package resolution, integrity verification,
+  extraction, linking, and an explicitly controlled cache.
+
+The first slice uses a Flect-owned typed service-worker preview broker.
+OPFS-backed Rifty VFS adoption remains part of the canonical workspace slice.
+
+Flect does not initially adopt:
+
+- the `@riftydev/sdk` umbrella or its realm-global `createSandbox()` lifecycle;
+- `@riftydev/kernel`, `@riftydev/net`, `@riftydev/service-worker`, or
+  `@riftydev/ts-language-service`;
+- `@riftydev/shell`, because the model-facing shell remains pinned
+  `just-bash`;
+- `@riftydev/git`, because its current isomorphic-git surface deliberately
+  excludes worktrees and other Flect-required repository behavior; or
+- Rifty's playground UI, application state, AI roadmap, or product identity.
+
+Every Rifty Promise, Worker, message, error, filesystem value, process event,
+and preview event enters the Flect application only through a small
+`BrowserExecution` Effect service and named live and test Layers. Layer
+acquisition owns the runtime realm and all Workers through `Scope` and
+`Effect.acquireRelease`; interruption closes child processes and message
+bridges. Effect Schema owns command, filesystem, process, package, and preview
+messages. React never calls a Rifty package directly.
+
+Rifty explicitly describes its runtime as cooperative browser-local execution,
+not hostile-code containment. Flect therefore does not treat a Rifty Worker,
+cross-origin isolation, or `SharedArrayBuffer` as a security boundary.
+
+The protected shell, credentials, capability grants, Guardian, activation
+state, and canonical Git repository remain outside the Rifty execution realm.
+Untrusted authoring processes receive only a disposable mirror of one proposal
+worktree. They never receive an OPFS handle for the canonical repository. A
+bounded, validated file delta is the only path back into `GitWorkspace`.
+
+The execution realm runs on a separate sandbox origin where the host can
+enforce a restrictive CSP. Ambient outbound network, parent DOM, Flect-origin
+storage, credentials, and native bridges are unavailable. Package acquisition
+and approved remote access cross separate typed host brokers. A deployment
+that cannot provide this origin and CSP boundary may offer the restricted
+schema-defined editor, but it must not silently enable the Node-compatible
+authoring runtime.
+
+Running arbitrary project build plugins or package lifecycle scripts remains
+an explicitly trusted authoring mode. Portable capsules, their default build,
+and their run mode do not require that trust.
+
 ### Embedded Git only
 
 Flect never assumes a `git` executable is installed. Browser and desktop hosts
 use the same pinned libgit2 WebAssembly artifact.
 
-Flect owns a reproducible build of a pinned upstream libgit2 revision rather
-than depending on an unverified system binary or an abandoned wrapper package.
-The build exports only the repository, object, reference, diff, merge, and
-worktree operations required by the product.
+Flect starts from a reproducible, source-pinned
+[wasm-git](https://github.com/petersalomonsen/wasm-git) build of libgit2 rather
+than depending on a system binary or inventing a JavaScript Git object model.
+The evaluated source snapshot was
+`6250484764878a35ba374836465cbf2e54364994`, corresponding to
+`wasm-git@0.0.17` and libgit2 `1.9.4`.
+
+The upstream `lg2` command surface already covers the repository operations
+Flect needs most often, but it does not currently expose a `worktree`
+subcommand. Flect adds or upstreams that bounded command using libgit2's
+existing
+[worktree API](https://libgit2.org/docs/reference/main/worktree/index.html).
+The resulting artifact exports only the repository, object, reference, diff,
+merge, remote, and worktree operations required by Flect. Unsupported Git
+flags and commands fail explicitly.
+
+One trusted `GitWorkspace` Worker is the sole writer of Git metadata. Its
+Effect service serializes repository and worktree mutations, permits only
+safe concurrent reads, reopens and validates OPFS state after interruption,
+and emits attributable operation receipts. Wasm commands, Rifty processes,
+capsule code, and Pi extensions cannot mutate `.git` directly.
+
+The distributed artifact and every modification to its libgit2 or `lg2`
+sources must retain the upstream GPLv2-with-linking-exception notices and pass
+the release dependency-license audit.
 
 If the browser filesystem integration cannot pass the worktree, crash
 recovery, and persistence tests in supported browsers, the embedded-Git slice
@@ -113,9 +206,17 @@ flect capabilities call <operation> --input <json>
 flect extensions list
 flect extensions describe <extension>/<operation>
 flect extensions call <extension>/<operation> --input <json>
+flect commands list
+flect commands describe <command>
 flect ui context
 flect ui emit --input <json>
 flect recovery ...
+bun run <entry>
+bun build <entry>
+bun install
+bun add <package>
+bun remove <package>
+bun stop
 git status
 git diff
 git add ...
@@ -138,6 +239,38 @@ The custom `git` command preserves familiar Git CLI interaction while calling
 the same libgit2-Wasm `GitWorkspace` service that owns the real OPFS repository
 and worktrees. It is a CLI-shaped capability, not a second Git implementation
 or simulated revision store. Unsupported flags or subcommands fail explicitly.
+
+`bun` is also a reserved Flect command and cannot be replaced by a capsule or
+extension. It provides a deliberately bounded Bun-compatible browser
+experience, not the native Bun executable:
+
+- `bun run` and `bun build` resolve the mirrored workspace module graph,
+  transpile supported JavaScript and TypeScript, and execute only through the
+  scoped Rifty Worker runtime;
+- `bun install`, `bun add`, and `bun remove` call the Rifty npm client through
+  Flect's integrity-checking, origin-restricted package broker;
+- `bun stop` interrupts and disposes the role-owned execution scope;
+- `Bun.serve({ fetch })` and server-shaped default exports may register with
+  Flect's isolated preview broker, but do not bind a real socket; and
+- unsupported commands and APIs fail with an explicit compatibility message.
+
+The baseline does not promise `Bun.spawn`, `Bun.$`, `Bun.file`, `Bun.write`,
+`bun:sqlite`, raw TCP, native addons, lifecycle scripts, or host-process
+execution. The browser and desktop WebView expose the same compatibility
+surface; Flect never expects a system Bun installation.
+
+Burrow demonstrates this UX by pairing `just-bash` with a `bun` command, a Bun
+transpiler Wasm module, browser Workers, a custom package manager, and a
+service-worker preview bridge. Flect reuses that architecture pattern rather
+than its package manager, Git model, or opaque binary. The evaluated Burrow
+`bun.wasm` has SHA-256
+`4dddd6083635da83d7eb2a41aeaa6b44f428909d612b2f5f35b52bf3bf556630`, but
+Burrow does not tie that checked-in artifact to a reproducible Bun source
+commit. Flect therefore must not vendor it as trusted input. A Bun transpiler
+artifact enters Flect only after its exact source revision, build recipe,
+license, output hash, and browser tests are recorded. Until that gate passes,
+the compatible command uses the reviewed Rifty module transformation path and
+reports that it does not claim exact Bun transpilation semantics.
 
 The `SandboxedShell` Effect service owns realm lifecycle, the scoped virtual
 filesystem, Bash execution, interruption, output and resource limits, command
@@ -163,6 +296,43 @@ wall-clock deadline. Bashkit remains a fallback if the isolated `just-bash`
 boundary fails adversarial tests. A Linux micro-VM was rejected for the
 default path because its runner and guest image would make Flect heavier and
 would move execution out of the browser.
+
+### Portable Wasm commands
+
+Flect can expose substantial command-line programs without installing native
+executables or registering thousands of model-visible tools. A portable
+command package contains:
+
+```text
+commands/
+  <command>/
+    manifest.json
+    command.wasm
+    provenance.json
+```
+
+The manifest declares:
+
+- command name, version, publisher, source, content hash, and license;
+- ABI (`wasi-preview1` initially, with `wasi:cli/command` as the later
+  component-model target);
+- target roles;
+- argument, environment, stdin, stdout, and stderr limits;
+- preopened filesystem roots and read/write mode;
+- approved host capabilities and network origins, normally none;
+- wall-time, memory, process, and output limits; and
+- compatibility with the active Flect and command-runtime versions.
+
+`BrowserExecution` runs each reviewed module in a disposable Worker through the
+Rifty WASI host. The module receives only declared preopens and values. Flect
+does not emulate `fork`, a process tree, raw sockets, a kernel, or arbitrary
+host syscalls. Just-bash owns pipelines and redirection and invokes external
+commands through the typed command broker.
+
+Reserved commands including `bash`, `flect`, and `git` cannot be shadowed by a
+capsule or extension. `git` remains the trusted CLI adapter to
+`GitWorkspace`; it is not an arbitrary Wasm package with direct repository
+write access.
 
 ### External Pi extensions are explicit trusted code
 
@@ -208,6 +378,11 @@ extensions/
   <extension-id>/
     manifest.json
     bundle.mjs
+    provenance.json
+commands/
+  <command>/
+    manifest.json
+    command.wasm
     provenance.json
 assets/
 ```
@@ -281,13 +456,22 @@ Effect application kernel
         |      pinned just-bash interpreter
         |      role-specific virtual FS, commands, and quotas
         |
+        +-- BrowserExecution host
+        |      separate sandbox origin
+        |      pinned Rifty leaf packages
+        |      disposable source and dependency mirror
+        |      Node-compatible authoring and WASI Workers
+        |      package acquisition and preview bridges
+        |
         +-- GitWorkspace worker
-        |      libgit2-Wasm
+        |      pinned wasm-git/libgit2-Wasm
         |      OPFS repository and worktrees
+        |      serialized metadata mutation
         |
         +-- BrowserBuild worker
         |      @rolldown/browser
-        |      mirrored build filesystem
+        |      validated mirrored build filesystem
+        |      acceptance artifact compiler
         |
         +-- Preview host
                isolated capsule iframe
@@ -321,6 +505,18 @@ merely a Pi tool allowlist:
   JavaScript realm with storage and network denied by CSP and host policy. It
   communicates only through a versioned portable Pi Extension API bridge.
   Extensions cannot address one another directly.
+- The Rifty-backed `BrowserExecution` realm is a cooperative authoring runtime
+  placed behind a separate sandbox origin and restrictive CSP. It receives a
+  disposable mirror, not the canonical Git worktree or protected OPFS root.
+  Its JavaScript runtime, Worker separation, and cross-origin isolation are not
+  treated as hostile-code containment.
+- Package resolution and download occur through a trusted, origin-restricted
+  broker with integrity verification. Lifecycle scripts are disabled in the
+  portable path. The sandbox receives only verified package bytes selected for
+  the current proposal.
+- Reviewed WASI commands execute in disposable Workers with manifest-declared
+  preopens and capabilities. They cannot obtain ambient browser APIs or
+  replace reserved `bash`, `flect`, or `git` commands.
 - App Agent and Shaper run in separate scoped Pi hosts with separate
   `SessionManager` and `ResourceLoader` instances. A portable extension is
   bridged into its approved role; its code is not promoted into the protected
@@ -350,14 +546,17 @@ merely a Pi tool allowlist:
 - An external, non-portable Pi extension executes in the selected role's
   disposable runtime process as explicitly trusted code. Flect labels this
   path as unsandboxed relative to the portable extension boundary.
-- Git and build workers receive only scoped repository or build messages and
-  cannot reach model, product, credential, DOM, or activation authority.
+- Git, execution, and build workers receive only scoped repository, mirrored
+  source, package, command, or build messages and cannot reach model, product,
+  credential, DOM, or activation authority.
 
 The same compartment protocol is used in the browser and desktop WebView.
-Flect does not emulate Node or run Bun in a browser, and does not depend on
-WebContainer. If a host cannot enforce a requested portable extension or UI
-capability, installation fails closed or opens the capsule with that component
-disabled.
+Flect does not run Bun, a host process, or an operating-system image in a
+browser. Its Rifty dependency exposes a bounded Node-compatible JavaScript
+surface and WASI host, not a native Node or POSIX guarantee. Flect does not
+depend on WebContainer. If a host cannot enforce a requested portable
+extension, command, execution, or UI capability, installation fails closed or
+opens the capsule with that component disabled.
 
 Direct network is absent. Approved product access exists only through the
 schema-backed `flect capabilities` command. Interpreter command count, loop
@@ -500,6 +699,21 @@ capability-incompatible proposal cannot become active.
 supported assets from a mirrored in-memory build filesystem. OPFS remains the
 source of truth; the Rolldown filesystem is disposable.
 
+Rifty serves a different purpose in the authoring loop. Its Node-compatible
+runtime, package installer, process kernel, service-worker router, and Vite
+compatibility may provide a fast disposable development preview for an
+imported or actively edited project. That preview runs from a mirrored
+proposal snapshot in the sandbox execution origin and cannot write the
+canonical repository directly.
+
+The Rifty preview is never the activation proof. Accepting a revision still
+requires the restricted `BrowserBuild` compiler to rebuild the exact verified
+Git proposal through the approved dependency graph, hash its artifact, validate
+the capsule contract, and open the result in the opaque preview host. A project
+that works only through an unapproved Vite plugin or lifecycle script remains
+usable only in explicitly trusted authoring mode until a portable build path
+exists.
+
 The `BrowserBuild` Effect service owns:
 
 - transfer from a Git worktree;
@@ -512,8 +726,8 @@ The `BrowserBuild` Effect service owns:
 - worker cleanup.
 
 Generated bundles do not receive network access by default. Node-only Vite
-plugins, native dependencies, arbitrary package scripts, and a full Node Vite
-development server are outside this slice.
+plugins, native dependencies, arbitrary package scripts, and activation based
+only on a development-server response are outside the portable slice.
 
 ## Guardian supervision
 
@@ -770,6 +984,13 @@ Safe mode never requires opening the Git repository.
 - Invalid or corrupt OPFS repository -> compiled launcher and repository
   recovery options.
 - libgit2-Wasm startup failure -> compiled launcher; no system Git fallback.
+- Rifty package, Worker, OPFS, WASI, or service-worker startup failure ->
+  restricted schema-defined authoring remains available with the unsupported
+  execution capability visibly disabled; no WebContainer or host-process
+  fallback.
+- Browser execution policy violation, undeclared egress, or malformed process
+  message -> terminate and dispose the entire proposal execution realm,
+  preserve the canonical Git worktree, and emit a bounded typed diagnostic.
 - Sandboxed shell startup or compatibility failure -> agent remains available
   for conversation with Bash disabled and a typed diagnostic; no host-shell
   fallback.
@@ -802,26 +1023,37 @@ cross public boundaries without classification and redaction.
 
 The program is implemented in dependency order:
 
-1. **Sandboxed shell proof:** pinned `just-bash` browser artifact, production
+1. **Execution-substrate proof:** pin the exact Rifty source and package
+   artifacts; adapt memory/VFS, kernel, Node-compatible runtime, WASI,
+   package-install, and preview behavior behind `BrowserExecution`; prove
+   separate-origin CSP enforcement, hard disposal, portable-build isolation,
+   Chromium support, packaged macOS support, and license inventory. This slice
+   is an adoption gate, not permission to import the Rifty umbrella API.
+2. **Sandboxed shell proof:** pinned `just-bash` browser artifact, production
    bundle, opaque-origin iframe, disposable Worker, Pi `BashOperations`,
    role-scoped async filesystem, hard cancellation, and brokered `flect`
-   command tests.
-2. **Embedded Git proof:** reproducible libgit2-Wasm, worker, OPFS adapter,
-   brokered `git` command, shell/worktree integration,
-   repository reopen, commit, branch, diff, and real worktree tests.
-3. **Composer, modes, and authentication:** T3-derived composer/provider
+   command tests. Add the reserved Bun-compatible command after the Rifty
+   execution proof: `run`, `build`, `install`, `add`, `remove`, `stop`, and the
+   isolated preview bridge must pass without a system Bun installation.
+3. **Embedded Git proof:** reproducible pinned wasm-git/libgit2-Wasm, trusted
+   worker, OPFS adapter, serialized mutation broker, added worktree command,
+   brokered `git` command, shell/worktree integration, repository reopen,
+   commit, branch, diff, and real worktree tests.
+4. **Composer, modes, and authentication:** T3-derived composer/provider
    picker, run/edit mode shell, in-Flect Pi login/logout, model refresh,
    favorites, and README cleanup.
-4. **Capsule agent packages:** capsule manifest and integrity rules, protected
-   base App Agent, capsule App Agent package, portable extension format,
-   shell-command contributions, install review, and role-scoped grants.
-5. **Supervised extensible agents:** independent App Agent and Shaper
+5. **Capsule agent and command packages:** capsule manifest and integrity
+   rules, protected base App Agent, capsule App Agent package, portable
+   extension and WASI command formats, shell-command contributions, install
+   review, and role-scoped grants.
+6. **Supervised extensible agents:** independent App Agent and Shaper
    lifecycles, extension discovery and explicit role enablement,
    `AgentObservation`, Guardian triggers, containment, base-agent fallback, and
    extension-free Shaper restart.
-6. **Authoring integration:** Shaper shell workflow, Rolldown build,
-   isolated preview, Git accept/reject/rollback, migration, and recovery.
-7. **Product verification:** real-browser automation, native host tests,
+7. **Authoring integration:** Shaper shell workflow, optional Rifty-backed
+   development preview, restricted Rolldown acceptance build, isolated capsule
+   preview, Git accept/reject/rollback, migration, and recovery.
+8. **Product verification:** real-browser automation, native host tests,
    accessibility, release media, attribution, documentation, and dogfood.
 
 Each slice lands only with its public behavior tests passing. The final outcome
@@ -835,11 +1067,13 @@ extension failure, Guardian shell recovery, restart, and rollback.
 ### Contract and Effect tests
 
 - Decode every shell, filesystem, Git, auth, extension, observation, recovery,
-  and build boundary with excess properties rejected.
-- Test `GitWorkspace`, `BrowserBuild`, `PiAuthentication`,
-  `SandboxedShell`, `ShellFilesystem`, `ShellCommandBroker`,
-  `CapsuleAgentPackage`, `AppAgentRuntime`, `ExtensionCatalog`,
-  `AgentSupervisor`, and `GuardianRecovery` through test Layers.
+  command-package, browser-process, package, preview, and build boundary with
+  excess properties rejected.
+- Test `GitWorkspace`, `BrowserExecution`, `WasmCommandRuntime`,
+  `BrowserBuild`, `PiAuthentication`, `SandboxedShell`, `ShellFilesystem`,
+  `ShellCommandBroker`, `CapsuleAgentPackage`, `AppAgentRuntime`,
+  `ExtensionCatalog`, `AgentSupervisor`, and `GuardianRecovery` through test
+  Layers.
 - Use scoped workers and finalizer assertions to prove interruption and
   disposal.
 - Prove secrets cannot enter encodable public events, logs, snapshots, Git, or
@@ -852,22 +1086,45 @@ extension failure, Guardian shell recovery, restart, and rollback.
 - Prove role shells expose only one Pi `bash` tool by default, and capability
   and extension schemas enter model context only after explicit shell
   discovery.
+- Prove `bun` is reserved, unsupported subcommands fail explicitly, package
+  mutations use the brokered Rifty npm client, and cancellation disposes every
+  run Worker without touching canonical OPFS.
+- Prove Rifty services are composed once at the runtime edge, every Worker and
+  service-worker bridge is scoped, and React has no direct Rifty dependency.
+- Prove an untrusted Rifty process sees only its disposable proposal mirror and
+  cannot reach canonical OPFS, another workspace, Flect-origin storage,
+  credentials, arbitrary network, Git metadata, or activation state.
+- Prove a WASI command receives only declared preopens and that reserved
+  commands cannot be replaced.
 
 ### Real-browser tests
 
 Playwright runs against a production build in Chromium and verifies:
 
+- the exact pinned Rifty packages bundle and boot behind `BrowserExecution`,
+  while the tested CSP denies ambient egress and the runtime can be terminated
+  without losing canonical source;
+- verified package installation into a disposable mirror, a bounded
+  Node-compatible command, a WASI command, and a service-worker-routed
+  development preview;
+- unsupported package lifecycle scripts, native dependencies, and undeclared
+  network access fail closed;
 - the pinned `just-bash` bundle loads without Node globals or polyfills in the
   opaque-origin shell host;
+- the Bun-compatible `run`, `build`, `install`, `add`, `remove`, and `stop`
+  commands execute through the browser sandbox, and the compatibility help
+  does not claim unsupported native Bun APIs;
 - pipelines, redirection, text processing, filesystem writes, output limits,
   cooperative cancellation, and forced Worker termination;
 - path traversal, symlink escape, direct OPFS, storage, and direct-network
   access remain unavailable from every role shell;
 - `.flect` capsule import, manifest and hash verification, extension review,
   approval or decline, restricted opening, and refresh restoration;
-- OPFS repository creation, refresh restoration, and export;
-- libgit2 commit, branch, worktree, diff, accept, reject, and rollback;
-- source edit, Rolldown build, isolated preview, and last-successful fallback;
+- OPFS repository creation, refresh restoration, export, and serialized
+  mutation while disposable execution mirrors exist;
+- wasm-git/libgit2 commit, branch, worktree, diff, accept, reject, and rollback;
+- source edit, optional Rifty development preview, restricted Rolldown
+  acceptance build, isolated capsule preview, and last-successful fallback;
 - provider and model search, favorites, keyboard behavior, and compact layout;
 - deterministic OAuth, device-code, API-key, cancellation, logout, and refresh
   flows through test Pi Layers;
@@ -888,8 +1145,9 @@ Playwright runs against a production build in Chromium and verifies:
 
 The packaged Tauri app uses the same Wasm Git and browser build path. Tests
 verify its private Pi transport, URL opening boundary, sidecar/process cleanup,
-OPFS persistence, restart recovery, the same browser-resident shell, and
-absence of system Bash and Git dependencies.
+OPFS persistence, restart recovery, the same Rifty, WASI, browser-resident
+shell, and acceptance-build paths, and absence of system Bash and Git
+dependencies.
 
 ### Live smoke
 
@@ -921,8 +1179,9 @@ No live credential or provider payload is captured in test artifacts.
   intentional non-capability.
 - `DESIGN.md` receives the final composer and provider-picker tokens.
 - `docs/trust-model.md` owns capsule and external extension trust, role and
-  capability isolation, the browser shell boundary, Guardian authority,
-  embedded Git, OPFS, and recovery explanations.
+  capability isolation, the browser shell boundary, cooperative Rifty
+  execution versus Flect containment, portable Wasm commands, Guardian
+  authority, embedded Git, OPFS, and recovery explanations.
 - Root `AGENTS.md` changes only after the shell boundary is implemented and
   proven. It then records that Bash is allowed solely through
   `SandboxedShell`; host shell, ambient filesystem, and direct network remain
@@ -936,16 +1195,164 @@ No live credential or provider payload is captured in test artifacts.
 This design does not promise:
 
 - arbitrary Node/Vite plugins in a browser;
+- that Rifty, a Worker, cross-origin isolation, or `SharedArrayBuffer` provides
+  hostile-code containment;
+- full Node, POSIX, WASIX, native-process, or native-CLI compatibility;
 - arbitrary native binaries or the host shell;
 - unrestricted package scripts;
 - automatic trust of external Pi extensions;
 - silent capability grants;
 - network access for generated UI;
 - automatic Git remote push;
+- SSH Git transport, credential helpers, hooks, signing, or every Git
+  subcommand;
 - system Git integration;
 - recovery that depends on Guardian or a model;
 - replacing product authentication or authorization; or
 - loading arbitrary extensions into the protected launcher or Guardian.
+
+## Retained research references
+
+This section preserves the primary sources and conclusions used for the
+2026-07-30 browser-runtime, shell, Git, and sandbox decision. A reference here
+does not make the project a Flect dependency. Implementation must revalidate
+the exact selected artifact before pinning it.
+
+### Selected foundations
+
+- [Rifty](https://github.com/vanilla-wave/rifty), evaluated at
+  `207e0ee9f108d6457e2448c956b84c2758e62671`: closest open, self-hostable
+  browser-local execution substrate. Selected leaf capabilities are VFS,
+  Worker/process IPC, Node-compatible authoring, WASI Preview 1, package
+  installation, local networking, service-worker preview routing, and later
+  TypeScript language services. Its
+  [trust model](https://github.com/vanilla-wave/rifty/blob/main/docs/public/trust-model.md)
+  explicitly limits it to cooperative execution, which is why Flect retains
+  its own origin, CSP, capability, canonical-workspace, and recovery
+  boundaries.
+- Rifty's pinned
+  [`npm-client` README](https://github.com/vanilla-wave/rifty/blob/207e0ee9f108d6457e2448c956b84c2758e62671/packages/npm-client/README.md)
+  and
+  [lockfile reader](https://github.com/vanilla-wave/rifty/blob/207e0ee9f108d6457e2448c956b84c2758e62671/packages/npm-client/src/installer-lockfile-reader.ts)
+  define the selected package-install call and its
+  `<cwd>/package-lock.json` persistence contract.
+- [wasm-git](https://github.com/petersalomonsen/wasm-git), evaluated at
+  `6250484764878a35ba374836465cbf2e54364994`: selected source foundation for
+  the embedded libgit2 artifact. Its browser builds cover OPFS with pthread,
+  JSPI, and Asyncify variants and expose an `lg2` command surface.
+- [libgit2 worktree API](https://libgit2.org/docs/reference/main/worktree/index.html)
+  and
+  [`git_worktree_add`](https://libgit2.org/docs/reference/main/worktree/git_worktree_add.html):
+  source for the missing bounded worktree adapter.
+- [just-bash](https://github.com/vercel-labs/just-bash), evaluated as
+  `just-bash@3.2.0`: selected model-facing Bash parser and browser userland,
+  subject to the production-bundle and `node:zlib` gate.
+- [Rolldown](https://github.com/rolldown/rolldown), evaluated through
+  `@rolldown/browser`: retained as the restricted acceptance compiler even
+  when Rifty supplies a faster Vite-compatible authoring preview.
+
+### Adjacent implementations retained for patterns
+
+- [Burrow](https://github.com/Dhravya/burrow), evaluated at
+  `5db19587ed318df1f12010b3a49c6daee79732c7`: closest existing browser
+  development-machine product using just-bash, isomorphic-git, a shared
+  virtual filesystem, Worker execution, browser package installation,
+  service-worker preview routing, and local AI. Retained as an implementation
+  reference, not a dependency, because its memory/IndexedDB persistence and
+  Git/worktree model do not satisfy Flect's canonical OPFS and supervision
+  requirements. Its pinned
+  [`bun` command](https://github.com/Dhravya/burrow/blob/5db19587ed318df1f12010b3a49c6daee79732c7/src/toolchain/commands.ts),
+  [runtime bridge](https://github.com/Dhravya/burrow/blob/5db19587ed318df1f12010b3a49c6daee79732c7/src/toolchain/wasm.ts),
+  and
+  [compatibility matrix](https://github.com/Dhravya/burrow/blob/5db19587ed318df1f12010b3a49c6daee79732c7/COMPAT.md)
+  are retained specifically for the compatible command, Worker execution,
+  package-command, cancellation, and `Bun.serve` preview patterns. Its
+  checked-in `bun.wasm` is not selected because the repository does not record
+  a reproducible source revision and build recipe for that binary.
+- [Agent in a Browser](https://github.com/tjfontaine/agent-in-a-browser),
+  evaluated at `677a94ed83c908705b6a5f7c5a5cdbaa71f63010`: retained for its WASI
+  Preview 2 command-component host, OPFS shims, JSPI and
+  `SharedArrayBuffer`/`Atomics` fallback, browser command packages, command
+  policy, and Playwright coverage. Its internal workspace packages were not
+  published as reusable npm packages at evaluation time, its Git command is
+  incomplete for Flect, and its root licensing must be clarified before any
+  code reuse.
+- [isomorphic-git](https://github.com/isomorphic-git/isomorphic-git),
+  evaluated at `5aff8afa3135eb15b8507619ea3cd30526ebbe69`: mature pure-JavaScript
+  browser Git API and useful compatibility oracle. Not selected as canonical
+  Git because its CLI is intentionally secondary, it does not create or
+  manage linked worktrees, and its in-process locks are not a sufficient
+  cross-Worker repository-mutation boundary.
+- [Runno](https://github.com/taybenlor/runno), evaluated at
+  `3c32435e7a07a59aac3f5497040c8c6317d1cff3`: retained as a small WASI
+  Preview 1 host and browser-language sandbox reference. Its WASIX process,
+  thread, network, and persistent-filesystem surfaces were incomplete for
+  Flect.
+- [browser_wasi_shim](https://github.com/bjorn3/browser_wasi_shim), evaluated
+  at `b068ec2c22d68581c48f2592f8cca1681bf71a98`: retained as a small
+  MIT/Apache low-level WASI Preview 1 reference. Its OPFS support is
+  file-oriented rather than a complete Flect filesystem and command host.
+- [Wasmer JS SDK](https://github.com/wasmerio/wasmer-js), evaluated at
+  `fafb390806342eeae2253e41cccca3831309e369`: retained as an optional future
+  heavy-command profile and WASIX reference. It requires cross-origin
+  isolation, has a much larger runtime footprint, and is registry-oriented, so
+  it is not Flect's portable baseline.
+- [CoWasm](https://github.com/sagemathinc/cowasm), evaluated at
+  `4e55390ad8f0933a0c8d027b7d8f67e6401233dd`: retained for browser POSIX,
+  dynamic-library, subprocess, shell, Python, SQLite, and libgit2 porting
+  patterns. It is a broad pre-alpha toolchain rather than a small embeddable
+  Flect runtime.
+
+### Git implementations evaluated but not selected
+
+- [Gitoxide](https://github.com/GitoxideLabs/gitoxide): promising pure-Rust
+  Git libraries, but the project warns that its `gix` and `ein` command-line
+  interfaces are unstable and it did not provide the required production
+  browser CLI and OPFS integration.
+- [Ziggit](https://github.com/hdresearch/ziggit): advertises broad Git and
+  worktree coverage, but its evaluated freestanding browser dispatcher
+  implemented only a very small command subset. Native/WASI source presence
+  was not accepted as proof of browser behavior.
+- [samdenty/git.wasm](https://github.com/samdenty/git.wasm),
+  [kirjavascript/git.wasm](https://github.com/kirjavascript/git.wasm),
+  [Edge-Tools/git-wasm](https://github.com/Edge-Tools/git-wasm), and
+  [simple-git-wasm](https://github.com/powercord-org/simple-git-wasm): retained
+  as prior-art references only. They were stale, minimally integrated,
+  generated-vendor artifacts, or too limited to own Flect's repository.
+
+### Broader runtimes evaluated but not selected
+
+- [WebVM](https://github.com/leaningtech/webvm), evaluated at
+  `e58fef0c9a1c815617e57c6704eaaf7c79c3de1c`: supplies a full x86 Linux
+  environment in the browser, but its CheerpX runtime and organizational
+  self-hosting terms do not fit Flect's open, lightweight, self-contained
+  baseline.
+- [WebContainers](https://github.com/stackblitz/webcontainer-core): capable
+  browser Node runtime, but the public repository is a client surface for a
+  proprietary runtime and does not meet Flect's locally owned, open,
+  self-hostable requirement.
+- [BoxVM](https://github.com/overandor/boxvm): early browser/WASI container
+  experiment whose durable storage and checkpointing remained roadmap work.
+- [Hush](https://github.com/hack-pad/hush): browser-portable Go shell retained
+  only as shell-language prior art; just-bash better matches Flect's selected
+  async filesystem and cancellation surface.
+- [Bashkit](https://github.com/everruns/bashkit), evaluated through
+  `@everruns/bashkit-wasm@0.14.4`: retained as the fallback shell interpreter
+  if just-bash fails isolation tests, but its larger artifact, internal VFS,
+  and missing hard browser deadline made it the second choice.
+
+### Standards and browser primitives
+
+- [WASI](https://github.com/WebAssembly/WASI): portable system-interface
+  standard used for reviewed command modules.
+- [Component Model worlds](https://component-model.bytecodealliance.org/design/worlds.html)
+  and
+  [running components](https://component-model.bytecodealliance.org/running-components.html):
+  basis for the later `wasi:cli/command` ABI and capability-by-import design.
+- [Origin Private File System](https://developer.mozilla.org/en-US/docs/Web/API/File_System_API/Origin_private_file_system):
+  browser persistence primitive for the canonical repository, subject to
+  origin partitioning, browser quota, eviction, secure-context, and Worker
+  constraints.
 
 ## Acceptance
 

@@ -1,6 +1,7 @@
 import { BrowserHttpClient } from "@effect/platform-browser";
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Fiber, Layer, Stream } from "effect";
+import { BunCommandResult } from "../../shared/bun-command";
 import {
   ModelSummary,
   RuntimeStatus,
@@ -163,6 +164,54 @@ describe("FlectClient", () => {
       }),
     );
   });
+
+  it.effect(
+    "returns a schema-encoded shell result to the agent session",
+    () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(jsonResponse({ version: 1, status: "accepted" }));
+      const result = BunCommandResult.make({
+        version: 1,
+        exitCode: 0,
+        stdout: "42\n",
+        stderr: "",
+      });
+
+      return withClient(
+        fetcher,
+        Effect.gen(function* () {
+          const client = yield* FlectClient;
+          yield* client.completeShellRequest(
+            "session-1",
+            "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+            result,
+          );
+
+          const [input, init] = fetcher.mock.calls[0] ?? [];
+          expect(String(input)).toBe(
+            "http://flect.local/api/sessions/session-1/shell-results",
+          );
+          expect(init?.method).toBe("POST");
+          expect(
+            JSON.parse(
+              init?.body instanceof Uint8Array
+                ? new TextDecoder().decode(init.body)
+                : String(init?.body),
+            ),
+          ).toEqual({
+            requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+            result: {
+              version: 1,
+              exitCode: 0,
+              stdout: "42\n",
+              stderr: "",
+            },
+          });
+        }),
+      );
+    },
+  );
 
   it.effect("decodes SSE split across arbitrary byte chunks", () => {
     const fetcher = vi

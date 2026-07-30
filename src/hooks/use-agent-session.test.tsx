@@ -4,7 +4,9 @@ import "@testing-library/jest-dom/vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
+import { BunCommandResult } from "../../shared/bun-command";
 import {
+  AgentShellRequest,
   GuardianDiagnostic,
   ModelSummary,
   RuntimeStatus,
@@ -21,6 +23,10 @@ import {
   type InterfaceStorageShape,
 } from "../lib/interface-store";
 import type { FlectBrowserRuntime } from "../lib/runtime";
+import {
+  SandboxedShell,
+  type SandboxedShellShape,
+} from "../shell/sandboxed-shell-service";
 import { useAgentSession } from "./use-agent-session";
 
 function createFakeRuntime({
@@ -40,6 +46,16 @@ function createFakeRuntime({
     ]),
   shape = (_sessionId, _instruction, document) => Effect.succeed(document),
   cancel = () => Effect.void,
+  completeShellRequest = () => Effect.void,
+  shellExecute = () =>
+    Effect.succeed(
+      BunCommandResult.make({
+        version: 1,
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      }),
+    ),
   diagnoseRecovery = () =>
     Effect.succeed(
       new GuardianDiagnostic({
@@ -53,6 +69,8 @@ function createFakeRuntime({
   readonly prompt?: FlectClientShape["prompt"];
   readonly shape?: FlectClientShape["shape"];
   readonly cancel?: FlectClientShape["cancel"];
+  readonly completeShellRequest?: FlectClientShape["completeShellRequest"];
+  readonly shellExecute?: SandboxedShellShape["execute"];
   readonly diagnoseRecovery?: FlectClientShape["diagnoseRecovery"];
 } = {}) {
   const client: FlectClientShape = {
@@ -63,7 +81,12 @@ function createFakeRuntime({
     prompt: vi.fn(prompt),
     shape: vi.fn(shape),
     cancel: vi.fn(cancel),
+    completeShellRequest: vi.fn(completeShellRequest),
     diagnoseRecovery: vi.fn(diagnoseRecovery),
+  };
+  const shell: SandboxedShellShape = {
+    role: "shaper",
+    execute: vi.fn(shellExecute),
   };
   const storage: InterfaceStorageShape = {
     read: () => Effect.succeed(null),
@@ -71,13 +94,14 @@ function createFakeRuntime({
     remove: () => Effect.void,
   };
   const runtime: FlectBrowserRuntime = ManagedRuntime.make(
-    Layer.merge(
+    Layer.mergeAll(
       Layer.succeed(FlectClient)(client),
       Layer.succeed(InterfaceStorage)(storage),
+      Layer.succeed(SandboxedShell)(shell),
     ),
   );
 
-  return { client, runtime };
+  return { client, runtime, shell };
 }
 
 describe("useAgentSession", () => {
@@ -140,6 +164,43 @@ describe("useAgentSession", () => {
     expect(result.current.status).toBe("ready");
     unmount();
     await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
+    await runtime.dispose();
+  });
+
+  it("runs an agent bash request in the browser sandbox and returns it", async () => {
+    const shellResult = BunCommandResult.make({
+      version: 1,
+      exitCode: 0,
+      stdout: "42\n",
+      stderr: "",
+    });
+    const { client, runtime, shell } = createFakeRuntime({
+      prompt: () =>
+        Stream.fromIterable([
+          { type: "turn_started" as const },
+          AgentShellRequest.make({
+            type: "shell_request",
+            requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+            command: "bun run src/index.ts",
+          }),
+          { type: "turn_completed" as const },
+        ]),
+      shellExecute: () => Effect.succeed(shellResult),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.submit("Run the project");
+    });
+
+    expect(shell.execute).toHaveBeenCalledWith("bun run src/index.ts");
+    expect(client.completeShellRequest).toHaveBeenCalledWith(
+      "session-1",
+      "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+      shellResult,
+    );
+    unmount();
     await runtime.dispose();
   });
 

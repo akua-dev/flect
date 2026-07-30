@@ -207,6 +207,10 @@ export const makeTauriFlectClientLayer = () =>
           ),
         cancel: (sessionId) =>
           mapError(rpc.Cancel({ sessionId })).pipe(Effect.asVoid),
+        completeShellRequest: (sessionId, requestId, result) =>
+          mapError(
+            rpc.CompleteShellRequest({ sessionId, requestId, result }),
+          ).pipe(Effect.asVoid),
         diagnoseRecovery: (sessionId, reason) =>
           mapSessionError(rpc.DiagnoseRecovery({ sessionId, reason })),
       } satisfies FlectClientShape;

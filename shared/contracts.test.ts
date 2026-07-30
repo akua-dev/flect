@@ -78,6 +78,22 @@ describe("runtime contracts", () => {
       }),
   );
 
+  it.effect("decodes a bounded browser-shell request from the agent", () =>
+    Effect.gen(function* () {
+      const event = yield* decodeFlectEvent({
+        type: "shell_request",
+        requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        command: "bun run src/index.ts",
+      });
+
+      expect(event).toEqual({
+        type: "shell_request",
+        requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        command: "bun run src/index.ts",
+      });
+    }),
+  );
+
   it.effect("trims prompts and requires visible text", () =>
     Effect.gen(function* () {
       yield* Effect.flip(decodePromptRequest({ text: "   " }));

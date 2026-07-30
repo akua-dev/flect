@@ -5,6 +5,8 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http";
 import {
+  AgentShellResultAccepted,
+  AgentShellResultRequest,
   CancelResponse,
   CloseSessionResponse,
   FlectEvent,
@@ -51,6 +53,7 @@ const closeJson = HttpServerResponse.schemaJson(CloseSessionResponse);
 const cancelJson = HttpServerResponse.schemaJson(CancelResponse);
 const shapeJson = HttpServerResponse.schemaJson(ShapeResponse);
 const guardianJson = HttpServerResponse.schemaJson(GuardianDiagnostic);
+const shellResultJson = HttpServerResponse.schemaJson(AgentShellResultAccepted);
 const publicErrorJson = HttpServerResponse.schemaJson(PublicErrorResponse);
 const encodeEventJson = Schema.encodeEffect(Schema.fromJsonString(FlectEvent));
 
@@ -189,6 +192,31 @@ const cancelRoute = HttpRouter.add(
   }).pipe(Effect.catch(() => runtimeFailure())),
 );
 
+const shellResultRoute = HttpRouter.add(
+  "POST",
+  "/api/sessions/:sessionId/shell-results",
+  Effect.gen(function* () {
+    const path = yield* sessionPath;
+    const shell = yield* decodeBody(AgentShellResultRequest);
+    if (Option.isNone(path) || Option.isNone(shell)) {
+      return yield* invalidRequest();
+    }
+
+    const runtime = yield* FlectRuntime;
+    yield* runtime.completeShellRequest(
+      path.value.sessionId,
+      shell.value.requestId,
+      shell.value.result,
+    );
+    return yield* shellResultJson(
+      AgentShellResultAccepted.make({
+        version: 1,
+        status: "accepted",
+      }),
+    );
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
 const guardianRoute = HttpRouter.add(
   "POST",
   "/api/sessions/:sessionId/guardian",
@@ -267,6 +295,7 @@ export const makeFlectHttpApp = (
     promptRoute,
     shapeRoute,
     cancelRoute,
+    shellResultRoute,
     guardianRoute,
     makeOriginMiddleware(allowedOrigins),
   );

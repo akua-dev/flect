@@ -1,4 +1,5 @@
 import { Context, type Effect, type Stream } from "effect";
+import type { BunCommandResult } from "../shared/bun-command";
 import type {
   FlectEvent,
   FlectRuntimeError,
@@ -33,6 +34,11 @@ export interface FlectRuntimeShape {
   ) => Effect.Effect<InterfaceDocument, FlectRuntimeError>;
   readonly cancel: (
     sessionId: string,
+  ) => Effect.Effect<void, FlectRuntimeError>;
+  readonly completeShellRequest: (
+    sessionId: string,
+    requestId: string,
+    result: BunCommandResult,
   ) => Effect.Effect<void, FlectRuntimeError>;
   readonly diagnoseRecovery: (
     sessionId: string,

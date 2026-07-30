@@ -82,12 +82,14 @@ before the active interface changes.
 
 - authenticated Pi model discovery, explicit selection, streamed turns, stop,
   and redacted public failures;
-- separate, tool-free Guardian and Shaper Pi sessions with independent
-  lifecycle state;
+- separate Guardian and Shaper Pi sessions with independent lifecycle state;
+  Guardian is tool-free and Shaper receives only Flect's browser-backed Bash;
 - Effect Schema-validated interface documents and a closed trusted renderer;
 - propose, preview, keep, reject, rollback, last-known-good recovery, and a
   compiled `?safe=1` launcher;
 - a protected composer even when a shaped document omits its own prompt;
+- one Pi-visible `bash` tool backed by a role-owned browser workspace, with
+  reserved Bun-compatible run, build, package, preview, and stop commands;
 - browser HTTP/SSE and native private-stdio transports behind the same Effect
   capabilities; and
 - optional pure extension logic in a disposable QuickJS/Wasm worker that may
@@ -99,23 +101,27 @@ stdio exposed to the webview by one narrow Tauri command.
 
 ## Current security and product boundary
 
-The QuickJS worker is a defense-in-depth **logic sandbox**, not an operating
-system sandbox. Flect v0.1.1 does not execute arbitrary generated React,
-native extensions, shell commands, or ambient filesystem and network code. It
-does not yet ship portable `.flect` capsules, a component registry,
-product/API adapters, privileged host brokerage, remote runtimes, automatic
-updates, notarization, a macOS App Sandbox entitlement, or Intel, Windows, and
-Linux packages.
+The QuickJS worker and browser agent workspace are defense-in-depth execution
+realms, not operating-system sandboxes. The source build can execute generated
+workspace code through its bounded browser shell, but it cannot invoke a host
+shell, native process, system Bun, ambient filesystem, or ambient network.
+Flect does not yet ship portable `.flect` capsules, a component registry,
+canonical OPFS/Git workspaces, product/API adapters, privileged host brokerage,
+remote runtimes, automatic updates, notarization, a macOS App Sandbox
+entitlement, or Intel, Windows, and Linux packages.
 
 User-shaped documents cannot replace deterministic validation, revision
 storage, rollback, safe mode, or the compiled recovery path. See the
 [capability and sandbox trust model](docs/trust-model.md) for the authority
-boundary.
+boundary and the exact
+[browser Bun compatibility matrix](docs/bun-compatibility.md) for supported
+commands and deliberate omissions.
 
 ## Architecture and vision
 
 - [Vision and intentional non-capabilities](VISION.md)
 - [Implemented architecture](ARCHITECTURE.md)
+- [Browser Bun compatibility](docs/bun-compatibility.md)
 - [Users and product principles](PRODUCT.md)
 - [Design system](DESIGN.md)
 - [Contributor guide](CONTRIBUTING.md)

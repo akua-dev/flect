@@ -19,6 +19,8 @@ export const makeFlectRpcHandlers = () =>
             return yield* runtime.shape(sessionId, instruction, validated);
           }),
         Cancel: ({ sessionId }) => runtime.cancel(sessionId),
+        CompleteShellRequest: ({ sessionId, requestId, result }) =>
+          runtime.completeShellRequest(sessionId, requestId, result),
         DiagnoseRecovery: ({ sessionId, reason }) =>
           runtime.diagnoseRecovery(sessionId, reason),
       });

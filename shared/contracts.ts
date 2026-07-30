@@ -1,4 +1,5 @@
 import { Effect, Schema, type SchemaAST } from "effect";
+import { BunCommandResult } from "./bun-command";
 import {
   InterfaceDocument,
   InvalidInterfaceDocument,
@@ -8,6 +9,12 @@ const NonEmptyText = Schema.Trim.check(Schema.isMinLength(1));
 const PromptText = NonEmptyText.check(Schema.isMaxLength(100_000));
 const ShapingInstruction = NonEmptyText.check(Schema.isMaxLength(4_000));
 const DiagnosticText = NonEmptyText.check(Schema.isMaxLength(4_000));
+const ShellRequestId = Schema.String.check(
+  Schema.isMinLength(7),
+  Schema.isMaxLength(80),
+  Schema.isPattern(/^shell-[a-z0-9-]+$/),
+);
+const ShellCommandText = NonEmptyText.check(Schema.isMaxLength(262_144));
 
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
@@ -120,9 +127,18 @@ export class TurnBusy extends Schema.Class<TurnBusy>("TurnBusy")({
   message: Schema.Literal("The session is busy."),
 }) {}
 
+export class AgentShellRequest extends Schema.Class<AgentShellRequest>(
+  "AgentShellRequest",
+)({
+  type: Schema.Literal("shell_request"),
+  requestId: ShellRequestId,
+  command: ShellCommandText,
+}) {}
+
 export const FlectEvent = Schema.Union([
   TurnStarted,
   TextDelta,
+  AgentShellRequest,
   TurnCompleted,
   TurnCancelled,
   TurnError,
@@ -166,6 +182,20 @@ export class SessionNotFound extends Schema.TaggedErrorClass<SessionNotFound>()(
   },
 ) {}
 
+export class AgentShellResultRequest extends Schema.Class<AgentShellResultRequest>(
+  "AgentShellResultRequest",
+)({
+  requestId: ShellRequestId,
+  result: BunCommandResult,
+}) {}
+
+export class AgentShellResultAccepted extends Schema.Class<AgentShellResultAccepted>(
+  "AgentShellResultAccepted",
+)({
+  version: Schema.Literal(1),
+  status: Schema.Literal("accepted"),
+}) {}
+
 export class SessionBusy extends Schema.TaggedErrorClass<SessionBusy>()(
   "SessionBusy",
   {
@@ -199,6 +229,7 @@ export class PiOperationFailed extends Schema.TaggedErrorClass<PiOperationFailed
       "shape",
       "cancel",
       "diagnose",
+      "shell",
     ]),
     message: Schema.Literal(
       "The model runtime could not complete the request.",

@@ -8,6 +8,10 @@ import {
 import { ExtensionExecutionLive } from "../sandbox/extension-execution";
 import { ExtensionSandboxLive } from "../sandbox/extension-sandbox";
 import {
+  makeLiveSandboxedShellLayer,
+  type SandboxedShell,
+} from "../shell/sandboxed-shell";
+import {
   type FlectClient,
   type FlectUnavailableError,
   makeFlectClientLayer,
@@ -21,9 +25,26 @@ const ClientLive = isTauri()
   ? makeTauriFlectClientLayer().pipe(Layer.provide(TauriBridgeLive))
   : makeFlectClientLayer().pipe(Layer.provide(BrowserHttpClient.layerFetch));
 
-const BrowserLive = Layer.merge(ClientLive, InterfaceStorageLive);
+const AgentShellLive = makeLiveSandboxedShellLayer({
+  role: "shaper",
+  files: {
+    "/workspace/package.json":
+      '{\n  "name": "flect-workspace",\n  "private": true,\n  "type": "module",\n  "dependencies": {}\n}\n',
+    "/workspace/src/index.ts":
+      'console.log("Flect browser workspace is ready.");\n',
+  },
+});
 
-export type FlectBrowserServices = FlectClient | InterfaceStorage;
+const BrowserLive = Layer.mergeAll(
+  ClientLive,
+  InterfaceStorageLive,
+  AgentShellLive,
+);
+
+export type FlectBrowserServices =
+  | FlectClient
+  | InterfaceStorage
+  | SandboxedShell;
 export type FlectBrowserRuntime = ManagedRuntime.ManagedRuntime<
   FlectBrowserServices,
   FlectUnavailableError
