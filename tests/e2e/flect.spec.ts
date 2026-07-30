@@ -92,12 +92,26 @@ test("uses the protected composer controls in a real browser", async ({
   await prompt.fill("Test the protected composer");
   await expect(send).toBeEnabled();
   await send.click();
+  const response = page.getByText("Flect’s protected test runtime is ready.");
+  const stop = page.getByRole("button", { name: "Stop response" });
+  await expect
+    .poll(
+      async () => {
+        if (await response.isVisible()) {
+          return "completed";
+        }
+        if (await stop.isVisible()) {
+          return "streaming";
+        }
+        return "pending";
+      },
+      { message: "the protected composer should stream or complete" },
+    )
+    .not.toBe("pending");
   await expect(
-    page.getByRole("button", { name: "Stop response" }),
+    response,
   ).toBeVisible();
-  await expect(
-    page.getByText("Flect’s protected test runtime is ready."),
-  ).toBeVisible();
+  await expect(stop).toBeHidden();
 });
 
 test("previews, accepts, persists, and safely bypasses a shaped UI", async ({
