@@ -659,7 +659,7 @@ export const BunPreviewExecutionLive = Layer.effect(
               Effect.tryPromise({
                 try: () => stopPreviewRoute(ownerRunId, ownerPort),
                 catch: () => undefined,
-              }),
+              }).pipe(Effect.ignore),
             clearActive,
           });
 
