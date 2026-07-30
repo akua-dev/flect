@@ -79,7 +79,7 @@ export const FlectTestRuntimeLive = Layer.succeed(FlectRuntime)({
       TurnCompleted.make({ type: "turn_completed" }),
     ),
   shape: (_sessionId, _instruction, document) =>
-    Effect.succeed(shapedDocument(document)),
+    Effect.succeed(shapedDocument(document)).pipe(Effect.delay("100 millis")),
   cancel: () => Effect.void,
   diagnoseRecovery: () =>
     Effect.succeed(

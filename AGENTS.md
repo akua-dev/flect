@@ -82,8 +82,8 @@ Repository-wide constraints:
   closed typed reasons and cannot mutate revisions, perform rollback, grant
   capabilities, or replace deterministic recovery.
 - Key client session handles by model selection, close them on replacement,
-  refresh, failure, and unmount, and keep the server-side session registry
-  bounded with disposal on eviction.
+  refresh, fatal failure, and unmount, preserve them for typed busy conflicts,
+  and keep the server-side session registry bounded with disposal on eviction.
 - Pi tools are denied by default. Adding a tool or product capability requires
   an explicit, inspectable, revocable capability design.
 - Execute optional extension logic only through the reviewed QuickJS worker

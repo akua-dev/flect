@@ -112,12 +112,18 @@ export class TurnError extends Schema.Class<TurnError>("TurnError")({
   message: NonEmptyText,
 }) {}
 
+export class TurnBusy extends Schema.Class<TurnBusy>("TurnBusy")({
+  type: Schema.Literal("busy"),
+  message: Schema.Literal("The session is busy."),
+}) {}
+
 export const FlectEvent = Schema.Union([
   TurnStarted,
   TextDelta,
   TurnCompleted,
   TurnCancelled,
   TurnError,
+  TurnBusy,
 ]);
 export type FlectEvent = typeof FlectEvent.Type;
 

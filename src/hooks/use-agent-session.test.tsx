@@ -243,6 +243,31 @@ describe("useAgentSession", () => {
     await runtime.dispose();
   });
 
+  it("preserves the active session after a busy prompt conflict", async () => {
+    const { client, runtime } = createFakeRuntime({
+      prompt: () =>
+        Stream.fail(
+          new SessionBusy({
+            sessionId: "session-1",
+            message: "The session is busy.",
+          }),
+        ),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.submit("Keep the active shape");
+    });
+
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe("The session is busy.");
+    expect(client.closeSession).not.toHaveBeenCalled();
+    unmount();
+    await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
+    await runtime.dispose();
+  });
+
   it("replaces a session after Pi returns a redacted turn error", async () => {
     let sequence = 0;
     const { client, runtime } = createFakeRuntime({

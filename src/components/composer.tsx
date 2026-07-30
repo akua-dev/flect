@@ -12,6 +12,7 @@ import { ModelMenu } from "./model-menu";
 
 export interface ComposerProps {
   readonly placeholder: string;
+  readonly disabled?: boolean;
   readonly status: AgentSessionStatus;
   readonly models: ReadonlyArray<ModelSummary>;
   readonly selectedModel: ModelSummary | undefined;
@@ -23,6 +24,7 @@ export interface ComposerProps {
 
 export function Composer({
   placeholder,
+  disabled = false,
   status,
   models,
   selectedModel,
@@ -35,12 +37,14 @@ export function Composer({
   const composingRef = useRef(false);
   const isActive = status === "submitting" || status === "streaming";
   const isUnavailable =
+    disabled ||
     status === "booting" ||
     status === "unavailable" ||
     status === "setup-required";
   const canSubmit = prompt.trim().length > 0 && !isUnavailable;
-  const help =
-    status === "booting"
+  const help = disabled
+    ? "Wait for the current interface proposal."
+    : status === "booting"
       ? "Connecting to the local runtime."
       : status === "unavailable"
         ? "Start the local runtime before shaping."

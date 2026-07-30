@@ -192,6 +192,30 @@ describe("FlectClient", () => {
     );
   });
 
+  it.effect("decodes a non-destructive busy event from browser SSE", () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        chunkedSse([
+          'data: {"type":"busy","message":"The session is busy."}\n\n',
+        ]),
+      );
+
+    return withClient(
+      fetcher,
+      Effect.gen(function* () {
+        const client = yield* FlectClient;
+        const events = yield* client
+          .prompt("session-1", "Keep talking")
+          .pipe(Stream.runCollect);
+
+        expect(events).toEqual([
+          { type: "busy", message: "The session is busy." },
+        ]);
+      }),
+    );
+  });
+
   it.effect("requests and validates an interface proposal", () => {
     const shaped = InterfaceDocument.make({
       ...defaultInterfaceDocument,

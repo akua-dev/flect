@@ -5,6 +5,7 @@ import {
   ModelSelection,
   type ModelSummary,
   type RecoveryReason,
+  type SessionBusy,
   SessionSelection,
 } from "../../shared/contracts";
 import type { InterfaceDocument } from "../../shared/interface-document";
@@ -85,7 +86,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   const [error, setError] = useState<string>();
   const sessionRef = useRef<SessionHandle | undefined>(undefined);
   const requestRef = useRef<
-    Fiber.Fiber<void, FlectUnavailableError> | undefined
+    Fiber.Fiber<void, FlectUnavailableError | SessionBusy> | undefined
   >(undefined);
 
   const releaseSession = useCallback(
@@ -231,6 +232,10 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
             setStatus("error");
             setError(event.message);
             break;
+          case "busy":
+            setStatus("error");
+            setError(event.message);
+            break;
         }
       }),
     [],
@@ -265,7 +270,11 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
               ? update.pipe(Effect.andThen(releaseSession(sessionId)))
               : update;
           }),
-          Effect.tapError(() => releaseSession(sessionId)),
+          Effect.tapError((failure) =>
+            failure._tag === "SessionBusy"
+              ? Effect.void
+              : releaseSession(sessionId),
+          ),
         );
       }).pipe(
         Effect.catch((failure) =>

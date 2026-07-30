@@ -115,8 +115,10 @@ or the UI unmounts. Session handles are keyed by model selection, and the
 runtime evicts and disposes the oldest pair before exceeding 32 active pairs.
 Each protected session admits one active operation at a time: overlapping shape
 requests fail with a typed busy conflict, while prompt-stream conflicts become
-public turn errors. Closing or evicting a pair interrupts its active operation,
-waits for completion for up to two seconds, and then disposes both sessions.
+typed non-destructive busy events. The client preserves a busy session, and the
+shell disables its composer while a shaping proposal is running. Closing or
+evicting a pair interrupts its active operation, waits for completion for up to
+two seconds, and then disposes both sessions.
 Raw Shaper output is capped at 256 KiB and raw Guardian output at 16 KiB before
 either can cross the runtime boundary.
 

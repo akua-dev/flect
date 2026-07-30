@@ -169,6 +169,39 @@ describe("Flect HTTP application", () => {
     }),
   );
 
+  it.effect(
+    "streams a non-destructive busy event for a prompt conflict",
+    () => {
+      const runtime = {
+        ...createFakeRuntime(),
+        prompt: vi.fn(() =>
+          Stream.fail(
+            new SessionBusy({
+              sessionId: "session-1",
+              message: "The session is busy.",
+            }),
+          ),
+        ),
+      } satisfies FlectRuntimeShape;
+
+      return Effect.gen(function* () {
+        const app = yield* useApp(runtime);
+        const response = yield* send(
+          app,
+          request("/api/sessions/session-1/prompts", {
+            method: "POST",
+            body: JSON.stringify({ text: "Keep talking" }),
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(yield* readText(response)).toBe(
+          'data: {"type":"busy","message":"The session is busy."}\n\n',
+        );
+      });
+    },
+  );
+
   it.effect("cancels a session through the Effect service", () => {
     const runtime = createFakeRuntime();
     return Effect.gen(function* () {

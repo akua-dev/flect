@@ -722,10 +722,7 @@ export const FlectRuntimeLive = Layer.effect(
     const prompt = (
       sessionId: string,
       text: string,
-    ): Stream.Stream<
-      TurnStarted | TextDelta | TurnCompleted | TurnCancelled | TurnError,
-      FlectRuntimeError
-    > =>
+    ): Stream.Stream<FlectEvent, FlectRuntimeError> =>
       Stream.fromEffect(findSession(sessionId)).pipe(
         Stream.flatMap((record) =>
           Stream.callback<FlectEvent, FlectRuntimeError>((queue) =>

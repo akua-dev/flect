@@ -65,7 +65,7 @@ export interface FlectClientShape {
   readonly prompt: (
     sessionId: string,
     text: string,
-  ) => Stream.Stream<FlectEvent, FlectUnavailableError>;
+  ) => Stream.Stream<FlectEvent, FlectUnavailableError | SessionBusy>;
   readonly shape: (
     sessionId: string,
     instruction: string,

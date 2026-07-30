@@ -86,7 +86,8 @@ browser development HTTP server.
 - separate, in-memory, tool-free Guardian and Shaper Pi sessions, with
   model-keyed lifecycle cleanup and a bounded runtime registry;
 - streamed turns, cancellation, redacted public failures, and finalized-text
-  recovery when a provider emits no live text delta;
+  recovery when a provider emits no live text delta, with typed non-destructive
+  busy conflicts for overlapping work;
 - model-backed interface proposals using a strict recursive Effect Schema;
 - preview, keep, reject, a durable versioned revision journal, rollback,
   last-known-good state, corrupt-journal recovery, and a compiled `?safe=1`

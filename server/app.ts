@@ -18,6 +18,7 @@ import {
   SessionSelection,
   ShapeRequest,
   ShapeResponse,
+  TurnBusy,
   TurnError,
 } from "../shared/contracts";
 import { FlectRuntime, type FlectRuntimeShape } from "./runtime";
@@ -122,6 +123,14 @@ const promptRoute = HttpRouter.add(
     const fallback =
       'data: {"type":"error","message":"The local runtime could not complete this request."}\n\n';
     const events = runtime.prompt(path.value.sessionId, prompt.value.text).pipe(
+      Stream.catchTag("SessionBusy", () =>
+        Stream.succeed(
+          new TurnBusy({
+            type: "busy",
+            message: "The session is busy.",
+          }),
+        ),
+      ),
       Stream.catch(() =>
         Stream.succeed(
           new TurnError({

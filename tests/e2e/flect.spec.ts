@@ -59,10 +59,16 @@ test("previews, accepts, persists, and safely bypasses a shaped UI", async ({
     .getByLabel("Describe the interface change")
     .fill("Make the headline say Focused workspace");
   await page.getByRole("button", { name: "Propose change" }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Describe what to shape" }),
+  ).toBeDisabled();
 
   await expect(
     page.getByRole("heading", { name: "Focused workspace" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Describe what to shape" }),
+  ).toBeEnabled();
   await expect(page.getByText("Previewing a validated proposal")).toBeVisible();
   await page.getByRole("button", { name: "Keep change" }).click();
 

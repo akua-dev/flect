@@ -38,7 +38,9 @@ function controller(
   };
 }
 
-function shaping(): ShapingController {
+function shaping(
+  overrides: Partial<ShapingController> = {},
+): ShapingController {
   return {
     status: "idle",
     isolation: "ready",
@@ -47,6 +49,7 @@ function shaping(): ShapingController {
     accept: vi.fn(() => Promise.resolve()),
     reject: vi.fn(() => Promise.resolve()),
     rollback: vi.fn(() => Promise.resolve()),
+    ...overrides,
   };
 }
 
@@ -83,6 +86,22 @@ describe("Launcher", () => {
     expect(session.submit).toHaveBeenCalledWith(
       "Create a focused project overview",
     );
+  });
+
+  it("disables the composer while an interface proposal is running", () => {
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={controller()}
+        shaping={shaping({ status: "shaping" })}
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Describe what to shape" }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Shape" })).toBeDisabled();
   });
 
   it("selects an explicit Pi model", async () => {

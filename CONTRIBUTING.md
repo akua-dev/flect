@@ -73,7 +73,8 @@ local application requests fail the test.
 
 Unit and integration coverage additionally proves the protected fallback
 composer, typed Guardian diagnostic, session close across both transports,
-model/refresh lifecycle invalidation, and the 32-pair runtime bound.
+model/refresh lifecycle invalidation, non-destructive busy conflicts in both
+directions, and the 32-pair runtime bound.
 
 After authenticating Pi, verify the real Guardian/Shaper construction:
 

@@ -221,6 +221,7 @@ export function Launcher({
       )}
 
       <Composer
+        disabled={shaping.status === "shaping"}
         models={session.models}
         onCancel={session.cancel}
         onSecondaryAction={setNotice}

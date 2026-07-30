@@ -62,6 +62,22 @@ describe("runtime contracts", () => {
     }),
   );
 
+  it.effect(
+    "decodes a typed busy turn without treating it as a fatal error",
+    () =>
+      Effect.gen(function* () {
+        const event = yield* decodeFlectEvent({
+          type: "busy",
+          message: "The session is busy.",
+        });
+
+        expect(event).toEqual({
+          type: "busy",
+          message: "The session is busy.",
+        });
+      }),
+  );
+
   it.effect("trims prompts and requires visible text", () =>
     Effect.gen(function* () {
       yield* Effect.flip(decodePromptRequest({ text: "   " }));

@@ -23,7 +23,7 @@ const unavailable = () =>
     message: "The local Flect runtime is unavailable.",
   });
 
-const mapShapeError = <A, R>(
+const mapSessionError = <A, R>(
   effect: Effect.Effect<A, FlectRuntimeError | RpcClientError, R>,
 ) =>
   effect.pipe(
@@ -184,9 +184,15 @@ export const makeTauriFlectClientLayer = () =>
         createSession: (selection) => mapError(rpc.CreateSession(selection)),
         closeSession: (sessionId) => mapError(rpc.CloseSession({ sessionId })),
         prompt: (sessionId, text) =>
-          rpc.Prompt({ sessionId, text }).pipe(Stream.mapError(unavailable)),
+          rpc
+            .Prompt({ sessionId, text })
+            .pipe(
+              Stream.mapError((error) =>
+                error._tag === "SessionBusy" ? error : unavailable(),
+              ),
+            ),
         shape: (sessionId, instruction, document) =>
-          mapShapeError(rpc.Shape({ sessionId, instruction, document })),
+          mapSessionError(rpc.Shape({ sessionId, instruction, document })),
         cancel: (sessionId) =>
           mapError(rpc.Cancel({ sessionId })).pipe(Effect.asVoid),
         diagnoseRecovery: (sessionId, reason) =>
