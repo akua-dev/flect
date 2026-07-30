@@ -1,5 +1,14 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Layer, Ref } from "effect";
+import {
+  Cause,
+  Deferred,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  Ref,
+  Result,
+} from "effect";
 import { FlectClient, FlectUnavailableError } from "./api";
 import {
   makeTauriFlectClientLayer,
@@ -118,8 +127,12 @@ describe("Tauri RPC transport", () => {
         );
 
         assert.isTrue(Exit.isFailure(result));
-        if (Exit.isFailure(result) && result.cause._tag === "Fail") {
-          assert.instanceOf(result.cause.error, FlectUnavailableError);
+        if (Exit.isFailure(result)) {
+          const error = Cause.findError(result.cause);
+          assert.isTrue(Result.isSuccess(error));
+          if (Result.isSuccess(error)) {
+            assert.instanceOf(error.success, FlectUnavailableError);
+          }
         }
       }),
   );

@@ -119,7 +119,9 @@ const executeInModule = Effect.fn("Flect.Sandbox.executeInModule")(
         const context = runtime.newContext({
           intrinsics: {
             BaseObjects: true,
+            Eval: true,
             JSON: true,
+            Promise: true,
           },
         });
 
