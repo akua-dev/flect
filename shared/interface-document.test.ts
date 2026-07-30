@@ -34,10 +34,10 @@ const validDocument = {
         gap: "sm",
         children: [
           {
-            id: "open",
+            id: "shape",
             type: "button",
-            label: "Open",
-            action: "open",
+            label: "Shape interface",
+            action: "shape",
           },
           {
             id: "divider",
@@ -120,6 +120,35 @@ describe("interface document", () => {
     }),
   );
 
+  it.effect("rejects unsupported launcher actions", () =>
+    Effect.gen(function* () {
+      for (const action of ["open", "extensions", "connect"] as const) {
+        const error = yield* Effect.flip(
+          validateInterfaceDocument({
+            version: 2,
+            name: "Unsupported action",
+            root: {
+              id: "root",
+              type: "stack",
+              direction: "column",
+              gap: "md",
+              children: [
+                {
+                  id: "unsupported",
+                  type: "button",
+                  label: "Unsupported",
+                  action,
+                },
+              ],
+            },
+          }),
+        );
+
+        assert.strictEqual(error._tag, "InvalidInterfaceDocument");
+      }
+    }),
+  );
+
   it.effect("rejects duplicate node identifiers", () =>
     Effect.gen(function* () {
       const error = yield* Effect.flip(
@@ -193,7 +222,7 @@ describe("interface document", () => {
       }),
   );
 
-  it.effect("migrates the legacy launcher document once", () =>
+  it.effect("drops unsupported actions while migrating the legacy launcher", () =>
     Effect.gen(function* () {
       const document = yield* decodeInterfaceDocument(
         JSON.stringify({
@@ -207,6 +236,10 @@ describe("interface document", () => {
       assert.strictEqual(document.version, 2);
       assert.strictEqual(document.name, "Where should we begin?");
       assert.strictEqual(document.root.type, "stack");
+      if (document.root.type !== "stack") {
+        return assert.fail("expected the migrated root to be a stack");
+      }
+      assert.strictEqual(document.root.children.length, 2);
     }),
   );
 });

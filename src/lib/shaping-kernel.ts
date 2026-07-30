@@ -12,6 +12,7 @@ import {
   RevisionNotFound,
   ShapingEvent,
   ShapingSnapshot,
+  isRollbackAvailable,
 } from "../../shared/revisions";
 import {
   InterfaceRepository,
@@ -55,7 +56,14 @@ export interface ShapingKernelShape {
   readonly reject: (
     id: RevisionId,
   ) => Effect.Effect<InterfaceRevision, TransitionError>;
-  readonly rollback: Effect.Effect<InterfaceRevision, InterfaceStorageError>;
+  readonly rollback: Effect.Effect<
+    InterfaceRevision,
+    InvalidRevisionTransition | InterfaceStorageError
+  >;
+  readonly restoreLastKnownGood: Effect.Effect<
+    InterfaceRevision,
+    InvalidRevisionTransition | InterfaceStorageError
+  >;
   readonly enterSafeMode: Effect.Effect<void, InterfaceStorageError>;
   readonly recordExtensionFailure: (
     extensionId: string,
@@ -138,7 +146,7 @@ const makeShapingKernel = (
               ? ShapingEvent.make({
                   version: 1,
                   sequence: 1,
-                  type: "recovery-requested",
+                  type: "safe-mode-entered",
                   revisionId: initialRevision.id,
                 })
               : initialEvent,
@@ -153,20 +161,44 @@ const makeShapingKernel = (
             sequence: restored.lastEvent.sequence,
             lastEvent: restored.lastEvent,
           };
-    let idSequence = initialState.sequence;
+    const pendingProposal =
+      initialState.proposal?.status === "proposed"
+        ? initialState.proposal
+        : undefined;
+    const reconciledState =
+      pendingProposal === undefined
+        ? initialState
+        : {
+            ...initialState,
+            proposal: InterfaceRevision.make({
+              ...pendingProposal,
+              status: "previewed",
+            }),
+            sequence: initialState.sequence + 1,
+            lastEvent: ShapingEvent.make({
+              version: 1,
+              sequence: initialState.sequence + 1,
+              type: "revision-previewed",
+              revisionId: pendingProposal.id,
+            }),
+          };
+    let idSequence = reconciledState.sequence;
     const nextId =
       options.nextId ??
       (() => {
         idSequence += 1;
         return `revision-${idSequence}`;
       });
-    const stateRef = yield* SubscriptionRef.make<KernelState>(initialState);
+    const stateRef = yield* SubscriptionRef.make<KernelState>(reconciledState);
     const persist = Effect.fn("Flect.ShapingKernel.persist")(
       (state: KernelState) =>
         repository === undefined
           ? Effect.void
           : repository.save(snapshotFromState(state)),
     );
+    if (pendingProposal !== undefined) {
+      yield* persist(reconciledState);
+    }
 
     const eventFor = (
       state: KernelState,
@@ -344,8 +376,43 @@ const makeShapingKernel = (
       );
     });
 
+    const restoreLastKnownGood = Effect.fn(
+      "Flect.ShapingKernel.restoreLastKnownGood",
+    )(function* () {
+      return yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
+        if (!state.safeMode) {
+          return Effect.fail(invalidTransition(state.active.id));
+        }
+        const recovered = InterfaceRevision.make({
+          ...state.lastKnownGood,
+          source: "recovery",
+          status: "accepted",
+        });
+        const next: KernelState = {
+          ...state,
+          active: recovered,
+          lastKnownGood: recovered,
+          proposal: undefined,
+          safeMode: false,
+          failureCounts: new Map(),
+          sequence: state.sequence + 1,
+          lastEvent: eventFor(state, "revision-rolled-back", {
+            revisionId: recovered.id,
+          }),
+        };
+        const transition: readonly [InterfaceRevision, KernelState] = [
+          recovered,
+          next,
+        ];
+        return persist(next).pipe(Effect.as(transition));
+      });
+    });
+
     const rollback = Effect.fn("Flect.ShapingKernel.rollback")(function* () {
       return yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
+        if (!isRollbackAvailable(snapshotFromState(state))) {
+          return Effect.fail(invalidTransition(state.active.id));
+        }
         const recovered = InterfaceRevision.make({
           ...state.lastKnownGood,
           source: "recovery",
@@ -468,6 +535,7 @@ const makeShapingKernel = (
       accept,
       reject,
       rollback: rollback(),
+      restoreLastKnownGood: restoreLastKnownGood(),
       enterSafeMode: enterSafeMode(),
       recordExtensionFailure,
       recordExtensionSuccess,

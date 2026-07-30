@@ -329,6 +329,37 @@ describe("Flect HTTP application", () => {
     });
   });
 
+  it.effect("returns a conflict response for a busy Guardian session", () => {
+    const runtime = {
+      ...createFakeRuntime(),
+      diagnoseRecovery: vi.fn(() =>
+        Effect.fail(
+          new SessionBusy({
+            sessionId: "session-1",
+            message: "The session is busy.",
+          }),
+        ),
+      ),
+    } satisfies FlectRuntimeShape;
+
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/guardian", {
+          method: "POST",
+          body: JSON.stringify({ reason: "rollback-failed" }),
+        }),
+      );
+
+      expect(response.status).toBe(409);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        error: "The session is busy.",
+      });
+    });
+  });
+
   it.effect("rejects malformed JSON, blank prompts, and excess fields", () =>
     Effect.gen(function* () {
       const app = yield* useApp(createFakeRuntime());

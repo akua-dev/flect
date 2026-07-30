@@ -7,9 +7,6 @@ import type {
 } from "../../shared/interface-document";
 
 export type InterfaceAction =
-  | "open"
-  | "extensions"
-  | "connect"
   | "shape"
   | "safe-mode"
   | "accept-revision"

@@ -274,6 +274,31 @@ describe("FlectClient", () => {
     );
   });
 
+  it.effect("preserves a typed busy response for Guardian diagnostics", () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ version: 1, error: "The session is busy." }, 409),
+      );
+
+    return withClient(
+      fetcher,
+      Effect.gen(function* () {
+        const client = yield* FlectClient;
+        const error = yield* client
+          .diagnoseRecovery("session-1", "rollback-failed")
+          .pipe(Effect.flip);
+
+        expect(error).toEqual(
+          new SessionBusy({
+            sessionId: "session-1",
+            message: "The session is busy.",
+          }),
+        );
+      }),
+    );
+  });
+
   it.effect(
     "interrupts the browser fetch when the prompt fiber is cancelled",
     () => {

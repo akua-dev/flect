@@ -196,7 +196,7 @@ export const makeTauriFlectClientLayer = () =>
         cancel: (sessionId) =>
           mapError(rpc.Cancel({ sessionId })).pipe(Effect.asVoid),
         diagnoseRecovery: (sessionId, reason) =>
-          mapError(rpc.DiagnoseRecovery({ sessionId, reason })),
+          mapSessionError(rpc.DiagnoseRecovery({ sessionId, reason })),
       } satisfies FlectClientShape;
     }),
   ).pipe(Layer.provide(TauriProtocolLive));

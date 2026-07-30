@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ModelSummary } from "../../shared/contracts";
 import type {
   InterfaceDocument,
@@ -34,12 +34,10 @@ export interface LauncherProps {
   readonly session: LauncherController;
   readonly shaping: ShapingController;
   readonly onOpenSafeMode?: () => void;
+  readonly onRestoreSafeMode?: () => void;
 }
 
 const actionLabel: Record<InterfaceAction, string> = {
-  open: "Open",
-  extensions: "Extensions",
-  connect: "Connect",
   shape: "Shape interface",
   "safe-mode": "Safe mode",
   "accept-revision": "Accept revision",
@@ -137,12 +135,20 @@ export function Launcher({
   session,
   shaping,
   onOpenSafeMode = () => globalThis.location.assign("/?safe=1"),
+  onRestoreSafeMode = () => globalThis.location.assign("/"),
 }: LauncherProps) {
   const [notice, setNotice] = useState<string>();
   const [shaperOpen, setShaperOpen] = useState(false);
   const hasConversation = session.messages.length > 0;
   const documentPrompt = findPrompt(document.root);
   const promptNode = documentPrompt ?? defaultPrompt;
+
+  useEffect(() => {
+    if (shaping.status === "preview") {
+      setShaperOpen(true);
+      void shaping.verifyIsolation();
+    }
+  }, [shaping.status, shaping.verifyIsolation]);
 
   const openShaper = () => {
     setShaperOpen(true);
@@ -271,7 +277,16 @@ export function Launcher({
         </a>
         <div className="topbar__status">
           {safeMode ? (
-            <span className="safe-mode">Safe mode</span>
+            <div className="safe-mode-group">
+              <span className="safe-mode">Safe mode</span>
+              <button
+                className="safe-mode-recovery"
+                onClick={onRestoreSafeMode}
+                type="button"
+              >
+                Restore last-known-good
+              </button>
+            </div>
           ) : (
             <a className="safe-mode-link" href="/?safe=1">
               Safe mode

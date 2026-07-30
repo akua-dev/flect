@@ -135,6 +135,65 @@ describe("ShapingKernel", () => {
     );
   });
 
+  const pendingProposalSnapshot = ShapingSnapshot.make({
+    version: 1,
+    active: InterfaceRevision.make({
+      version: 1,
+      id: RevisionId.make("built-in"),
+      status: "accepted",
+      source: "built-in",
+      document: defaultInterfaceDocument,
+      createdAt: 0,
+    }),
+    lastKnownGood: InterfaceRevision.make({
+      version: 1,
+      id: RevisionId.make("built-in"),
+      status: "accepted",
+      source: "built-in",
+      document: defaultInterfaceDocument,
+      createdAt: 0,
+    }),
+    proposal: InterfaceRevision.make({
+      version: 1,
+      id: RevisionId.make("revision-1"),
+      parentId: RevisionId.make("built-in"),
+      status: "proposed",
+      source: "shaper",
+      document: customizedDocument("Pending workspace"),
+      createdAt: 1,
+    }),
+    safeMode: false,
+    disabledExtensions: [],
+    lastEvent: ShapingEvent.make({
+      version: 1,
+      sequence: 1,
+      type: "revision-proposed",
+      revisionId: RevisionId.make("revision-1"),
+    }),
+  });
+
+  it.layer(makePersistentHarness(JSON.stringify(pendingProposalSnapshot)))(
+    (it) => {
+      it.effect("reconciles a persisted proposal into a visible preview", () =>
+        Effect.gen(function* () {
+          const kernel = yield* ShapingKernel;
+          const snapshot = yield* kernel.snapshot;
+          const repository = yield* InterfaceRepository;
+          const persisted = yield* repository.load;
+
+          assert.strictEqual(snapshot.proposal?.status, "previewed");
+          assert.deepStrictEqual(
+            snapshot.active.document,
+            defaultInterfaceDocument,
+          );
+          assert.strictEqual(snapshot.lastEvent.type, "revision-previewed");
+          assert.strictEqual(snapshot.lastEvent.sequence, 2);
+          assert.deepStrictEqual(persisted.snapshot, snapshot);
+        }),
+      );
+    },
+  );
+
   const restoredDocument = customizedDocument("Restored workspace");
   const restoredSnapshot = ShapingSnapshot.make({
     version: 1,
@@ -212,6 +271,8 @@ describe("ShapingKernel", () => {
           );
           assert.strictEqual(snapshot.safeMode, true);
           assert.strictEqual(snapshot.proposal, undefined);
+          assert.strictEqual(snapshot.lastEvent.type, "safe-mode-entered");
+          assert.strictEqual(snapshot.lastEvent.revisionId, "built-in");
         }),
       );
     },
@@ -288,6 +349,36 @@ describe("ShapingKernel", () => {
   });
 
   it.layer(makeShapingKernelTestLayer())((it) => {
+    it.effect("rejects rollback while a proposal is undecided", () =>
+      Effect.gen(function* () {
+        const kernel = yield* ShapingKernel;
+        const first = yield* kernel.propose(
+          customizedDocument("First"),
+          "user",
+        );
+        yield* kernel.preview(first.id);
+        yield* kernel.accept(first.id);
+        const second = yield* kernel.propose(
+          customizedDocument("Second"),
+          "shaper",
+        );
+        yield* kernel.preview(second.id);
+
+        const error = yield* kernel.rollback.pipe(Effect.flip);
+        const snapshot = yield* kernel.snapshot;
+
+        assert.strictEqual(error._tag, "InvalidRevisionTransition");
+        assert.deepStrictEqual(
+          snapshot.active.document,
+          customizedDocument("First"),
+        );
+        assert.strictEqual(snapshot.proposal?.id, second.id);
+        assert.strictEqual(snapshot.proposal?.status, "previewed");
+      }),
+    );
+  });
+
+  it.layer(makeShapingKernelTestLayer())((it) => {
     it.effect("rolls back to the last-known-good interface", () =>
       Effect.gen(function* () {
         const kernel = yield* ShapingKernel;
@@ -317,6 +408,11 @@ describe("ShapingKernel", () => {
           defaultInterfaceDocument,
         );
         assert.deepStrictEqual(recovered.lastKnownGood.document, firstDocument);
+
+        yield* kernel.restoreLastKnownGood;
+        const restored = yield* kernel.snapshot;
+        assert.deepStrictEqual(restored.active.document, firstDocument);
+        assert.strictEqual(restored.safeMode, false);
       }),
     );
   });

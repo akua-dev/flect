@@ -123,6 +123,12 @@ textarea:focus-visible {
   gap: 10px;
 }
 
+.safe-mode-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .runtime-state,
 .safe-mode,
 .safe-mode-link {
@@ -168,6 +174,22 @@ textarea:focus-visible {
 .safe-mode-link:hover {
   background: var(--canvas);
   color: var(--ink);
+}
+
+.safe-mode-recovery {
+  min-height: 30px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0 8px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 520;
+}
+
+.safe-mode-recovery:hover {
+  background: var(--flect-rose);
 }
 
 .workspace {
@@ -1093,6 +1115,7 @@ textarea:focus-visible {
 
 @media (prefers-reduced-motion: reduce) {
   .safe-mode-link,
+  .safe-mode-recovery,
   .composer,
   .composer::after,
   .composer-control,

@@ -50,6 +50,14 @@ const shapeFailure = (sessionId: string) => (error: unknown) =>
       })
     : unavailable();
 
+const diagnoseFailure = (sessionId: string) => (error: unknown) =>
+  HttpClientError.isHttpClientError(error) && error.response?.status === 409
+    ? new SessionBusy({
+        sessionId,
+        message: "The session is busy.",
+      })
+    : unavailable();
+
 export interface FlectClientShape {
   readonly status: Effect.Effect<RuntimeStatus, FlectUnavailableError>;
   readonly models: Effect.Effect<
@@ -77,7 +85,7 @@ export interface FlectClientShape {
   readonly diagnoseRecovery: (
     sessionId: string,
     reason: RecoveryReason,
-  ) => Effect.Effect<GuardianDiagnostic, FlectUnavailableError>;
+  ) => Effect.Effect<GuardianDiagnostic, FlectUnavailableError | SessionBusy>;
 }
 
 export class FlectClient extends Context.Service<
@@ -221,7 +229,7 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
                 strictOptions,
               ),
             ),
-            Effect.mapError(unavailable),
+            Effect.mapError(diagnoseFailure(sessionId)),
           ),
       );
 

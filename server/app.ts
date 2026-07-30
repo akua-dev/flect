@@ -204,7 +204,12 @@ const guardianRoute = HttpRouter.add(
       recovery.value.reason,
     );
     return yield* guardianJson(diagnostic);
-  }).pipe(Effect.catch(() => runtimeFailure())),
+  }).pipe(
+    Effect.catchTag("SessionBusy", () =>
+      publicError("The session is busy.", 409),
+    ),
+    Effect.catch(() => runtimeFailure()),
+  ),
 );
 
 const shapeRoute = HttpRouter.add(

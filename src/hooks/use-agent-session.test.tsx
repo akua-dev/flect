@@ -40,12 +40,20 @@ function createFakeRuntime({
     ]),
   shape = (_sessionId, _instruction, document) => Effect.succeed(document),
   cancel = () => Effect.void,
+  diagnoseRecovery = () =>
+    Effect.succeed(
+      new GuardianDiagnostic({
+        version: 1,
+        message: "The protected launcher remains available.",
+      }),
+    ),
 }: {
   readonly createSession?: FlectClientShape["createSession"];
   readonly models?: ReadonlyArray<ModelSummary>;
   readonly prompt?: FlectClientShape["prompt"];
   readonly shape?: FlectClientShape["shape"];
   readonly cancel?: FlectClientShape["cancel"];
+  readonly diagnoseRecovery?: FlectClientShape["diagnoseRecovery"];
 } = {}) {
   const client: FlectClientShape = {
     status: Effect.succeed(new RuntimeStatus({ version: 1, status: "ready" })),
@@ -55,14 +63,7 @@ function createFakeRuntime({
     prompt: vi.fn(prompt),
     shape: vi.fn(shape),
     cancel: vi.fn(cancel),
-    diagnoseRecovery: vi.fn(() =>
-      Effect.succeed(
-        new GuardianDiagnostic({
-          version: 1,
-          message: "The protected launcher remains available.",
-        }),
-      ),
-    ),
+    diagnoseRecovery: vi.fn(diagnoseRecovery),
   };
   const storage: InterfaceStorageShape = {
     read: () => Effect.succeed(null),
@@ -445,6 +446,65 @@ describe("useAgentSession", () => {
       "session-1",
       "rollback-failed",
     );
+    unmount();
+    await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
+    await runtime.dispose();
+  });
+
+  it("releases the session after a fatal Guardian failure", async () => {
+    const { client, runtime } = createFakeRuntime({
+      diagnoseRecovery: () =>
+        Effect.fail(
+          new FlectUnavailableError({
+            message: "The local Flect runtime is unavailable.",
+          }),
+        ),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await expect(
+        result.current.diagnoseRecovery("rollback-failed"),
+      ).rejects.toEqual(
+        new FlectUnavailableError({
+          message: "The local Flect runtime is unavailable.",
+        }),
+      );
+    });
+
+    await waitFor(() =>
+      expect(client.closeSession).toHaveBeenCalledWith("session-1"),
+    );
+    unmount();
+    await runtime.dispose();
+  });
+
+  it("preserves the session after a busy Guardian conflict", async () => {
+    const { client, runtime } = createFakeRuntime({
+      diagnoseRecovery: () =>
+        Effect.fail(
+          new SessionBusy({
+            sessionId: "session-1",
+            message: "The session is busy.",
+          }),
+        ),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await expect(
+        result.current.diagnoseRecovery("rollback-failed"),
+      ).rejects.toEqual(
+        new SessionBusy({
+          sessionId: "session-1",
+          message: "The session is busy.",
+        }),
+      );
+    });
+
+    expect(client.closeSession).not.toHaveBeenCalled();
     unmount();
     await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
     await runtime.dispose();

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelSummary } from "../../shared/contracts";
@@ -420,6 +420,44 @@ describe("Launcher", () => {
     expect(
       screen.getByRole("heading", { name: "What should we shape?" }),
     ).toBeVisible();
+  });
+
+  it("opens the Shaper for a persisted preview and exposes its decisions", async () => {
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={controller()}
+        shaping={shaping({ status: "preview" })}
+      />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("complementary", { name: "Interface Shaper" }),
+      ).toBeVisible(),
+    );
+    expect(screen.getByRole("button", { name: "Keep change" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Reject" })).toBeVisible();
+  });
+
+  it("offers a protected restore action in safe mode", async () => {
+    const restore = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        onRestoreSafeMode={restore}
+        safeMode
+        session={controller()}
+        shaping={shaping()}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Restore last-known-good" }),
+    );
+    expect(restore).toHaveBeenCalledOnce();
   });
 
   it("keeps a protected composer when a shaped document omits its prompt", () => {

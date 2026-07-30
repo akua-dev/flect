@@ -40,9 +40,6 @@ export interface ButtonNode {
   readonly type: "button";
   readonly label: string;
   readonly action:
-    | "open"
-    | "extensions"
-    | "connect"
     | "shape"
     | "safe-mode"
     | "accept-revision"
@@ -97,9 +94,6 @@ export const ButtonNode: Schema.Codec<ButtonNode> = Schema.Struct({
   type: Schema.Literal("button"),
   label: DisplayText(80),
   action: Schema.Literals([
-    "open",
-    "extensions",
-    "connect",
     "shape",
     "safe-mode",
     "accept-revision",
@@ -169,20 +163,6 @@ const decodeLegacyDocument = Schema.decodeUnknownEffect(
   strictOptions,
 );
 
-const buttonForLegacyAction = (
-  action: "open" | "extensions" | "connect",
-): ButtonNode => ({
-  id: `action-${action}`,
-  type: "button",
-  label:
-    action === "open"
-      ? "Open"
-      : action === "extensions"
-        ? "Extensions"
-        : "Connect",
-  action,
-});
-
 const migrateLegacyDocument = Effect.fn(
   "Flect.InterfaceDocument.migrateLegacy",
 )(function* (input: unknown) {
@@ -206,13 +186,6 @@ const migrateLegacyDocument = Effect.fn(
           id: "prompt",
           type: "prompt",
           placeholder: legacy.placeholder,
-        },
-        {
-          id: "secondary-actions",
-          type: "stack",
-          direction: "row",
-          gap: "sm",
-          children: legacy.secondaryActions.map(buttonForLegacyAction),
         },
       ],
     },

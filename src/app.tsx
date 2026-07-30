@@ -85,6 +85,8 @@ export function App() {
         shapeRequestRef.current += 1;
         setShapingStatus("idle");
         setShapingError(undefined);
+      } else if (preview !== undefined) {
+        setShapingStatus("preview");
       }
     };
 
@@ -291,6 +293,39 @@ export function App() {
     }
   }, [session.diagnoseRecovery, session.status, shapingStatus]);
 
+  const restoreSafeMode = useCallback(async () => {
+    if (safeMode) {
+      globalThis.location.assign("/");
+      return;
+    }
+    if (!protectedMode || decisionInFlightRef.current) {
+      return;
+    }
+    shapeRequestRef.current += 1;
+    decisionInFlightRef.current = true;
+    setShapingStatus("shaping");
+    setShapingError(undefined);
+    try {
+      const recovered = await shapingRuntime.runPromise(
+        Effect.gen(function* () {
+          const kernel = yield* ShapingKernel;
+          return yield* kernel.restoreLastKnownGood;
+        }),
+      );
+      setDocument(recovered.document);
+      setProtectedMode(false);
+      setProposalId(undefined);
+      setShapingStatus("idle");
+    } catch {
+      setShapingStatus("error");
+      setShapingError(
+        "Flect could not restore the last-known-good interface from safe mode.",
+      );
+    } finally {
+      decisionInFlightRef.current = false;
+    }
+  }, [protectedMode]);
+
   const verifyIsolation = useCallback(async () => {
     if (isolation === "checking" || isolation === "ready") {
       return;
@@ -334,6 +369,7 @@ export function App() {
         reject: rejectShape,
         rollback: rollbackShape,
       }}
+      onRestoreSafeMode={restoreSafeMode}
     />
   );
 }
