@@ -205,38 +205,38 @@ export function Launcher({
 
       {(session.status === "error" || session.status === "cancelling") &&
         session.error && (
-        <div className="runtime-alert" role="alert">
-          <div>
-            <strong>
-              {session.status === "cancelling"
-                ? "Response is still stopping"
-                : "The turn stopped"}
-            </strong>
-            <p>{session.error}</p>
+          <div className="runtime-alert" role="alert">
+            <div>
+              <strong>
+                {session.status === "cancelling"
+                  ? "Response is still stopping"
+                  : "The turn stopped"}
+              </strong>
+              <p>{session.error}</p>
+            </div>
+            {session.status === "cancelling" ? (
+              <button
+                className="retry-button"
+                onClick={() => void session.cancel()}
+                type="button"
+              >
+                <RefreshIcon />
+                Try again
+              </button>
+            ) : (
+              session.lastPrompt && (
+                <button
+                  className="retry-button"
+                  onClick={() => void session.submit(session.lastPrompt)}
+                  type="button"
+                >
+                  <RefreshIcon />
+                  Retry
+                </button>
+              )
+            )}
           </div>
-          {session.status === "cancelling" ? (
-            <button
-              className="retry-button"
-              onClick={() => void session.cancel()}
-              type="button"
-            >
-              <RefreshIcon />
-              Try again
-            </button>
-          ) : (
-            session.lastPrompt && (
-            <button
-              className="retry-button"
-              onClick={() => void session.submit(session.lastPrompt)}
-              type="button"
-            >
-              <RefreshIcon />
-              Retry
-            </button>
-            )
-          )}
-        </div>
-      )}
+        )}
 
       <Composer
         disabled={shaping.status === "shaping"}

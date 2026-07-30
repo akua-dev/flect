@@ -53,8 +53,9 @@ rather than provider-specific logic in the UI.
 
 ### Customization and recovery
 
-The launcher is itself a Flect interface and will eventually be customizable.
-The MVP establishes the boundary needed for that future:
+The launcher is itself a Flect interface and is customizable through a
+schema-defined document in the delivered slice. The MVP establishes the
+boundary needed for that capability:
 
 - customizable interface state is represented by a versioned, validated
   document;
@@ -65,12 +66,14 @@ The MVP establishes the boundary needed for that future:
   interface state.
 
 The MVP does not execute arbitrary generated interface code. Typed interface
-documents are the first safe substrate; sandboxed code extensions can be
-designed separately.
+documents remain the UI substrate; optional pure extension logic runs only
+through the reviewed QuickJS worker described in the native-agent-shell plan.
 
 ## Architecture
 
-Flect starts as one TypeScript workspace with two process boundaries.
+The browser MVP starts as one TypeScript workspace with two process boundaries.
+The delivered macOS host adds a private Tauri-to-sidecar boundary described in
+the native-agent-shell plan.
 
 ### Browser shell
 
@@ -81,8 +84,8 @@ directly, or execute generated code. React enters application workflows
 through a single Effect `ManagedRuntime`; data access, decoding, streaming,
 resource lifetime, and typed failures remain Effect programs.
 
-The browser build is usable in a normal browser and is structured so the same
-assets can later be packaged as a desktop application.
+The browser build is usable in a normal browser, and the same assets are also
+packaged as the delivered macOS Tauri application.
 
 ### Local runtime
 
@@ -143,8 +146,8 @@ event fields and reject unsupported major versions.
 2. The runtime asks Pi's `ModelRuntime` for models with valid authentication.
 3. The user chooses a model or leaves selection on `Auto`.
 4. The browser creates a Flect session.
-5. The runtime creates an in-memory Pi agent session with a minimal Flect
-   system prompt and an explicit tool allowlist.
+5. The runtime creates a protected, in-memory Pi agent session with a minimal
+   Flect system prompt and no Pi tools.
 6. The browser submits a prompt and consumes the Effect `Stream` response.
 7. Pi events are mapped to the stable Flect event contract; Pi internals and
    credentials never cross the boundary.
@@ -165,7 +168,7 @@ No provider call is made until the user submits a prompt.
 - Cancellation stops the active Pi turn and returns the composer to a usable
   state.
 - Safe mode bypasses customized interface state and extensions while
-  preserving access to runtime diagnostics and model logout guidance.
+  preserving access to runtime diagnostics and model setup guidance.
 - The browser never silently falls back to sending credentials or prompts to
   a hosted Flect service.
 
@@ -175,8 +178,8 @@ No provider call is made until the user submits a prompt.
 - Runtime requests enforce the expected local origin.
 - Secrets stay in Pi's credential mechanisms and are excluded from API
   responses, persisted interface state, telemetry, screenshots, and tests.
-- Pi tools are denied by default. The initial conversational session has no
-  filesystem or shell tools.
+- All Pi tools are disabled for the initial conversational session; it has no
+  tool authority.
 - Future product capabilities must be explicit, inspectable, and revocable.
 - User-modifiable interface state cannot replace or intercept the protected
   recovery entry point.
@@ -220,8 +223,11 @@ The first milestone deliberately defers:
 - product API capability negotiation;
 - shared component publishing;
 - synced workspaces;
-- a native desktop wrapper;
 - embedded provider OAuth flows; and
 - autonomous interface repair.
+
+The native desktop wrapper originally listed here is now delivered by the
+native-agent-shell implementation plan and is documented as implemented in
+`ARCHITECTURE.md`.
 
 Each item depends on the protected core and typed contracts established here.

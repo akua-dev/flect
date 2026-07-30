@@ -23,9 +23,7 @@ export type AgentSessionStatus =
   | "unavailable";
 
 export const isAgentSessionActive = (status: AgentSessionStatus) =>
-  status === "submitting" ||
-  status === "streaming" ||
-  status === "cancelling";
+  status === "submitting" || status === "streaming" || status === "cancelling";
 
 export interface ConversationMessage {
   readonly id: string;

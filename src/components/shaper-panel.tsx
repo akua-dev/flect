@@ -1,7 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import {
-  isAgentSessionActive,
   type AgentSessionStatus,
+  isAgentSessionActive,
 } from "../hooks/use-agent-session";
 
 export interface ShapingController {

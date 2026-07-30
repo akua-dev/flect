@@ -1,8 +1,8 @@
 import { useRef, useState } from "react";
 import type { ModelSummary } from "../../shared/contracts";
 import {
-  isAgentSessionActive,
   type AgentSessionStatus,
+  isAgentSessionActive,
 } from "../hooks/use-agent-session";
 import {
   AddIcon,

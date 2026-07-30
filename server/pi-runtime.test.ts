@@ -200,27 +200,32 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
-  it.effect("releases a prompt operation before returning its terminal event", () => {
-    const fake = createFakePi({
-      promptResponse: JSON.stringify(defaultInterfaceDocument),
-    });
-    return Effect.gen(function* () {
-      const runtime = yield* FlectRuntime;
-      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+  it.effect(
+    "releases a prompt operation before returning its terminal event",
+    () => {
+      const fake = createFakePi({
+        promptResponse: JSON.stringify(defaultInterfaceDocument),
+      });
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const sessionId = yield* runtime.createSession(
+          new SessionSelection({}),
+        );
 
-      const events = yield* runtime
-        .prompt(sessionId, "Keep talking")
-        .pipe(Stream.runCollect);
-      expect(events.at(-1)).toEqual({ type: "turn_completed" });
+        const events = yield* runtime
+          .prompt(sessionId, "Keep talking")
+          .pipe(Stream.runCollect);
+        expect(events.at(-1)).toEqual({ type: "turn_completed" });
 
-      const shaped = yield* runtime.shape(
-        sessionId,
-        "Shape this",
-        defaultInterfaceDocument,
-      );
-      expect(shaped).toEqual(defaultInterfaceDocument);
-    }).pipe(Effect.provide(fake.layer));
-  });
+        const shaped = yield* runtime.shape(
+          sessionId,
+          "Shape this",
+          defaultInterfaceDocument,
+        );
+        expect(shaped).toEqual(defaultInterfaceDocument);
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 
   it.effect("validates a Shaper proposal before returning it", () => {
     const shaped = InterfaceDocument.make({
@@ -308,36 +313,41 @@ describe("FlectRuntimeLive", () => {
     },
   );
 
-  it.effect("waits for an interrupted prompt before acknowledging cancel", () => {
-    const promptStarted = Deferred.makeUnsafe<void>();
-    const promptGate = Deferred.makeUnsafe<void>();
-    const abortStarted = Deferred.makeUnsafe<void>();
-    const fake = createFakePi({
-      promptGate,
-      promptStarted,
-      abortStarted,
-    });
+  it.effect(
+    "waits for an interrupted prompt before acknowledging cancel",
+    () => {
+      const promptStarted = Deferred.makeUnsafe<void>();
+      const promptGate = Deferred.makeUnsafe<void>();
+      const abortStarted = Deferred.makeUnsafe<void>();
+      const fake = createFakePi({
+        promptGate,
+        promptStarted,
+        abortStarted,
+      });
 
-    return Effect.gen(function* () {
-      const runtime = yield* FlectRuntime;
-      const sessionId = yield* runtime.createSession(new SessionSelection({}));
-      const promptFiber = yield* runtime
-        .prompt(sessionId, "Keep talking")
-        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
-      yield* Deferred.await(promptStarted);
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const sessionId = yield* runtime.createSession(
+          new SessionSelection({}),
+        );
+        const promptFiber = yield* runtime
+          .prompt(sessionId, "Keep talking")
+          .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+        yield* Deferred.await(promptStarted);
 
-      const cancelFiber = yield* runtime
-        .cancel(sessionId)
-        .pipe(Effect.forkChild({ startImmediately: true }));
-      yield* Deferred.await(abortStarted);
-      yield* Effect.yieldNow;
-      expect(cancelFiber.pollUnsafe()).toBeUndefined();
+        const cancelFiber = yield* runtime
+          .cancel(sessionId)
+          .pipe(Effect.forkChild({ startImmediately: true }));
+        yield* Deferred.await(abortStarted);
+        yield* Effect.yieldNow;
+        expect(cancelFiber.pollUnsafe()).toBeUndefined();
 
-      yield* Deferred.succeed(promptGate, undefined);
-      yield* Fiber.join(promptFiber);
-      yield* Fiber.join(cancelFiber);
-    }).pipe(Effect.provide(fake.layer));
-  });
+        yield* Deferred.succeed(promptGate, undefined);
+        yield* Fiber.join(promptFiber);
+        yield* Fiber.join(cancelFiber);
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 
   it.effect(
     "rejects conflicts and waits before disposing an active session",
