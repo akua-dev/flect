@@ -63,7 +63,14 @@ describe("ShaperPanel", () => {
     );
 
     await user.click(
-      within(container).getByRole("button", { name: "Keep change" }),
+      within(container).getByRole("button", { name: "Reject" }),
+    );
+    rerender(
+      <ShaperPanel
+        agentStatus="ready"
+        controller={{ ...controller, status: "shaping" }}
+        onClose={() => undefined}
+      />,
     );
     rerender(
       <ShaperPanel

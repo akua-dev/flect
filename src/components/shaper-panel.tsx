@@ -27,6 +27,7 @@ export function ShaperPanel({
   const [instruction, setInstruction] = useState("");
   const instructionRef = useRef<HTMLTextAreaElement>(null);
   const previousStatus = useRef(controller.status);
+  const focusAfterPreview = useRef(false);
   const operationActive =
     controller.status === "shaping" || isAgentSessionActive(agentStatus);
 
@@ -35,10 +36,14 @@ export function ShaperPanel({
       previousStatus.current === "preview" &&
       controller.status !== "preview"
     ) {
-      instructionRef.current?.focus();
+      focusAfterPreview.current = true;
     }
     previousStatus.current = controller.status;
-  }, [controller.status]);
+    if (focusAfterPreview.current && !operationActive) {
+      instructionRef.current?.focus();
+      focusAfterPreview.current = false;
+    }
+  }, [controller.status, operationActive]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
