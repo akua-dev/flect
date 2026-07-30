@@ -3,6 +3,7 @@ import { Effect } from "effect";
 import { defaultInterfaceDocument } from "./interface-document";
 import {
   InterfaceRevision,
+  isRollbackAvailable,
   RevisionId,
   ShapingEvent,
   ShapingSnapshot,
@@ -176,4 +177,67 @@ describe("interface revisions", () => {
       );
     }),
   );
+
+  it("only offers rollback for an accepted customization without a pending proposal", () => {
+    const builtIn = InterfaceRevision.make({
+      version: 1,
+      id: RevisionId.make("built-in"),
+      status: "accepted",
+      source: "built-in",
+      document: defaultInterfaceDocument,
+      createdAt: 0,
+    });
+    const custom = InterfaceRevision.make({
+      version: 1,
+      id: RevisionId.make("revision-1"),
+      parentId: builtIn.id,
+      status: "accepted",
+      source: "shaper",
+      document: defaultInterfaceDocument,
+      createdAt: 1,
+    });
+    const proposed = InterfaceRevision.make({
+      version: 1,
+      id: RevisionId.make("revision-2"),
+      parentId: custom.id,
+      status: "proposed",
+      source: "shaper",
+      document: defaultInterfaceDocument,
+      createdAt: 2,
+    });
+    const snapshot = (
+      active: InterfaceRevision,
+      lastKnownGood: InterfaceRevision,
+      options?: {
+        readonly proposal?: InterfaceRevision;
+        readonly safeMode?: boolean;
+      },
+    ) =>
+      ShapingSnapshot.make({
+        version: 1,
+        active,
+        lastKnownGood,
+        ...(options?.proposal === undefined
+          ? {}
+          : { proposal: options.proposal }),
+        safeMode: options?.safeMode ?? false,
+        disabledExtensions: [],
+        lastEvent: ShapingEvent.make({
+          version: 1,
+          sequence: 1,
+          type: "revision-accepted",
+          revisionId: active.id,
+        }),
+      });
+
+    assert.isFalse(isRollbackAvailable(snapshot(builtIn, builtIn)));
+    assert.isTrue(isRollbackAvailable(snapshot(custom, builtIn)));
+    assert.isFalse(
+      isRollbackAvailable(snapshot(custom, builtIn, { proposal: proposed })),
+    );
+    assert.isFalse(
+      isRollbackAvailable(snapshot(builtIn, builtIn, { safeMode: true })),
+    );
+    assert.isFalse(isRollbackAvailable(snapshot(custom, custom)));
+  });
 });

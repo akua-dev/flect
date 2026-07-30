@@ -33,6 +33,7 @@ export interface LauncherProps {
   readonly safeMode: boolean;
   readonly session: LauncherController;
   readonly shaping: ShapingController;
+  readonly onOpenSafeMode?: () => void;
 }
 
 const actionLabel: Record<InterfaceAction, string> = {
@@ -135,6 +136,7 @@ export function Launcher({
   safeMode,
   session,
   shaping,
+  onOpenSafeMode = () => globalThis.location.assign("/?safe=1"),
 }: LauncherProps) {
   const [notice, setNotice] = useState<string>();
   const [shaperOpen, setShaperOpen] = useState(false);
@@ -142,14 +144,18 @@ export function Launcher({
   const documentPrompt = findPrompt(document.root);
   const promptNode = documentPrompt ?? defaultPrompt;
 
+  const openShaper = () => {
+    setShaperOpen(true);
+    void shaping.verifyIsolation();
+  };
+
   const handleInterfaceAction = (action: InterfaceAction) => {
     if (action === "safe-mode") {
-      globalThis.location.assign("/?safe=1");
+      onOpenSafeMode();
       return;
     }
     if (action === "shape") {
-      setShaperOpen(true);
-      void shaping.verifyIsolation();
+      openShaper();
       return;
     }
     if (action === "accept-revision") {
@@ -242,17 +248,16 @@ export function Launcher({
         disabled={shaping.status === "shaping"}
         models={session.models}
         onCancel={session.cancel}
-        onSecondaryAction={setNotice}
+        onOpenSafeMode={onOpenSafeMode}
+        onOpenShaper={openShaper}
+        onRollback={shaping.rollback}
         onSelectModel={session.selectModel}
         onSubmit={session.submit}
         placeholder={node.placeholder}
+        rollbackAvailable={shaping.rollbackAvailable === true}
         selectedModel={session.selectedModel}
         status={session.status}
       />
-
-      <div className="secondary-rail">
-        <span className="privacy-note">Local shell · models via Pi</span>
-      </div>
     </section>
   );
 

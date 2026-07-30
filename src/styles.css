@@ -359,12 +359,12 @@ textarea:focus-visible {
 .composer textarea {
   display: block;
   width: 100%;
-  min-height: 82px;
-  max-height: 220px;
+  min-height: 48px;
+  max-height: 168px;
   resize: none;
   border: 0;
   outline: 0;
-  padding: 18px 20px 8px;
+  padding: 15px 18px 5px;
   background: transparent;
   color: var(--ink);
   font-size: 16px;
@@ -385,11 +385,11 @@ textarea:focus-visible {
 
 .composer__rail {
   display: flex;
-  min-height: 58px;
+  min-height: 52px;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 7px 10px 10px;
+  padding: 3px 8px 7px;
 }
 
 .composer__tools,
@@ -408,17 +408,9 @@ textarea:focus-visible {
   gap: 5px;
 }
 
-.composer__divider {
-  width: 1px;
-  height: 20px;
-  margin: 0 5px;
-  background: var(--line);
-}
-
 .composer-control,
 .submit-button,
-.retry-button,
-.secondary-actions button {
+.retry-button {
   border: 0;
   cursor: pointer;
 }
@@ -590,8 +582,8 @@ textarea:focus-visible {
 
 .submit-button {
   display: inline-grid;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border-radius: 999px;
   background: var(--ink);
@@ -615,48 +607,8 @@ textarea:focus-visible {
 }
 
 .submit-button--stop {
-  background: var(--ink);
-  color: var(--void);
-}
-
-.secondary-rail {
-  display: flex;
-  min-height: 40px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 4px 0;
-}
-
-.secondary-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-}
-
-.secondary-actions button {
-  min-height: 30px;
-  border-radius: 8px;
-  padding: 0 9px;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 520;
-  transition:
-    color var(--state-motion),
-    background var(--state-motion);
-}
-
-.secondary-actions button:hover {
-  background: var(--canvas);
+  background: var(--danger);
   color: var(--ink);
-}
-
-.privacy-note {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
 }
 
 .notice {
@@ -1079,26 +1031,20 @@ textarea:focus-visible {
   }
 
   .composer textarea {
-    min-height: 88px;
-    padding: 16px 16px 8px;
+    min-height: 48px;
+    padding: 15px 16px 5px;
   }
 
   .composer__rail {
     padding: 7px 8px 8px;
   }
 
-  .composer__divider,
-  .privacy-note,
-  .composer__tools > .icon-button:nth-of-type(2) {
+  .model-menu__source {
     display: none;
   }
 
-  .model-menu select {
-    max-width: 150px;
-  }
-
-  .secondary-rail {
-    justify-content: center;
+  .model-menu__trigger {
+    max-width: 180px;
   }
 
   .runtime-alert {
@@ -1115,10 +1061,10 @@ textarea:focus-visible {
   .safe-mode-link,
   .composer,
   .composer::after,
-  .icon-button,
-  .model-menu,
+  .composer-control,
+  .composer-popover__item,
   .submit-button,
-  .secondary-actions button {
+  .model-menu {
     transition-duration: 0.01ms;
   }
 

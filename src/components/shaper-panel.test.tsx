@@ -9,6 +9,28 @@ import { ShaperPanel } from "./shaper-panel";
 afterEach(cleanup);
 
 describe("ShaperPanel", () => {
+  it("focuses the shaping instruction when opened", () => {
+    render(
+      <ShaperPanel
+        controller={{
+          status: "idle",
+          isolation: "ready",
+          verifyIsolation: () => Promise.resolve(),
+          request: () => Promise.resolve(),
+          accept: () => Promise.resolve(),
+          reject: () => Promise.resolve(),
+          rollback: () => Promise.resolve(),
+        }}
+        agentStatus="ready"
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("Describe the interface change"),
+    ).toHaveFocus();
+  });
+
   it("submits an instruction and exposes explicit preview decisions", async () => {
     const user = userEvent.setup();
     const request = vi.fn(() => Promise.resolve());

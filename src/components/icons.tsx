@@ -24,28 +24,6 @@ export function AddIcon(props: IconProps) {
   );
 }
 
-export function CapabilitiesIcon(props: IconProps) {
-  return (
-    <svg {...baseProps} {...props}>
-      <title>Capabilities</title>
-      <path
-        d="M8.25 4.75v3.5h-3.5m14.5 0h-3.5v-3.5m0 14.5v-3.5h3.5m-14.5 0h3.5v3.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.7"
-      />
-      <circle
-        cx="12"
-        cy="12"
-        r="2.25"
-        stroke="currentColor"
-        strokeWidth="1.7"
-      />
-    </svg>
-  );
-}
-
 export function ChevronIcon(props: IconProps) {
   return (
     <svg {...baseProps} height={14} viewBox="0 0 16 16" width={14} {...props}>
@@ -61,33 +39,10 @@ export function ChevronIcon(props: IconProps) {
   );
 }
 
-export function MicrophoneIcon(props: IconProps) {
-  return (
-    <svg {...baseProps} {...props}>
-      <title>Voice</title>
-      <rect
-        height="10"
-        rx="3"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        width="6"
-        x="9"
-        y="3"
-      />
-      <path
-        d="M6.5 10.75v.5a5.5 5.5 0 0 0 11 0v-.5M12 16.75V21m-3 0h6"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeWidth="1.7"
-      />
-    </svg>
-  );
-}
-
 export function ArrowUpIcon(props: IconProps) {
   return (
     <svg {...baseProps} {...props}>
-      <title>Shape</title>
+      <title>Send</title>
       <path
         d="m6.5 10.5 5.5-5.5 5.5 5.5M12 5v14"
         stroke="currentColor"

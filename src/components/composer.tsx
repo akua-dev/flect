@@ -1,17 +1,15 @@
-import { useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { ModelSummary } from "../../shared/contracts";
 import {
   type AgentSessionStatus,
   isAgentSessionActive,
 } from "../hooks/use-agent-session";
-import {
-  AddIcon,
-  ArrowUpIcon,
-  CapabilitiesIcon,
-  MicrophoneIcon,
-  StopIcon,
-} from "./icons";
+import { ComposerActionsMenu } from "./composer-actions-menu";
+import { ArrowUpIcon, StopIcon } from "./icons";
 import { ModelMenu } from "./model-menu";
+
+const MAX_COMPOSER_HEIGHT = 168;
+const MIN_COMPOSER_HEIGHT = 48;
 
 export interface ComposerProps {
   readonly placeholder: string;
@@ -19,10 +17,13 @@ export interface ComposerProps {
   readonly status: AgentSessionStatus;
   readonly models: ReadonlyArray<ModelSummary>;
   readonly selectedModel: ModelSummary | undefined;
+  readonly rollbackAvailable: boolean;
   readonly onSelectModel: (model: ModelSummary | undefined) => void;
   readonly onSubmit: (prompt: string) => Promise<void>;
   readonly onCancel: () => Promise<void>;
-  readonly onSecondaryAction: (message: string) => void;
+  readonly onOpenShaper: () => void;
+  readonly onRollback: () => Promise<void>;
+  readonly onOpenSafeMode: () => void;
 }
 
 export function Composer({
@@ -31,33 +32,56 @@ export function Composer({
   status,
   models,
   selectedModel,
+  rollbackAvailable,
   onSelectModel,
   onSubmit,
   onCancel,
-  onSecondaryAction,
+  onOpenShaper,
+  onRollback,
+  onOpenSafeMode,
 }: ComposerProps) {
   const [prompt, setPrompt] = useState("");
   const composingRef = useRef(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const helpId = useId();
   const isActive = isAgentSessionActive(status);
   const isUnavailable =
     disabled ||
     status === "booting" ||
     status === "unavailable" ||
     status === "setup-required";
-  const canSubmit = prompt.trim().length > 0 && !isUnavailable;
+  const canSubmit = prompt.trim().length > 0 && !isUnavailable && !isActive;
   const help = disabled
     ? "Wait for the current interface proposal."
     : status === "booting"
       ? "Connecting to the local runtime."
       : status === "unavailable"
-        ? "Start the local runtime before shaping."
+        ? "Start the local runtime before sending."
         : status === "setup-required"
-          ? "Sign in to a Pi provider before shaping."
+          ? "Sign in to a Pi provider before sending."
           : status === "cancelling"
             ? "Stopping the current response."
-            : prompt.trim().length === 0
-              ? "Enter a prompt to enable Shape."
-              : "Press Enter to shape. Press Shift Enter for a new line.";
+            : status === "submitting" || status === "streaming"
+              ? "Stop the current response before sending another message."
+              : prompt.trim().length === 0
+                ? "Enter a message to enable Send."
+                : "Press Enter to send. Press Shift Enter for a new line.";
+
+  useLayoutEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea === null) {
+      return;
+    }
+
+    textarea.style.height = "0px";
+    const measuredHeight = Math.max(textarea.scrollHeight, MIN_COMPOSER_HEIGHT);
+    textarea.style.height = `${Math.min(
+      measuredHeight,
+      MAX_COMPOSER_HEIGHT,
+    )}px`;
+    textarea.style.overflowY =
+      textarea.scrollHeight > MAX_COMPOSER_HEIGHT ? "auto" : "hidden";
+  });
 
   const submit = async () => {
     const nextPrompt = prompt.trim();
@@ -65,8 +89,9 @@ export function Composer({
       return;
     }
 
+    const operation = onSubmit(nextPrompt);
     setPrompt("");
-    await onSubmit(nextPrompt);
+    await operation;
   };
 
   return (
@@ -79,9 +104,10 @@ export function Composer({
       }}
     >
       <textarea
-        aria-describedby="composer-help"
-        aria-label="Describe what to shape"
+        aria-describedby={helpId}
+        aria-label="Message Flect"
         disabled={isUnavailable}
+        name="prompt"
         onChange={(event) => setPrompt(event.target.value)}
         onCompositionEnd={() => {
           composingRef.current = false;
@@ -99,37 +125,22 @@ export function Composer({
             void submit();
           }
         }}
-        name="prompt"
         placeholder={placeholder}
-        rows={3}
+        ref={textareaRef}
+        rows={1}
         value={prompt}
       />
 
       <div className="composer__rail">
         <div className="composer__tools">
-          <button
-            aria-label="Add context"
-            className="icon-button"
-            onClick={() =>
-              onSecondaryAction("Context sources are coming next.")
-            }
-            type="button"
-          >
-            <AddIcon />
-          </button>
-          <button
-            aria-label="Capabilities"
-            className="icon-button"
-            onClick={() =>
-              onSecondaryAction(
-                "Capabilities will stay explicit and revocable.",
-              )
-            }
-            type="button"
-          >
-            <CapabilitiesIcon />
-          </button>
-          <span className="composer__divider" />
+          <ComposerActionsMenu
+            disabled={isUnavailable || isActive}
+            onOpenSafeMode={onOpenSafeMode}
+            onOpenShaper={onOpenShaper}
+            onRollback={onRollback}
+            rollbackAvailable={rollbackAvailable}
+            rollbackDisabled={isUnavailable || isActive}
+          />
           <ModelMenu
             disabled={isUnavailable || isActive}
             models={models}
@@ -139,20 +150,12 @@ export function Composer({
         </div>
 
         <div className="composer__actions">
-          <button
-            aria-label="Voice input"
-            className="icon-button"
-            onClick={() =>
-              onSecondaryAction("Voice input is not available yet.")
-            }
-            type="button"
-          >
-            <MicrophoneIcon />
-          </button>
           {isActive ? (
             <button
+              aria-describedby={helpId}
               aria-label="Stop response"
               className="submit-button submit-button--stop"
+              disabled={status === "cancelling"}
               onClick={() => void onCancel()}
               type="button"
             >
@@ -160,8 +163,8 @@ export function Composer({
             </button>
           ) : (
             <button
-              aria-describedby="composer-help"
-              aria-label="Shape"
+              aria-describedby={helpId}
+              aria-label="Send message"
               className="submit-button"
               disabled={!canSubmit}
               type="submit"
@@ -171,7 +174,7 @@ export function Composer({
           )}
         </div>
       </div>
-      <span className="sr-only" id="composer-help">
+      <span className="sr-only" id={helpId}>
         {help}
       </span>
     </form>

@@ -67,6 +67,11 @@ export class ShapingSnapshot extends Schema.Class<ShapingSnapshot>(
   lastEvent: ShapingEvent,
 }) {}
 
+export const isRollbackAvailable = (snapshot: ShapingSnapshot) =>
+  !snapshot.safeMode &&
+  snapshot.proposal === undefined &&
+  snapshot.active.id !== snapshot.lastKnownGood.id;
+
 export class InvalidRevision extends Schema.TaggedErrorClass<InvalidRevision>()(
   "InvalidRevision",
   {

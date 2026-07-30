@@ -34,6 +34,10 @@ export function ShaperPanel({
   const requestBlocked = operationActive || controller.status === "preview";
 
   useEffect(() => {
+    instructionRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
     if (
       previousStatus.current === "preview" &&
       controller.status !== "preview"

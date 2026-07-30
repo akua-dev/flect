@@ -5,7 +5,11 @@ import {
   defaultInterfaceDocument,
   type InterfaceDocument,
 } from "../shared/interface-document";
-import type { RevisionId, ShapingSnapshot } from "../shared/revisions";
+import {
+  isRollbackAvailable,
+  type RevisionId,
+  type ShapingSnapshot,
+} from "../shared/revisions";
 import { Launcher } from "./components/launcher";
 import type { ShapingController } from "./components/shaper-panel";
 import {
@@ -54,6 +58,7 @@ export function App() {
     useState<ShapingController["status"]>("idle");
   const [shapingError, setShapingError] = useState<string>();
   const [proposalId, setProposalId] = useState<RevisionId>();
+  const [rollbackAvailable, setRollbackAvailable] = useState(false);
   const [isolation, setIsolation] =
     useState<ShapingController["isolation"]>("unchecked");
 
@@ -75,6 +80,7 @@ export function App() {
       );
       setProtectedMode(snapshot.safeMode);
       setProposalId(preview?.id);
+      setRollbackAvailable(!safeMode && isRollbackAvailable(snapshot));
       if (snapshot.safeMode) {
         shapeRequestRef.current += 1;
         setShapingStatus("idle");
@@ -117,6 +123,7 @@ export function App() {
             setDocument(defaultInterfaceDocument);
             setProtectedMode(true);
             setProposalId(undefined);
+            setRollbackAvailable(false);
           }
         }),
       ),
@@ -317,7 +324,7 @@ export function App() {
       shaping={{
         status: shapingStatus,
         ...(shapingError === undefined ? {} : { error: shapingError }),
-        rollbackAvailable: !safeMode,
+        rollbackAvailable,
         isolation,
         verifyIsolation,
         request: requestShape,

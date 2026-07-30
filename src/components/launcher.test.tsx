@@ -70,15 +70,15 @@ describe("Launcher", () => {
       screen.getByRole("heading", { name: "What should we shape?" }),
     ).toBeVisible();
     const prompt = screen.getByRole("textbox", {
-      name: "Describe what to shape",
+      name: "Message Flect",
     });
     expect(prompt).toHaveAttribute(
       "placeholder",
       "Build, change, or connect anything",
     );
     expect(
-      screen.getByRole("button", { name: "Shape" }),
-    ).toHaveAccessibleDescription("Enter a prompt to enable Shape.");
+      screen.getByRole("button", { name: "Send message" }),
+    ).toHaveAccessibleDescription("Enter a message to enable Send.");
 
     await user.type(prompt, "Create a focused project overview");
     await user.keyboard("{Enter}");
@@ -99,9 +99,9 @@ describe("Launcher", () => {
     );
 
     expect(
-      screen.getByRole("textbox", { name: "Describe what to shape" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Shape" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
   });
 
   it("selects an explicit Pi model", async () => {
@@ -142,6 +142,66 @@ describe("Launcher", () => {
 
     await user.click(screen.getByRole("button", { name: "Stop response" }));
     expect(session.cancel).toHaveBeenCalledOnce();
+  });
+
+  it("opens the protected Interface Shaper from the composer actions", async () => {
+    const user = userEvent.setup();
+    const shapingController = shaping();
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={controller()}
+        shaping={shapingController}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Shape interface" }));
+
+    expect(
+      screen.getByRole("complementary", { name: "Interface Shaper" }),
+    ).toBeVisible();
+    expect(shapingController.verifyIsolation).toHaveBeenCalledOnce();
+  });
+
+  it("rolls back through the protected composer actions", async () => {
+    const user = userEvent.setup();
+    const rollback = vi.fn(() => Promise.resolve());
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={controller()}
+        shaping={shaping({ rollback, rollbackAvailable: true })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Roll back last change" }),
+    );
+
+    expect(rollback).toHaveBeenCalledOnce();
+  });
+
+  it("opens the compiled safe launcher through the composer actions", async () => {
+    const user = userEvent.setup();
+    const onOpenSafeMode = vi.fn();
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        onOpenSafeMode={onOpenSafeMode}
+        safeMode={false}
+        session={controller()}
+        shaping={shaping()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Open safe mode" }));
+
+    expect(onOpenSafeMode).toHaveBeenCalledOnce();
   });
 
   it("prevents opening a shaping operation while a prompt is streaming", async () => {
@@ -313,7 +373,7 @@ describe("Launcher", () => {
       screen.getByText("Sign in to a Pi provider, then try again."),
     ).toBeVisible();
     expect(
-      screen.getByRole("textbox", { name: "Describe what to shape" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Check again" }));
     expect(session.refresh).toHaveBeenCalledOnce();
@@ -392,7 +452,7 @@ describe("Launcher", () => {
     );
 
     expect(
-      screen.getByRole("textbox", { name: "Describe what to shape" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toHaveAttribute("placeholder", "Build, change, or connect anything");
   });
 });
