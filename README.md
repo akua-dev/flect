@@ -135,7 +135,8 @@ turn with the developer’s existing Pi provider login.
 
 Release maintainers can reproduce the screenshots, demo, hero, DMG, checksum,
 and MP4 with `bun run media:release` and `bun run release:package`. The media
-pipeline additionally needs FFmpeg and `img2webp`.
+pipeline additionally needs FFmpeg and the WebP tools `cwebp`, `dwebp`, and
+`img2webp`.
 
 ## License
 

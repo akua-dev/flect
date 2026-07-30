@@ -335,4 +335,7 @@ test("supports keyboard submission and reduced motion", async ({ page }) => {
   await expect(
     page.getByText("Flect’s protected test runtime is ready."),
   ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Send message" }),
+  ).toBeVisible();
 });

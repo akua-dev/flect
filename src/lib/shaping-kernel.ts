@@ -8,11 +8,11 @@ import {
 import {
   InterfaceRevision,
   InvalidRevisionTransition,
+  isRollbackAvailable,
   RevisionId,
   RevisionNotFound,
   ShapingEvent,
   ShapingSnapshot,
-  isRollbackAvailable,
 } from "../../shared/revisions";
 import {
   InterfaceRepository,

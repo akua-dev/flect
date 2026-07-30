@@ -406,16 +406,18 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         Effect.gen(function* () {
           const client = yield* FlectClient;
           const sessionId = yield* ensureSession();
-          return yield* client.diagnoseRecovery(sessionId, reason).pipe(
-            Effect.tapError((failure) =>
-              failure._tag === "SessionBusy"
-                ? Effect.void
-                : releaseSession(sessionId),
-            ),
-          );
+          return yield* client
+            .diagnoseRecovery(sessionId, reason)
+            .pipe(
+              Effect.tapError((failure) =>
+                failure._tag === "SessionBusy"
+                  ? Effect.void
+                  : releaseSession(sessionId),
+              ),
+            );
         }),
       ),
-    [ensureSession, runtime],
+    [ensureSession, releaseSession, runtime],
   );
 
   return {
