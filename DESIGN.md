@@ -221,6 +221,11 @@ Its input, model source, attachment entry, voice entry, and submit/cancel state
 share one visual grammar. The prompt itself is customizable; safe mode always
 restores the compiled default.
 
+The open Interface Shaper is a protected utility panel, not a card or prompt
+surface. It may use a 20px corner and a 28px backdrop blur while open so its
+protected controls remain distinct from the workspace. This is a transient
+functional separation, not a general glass treatment or a new surface token.
+
 ## 6. Do's and Don'ts
 
 ### Do:
@@ -237,8 +242,10 @@ restores the compiled default.
 - **Don't** turn Flect into a fixed widget dashboard.
 - **Don't** present the agent as a chatbot bolted onto a static application.
 - **Don't** use terminal cosplay, neon gradients, decorative glass panels, or
-  loud generative-AI activity chrome.
-- **Don't** use radii above 16px on cards, sections, or prompt surfaces.
+  loud generative-AI activity chrome. The transient protected Shaper utility
+  panel is the intentional functional exception to the glass rule.
+- **Don't** use radii above 16px on cards, sections, or prompt surfaces. The
+  open Shaper utility panel is the intentional 20px utility-panel exception.
 - **Don't** use controls whose novelty makes ordinary actions harder to
   recognize.
 - **Don't** pair a decorative 1px border with a broad soft shadow.
