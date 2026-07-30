@@ -514,15 +514,17 @@ export const FlectRuntimeLive = Layer.effect(
     const disposeSessionRecord = Effect.fn(
       "Flect.Runtime.disposeSessionRecord",
     )((record: SessionRecord) =>
-      Effect.all(
-        [record.sessionOperation.close, record.guardianOperation.close],
-        { concurrency: "unbounded", discard: true },
-      ).pipe(
-        Effect.andThen(
-          Effect.all([record.session.dispose, record.guardian.dispose], {
-            concurrency: "unbounded",
-            discard: true,
-          }),
+      Effect.uninterruptible(
+        Effect.all(
+          [record.sessionOperation.close, record.guardianOperation.close],
+          { concurrency: "unbounded", discard: true },
+        ).pipe(
+          Effect.andThen(
+            Effect.all([record.session.dispose, record.guardian.dispose], {
+              concurrency: "unbounded",
+              discard: true,
+            }),
+          ),
         ),
       ),
     );
@@ -594,54 +596,67 @@ export const FlectRuntimeLive = Layer.effect(
         guardianOperation,
         sequence,
       };
-      const evicted = yield* Ref.modify(sessions, (current) => {
-        const replaced = HashMap.get(current, pair.shaper.sessionId);
-        let oldest: SessionRecord | undefined;
-        if (
-          Option.isNone(replaced) &&
-          HashMap.size(current) >= MAX_ACTIVE_SESSIONS
-        ) {
-          for (const candidate of HashMap.values(current)) {
-            if (oldest === undefined || candidate.sequence < oldest.sequence) {
-              oldest = candidate;
+      yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const evicted = yield* Ref.modify(sessions, (current) => {
+            const replaced = HashMap.get(current, pair.shaper.sessionId);
+            let oldest: SessionRecord | undefined;
+            if (
+              Option.isNone(replaced) &&
+              HashMap.size(current) >= MAX_ACTIVE_SESSIONS
+            ) {
+              for (const candidate of HashMap.values(current)) {
+                if (
+                  oldest === undefined ||
+                  candidate.sequence < oldest.sequence
+                ) {
+                  oldest = candidate;
+                }
+              }
             }
+            const evictedRecord = Option.getOrUndefined(replaced) ?? oldest;
+            const withoutEvicted =
+              evictedRecord === undefined
+                ? current
+                : HashMap.remove(current, evictedRecord.session.sessionId);
+            return [
+              evictedRecord,
+              HashMap.set(withoutEvicted, pair.shaper.sessionId, record),
+            ];
+          });
+          if (evicted !== undefined) {
+            yield* disposeSessionRecord(evicted);
           }
-        }
-        const evictedRecord = Option.getOrUndefined(replaced) ?? oldest;
-        const withoutEvicted =
-          evictedRecord === undefined
-            ? current
-            : HashMap.remove(current, evictedRecord.session.sessionId);
-        return [
-          evictedRecord,
-          HashMap.set(withoutEvicted, pair.shaper.sessionId, record),
-        ];
-      });
-      if (evicted !== undefined) {
-        yield* disposeSessionRecord(evicted);
-      }
+        }),
+      );
       return pair.shaper.sessionId;
     });
 
     const closeSession = Effect.fn("Flect.Runtime.closeSession")(function* (
       sessionId: string,
     ) {
-      const removed = yield* Ref.modify(sessions, (current) => {
-        const record = HashMap.get(current, sessionId);
-        return [
-          record,
-          Option.isNone(record) ? current : HashMap.remove(current, sessionId),
-        ];
-      });
-      if (Option.isNone(removed)) {
-        return yield* Effect.fail(
-          new SessionNotFound({
-            sessionId,
-            message: "Session not found.",
-          }),
-        );
-      }
-      yield* disposeSessionRecord(removed.value);
+      yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const removed = yield* Ref.modify(sessions, (current) => {
+            const record = HashMap.get(current, sessionId);
+            return [
+              record,
+              Option.isNone(record)
+                ? current
+                : HashMap.remove(current, sessionId),
+            ];
+          });
+          if (Option.isNone(removed)) {
+            return yield* Effect.fail(
+              new SessionNotFound({
+                sessionId,
+                message: "Session not found.",
+              }),
+            );
+          }
+          yield* disposeSessionRecord(removed.value);
+        }),
+      );
     });
 
     const diagnoseRecovery = Effect.fn("Flect.Runtime.diagnoseRecovery")(

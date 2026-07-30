@@ -303,12 +303,10 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         Effect.gen(function* () {
           const client = yield* FlectClient;
           const sessionId = yield* ensureSession();
-          return yield* client
-            .shape(sessionId, instruction, document)
-            .pipe(Effect.tapError(() => releaseSession(sessionId)));
+          return yield* client.shape(sessionId, instruction, document);
         }),
       ),
-    [ensureSession, releaseSession, runtime],
+    [ensureSession, runtime],
   );
 
   const cancel = useCallback((): Promise<void> => {

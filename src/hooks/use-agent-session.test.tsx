@@ -37,10 +37,12 @@ function createFakeRuntime({
       { type: "text_delta" as const, delta: "A shaped response" },
       { type: "turn_completed" as const },
     ]),
+  shape = (_sessionId, _instruction, document) => Effect.succeed(document),
 }: {
   readonly createSession?: FlectClientShape["createSession"];
   readonly models?: ReadonlyArray<ModelSummary>;
   readonly prompt?: FlectClientShape["prompt"];
+  readonly shape?: FlectClientShape["shape"];
 } = {}) {
   const client: FlectClientShape = {
     status: Effect.succeed(new RuntimeStatus({ version: 1, status: "ready" })),
@@ -48,9 +50,7 @@ function createFakeRuntime({
     createSession: vi.fn(createSession),
     closeSession: vi.fn(() => Effect.void),
     prompt: vi.fn(prompt),
-    shape: vi.fn((_sessionId, _instruction, document) =>
-      Effect.succeed(document),
-    ),
+    shape: vi.fn(shape),
     cancel: vi.fn(() => Effect.void),
     diagnoseRecovery: vi.fn(() =>
       Effect.succeed(
@@ -155,6 +155,34 @@ describe("useAgentSession", () => {
       "Make it focused",
       defaultInterfaceDocument,
     );
+    unmount();
+    await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
+    await runtime.dispose();
+  });
+
+  it("preserves the session after a Shaper failure", async () => {
+    const { client, runtime } = createFakeRuntime({
+      shape: () =>
+        Effect.fail(
+          new FlectUnavailableError({
+            message: "The local Flect runtime is unavailable.",
+          }),
+        ),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await expect(
+        result.current.shape("Make it focused", defaultInterfaceDocument),
+      ).rejects.toEqual(
+        new FlectUnavailableError({
+          message: "The local Flect runtime is unavailable.",
+        }),
+      );
+    });
+
+    expect(client.closeSession).not.toHaveBeenCalled();
     unmount();
     await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
     await runtime.dispose();

@@ -26,6 +26,7 @@ type FakeOptions = {
   readonly guardianResponse?: string;
   readonly promptGate?: Deferred.Deferred<void>;
   readonly promptStarted?: Deferred.Deferred<void>;
+  readonly abortStarted?: Deferred.Deferred<void>;
 };
 
 function createFakePi(options: FakeOptions = {}) {
@@ -33,7 +34,11 @@ function createFakePi(options: FakeOptions = {}) {
   let guardianListener: ((delta: string) => void) | undefined;
   const unsubscribe = vi.fn();
   const guardianUnsubscribe = vi.fn();
-  const abort = vi.fn(() => Effect.void);
+  const abort = vi.fn(() =>
+    options.abortStarted === undefined
+      ? Effect.void
+      : Deferred.succeed(options.abortStarted, undefined).pipe(Effect.asVoid),
+  );
   const guardianAbort = vi.fn(() => Effect.void);
   const dispose = vi.fn(() => undefined);
   const guardianDispose = vi.fn(() => undefined);
@@ -311,6 +316,43 @@ describe("FlectRuntimeLive", () => {
       yield* Deferred.succeed(promptGate, undefined);
       yield* Fiber.join(shapeFiber);
       yield* Fiber.join(closeFiber);
+      expect(fake.dispose).toHaveBeenCalledOnce();
+      expect(fake.guardianDispose).toHaveBeenCalledOnce();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("completes disposal when the close fiber is interrupted", () => {
+    const promptStarted = Deferred.makeUnsafe<void>();
+    const promptGate = Deferred.makeUnsafe<void>();
+    const abortStarted = Deferred.makeUnsafe<void>();
+    const fake = createFakePi({
+      promptGate,
+      promptStarted,
+      abortStarted,
+      promptResponse: JSON.stringify(defaultInterfaceDocument),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const shapeFiber = yield* runtime
+        .shape(sessionId, "Shape this", defaultInterfaceDocument)
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(promptStarted);
+
+      const closeFiber = yield* runtime
+        .closeSession(sessionId)
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(abortStarted);
+      const interruptedClose = yield* Fiber.interrupt(closeFiber).pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* Effect.yieldNow;
+      expect(fake.dispose).not.toHaveBeenCalled();
+
+      yield* Deferred.succeed(promptGate, undefined);
+      yield* Fiber.join(shapeFiber);
+      yield* Fiber.join(interruptedClose);
       expect(fake.dispose).toHaveBeenCalledOnce();
       expect(fake.guardianDispose).toHaveBeenCalledOnce();
     }).pipe(Effect.provide(fake.layer));
