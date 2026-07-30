@@ -54,6 +54,31 @@ const runtimeLayer = Layer.succeed(FlectRuntime)({
 
 const handlers = makeFlectRpcHandlers().pipe(Layer.provide(runtimeLayer));
 
+const deeplyNestedDocument = (depth: number) => {
+  let node: unknown = {
+    id: "leaf",
+    type: "text",
+    text: "Too deep",
+    style: "body",
+  };
+
+  for (let index = 0; index < depth; index += 1) {
+    node = {
+      id: `stack-${index}`,
+      type: "stack",
+      direction: "column",
+      gap: "sm",
+      children: [node],
+    };
+  }
+
+  return {
+    version: 2,
+    name: "Pathological depth",
+    root: node,
+  };
+};
+
 describe("Flect RPC handlers", () => {
   it.effect(
     "serves finite runtime operations through the shared RPC group",
@@ -99,6 +124,21 @@ describe("Flect RPC handlers", () => {
         events.map((event) => event.type),
         ["turn_started", "text_delta", "turn_completed"],
       );
+    }).pipe(Effect.provide(handlers)),
+  );
+
+  it.effect("rejects a deep shape document before transport decoding", () =>
+    Effect.gen(function* () {
+      const client = yield* RpcTest.makeClient(FlectRpcs);
+      const error = yield* Effect.flip(
+        client.Shape({
+          sessionId: "session-1",
+          instruction: "Make this more focused",
+          document: deeplyNestedDocument(2_000) as never,
+        }),
+      );
+
+      assert.strictEqual(error._tag, "InvalidInterfaceDocument");
     }).pipe(Effect.provide(handlers)),
   );
 });

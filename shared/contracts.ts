@@ -59,7 +59,7 @@ export class PromptRequest extends Schema.Class<PromptRequest>("PromptRequest")(
 
 export class ShapeRequest extends Schema.Class<ShapeRequest>("ShapeRequest")({
   instruction: ShapingInstruction,
-  document: InterfaceDocument,
+  document: Schema.Unknown,
 }) {}
 
 export class ShapeResponse extends Schema.Class<ShapeResponse>("ShapeResponse")(

@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { validateInterfaceDocument } from "../shared/interface-document";
 import { FlectRpcs } from "../shared/rpc";
 import { FlectRuntime } from "./runtime";
 
@@ -13,7 +14,10 @@ export const makeFlectRpcHandlers = () =>
         CloseSession: ({ sessionId }) => runtime.closeSession(sessionId),
         Prompt: ({ sessionId, text }) => runtime.prompt(sessionId, text),
         Shape: ({ sessionId, instruction, document }) =>
-          runtime.shape(sessionId, instruction, document),
+          Effect.gen(function* () {
+            const validated = yield* validateInterfaceDocument(document);
+            return yield* runtime.shape(sessionId, instruction, validated);
+          }),
         Cancel: ({ sessionId }) => runtime.cancel(sessionId),
         DiagnoseRecovery: ({ sessionId, reason }) =>
           runtime.diagnoseRecovery(sessionId, reason),

@@ -66,7 +66,7 @@ export class Shape extends Rpc.make("Shape", {
       Schema.isMinLength(1),
       Schema.isMaxLength(4_000),
     ),
-    document: InterfaceDocument,
+    document: Schema.Unknown,
   },
   success: InterfaceDocument,
   error: FlectRuntimeError,

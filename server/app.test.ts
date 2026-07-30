@@ -88,6 +88,31 @@ function request(
   });
 }
 
+const deeplyNestedDocument = (depth: number) => {
+  let node: unknown = {
+    id: "leaf",
+    type: "text",
+    text: "Too deep",
+    style: "body",
+  };
+
+  for (let index = 0; index < depth; index += 1) {
+    node = {
+      id: `stack-${index}`,
+      type: "stack",
+      direction: "column",
+      gap: "sm",
+      children: [node],
+    };
+  }
+
+  return {
+    version: 2,
+    name: "Pathological depth",
+    root: node,
+  };
+};
+
 describe("Flect HTTP application", () => {
   it.effect("returns schema-encoded runtime and model responses", () =>
     Effect.gen(function* () {
@@ -302,6 +327,30 @@ describe("Flect HTTP application", () => {
         version: 1,
         error: "The session is busy.",
       });
+    });
+  });
+
+  it.effect("rejects a deep shape document before transport decoding", () => {
+    const runtime = createFakeRuntime();
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/shape", {
+          method: "POST",
+          body: JSON.stringify({
+            instruction: "Make this more focused",
+            document: deeplyNestedDocument(2_000),
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(400);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        error: "Invalid request",
+      });
+      expect(runtime.shape).not.toHaveBeenCalled();
     });
   });
 

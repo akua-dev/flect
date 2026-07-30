@@ -21,6 +21,7 @@ import {
   TurnBusy,
   TurnError,
 } from "../shared/contracts";
+import { validateInterfaceDocument } from "../shared/interface-document";
 import { FlectRuntime, type FlectRuntimeShape } from "./runtime";
 
 const defaultAllowedOrigins = new Set([
@@ -221,14 +222,17 @@ const shapeRoute = HttpRouter.add(
     if (Option.isNone(path) || Option.isNone(shape)) {
       return yield* invalidRequest();
     }
+    const document = yield* validateInterfaceDocument(shape.value.document);
 
     const runtime = yield* FlectRuntime;
-    const document = yield* runtime.shape(
+    const shaped = yield* runtime.shape(
       path.value.sessionId,
       shape.value.instruction,
-      shape.value.document,
+      document,
     );
-    return yield* shapeJson(new ShapeResponse({ version: 1, document }));
+    return yield* shapeJson(
+      new ShapeResponse({ version: 1, document: shaped }),
+    );
   }).pipe(
     Effect.catchTag("SessionBusy", () =>
       publicError("The session is busy.", 409),
