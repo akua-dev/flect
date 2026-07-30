@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -77,6 +77,37 @@ describe("release media", () => {
           "WEBP",
         );
       }
+    }
+  });
+
+  it("keeps the public README connected to downloads, media, and local docs", () => {
+    const readme = readFileSync(resolve(root, "README.md"), "utf8");
+
+    expect(readme).toContain(
+      "releases/latest/download/Flect_0.1.0_aarch64.dmg",
+    );
+    expect(readme).toContain("assets/demo/flect-v0.1-demo.webp");
+    expect(readme).toContain("assets/screenshots/flect-launcher.png");
+    expect(readme).toContain("assets/screenshots/flect-shaper-preview.png");
+    expect(readme).toContain("ad-hoc signed");
+    expect(readme).toContain("Apple Silicon");
+
+    const relativeLinks = Array.from(
+      readme.matchAll(/!?\[[^\]]*\]\(([^)]+)\)/g),
+      (match) => match[1],
+    ).filter(
+      (target): target is string =>
+        target !== undefined &&
+        !target.startsWith("http://") &&
+        !target.startsWith("https://") &&
+        !target.startsWith("#") &&
+        !target.startsWith("mailto:"),
+    );
+
+    for (const target of relativeLinks) {
+      const path = target.split("#", 1)[0];
+      expect(path, target).toBeTruthy();
+      expect(existsSync(resolve(root, path ?? "")), target).toBe(true);
     }
   });
 });
