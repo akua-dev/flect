@@ -88,7 +88,9 @@ read only as a one-time migration source when no journal exists.
 
 The built-in launcher is compiled with the app. `?safe=1` bypasses customized
 storage without reading or writing it. Invalid persisted state fails closed to
-that launcher in a protected recovery state.
+that launcher in a protected recovery state. The shell also renders a compiled
+composer outside the customizable document whenever that document omits a
+`prompt` node, so shaping cannot remove the user's route back to the agent.
 
 ## Pi trust domains
 
@@ -96,7 +98,9 @@ Flect creates one Pi `ModelRuntime` for provider discovery and authentication,
 then creates two isolated agent sessions:
 
 - **Guardian** has immutable recovery instructions. It has no user extensions,
-  skills, templates, themes, context files, or tools.
+  skills, templates, themes, context files, or tools. It accepts only a closed
+  set of typed recovery reasons and returns a bounded plain-text diagnostic; it
+  cannot write revisions or perform recovery.
 - **Shaper** receives the current validated document and a shaping instruction.
   It has no ambient resources or tools and can only return a candidate value
   for Flect to validate.
@@ -104,7 +108,10 @@ then creates two isolated agent sessions:
 Each session has its own in-memory `SessionManager`, `SettingsManager`, and
 `DefaultResourceLoader`. Their only shared object is the provider/model runtime.
 Prompts and responses are not persisted by Flect. Disposing the Effect runtime
-unsubscribes and disposes both sessions.
+unsubscribes and disposes both sessions. The client closes its current pair
+when the model changes, the runtime is refreshed, a transport operation fails,
+or the UI unmounts. Session handles are keyed by model selection, and the
+runtime evicts and disposes the oldest pair before exceeding 32 active pairs.
 
 Pi remains the sole owner of provider login state. Flect neither creates a
 credential format nor exposes provider tokens to the WebView, browser APIs,
@@ -139,7 +146,8 @@ The sidecar is a compiled Bun executable running the same `FlectRuntime`
 handlers through Effect RPC NDJSON. It does not bind a TCP port.
 
 This RPC boundary owns Pi runtime operations: health, model discovery and
-selection, session turns, interruption, shaping proposals, and their streams.
+selection, session creation and close, turns, interruption, shaping proposals,
+the narrow Guardian diagnostic, and their streams.
 The client Effect kernel deliberately owns the revision journal so browser and
 desktop hosts share one client-side state machine. Revision operations are not
 duplicated in the sidecar.
@@ -189,6 +197,8 @@ design.
 - rejected preview -> active state unchanged;
 - accepted preview -> previous active state becomes last-known-good;
 - rollback -> last-known-good becomes active;
+- rollback failure -> the protected kernel remains authoritative and may ask
+  Guardian for a bounded, inert explanation;
 - repeated extension failures -> extension disabled and deterministic rollback;
 - unavailable model runtime -> visible offline state while local interface
   recovery remains available;

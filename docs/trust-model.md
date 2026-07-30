@@ -95,6 +95,7 @@ The following remain independent from user-modifiable capsules and extensions:
 
 - the compiled safe launcher;
 - a known-safe route to open the agent and recovery controls;
+- a compiled fallback composer when a customized document omits its prompt;
 - capability inspection and revocation;
 - interface validation and compatible migration;
 - the attributable revision journal;
@@ -104,7 +105,9 @@ The following remain independent from user-modifiable capsules and extensions:
 
 The Shaper may propose changes to normal Flect surfaces, including the default
 agent rail. It cannot modify the protected fallback or promote its own
-permissions.
+permissions. Guardian output is advisory text behind a typed diagnostic
+operation; the Guardian cannot mutate the revision journal, invoke rollback, or
+authorize capabilities.
 
 ## Interface change flow
 
@@ -175,12 +178,12 @@ broader substitute.
 The current vertical slice uses a closed schema-defined renderer rather than
 arbitrary UI capsules. It implements model-backed proposals, preview, keep,
 reject, a versioned revision journal, rollback, safe mode, separate Guardian
-and Shaper Pi sessions, a resource-limited QuickJS logic worker, and a minimal
-capability broker. That broker requires both manifest declaration and an
-explicit grant supplied by the protected caller before invoking its current
-interface-local adapter; denied requests never reach the adapter. Repeated
-sandbox or broker failures disable the extension and request deterministic
-recovery.
+and Shaper Pi sessions with explicit close and bounded retention, a
+resource-limited QuickJS logic worker, and a minimal capability broker. That
+broker requires both manifest declaration and an explicit grant supplied by
+the protected caller before invoking its current interface-local adapter;
+denied requests never reach the adapter. Repeated sandbox or broker failures
+disable the extension and request deterministic recovery.
 
 Arbitrary generated React, the isolated capsule renderer, browser source
 building, product/API adapters, privileged native brokerage, sharing, signing,

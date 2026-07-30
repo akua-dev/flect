@@ -6,11 +6,15 @@ import {
 } from "effect/unstable/http";
 import {
   CancelResponse,
+  CloseSessionResponse,
   decodePromptRequest,
   FlectEvent,
+  GuardianDiagnostic,
   type ModelSummary,
   ModelsResponse,
   PromptRequest,
+  type RecoveryReason,
+  RecoveryRequest,
   RuntimeStatus,
   SessionResponse,
   SessionSelection,
@@ -45,6 +49,9 @@ export interface FlectClientShape {
   readonly createSession: (
     selection: SessionSelection,
   ) => Effect.Effect<string, FlectUnavailableError>;
+  readonly closeSession: (
+    sessionId: string,
+  ) => Effect.Effect<void, FlectUnavailableError>;
   readonly prompt: (
     sessionId: string,
     text: string,
@@ -57,6 +64,10 @@ export interface FlectClientShape {
   readonly cancel: (
     sessionId: string,
   ) => Effect.Effect<void, FlectUnavailableError>;
+  readonly diagnoseRecovery: (
+    sessionId: string,
+    reason: RecoveryReason,
+  ) => Effect.Effect<GuardianDiagnostic, FlectUnavailableError>;
 }
 
 export class FlectClient extends Context.Service<
@@ -139,6 +150,23 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
         );
       };
 
+      const closeSession = Effect.fn("Flect.Client.closeSession")(
+        (sessionId: string) =>
+          HttpClientRequest.delete(
+            `/sessions/${encodeURIComponent(sessionId)}`,
+          ).pipe(
+            transport.execute,
+            Effect.flatMap(
+              HttpClientResponse.schemaBodyJson(
+                CloseSessionResponse,
+                strictOptions,
+              ),
+            ),
+            Effect.asVoid,
+            Effect.mapError(unavailable),
+          ),
+      );
+
       const cancel = Effect.fn("Flect.Client.cancel")((sessionId: string) =>
         transport
           .post(`/sessions/${encodeURIComponent(sessionId)}/cancel`)
@@ -168,13 +196,34 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
           ),
       );
 
+      const diagnoseRecovery = Effect.fn("Flect.Client.diagnoseRecovery")(
+        (sessionId: string, reason: RecoveryReason) =>
+          HttpClientRequest.post(
+            `/sessions/${encodeURIComponent(sessionId)}/guardian`,
+          ).pipe(
+            HttpClientRequest.schemaBodyJson(RecoveryRequest)(
+              new RecoveryRequest({ reason }),
+            ),
+            Effect.flatMap(transport.execute),
+            Effect.flatMap(
+              HttpClientResponse.schemaBodyJson(
+                GuardianDiagnostic,
+                strictOptions,
+              ),
+            ),
+            Effect.mapError(unavailable),
+          ),
+      );
+
       return {
         status,
         models,
         createSession,
+        closeSession,
         prompt,
         shape,
         cancel,
+        diagnoseRecovery,
       };
     }),
   );

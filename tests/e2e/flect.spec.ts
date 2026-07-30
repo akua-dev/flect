@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { defaultInterfaceDocument } from "../../shared/interface-document";
 
 const browserFailures = new WeakMap<Page, Array<string>>();
 
@@ -129,6 +130,73 @@ test("recovers a corrupt journal through the compiled launcher", async ({
   await expect(
     page.getByText("Custom interface state is bypassed."),
   ).toBeVisible();
+});
+
+test("keeps the protected composer when a valid custom UI omits its prompt", async ({
+  page,
+}) => {
+  const promptlessDocument = {
+    version: 2 as const,
+    name: "Read-only dashboard",
+    root: {
+      id: "dashboard",
+      type: "stack" as const,
+      direction: "column" as const,
+      gap: "lg" as const,
+      children: [
+        {
+          id: "dashboard-headline",
+          type: "text" as const,
+          text: "Read-only dashboard",
+          style: "headline" as const,
+        },
+      ],
+    },
+  };
+  await page.evaluate(
+    ({ builtIn, promptless }) => {
+      localStorage.setItem(
+        "flect.revisions.v1",
+        JSON.stringify({
+          version: 1,
+          active: {
+            version: 1,
+            id: "promptless",
+            parentId: "built-in",
+            status: "accepted",
+            source: "user",
+            document: promptless,
+            createdAt: 1,
+          },
+          lastKnownGood: {
+            version: 1,
+            id: "built-in",
+            status: "accepted",
+            source: "built-in",
+            document: builtIn,
+            createdAt: 0,
+          },
+          safeMode: false,
+          disabledExtensions: [],
+          lastEvent: {
+            version: 1,
+            sequence: 1,
+            type: "revision-accepted",
+            revisionId: "promptless",
+          },
+        }),
+      );
+    },
+    { builtIn: defaultInterfaceDocument, promptless: promptlessDocument },
+  );
+  await page.reload();
+
+  await expect(
+    page.getByRole("heading", { name: "Read-only dashboard" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Describe what to shape" }),
+  ).toHaveAttribute("placeholder", "Build, change, or connect anything");
 });
 
 test("keeps the shell usable at a compact viewport", async ({ page }) => {

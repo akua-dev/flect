@@ -1,5 +1,6 @@
 import { Effect, Layer, Stream } from "effect";
 import {
+  GuardianDiagnostic,
   ModelSummary,
   RuntimeStatus,
   TextDelta,
@@ -67,6 +68,7 @@ export const FlectTestRuntimeLive = Layer.succeed(FlectRuntime)({
   status: Effect.succeed(RuntimeStatus.make({ version: 1, status: "ready" })),
   listModels: Effect.succeed([model]),
   createSession: () => Effect.succeed("browser-test-session"),
+  closeSession: () => Effect.void,
   prompt: () =>
     Stream.make(
       TurnStarted.make({ type: "turn_started" }),
@@ -79,4 +81,11 @@ export const FlectTestRuntimeLive = Layer.succeed(FlectRuntime)({
   shape: (_sessionId, _instruction, document) =>
     Effect.succeed(shapedDocument(document)),
   cancel: () => Effect.void,
+  diagnoseRecovery: () =>
+    Effect.succeed(
+      GuardianDiagnostic.make({
+        version: 1,
+        message: "The protected launcher remains available.",
+      }),
+    ),
 });

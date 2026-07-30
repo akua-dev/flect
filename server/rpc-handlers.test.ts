@@ -2,6 +2,7 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer, Stream } from "effect";
 import * as RpcTest from "effect/unstable/rpc/RpcTest";
 import {
+  GuardianDiagnostic,
   ModelSummary,
   RuntimeStatus,
   SessionSelection,
@@ -27,6 +28,7 @@ const runtimeLayer = Layer.succeed(FlectRuntime)({
     }),
   ]),
   createSession: () => Effect.succeed("session-1"),
+  closeSession: () => Effect.void,
   prompt: () =>
     Stream.make(
       TurnStarted.make({ type: "turn_started" }),
@@ -41,6 +43,13 @@ const runtimeLayer = Layer.succeed(FlectRuntime)({
       }),
     ),
   cancel: () => Effect.void,
+  diagnoseRecovery: () =>
+    Effect.succeed(
+      GuardianDiagnostic.make({
+        version: 1,
+        message: "The protected launcher remains available.",
+      }),
+    ),
 });
 
 const handlers = makeFlectRpcHandlers().pipe(Layer.provide(runtimeLayer));
@@ -62,11 +71,20 @@ describe("Flect RPC handlers", () => {
           document: defaultInterfaceDocument,
         });
         yield* client.Cancel({ sessionId });
+        const diagnostic = yield* client.DiagnoseRecovery({
+          sessionId,
+          reason: "rollback-failed",
+        });
+        yield* client.CloseSession({ sessionId });
 
         assert.strictEqual(status.status, "ready");
         assert.strictEqual(models[0]?.name, "GPT-5.6");
         assert.strictEqual(sessionId, "session-1");
         assert.strictEqual(shaped.name, "Focused Flect");
+        assert.strictEqual(
+          diagnostic.message,
+          "The protected launcher remains available.",
+        );
       }).pipe(Effect.provide(handlers)),
   );
 

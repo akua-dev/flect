@@ -26,8 +26,13 @@ type FakeOptions = {
 
 function createFakePi(options: FakeOptions = {}) {
   let listener: ((delta: string) => void) | undefined;
+  let guardianListener: ((delta: string) => void) | undefined;
   const unsubscribe = vi.fn();
+  const guardianUnsubscribe = vi.fn();
   const abort = vi.fn(() => Effect.void);
+  const guardianAbort = vi.fn(() => Effect.void);
+  const dispose = vi.fn(() => undefined);
+  const guardianDispose = vi.fn(() => undefined);
   const prompt = vi.fn((_: string) =>
     options.promptFailure
       ? Effect.fail(
@@ -40,6 +45,11 @@ function createFakePi(options: FakeOptions = {}) {
           listener?.(options.promptResponse ?? "A shaped response"),
         ),
   );
+  const guardianPrompt = vi.fn(() =>
+    Effect.sync(() =>
+      guardianListener?.("The protected launcher remains available."),
+    ),
+  );
 
   const session: PiSession = {
     sessionId: "session-1",
@@ -50,12 +60,19 @@ function createFakePi(options: FakeOptions = {}) {
       }),
     prompt,
     abort,
-    dispose: Effect.void,
+    dispose: Effect.sync(dispose),
   };
 
   const guardian: PiSession = {
-    ...session,
     sessionId: "guardian-1",
+    subscribe: (next) =>
+      Effect.sync(() => {
+        guardianListener = (delta) => next({ type: "text_delta", delta });
+        return guardianUnsubscribe;
+      }),
+    prompt: guardianPrompt,
+    abort: guardianAbort,
+    dispose: Effect.sync(guardianDispose),
   };
 
   const createAgentPair = vi.fn(
@@ -86,6 +103,11 @@ function createFakePi(options: FakeOptions = {}) {
   return {
     abort,
     createAgentPair,
+    dispose,
+    guardianAbort,
+    guardianDispose,
+    guardianPrompt,
+    guardianUnsubscribe,
     layer: FlectRuntimeLive.pipe(Layer.provide(layer)),
     prompt,
     unsubscribe,
@@ -231,6 +253,118 @@ describe("FlectRuntimeLive", () => {
       expect(fake.abort).toHaveBeenCalledOnce();
     }).pipe(Effect.provide(fake.layer));
   });
+
+  it.effect("uses Guardian for a narrow recovery diagnostic", () => {
+    const fake = createFakePi();
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+
+      const diagnostic = yield* runtime.diagnoseRecovery(
+        sessionId,
+        "rollback-failed",
+      );
+
+      expect(diagnostic).toEqual({
+        version: 1,
+        message: "The protected launcher remains available.",
+      });
+      expect(fake.guardianPrompt).toHaveBeenCalledOnce();
+      expect(fake.guardianUnsubscribe).toHaveBeenCalledOnce();
+      expect(fake.prompt).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("closes and disposes both protected Pi sessions", () => {
+    const fake = createFakePi();
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+
+      yield* runtime.closeSession(sessionId);
+      const error = yield* runtime.cancel(sessionId).pipe(Effect.flip);
+
+      expect(error).toEqual(
+        new SessionNotFound({
+          sessionId,
+          message: "Session not found.",
+        }),
+      );
+      expect(fake.abort).toHaveBeenCalledOnce();
+      expect(fake.guardianAbort).toHaveBeenCalledOnce();
+      expect(fake.dispose).toHaveBeenCalledOnce();
+      expect(fake.guardianDispose).toHaveBeenCalledOnce();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect(
+    "evicts the oldest protected pair when the session bound is reached",
+    () => {
+      let sequence = 0;
+      const firstShaperAbort = vi.fn(() => Effect.void);
+      const firstGuardianAbort = vi.fn(() => Effect.void);
+      const firstShaperDispose = vi.fn(() => undefined);
+      const firstGuardianDispose = vi.fn(() => undefined);
+      const makeSession = (
+        sessionId: string,
+        abort: () => Effect.Effect<void>,
+        dispose: () => void,
+      ): PiSession => ({
+        sessionId,
+        subscribe: () => Effect.succeed(() => undefined),
+        prompt: () => Effect.void,
+        abort,
+        dispose: Effect.sync(dispose),
+      });
+      const piLayer = Layer.succeed(PiSdk)({
+        listModels: Effect.succeed([
+          new ModelSummary({
+            provider: "openai-codex",
+            id: "gpt-5.6",
+            name: "GPT-5.6",
+          }),
+        ]),
+        createAgentPair: () => {
+          sequence += 1;
+          const isFirst = sequence === 1;
+          return Effect.succeed({
+            shaper: makeSession(
+              `session-${sequence}`,
+              isFirst ? firstShaperAbort : () => Effect.void,
+              isFirst ? firstShaperDispose : () => undefined,
+            ),
+            guardian: makeSession(
+              `guardian-${sequence}`,
+              isFirst ? firstGuardianAbort : () => Effect.void,
+              isFirst ? firstGuardianDispose : () => undefined,
+            ),
+          });
+        },
+      });
+      const layer = FlectRuntimeLive.pipe(Layer.provide(piLayer));
+
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        yield* Effect.forEach(
+          Array.from({ length: 33 }),
+          () => runtime.createSession(new SessionSelection({})),
+          { discard: true },
+        );
+        const missing = yield* runtime.cancel("session-1").pipe(Effect.flip);
+
+        expect(missing).toEqual(
+          new SessionNotFound({
+            sessionId: "session-1",
+            message: "Session not found.",
+          }),
+        );
+        expect(firstShaperAbort).toHaveBeenCalledOnce();
+        expect(firstGuardianAbort).toHaveBeenCalledOnce();
+        expect(firstShaperDispose).toHaveBeenCalledOnce();
+        expect(firstGuardianDispose).toHaveBeenCalledOnce();
+      }).pipe(Effect.provide(layer));
+    },
+  );
 
   it.effect("keeps missing sessions typed in the error channel", () => {
     const fake = createFakePi();

@@ -201,10 +201,17 @@ export function App() {
       setProposalId(undefined);
       setShapingStatus("idle");
     } catch {
+      let message = "Flect could not restore the last-known-good interface.";
+      try {
+        const diagnostic = await session.diagnoseRecovery("rollback-failed");
+        message = `${message} ${diagnostic.message}`;
+      } catch {
+        // The protected launcher remains usable without an AI diagnostic.
+      }
       setShapingStatus("error");
-      setShapingError("Flect could not restore the last-known-good interface.");
+      setShapingError(message);
     }
-  }, []);
+  }, [session.diagnoseRecovery]);
 
   const verifyIsolation = useCallback(async () => {
     if (isolation === "checking" || isolation === "ready") {

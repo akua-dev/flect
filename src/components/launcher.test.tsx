@@ -237,4 +237,38 @@ describe("Launcher", () => {
       screen.getByRole("heading", { name: "What should we shape?" }),
     ).toBeVisible();
   });
+
+  it("keeps a protected composer when a shaped document omits its prompt", () => {
+    const documentWithoutPrompt = InterfaceDocument.make({
+      version: 2,
+      name: "Read-only dashboard",
+      root: {
+        id: "dashboard-root",
+        type: "stack",
+        direction: "column",
+        gap: "md",
+        children: [
+          {
+            id: "dashboard-headline",
+            type: "text",
+            text: "Read-only dashboard",
+            style: "headline",
+          },
+        ],
+      },
+    });
+
+    render(
+      <Launcher
+        document={documentWithoutPrompt}
+        safeMode={false}
+        session={controller()}
+        shaping={shaping()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Describe what to shape" }),
+    ).toHaveAttribute("placeholder", "Build, change, or connect anything");
+  });
 });

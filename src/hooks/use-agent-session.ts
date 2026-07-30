@@ -4,6 +4,7 @@ import {
   type FlectEvent,
   ModelSelection,
   type ModelSummary,
+  type RecoveryReason,
   SessionSelection,
 } from "../../shared/contracts";
 import type { InterfaceDocument } from "../../shared/interface-document";
@@ -26,6 +27,11 @@ export interface ConversationMessage {
 
 const messageId = () => crypto.randomUUID();
 
+interface SessionHandle {
+  readonly id: string;
+  readonly selectionKey: string;
+}
+
 const sessionSelection = (
   selectedModel: ModelSummary | undefined,
 ): SessionSelection =>
@@ -38,19 +44,31 @@ const sessionSelection = (
       })
     : new SessionSelection({});
 
+const modelSelectionKey = (selectedModel: ModelSummary | undefined) =>
+  selectedModel === undefined
+    ? "auto"
+    : JSON.stringify([selectedModel.provider, selectedModel.id]);
+
 const ensurePiSession = Effect.fn("Flect.AgentSession.ensureSession")(
   function* (
     selection: SessionSelection,
-    readCurrent: () => string | undefined,
-    storeCurrent: (sessionId: string) => void,
+    selectionKey: string,
+    readCurrent: () => SessionHandle | undefined,
+    storeCurrent: (handle: SessionHandle | undefined) => void,
   ) {
     const client = yield* FlectClient;
     const existing = readCurrent();
+    if (existing?.selectionKey === selectionKey) {
+      return existing.id;
+    }
     if (existing !== undefined) {
-      return existing;
+      storeCurrent(undefined);
+      yield* client
+        .closeSession(existing.id)
+        .pipe(Effect.catch(() => Effect.void));
     }
     const sessionId = yield* client.createSession(selection);
-    storeCurrent(sessionId);
+    storeCurrent({ id: sessionId, selectionKey });
     return sessionId;
   },
 );
@@ -64,16 +82,47 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   );
   const [lastPrompt, setLastPrompt] = useState("");
   const [error, setError] = useState<string>();
-  const sessionIdRef = useRef<string | undefined>(undefined);
+  const sessionRef = useRef<SessionHandle | undefined>(undefined);
   const requestRef = useRef<
     Fiber.Fiber<void, FlectUnavailableError> | undefined
   >(undefined);
 
+  const releaseSession = useCallback(
+    (expectedId: string) =>
+      Effect.gen(function* () {
+        const current = yield* Effect.sync(() => {
+          const handle = sessionRef.current;
+          if (handle === undefined || handle.id !== expectedId) {
+            return undefined;
+          }
+          sessionRef.current = undefined;
+          return handle;
+        });
+        if (current !== undefined) {
+          const client = yield* FlectClient;
+          yield* client
+            .closeSession(current.id)
+            .pipe(Effect.catch(() => Effect.void));
+        }
+      }),
+    [],
+  );
+
   const refresh = useCallback(() => {
     setStatus("booting");
     setError(undefined);
+    const request = requestRef.current;
+    requestRef.current = undefined;
+    const sessionId = sessionRef.current?.id;
 
     const load = Effect.gen(function* () {
+      if (request) {
+        yield* Fiber.interrupt(request);
+      }
+      if (sessionId !== undefined) {
+        yield* releaseSession(sessionId);
+      }
+
       const client = yield* FlectClient;
       const [runtimeStatus, availableModels] = yield* Effect.all(
         [client.status, client.models],
@@ -103,33 +152,46 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
     );
 
     return runtime.runPromise(load);
-  }, [runtime]);
+  }, [releaseSession, runtime]);
 
   useEffect(() => {
     void refresh();
 
     return () => {
       const request = requestRef.current;
-      if (request) {
-        runtime.runFork(Fiber.interrupt(request));
-      }
+      const sessionId = sessionRef.current?.id;
+      runtime.runFork(
+        Effect.gen(function* () {
+          if (request) {
+            yield* Fiber.interrupt(request);
+          }
+          if (sessionId !== undefined) {
+            yield* releaseSession(sessionId);
+          }
+        }),
+      );
     };
-  }, [refresh, runtime]);
+  }, [refresh, releaseSession, runtime]);
 
   const selection = useMemo(
     () => sessionSelection(selectedModel),
+    [selectedModel],
+  );
+  const selectionKey = useMemo(
+    () => modelSelectionKey(selectedModel),
     [selectedModel],
   );
   const ensureSession = useCallback(
     () =>
       ensurePiSession(
         selection,
-        () => sessionIdRef.current,
-        (sessionId) => {
-          sessionIdRef.current = sessionId;
+        selectionKey,
+        () => sessionRef.current,
+        (handle) => {
+          sessionRef.current = handle;
         },
       ),
-    [selection],
+    [selection, selectionKey],
   );
 
   const handleEvent = useCallback(
@@ -186,9 +248,15 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         const client = yield* FlectClient;
         const sessionId = yield* ensureSession();
 
-        yield* client
-          .prompt(sessionId, prompt)
-          .pipe(Stream.runForEach((event) => handleEvent(assistantId, event)));
+        yield* client.prompt(sessionId, prompt).pipe(
+          Stream.runForEach((event) => {
+            const update = handleEvent(assistantId, event);
+            return event.type === "error"
+              ? update.pipe(Effect.andThen(releaseSession(sessionId)))
+              : update;
+          }),
+          Effect.tapError(() => releaseSession(sessionId)),
+        );
       }).pipe(
         Effect.catch((failure) =>
           Effect.sync(() => {
@@ -210,7 +278,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
           }
         });
     },
-    [ensureSession, handleEvent, runtime, status],
+    [ensureSession, handleEvent, releaseSession, runtime, status],
   );
 
   const shape = useCallback(
@@ -222,15 +290,17 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         Effect.gen(function* () {
           const client = yield* FlectClient;
           const sessionId = yield* ensureSession();
-          return yield* client.shape(sessionId, instruction, document);
+          return yield* client
+            .shape(sessionId, instruction, document)
+            .pipe(Effect.tapError(() => releaseSession(sessionId)));
         }),
       ),
-    [ensureSession, runtime],
+    [ensureSession, releaseSession, runtime],
   );
 
   const cancel = useCallback((): Promise<void> => {
     const request = requestRef.current;
-    const sessionId = sessionIdRef.current;
+    const sessionId = sessionRef.current?.id;
 
     const cancelRequest = Effect.gen(function* () {
       if (request) {
@@ -254,17 +324,54 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
     return runtime.runPromise(cancelRequest);
   }, [runtime]);
 
+  const selectModel = useCallback(
+    (model: ModelSummary | undefined) => {
+      const request = requestRef.current;
+      const sessionId = sessionRef.current?.id;
+      requestRef.current = undefined;
+      runtime.runFork(
+        Effect.gen(function* () {
+          if (request) {
+            yield* Fiber.interrupt(request);
+          }
+          if (sessionId !== undefined) {
+            yield* releaseSession(sessionId);
+          }
+        }),
+      );
+      setSelectedModel(model);
+      setError(undefined);
+      setStatus((current) =>
+        current === "booting" || current === "unavailable" ? current : "ready",
+      );
+    },
+    [releaseSession, runtime],
+  );
+
+  const diagnoseRecovery = useCallback(
+    (reason: RecoveryReason) =>
+      runtime.runPromise(
+        Effect.gen(function* () {
+          const client = yield* FlectClient;
+          const sessionId = yield* ensureSession();
+          return yield* client.diagnoseRecovery(sessionId, reason);
+        }),
+      ),
+    [ensureSession, runtime],
+  );
+
   return {
     status,
     models,
     selectedModel,
-    selectModel: setSelectedModel,
+    selectModel,
     messages,
     lastPrompt,
     error,
     submit,
     shape,
     cancel,
+    diagnoseRecovery,
     refresh,
   };
 }

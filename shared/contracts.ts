@@ -4,6 +4,7 @@ import { InterfaceDocument } from "./interface-document";
 const NonEmptyText = Schema.Trim.check(Schema.isMinLength(1));
 const PromptText = NonEmptyText.check(Schema.isMaxLength(100_000));
 const ShapingInstruction = NonEmptyText.check(Schema.isMaxLength(4_000));
+const DiagnosticText = NonEmptyText.check(Schema.isMaxLength(4_000));
 
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
@@ -64,6 +65,26 @@ export class ShapeResponse extends Schema.Class<ShapeResponse>("ShapeResponse")(
     document: InterfaceDocument,
   },
 ) {}
+
+export const RecoveryReason = Schema.Literals([
+  "rollback-failed",
+  "invalid-interface",
+  "extension-disabled",
+]);
+export type RecoveryReason = typeof RecoveryReason.Type;
+
+export class RecoveryRequest extends Schema.Class<RecoveryRequest>(
+  "RecoveryRequest",
+)({
+  reason: RecoveryReason,
+}) {}
+
+export class GuardianDiagnostic extends Schema.Class<GuardianDiagnostic>(
+  "GuardianDiagnostic",
+)({
+  version: Schema.Literal(1),
+  message: DiagnosticText,
+}) {}
 
 export class TurnStarted extends Schema.Class<TurnStarted>("TurnStarted")({
   type: Schema.Literal("turn_started"),
@@ -136,6 +157,13 @@ export class SessionNotFound extends Schema.TaggedErrorClass<SessionNotFound>()(
   },
 ) {}
 
+export class CloseSessionResponse extends Schema.Class<CloseSessionResponse>(
+  "CloseSessionResponse",
+)({
+  version: Schema.Literal(1),
+  status: Schema.Literal("closed"),
+}) {}
+
 export class NoModelAvailable extends Schema.TaggedErrorClass<NoModelAvailable>()(
   "NoModelAvailable",
   {
@@ -153,6 +181,7 @@ export class PiOperationFailed extends Schema.TaggedErrorClass<PiOperationFailed
       "prompt",
       "shape",
       "cancel",
+      "diagnose",
     ]),
     message: Schema.Literal(
       "The model runtime could not complete the request.",

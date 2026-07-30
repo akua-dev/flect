@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Stream } from "effect";
 import {
+  GuardianDiagnostic,
   ModelSummary,
   ModelsResponse,
   RuntimeStatus,
@@ -27,6 +28,7 @@ function createFakeRuntime(): FlectRuntimeShape {
       }),
     ]),
     createSession: vi.fn(() => Effect.succeed("session-1")),
+    closeSession: vi.fn(() => Effect.void),
     prompt: vi.fn(() =>
       Stream.make(
         new TurnStarted({ type: "turn_started" }),
@@ -43,6 +45,14 @@ function createFakeRuntime(): FlectRuntimeShape {
       ),
     ),
     cancel: vi.fn(() => Effect.void),
+    diagnoseRecovery: vi.fn(() =>
+      Effect.succeed(
+        new GuardianDiagnostic({
+          version: 1,
+          message: "The protected launcher remains available.",
+        }),
+      ),
+    ),
   };
 }
 
@@ -176,6 +186,24 @@ describe("Flect HTTP application", () => {
     });
   });
 
+  it.effect("closes a session through the Effect service", () => {
+    const runtime = createFakeRuntime();
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1", { method: "DELETE" }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        status: "closed",
+      });
+      expect(runtime.closeSession).toHaveBeenCalledWith("session-1");
+    });
+  });
+
   it.effect("returns a strictly validated interface proposal", () => {
     const runtime = createFakeRuntime();
     return Effect.gen(function* () {
@@ -207,6 +235,30 @@ describe("Flect HTTP application", () => {
     });
   });
 
+  it.effect("returns a narrow Guardian recovery diagnostic", () => {
+    const runtime = createFakeRuntime();
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/guardian", {
+          method: "POST",
+          body: JSON.stringify({ reason: "rollback-failed" }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        message: "The protected launcher remains available.",
+      });
+      expect(runtime.diagnoseRecovery).toHaveBeenCalledWith(
+        "session-1",
+        "rollback-failed",
+      );
+    });
+  });
+
   it.effect("rejects malformed JSON, blank prompts, and excess fields", () =>
     Effect.gen(function* () {
       const app = yield* useApp(createFakeRuntime());
@@ -228,10 +280,18 @@ describe("Flect HTTP application", () => {
           body: JSON.stringify({ credential: "not-a-real-secret" }),
         }),
       );
+      const invalidRecovery = yield* send(
+        app,
+        request("/api/sessions/session-1/guardian", {
+          method: "POST",
+          body: JSON.stringify({ reason: "run-arbitrary-repair" }),
+        }),
+      );
 
       expect(malformed.status).toBe(400);
       expect(blank.status).toBe(400);
       expect(excessive.status).toBe(400);
+      expect(invalidRecovery.status).toBe(400);
       expect(yield* readJson(blank)).toEqual({
         version: 1,
         error: "Invalid request",

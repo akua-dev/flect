@@ -124,6 +124,45 @@ describe("FlectClient", () => {
     },
   );
 
+  it.effect("closes sessions and requests Guardian diagnostics", () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(jsonResponse({ version: 1, status: "closed" }))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          version: 1,
+          message: "The protected launcher remains available.",
+        }),
+      );
+
+    return withClient(
+      fetcher,
+      Effect.gen(function* () {
+        const client = yield* FlectClient;
+        yield* client.closeSession("session-1");
+        const diagnostic = yield* client.diagnoseRecovery(
+          "session-2",
+          "rollback-failed",
+        );
+
+        const [closeInput, closeInit] = fetcher.mock.calls[0] ?? [];
+        expect(String(closeInput)).toBe(
+          "http://flect.local/api/sessions/session-1",
+        );
+        expect(closeInit?.method).toBe("DELETE");
+
+        const [guardianInput, guardianInit] = fetcher.mock.calls[1] ?? [];
+        expect(String(guardianInput)).toBe(
+          "http://flect.local/api/sessions/session-2/guardian",
+        );
+        expect(guardianInit?.method).toBe("POST");
+        expect(diagnostic.message).toBe(
+          "The protected launcher remains available.",
+        );
+      }),
+    );
+  });
+
   it.effect("decodes SSE split across arbitrary byte chunks", () => {
     const fetcher = vi
       .fn<typeof fetch>()

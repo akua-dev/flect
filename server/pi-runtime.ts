@@ -18,9 +18,11 @@ import {
 } from "effect";
 import {
   type FlectRuntimeError,
+  GuardianDiagnostic,
   ModelSummary,
   NoModelAvailable,
   PiOperationFailed,
+  type RecoveryReason,
   RuntimeStatus,
   SessionNotFound,
   type SessionSelection,
@@ -300,10 +302,13 @@ type SessionRecord = {
   readonly session: PiSession;
   readonly guardian: PiSession;
   readonly cancelled: Ref.Ref<boolean>;
+  readonly sequence: number;
 };
 
 const PUBLIC_TURN_ERROR = "The model could not complete this turn.";
 const MAX_SHAPER_RESPONSE_BYTES = 256 * 1024;
+const MAX_GUARDIAN_RESPONSE_BYTES = 16 * 1024;
+const MAX_ACTIVE_SESSIONS = 32;
 
 const shapePrompt = (
   instruction: string,
@@ -320,6 +325,16 @@ ${JSON.stringify(document)}
 
 User instruction:
 ${JSON.stringify(instruction)}`;
+
+const guardianPrompt = (
+  reason: RecoveryReason,
+) => `Assess this typed Flect recovery signal.
+
+Return one short plain-text diagnostic for the user. Do not propose code, invoke
+tools, claim that recovery already happened, or request additional authority.
+Deterministic safe mode and rollback remain owned by the protected Flect kernel.
+
+Recovery reason: ${reason}`;
 
 const parseShaperDocument = Effect.fn("Flect.Runtime.parseShaperDocument")(
   function* (raw: string) {
@@ -348,24 +363,29 @@ export const FlectRuntimeLive = Layer.effect(
   Effect.gen(function* () {
     const pi = yield* PiSdk;
     const sessions = yield* Ref.make(HashMap.empty<string, SessionRecord>());
+    const sessionSequence = yield* Ref.make(0);
+
+    const disposeSessionRecord = Effect.fn(
+      "Flect.Runtime.disposeSessionRecord",
+    )((record: SessionRecord) =>
+      Effect.all(
+        [
+          record.session.abort().pipe(Effect.catch(() => Effect.void)),
+          record.guardian.abort().pipe(Effect.catch(() => Effect.void)),
+          record.session.dispose,
+          record.guardian.dispose,
+        ],
+        { concurrency: "unbounded", discard: true },
+      ),
+    );
 
     yield* Effect.addFinalizer(() =>
       Ref.get(sessions).pipe(
         Effect.flatMap((records) =>
-          Effect.forEach(
-            HashMap.values(records),
-            (record) =>
-              Effect.all(
-                [
-                  record.session.abort().pipe(Effect.catch(() => Effect.void)),
-                  record.guardian.abort().pipe(Effect.catch(() => Effect.void)),
-                  record.session.dispose,
-                  record.guardian.dispose,
-                ],
-                { concurrency: "unbounded", discard: true },
-              ),
-            { concurrency: "unbounded", discard: true },
-          ),
+          Effect.forEach(HashMap.values(records), disposeSessionRecord, {
+            concurrency: "unbounded",
+            discard: true,
+          }),
         ),
       ),
     );
@@ -408,16 +428,94 @@ export const FlectRuntimeLive = Layer.effect(
 
       const pair = yield* pi.createAgentPair(model, protectedAgentPolicies);
       const cancelled = yield* Ref.make(false);
-      yield* Ref.update(
-        sessions,
-        HashMap.set(pair.shaper.sessionId, {
-          session: pair.shaper,
-          guardian: pair.guardian,
-          cancelled,
-        }),
+      const sequence = yield* Ref.getAndUpdate(
+        sessionSequence,
+        (current) => current + 1,
       );
+      const record: SessionRecord = {
+        session: pair.shaper,
+        guardian: pair.guardian,
+        cancelled,
+        sequence,
+      };
+      const evicted = yield* Ref.modify(sessions, (current) => {
+        const replaced = HashMap.get(current, pair.shaper.sessionId);
+        let oldest: SessionRecord | undefined;
+        if (
+          Option.isNone(replaced) &&
+          HashMap.size(current) >= MAX_ACTIVE_SESSIONS
+        ) {
+          for (const candidate of HashMap.values(current)) {
+            if (oldest === undefined || candidate.sequence < oldest.sequence) {
+              oldest = candidate;
+            }
+          }
+        }
+        const evictedRecord = Option.getOrUndefined(replaced) ?? oldest;
+        const withoutEvicted =
+          evictedRecord === undefined
+            ? current
+            : HashMap.remove(current, evictedRecord.session.sessionId);
+        return [
+          evictedRecord,
+          HashMap.set(withoutEvicted, pair.shaper.sessionId, record),
+        ];
+      });
+      if (evicted !== undefined) {
+        yield* disposeSessionRecord(evicted);
+      }
       return pair.shaper.sessionId;
     });
+
+    const closeSession = Effect.fn("Flect.Runtime.closeSession")(function* (
+      sessionId: string,
+    ) {
+      const removed = yield* Ref.modify(sessions, (current) => {
+        const record = HashMap.get(current, sessionId);
+        return [
+          record,
+          Option.isNone(record) ? current : HashMap.remove(current, sessionId),
+        ];
+      });
+      if (Option.isNone(removed)) {
+        return yield* Effect.fail(
+          new SessionNotFound({
+            sessionId,
+            message: "Session not found.",
+          }),
+        );
+      }
+      yield* disposeSessionRecord(removed.value);
+    });
+
+    const diagnoseRecovery = Effect.fn("Flect.Runtime.diagnoseRecovery")(
+      function* (sessionId: string, reason: RecoveryReason) {
+        const record = yield* findSession(sessionId);
+        const chunks: Array<string> = [];
+        const unsubscribe = yield* record.guardian.subscribe((event) => {
+          chunks.push(event.delta);
+        });
+
+        yield* record.guardian.prompt(guardianPrompt(reason)).pipe(
+          Effect.mapError(() => piFailure("diagnose")),
+          Effect.ensuring(Effect.sync(() => unsubscribe())),
+        );
+
+        const message = chunks.join("").trim();
+        if (
+          message.length === 0 ||
+          new TextEncoder().encode(message).byteLength >
+            MAX_GUARDIAN_RESPONSE_BYTES
+        ) {
+          return yield* Effect.fail(piFailure("diagnose"));
+        }
+
+        return GuardianDiagnostic.make({
+          version: 1,
+          message,
+        });
+      },
+    );
 
     const prompt = (
       sessionId: string,
@@ -526,9 +624,11 @@ export const FlectRuntimeLive = Layer.effect(
       ),
       listModels: pi.listModels,
       createSession,
+      closeSession,
       prompt,
       shape,
       cancel,
+      diagnoseRecovery,
     };
   }),
 );

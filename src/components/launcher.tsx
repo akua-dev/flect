@@ -132,7 +132,8 @@ export function Launcher({
   const [notice, setNotice] = useState<string>();
   const [shaperOpen, setShaperOpen] = useState(false);
   const hasConversation = session.messages.length > 0;
-  const promptNode = findPrompt(document.root) ?? defaultPrompt;
+  const documentPrompt = findPrompt(document.root);
+  const promptNode = documentPrompt ?? defaultPrompt;
 
   const handleInterfaceAction = (action: InterfaceAction) => {
     if (action === "safe-mode") {
@@ -241,11 +242,14 @@ export function Launcher({
             {renderComposer(promptNode)}
           </>
         ) : (
-          <InterfaceRenderer
-            document={document}
-            onAction={handleInterfaceAction}
-            renderPrompt={renderComposer}
-          />
+          <>
+            <InterfaceRenderer
+              document={document}
+              onAction={handleInterfaceAction}
+              renderPrompt={renderComposer}
+            />
+            {documentPrompt === undefined && renderComposer(defaultPrompt)}
+          </>
         )}
 
         <p aria-live="polite" className="notice">

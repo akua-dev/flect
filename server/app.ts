@@ -6,10 +6,13 @@ import {
 } from "effect/unstable/http";
 import {
   CancelResponse,
+  CloseSessionResponse,
   FlectEvent,
+  GuardianDiagnostic,
   ModelsResponse,
   PromptRequest,
   PublicErrorResponse,
+  RecoveryRequest,
   RuntimeStatus,
   SessionResponse,
   SessionSelection,
@@ -42,8 +45,10 @@ class SessionPathParams extends Schema.Class<SessionPathParams>(
 const runtimeJson = HttpServerResponse.schemaJson(RuntimeStatus);
 const modelsJson = HttpServerResponse.schemaJson(ModelsResponse);
 const sessionJson = HttpServerResponse.schemaJson(SessionResponse);
+const closeJson = HttpServerResponse.schemaJson(CloseSessionResponse);
 const cancelJson = HttpServerResponse.schemaJson(CancelResponse);
 const shapeJson = HttpServerResponse.schemaJson(ShapeResponse);
+const guardianJson = HttpServerResponse.schemaJson(GuardianDiagnostic);
 const publicErrorJson = HttpServerResponse.schemaJson(PublicErrorResponse);
 const encodeEventJson = Schema.encodeEffect(Schema.fromJsonString(FlectEvent));
 
@@ -140,6 +145,23 @@ const promptRoute = HttpRouter.add(
   }).pipe(Effect.catch(() => runtimeFailure())),
 );
 
+const closeSessionRoute = HttpRouter.add(
+  "DELETE",
+  "/api/sessions/:sessionId",
+  Effect.gen(function* () {
+    const path = yield* sessionPath;
+    if (Option.isNone(path)) {
+      return yield* invalidRequest();
+    }
+
+    const runtime = yield* FlectRuntime;
+    yield* runtime.closeSession(path.value.sessionId);
+    return yield* closeJson(
+      new CloseSessionResponse({ version: 1, status: "closed" }),
+    );
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
 const cancelRoute = HttpRouter.add(
   "POST",
   "/api/sessions/:sessionId/cancel",
@@ -154,6 +176,25 @@ const cancelRoute = HttpRouter.add(
     return yield* cancelJson(
       new CancelResponse({ version: 1, status: "cancelled" }),
     );
+  }).pipe(Effect.catch(() => runtimeFailure())),
+);
+
+const guardianRoute = HttpRouter.add(
+  "POST",
+  "/api/sessions/:sessionId/guardian",
+  Effect.gen(function* () {
+    const path = yield* sessionPath;
+    const recovery = yield* decodeBody(RecoveryRequest);
+    if (Option.isNone(path) || Option.isNone(recovery)) {
+      return yield* invalidRequest();
+    }
+
+    const runtime = yield* FlectRuntime;
+    const diagnostic = yield* runtime.diagnoseRecovery(
+      path.value.sessionId,
+      recovery.value.reason,
+    );
+    return yield* guardianJson(diagnostic);
   }).pipe(Effect.catch(() => runtimeFailure())),
 );
 
@@ -198,9 +239,11 @@ export const makeFlectHttpApp = (
     runtimeRoute,
     modelsRoute,
     createSessionRoute,
+    closeSessionRoute,
     promptRoute,
     shapeRoute,
     cancelRoute,
+    guardianRoute,
     makeOriginMiddleware(allowedOrigins),
   );
 

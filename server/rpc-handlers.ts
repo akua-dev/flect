@@ -10,10 +10,13 @@ export const makeFlectRpcHandlers = () =>
         GetRuntime: () => runtime.status,
         ListModels: () => runtime.listModels,
         CreateSession: (selection) => runtime.createSession(selection),
+        CloseSession: ({ sessionId }) => runtime.closeSession(sessionId),
         Prompt: ({ sessionId, text }) => runtime.prompt(sessionId, text),
         Shape: ({ sessionId, instruction, document }) =>
           runtime.shape(sessionId, instruction, document),
         Cancel: ({ sessionId }) => runtime.cancel(sessionId),
+        DiagnoseRecovery: ({ sessionId, reason }) =>
+          runtime.diagnoseRecovery(sessionId, reason),
       });
     }),
   );

@@ -62,6 +62,9 @@ Repository-wide constraints:
   network requires a separately reviewed authentication and threat model.
 - Keep the built-in launcher and safe-mode entry point independent from
   user-modifiable interface documents and extensions.
+- Keep a compiled agent composer available when a customized interface omits
+  its own prompt node; user-shaped documents must not remove every route back
+  to the protected shell.
 - Fail closed to the built-in launcher when customized interface state is
   invalid or unsupported.
 - Keep the Guardian and Shaper Pi trust domains separate. The Guardian uses
@@ -75,6 +78,12 @@ Repository-wide constraints:
   their acquisition, communication, interruption, and disposal. Deterministic
   validation and rollback must remain available when either agent or every
   model provider is unavailable.
+- Treat Guardian output as bounded advisory text only. Guardian operations use
+  closed typed reasons and cannot mutate revisions, perform rollback, grant
+  capabilities, or replace deterministic recovery.
+- Key client session handles by model selection, close them on replacement,
+  refresh, failure, and unmount, and keep the server-side session registry
+  bounded with disposal on eviction.
 - Pi tools are denied by default. Adding a tool or product capability requires
   an explicit, inspectable, revocable capability design.
 - Execute optional extension logic only through the reviewed QuickJS worker

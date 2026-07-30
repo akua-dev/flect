@@ -172,12 +172,15 @@ export const makeTauriFlectClientLayer = () =>
         status: mapError(rpc.GetRuntime()),
         models: mapError(rpc.ListModels()),
         createSession: (selection) => mapError(rpc.CreateSession(selection)),
+        closeSession: (sessionId) => mapError(rpc.CloseSession({ sessionId })),
         prompt: (sessionId, text) =>
           rpc.Prompt({ sessionId, text }).pipe(Stream.mapError(unavailable)),
         shape: (sessionId, instruction, document) =>
           mapError(rpc.Shape({ sessionId, instruction, document })),
         cancel: (sessionId) =>
           mapError(rpc.Cancel({ sessionId })).pipe(Effect.asVoid),
+        diagnoseRecovery: (sessionId, reason) =>
+          mapError(rpc.DiagnoseRecovery({ sessionId, reason })),
       } satisfies FlectClientShape;
     }),
   ).pipe(Layer.provide(TauriProtocolLive));

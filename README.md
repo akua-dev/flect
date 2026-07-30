@@ -83,7 +83,8 @@ browser development HTTP server.
 ## What works today
 
 - authenticated Pi model discovery and explicit model selection;
-- separate, in-memory, tool-free Guardian and Shaper Pi sessions;
+- separate, in-memory, tool-free Guardian and Shaper Pi sessions, with
+  model-keyed lifecycle cleanup and a bounded runtime registry;
 - streamed turns, cancellation, redacted public failures, and finalized-text
   recovery when a provider emits no live text delta;
 - model-backed interface proposals using a strict recursive Effect Schema;
@@ -91,7 +92,8 @@ browser development HTTP server.
   last-known-good state, corrupt-journal recovery, and a compiled `?safe=1`
   launcher;
 - a trusted renderer for `stack`, `text`, `prompt`, `button`, `divider`, and
-  `agent-panel` nodes;
+  `agent-panel` nodes, plus a protected composer when a shaped document omits
+  its own prompt;
 - strict extension manifests and a QuickJS-NG/WASM logic sandbox with resource
   limits and no ambient browser, network, process, module, Tauri, or Pi access;
 - an explicit capability broker that requires both manifest declaration and an
@@ -100,6 +102,10 @@ browser development HTTP server.
 - automated production-build Chromium coverage for chat, shaping, accept,
   reject, persistence, rollback, corrupt-journal recovery, keyboard use,
   reduced motion, sandbox isolation, and compact layout.
+
+The Guardian is reachable only for a short, typed recovery diagnostic after a
+protected operation fails. It cannot change revisions or replace deterministic
+validation, safe mode, or rollback.
 
 ## Security boundary
 
