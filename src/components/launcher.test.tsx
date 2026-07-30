@@ -116,9 +116,13 @@ describe("Launcher", () => {
       />,
     );
 
-    await user.selectOptions(
-      screen.getByRole("combobox", { name: "Model" }),
-      "openai-codex:gpt-5.6",
+    await user.click(
+      screen.getByRole("button", { name: "Model: Auto via Pi" }),
+    );
+    await user.click(
+      screen.getByRole("menuitemradio", {
+        name: "GPT-5.6 by openai-codex",
+      }),
     );
 
     expect(session.selectModel).toHaveBeenCalledWith(model);
