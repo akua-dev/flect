@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 
-const expectedVersion = "0.1.0";
+const expectedVersion = "0.1.1";
 const root = resolve(import.meta.dirname, "..");
 const distRelease = resolve(root, "dist-release");
 
@@ -27,12 +27,12 @@ const paths = {
   app: resolve(root, "src-tauri/target/release/bundle/macos/Flect.app"),
   builtDmg: resolve(
     root,
-    "src-tauri/target/release/bundle/dmg/Flect_0.1.0_aarch64.dmg",
+    "src-tauri/target/release/bundle/dmg/Flect_0.1.1_aarch64.dmg",
   ),
-  releaseDmg: resolve(distRelease, "Flect_0.1.0_aarch64.dmg"),
-  checksum: resolve(distRelease, "Flect_0.1.0_aarch64.dmg.sha256"),
+  releaseDmg: resolve(distRelease, "Flect_0.1.1_aarch64.dmg"),
+  checksum: resolve(distRelease, "Flect_0.1.1_aarch64.dmg.sha256"),
   demoSource: resolve(root, "assets/demo/flect-v0.1-demo.webm"),
-  demoMp4: resolve(distRelease, "flect-v0.1.0-demo.mp4"),
+  demoMp4: resolve(distRelease, "flect-v0.1.1-demo.mp4"),
 };
 
 const VersionDocument = Schema.Struct({ version: Schema.String });
@@ -71,7 +71,7 @@ export const validateVersionManifest = Effect.fn(
     manifest.tauriVersion !== expectedVersion
   ) {
     return yield* Effect.fail(
-      packagingError("Every public Flect version must be 0.1.0."),
+      packagingError("Every public Flect version must be 0.1.1."),
     );
   }
 });

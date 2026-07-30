@@ -24,7 +24,7 @@ const paths = {
   hero: resolve(root, "assets/flect-hero.png"),
   webm: resolve(root, "assets/demo/flect-v0.1-demo.webm"),
   webp: resolve(root, "assets/demo/flect-v0.1-demo.webp"),
-  mp4: resolve(root, "dist-release/flect-v0.1.0-demo.mp4"),
+  mp4: resolve(root, "dist-release/flect-v0.1.1-demo.mp4"),
 };
 
 type ChildProcess = ReturnType<typeof Bun.spawn>;

@@ -1,13 +1,24 @@
-# Flect v0.1.0
+# Flect v0.1.1
 
-Flect v0.1.0 is the first public developer preview of the protected,
-agent-native interface shell.
+Flect v0.1.1 is the current public developer preview of the protected,
+agent-native interface shell. It keeps the v0.1 interface and hardens two
+trust-boundary recovery paths found during the v0.1.0 release review.
+
+## Hardening in v0.1.1
+
+- A persisted pending proposal now reconciles in memory even when its startup
+  repair write cannot reach local storage. The protected preview and safe-mode
+  escape remain available instead of losing the shaping kernel.
+- Interface trees are preflighted iteratively before recursive schema decoding
+  at direct, journal, browser HTTP, and native RPC boundaries. Pathological
+  depth now returns a typed invalid-document response instead of exhausting the
+  JavaScript stack.
 
 ## Install on macOS
 
 The native preview supports Apple Silicon Macs running macOS 12 or newer.
-Download `Flect_0.1.0_aarch64.dmg`, verify it with
-`Flect_0.1.0_aarch64.dmg.sha256`, and drag Flect into Applications.
+Download `Flect_0.1.1_aarch64.dmg`, verify it with
+`Flect_0.1.1_aarch64.dmg.sha256`, and drag Flect into Applications.
 
 Flect uses the provider login already managed by Pi. Before opening Flect for
 the first time, run `bunx pi`, use `/login` to authenticate a supported model
@@ -48,9 +59,9 @@ Use `/login` inside Pi, quit Pi, then run `bun run dev` and open
 
 Release assets:
 
-- `Flect_0.1.0_aarch64.dmg`
-- `Flect_0.1.0_aarch64.dmg.sha256`
-- `flect-v0.1.0-demo.mp4`
+- `Flect_0.1.1_aarch64.dmg`
+- `Flect_0.1.1_aarch64.dmg.sha256`
+- `flect-v0.1.1-demo.mp4`
 
 ## Current boundary
 

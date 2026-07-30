@@ -9,13 +9,13 @@ changed from inside itself. It works as a local macOS app and in a browser,
 uses models already authenticated through [Pi](https://pi.dev), and keeps a
 protected path back when a customized interface fails.
 
-**v0.1.0 is a public developer preview of the protected vertical slice:** talk
+**v0.1.1 is a public developer preview of the protected vertical slice:** talk
 to Pi, propose an interface revision, inspect the preview, keep or reject it,
 roll back, or bypass custom state in safe mode.
 
-[Download Flect for Apple Silicon macOS](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.1.0_aarch64.dmg)
+[Download Flect for Apple Silicon macOS](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.1.1_aarch64.dmg)
 ·
-[SHA-256 checksum](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.1.0_aarch64.dmg.sha256)
+[SHA-256 checksum](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.1.1_aarch64.dmg.sha256)
 
 ## Install Flect
 
@@ -33,10 +33,10 @@ Download the DMG and checksum into the same directory and verify them:
 
 ```bash
 cd ~/Downloads
-shasum -a 256 -c Flect_0.1.0_aarch64.dmg.sha256
+shasum -a 256 -c Flect_0.1.1_aarch64.dmg.sha256
 ```
 
-Open the DMG and drag Flect into Applications. The v0.1.0 app is ad-hoc signed
+Open the DMG and drag Flect into Applications. The v0.1.1 app is ad-hoc signed
 and unnotarized, so Gatekeeper may block the first launch. After verifying the
 checksum, use Finder’s **Open** action from the context menu. If quarantine
 still blocks the app:
@@ -100,7 +100,7 @@ stdio exposed to the webview by one narrow Tauri command.
 ## Current security and product boundary
 
 The QuickJS worker is a defense-in-depth **logic sandbox**, not an operating
-system sandbox. Flect v0.1.0 does not execute arbitrary generated React,
+system sandbox. Flect v0.1.1 does not execute arbitrary generated React,
 native extensions, shell commands, or ambient filesystem and network code. It
 does not yet ship portable `.flect` capsules, a component registry,
 product/API adapters, privileged host brokerage, remote runtimes, automatic

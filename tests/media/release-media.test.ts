@@ -84,7 +84,7 @@ describe("release media", () => {
     const readme = readFileSync(resolve(root, "README.md"), "utf8");
 
     expect(readme).toContain(
-      "releases/latest/download/Flect_0.1.0_aarch64.dmg",
+      "releases/latest/download/Flect_0.1.1_aarch64.dmg",
     );
     expect(readme).toContain("assets/demo/flect-v0.1-demo.webp");
     expect(readme).toContain("assets/screenshots/flect-launcher.png");
