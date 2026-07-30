@@ -13,14 +13,15 @@ separate Shaper that can load explicitly enabled Pi extensions, edit a real Git
 workspace, build the interface, and preview a proposed change without requiring
 a system Git installation or a terminal login.
 
-The release-quality outcome combines six related changes:
+The release-quality outcome combines seven related changes:
 
 1. a composer and provider/model picker selectively ported from T3 Code;
 2. Pi authentication managed from inside Flect;
 3. one App Agent for using the running product;
 4. one extensible Shaper for editing it, supervised by a protected Guardian;
 5. portable Pi extensions packaged inside shareable `.flect` capsules; and
-6. a Git-backed OPFS workspace built with `@rolldown/browser`.
+6. a Git-backed OPFS workspace built with `@rolldown/browser`; and
+7. one full Bash surface per agent, routed into a role-specific sandbox.
 
 The protected launcher, deterministic validation, capability enforcement, and
 last-known-good recovery stay outside the user-modifiable workspace.
@@ -86,6 +87,83 @@ recovery, and persistence tests in supported browsers, the embedded-Git slice
 does not silently fall back to system Git. The design must be corrected before
 shipping.
 
+### Browser-native Bash, small model-facing surface
+
+App Agent, Shaper, and Guardian each receive Pi's normal `bash` tool backed by
+Flect-controlled `BashOperations`. Flect does not register every product
+operation, filesystem action, Git action, and utility as a separate
+model-visible tool.
+
+"Full Bash power" means a broad Bash-compatible language and virtual Unix
+userland, not arbitrary native processes or the host user's shell. The first
+backend is a pinned `just-bash` browser build running entirely on the client.
+It supplies pipelines, redirection, functions, loops, variables, standard file
+and text commands, ripgrep, sed, awk, jq, diffs, and bounded execution. Flect
+does not enable its Node-only filesystem, Python, SQLite,
+JavaScript-execution, or direct-network integrations.
+
+Two schema-backed custom commands provide on-demand discovery and invocation
+without expanding the model prompt:
+
+```text
+flect help
+flect capabilities list
+flect capabilities describe <operation>
+flect capabilities call <operation> --input <json>
+flect extensions list
+flect extensions describe <extension>/<operation>
+flect extensions call <extension>/<operation> --input <json>
+flect ui context
+flect ui emit --input <json>
+flect recovery ...
+git status
+git diff
+git add ...
+git commit ...
+```
+
+Each subcommand crosses the same Effect Schema and capability broker used by
+the graphical shell. A role sees only applicable subcommands and operations.
+Skills can teach discovery patterns, while full operation descriptions stay
+out of model context until the agent asks for them.
+
+Compatible extension operations are shell commands by default. Flect keeps
+their complete schemas out of the model's initial tool list and resolves
+`describe` or `call` through the role's approved extension host. An extension
+must separately declare and justify any directly model-visible tool it cannot
+represent through the shell; installation shows that added context cost before
+approval.
+
+The custom `git` command preserves familiar Git CLI interaction while calling
+the same libgit2-Wasm `GitWorkspace` service that owns the real OPFS repository
+and worktrees. It is a CLI-shaped capability, not a second Git implementation
+or simulated revision store. Unsupported flags or subcommands fail explicitly.
+
+The `SandboxedShell` Effect service owns realm lifecycle, the scoped virtual
+filesystem, Bash execution, interruption, output and resource limits, command
+registration, and cleanup. Pi's runtime may remain local or remote, but its
+`bash` call crosses the existing Flect transport back to the browser-resident
+shell. Shell execution therefore works identically in a normal browser and the
+desktop WebView without shipping a VM, container, operating-system image, or
+native executable.
+
+Before adoption, the exact pinned `just-bash` browser artifact must pass
+Flect's Vite/Rolldown production-build and real-browser tests. The current
+package's browser entry leaves `node:zlib` external for archive support, so
+Flect must either use a reviewed browser implementation, disable those archive
+commands, or land an upstream fix. It must not add a Node polyfill bundle or
+silently fall back to host execution.
+
+The 2026-07-30 spike compared `just-bash@3.2.0` with
+`@everruns/bashkit-wasm@0.14.4`. The published `just-bash` browser bundle was
+about 1.2 MB minified and 340 KB gzip, exposes a complete async filesystem
+interface, and supports `AbortSignal`. Bashkit's Wasm artifact was about 5.9 MB
+and 2.26 MB gzip, uses an internal VFS, and documents no reliable browser
+wall-clock deadline. Bashkit remains a fallback if the isolated `just-bash`
+boundary fails adversarial tests. A Linux micro-VM was rejected for the
+default path because its runner and guest image would make Flect heavier and
+would move execution out of the browser.
+
 ### External Pi extensions are explicit trusted code
 
 Flect discovers external Pi extensions without importing or executing them.
@@ -142,7 +220,8 @@ Each bundled extension is content-addressed and declares:
 - required and optional Flect capabilities;
 - whether it uses only the portable Extension API subset;
 - browser and desktop compatibility;
-- commands, widgets, dialogs, tools, and event hooks it contributes; and
+- namespaced shell commands, widgets, dialogs, and event hooks it contributes;
+  a new model-visible tool requires separate justification; and
 - bundled dependency and source-map hashes.
 
 Capsules include prebuilt extension modules and all portable runtime
@@ -180,18 +259,27 @@ Effect application kernel
         |      |      extension-free
         |      |      read-only agent observations
         |      |      closed recovery capabilities
+        |      |      recovery-shell profile
         |      |
         |      +-- App Agent process
         |      |      normal run mode
         |      |      capsule App Agent package
         |      |      approved product/API capabilities
         |      |      explicitly enabled runtime extensions
+        |      |      app-shell profile
         |      |
         |      +-- Shaper process
         |             explicit edit mode
         |             Git/build/preview capabilities
         |             explicitly enabled authoring extensions
         |             scoped workspace capabilities
+        |             authoring-shell profile
+        |
+        +-- SandboxedShell host
+        |      opaque-origin iframe per active role
+        |      disposable interpreter Worker
+        |      pinned just-bash interpreter
+        |      role-specific virtual FS, commands, and quotas
         |
         +-- GitWorkspace worker
         |      libgit2-Wasm
@@ -237,6 +325,28 @@ merely a Pi tool allowlist:
   `SessionManager` and `ResourceLoader` instances. A portable extension is
   bridged into its approved role; its code is not promoted into the protected
   runtime process.
+- Each Pi host routes its `bash` tool to a distinct browser-resident
+  `SandboxedShell`. The interpreter runs in a disposable Worker created inside
+  an `<iframe sandbox="allow-scripts">` without `allow-same-origin`. A
+  restrictive CSP denies network, navigation, storage-bearing origins, and
+  unreviewed script sources. Terminating the Worker is the hard cancellation
+  boundary.
+- The shell's async filesystem adapter crosses a typed message bridge. The
+  parent resolves paths under exactly one role root and performs approved
+  operations through `GitWorkspace` or a bounded in-memory filesystem. The
+  opaque shell realm never receives an OPFS handle, model credential, host
+  environment, product credential, or parent object reference.
+- App Agent receives a writable ephemeral scratch directory, a bounded
+  read-only projection of public capsule context, and its approved `flect
+  capabilities` commands. It does not receive interface source or the Git
+  repository.
+- Shaper receives a virtual filesystem rooted at exactly one OPFS proposal
+  worktree plus the brokered `git`, build, preview, and authoring commands. It
+  does not receive product capabilities or product credentials.
+- Guardian receives a bounded observation bundle and, only when source repair
+  is required, a virtual filesystem rooted at a disposable recovery worktree.
+  It does not receive App Agent product data, the accepted workspace as
+  writable, or ordinary capsule extensions.
 - An external, non-portable Pi extension executes in the selected role's
   disposable runtime process as explicitly trusted code. Flect labels this
   path as unsandboxed relative to the portable extension boundary.
@@ -248,6 +358,12 @@ Flect does not emulate Node or run Bun in a browser, and does not depend on
 WebContainer. If a host cannot enforce a requested portable extension or UI
 capability, installation fails closed or opens the capsule with that component
 disabled.
+
+Direct network is absent. Approved product access exists only through the
+schema-backed `flect capabilities` command. Interpreter command count, loop
+iterations, recursion, glob work, strings, arrays, files, filesystem bytes,
+wall time, stdout, and stderr are bounded. Effect `Scope` revokes every bridge
+capability and terminates the Worker on cancellation or disposal.
 
 ## App Agent run mode
 
@@ -276,8 +392,8 @@ grant capabilities, or alter recovery state.
 ### Product and API capabilities
 
 A capsule can declare product operations through schema-defined Flect
-capability adapters. A portable extension can contribute the tool description
-and Effect Schema request and response contracts, but it cannot gain ambient
+capability adapters. A portable extension can contribute command metadata and
+Effect Schema request and response contracts, but it cannot gain ambient
 `fetch`, read product credentials, or choose arbitrary destinations.
 
 Installation resolves each declared operation to an adapter and presents its
@@ -291,7 +407,7 @@ requirement. A protected capability broker:
 - distinguishes read, reversible write, and consequential write operations;
 - requires confirmation where the capability policy demands it;
 - attaches idempotency protection when the product contract supports it; and
-- returns bounded, redacted results to App Agent.
+- returns bounded, redacted results through `flect capabilities call`.
 
 In a browser, direct adapters work only where the product's origin and CORS
 policy permit them. An explicitly configured Flect runtime can broker an
@@ -355,20 +471,28 @@ change proceeds as follows:
 
 1. Flect creates `flect/proposal/<proposal-id>` at the exact accepted commit.
 2. libgit2 creates an isolated proposal worktree.
-3. Shaper receives workspace tools scoped to that worktree.
-4. Every Shaper edit affects only the proposal worktree.
-5. Flect commits attributable checkpoints while the turn progresses.
-6. `BrowserBuild` mirrors the worktree into Rolldown's filesystem and builds
-   it in a worker.
-7. Flect validates the emitted capsule and opens it in the isolated preview.
-8. Accept advances the accepted ref to the validated proposal commit and
+3. `SandboxedShell` exposes that worktree as `/workspace` through a
+   path-confined async filesystem adapter; it does not expose the `.git`
+   directory or an OPFS handle.
+4. Shaper receives one Bash tool and uses ordinary shell commands plus the
+   brokered `git` command.
+5. File commands write directly through `GitWorkspace` to the proposal
+   worktree. The `git` command invokes bounded libgit2-Wasm operations against
+   the same worktree and creates attributable checkpoint commits.
+6. Flect verifies the expected parent, paths, authorship, size, object graph,
+   and proposal ref before accepting each checkpoint.
+7. `BrowserBuild` mirrors the verified proposal worktree into Rolldown's
+   filesystem and builds it in a worker.
+8. Flect validates the emitted capsule and opens it in the isolated preview.
+9. Accept advances the accepted ref to the validated proposal commit and
    records the protected activation receipt.
-9. Reject removes the proposal ref and worktree after retaining the requested
-   diagnostic metadata.
-10. Rollback activates a prior validated accepted commit.
+10. Reject removes the proposal ref, worktree, and shell realm after retaining
+    the requested diagnostic metadata.
+11. Rollback activates a prior validated accepted commit.
 
-An uncommitted, unbuilt, invalid, stale-base, or capability-incompatible
-proposal cannot become active.
+The shell cannot address another worktree, repository internals, or activation
+metadata. An uncommitted, unbuilt, invalid, stale-base, oversized, or
+capability-incompatible proposal cannot become active.
 
 ### Build integration
 
@@ -445,7 +569,10 @@ The supervisor asks Guardian for a diagnosis when it observes:
 
 ### Recovery authority
 
-Guardian can request only closed, schema-defined recovery operations:
+Guardian may use Bash to inspect its bounded observation files, search source,
+run inert diagnostics, edit its recovery worktree, and produce a repair commit.
+Its `flect recovery` command can request only closed, schema-defined host
+operations:
 
 - interrupt the active operation in a named role;
 - restart App Agent or Shaper;
@@ -643,6 +770,11 @@ Safe mode never requires opening the Git repository.
 - Invalid or corrupt OPFS repository -> compiled launcher and repository
   recovery options.
 - libgit2-Wasm startup failure -> compiled launcher; no system Git fallback.
+- Sandboxed shell startup or compatibility failure -> agent remains available
+  for conversation with Bash disabled and a typed diagnostic; no host-shell
+  fallback.
+- Shell deadline or resource limit -> terminate the role Worker, discard
+  unvalidated output, reopen its scoped filesystem, and offer a clean retry.
 - Proposal worktree failure -> accepted worktree remains unchanged.
 - Build failure -> retain the last successful build and show bounded
   diagnostics.
@@ -670,36 +802,42 @@ cross public boundaries without classification and redaction.
 
 The program is implemented in dependency order:
 
-1. **Embedded Git proof:** reproducible libgit2-Wasm, worker, OPFS adapter,
+1. **Sandboxed shell proof:** pinned `just-bash` browser artifact, production
+   bundle, opaque-origin iframe, disposable Worker, Pi `BashOperations`,
+   role-scoped async filesystem, hard cancellation, and brokered `flect`
+   command tests.
+2. **Embedded Git proof:** reproducible libgit2-Wasm, worker, OPFS adapter,
+   brokered `git` command, shell/worktree integration,
    repository reopen, commit, branch, diff, and real worktree tests.
-2. **Composer, modes, and authentication:** T3-derived composer/provider
+3. **Composer, modes, and authentication:** T3-derived composer/provider
    picker, run/edit mode shell, in-Flect Pi login/logout, model refresh,
    favorites, and README cleanup.
-3. **Capsule agent packages:** capsule manifest and integrity rules, protected
+4. **Capsule agent packages:** capsule manifest and integrity rules, protected
    base App Agent, capsule App Agent package, portable extension format,
-   install review, and role-scoped grants.
-4. **Supervised extensible agents:** independent App Agent and Shaper
+   shell-command contributions, install review, and role-scoped grants.
+5. **Supervised extensible agents:** independent App Agent and Shaper
    lifecycles, extension discovery and explicit role enablement,
    `AgentObservation`, Guardian triggers, containment, base-agent fallback, and
    extension-free Shaper restart.
-5. **Authoring integration:** Shaper workspace tools, Rolldown build,
+6. **Authoring integration:** Shaper shell workflow, Rolldown build,
    isolated preview, Git accept/reject/rollback, migration, and recovery.
-6. **Product verification:** real-browser automation, native host tests,
+7. **Product verification:** real-browser automation, native host tests,
    accessibility, release media, attribution, documentation, and dogfood.
 
 Each slice lands only with its public behavior tests passing. The final outcome
 is not considered complete until the integrated browser and packaged macOS app
-have been exercised through capsule installation, login, App Agent use,
-run-to-edit handoff, edit, build, preview, accept, role-scoped extension
-failure, Guardian recovery, restart, and rollback.
+have been exercised through capsule installation, login, Bash-driven App Agent
+use, run-to-edit handoff, Bash-driven edit, build, preview, accept, role-scoped
+extension failure, Guardian shell recovery, restart, and rollback.
 
 ## Testing
 
 ### Contract and Effect tests
 
-- Decode every Git, auth, extension, observation, recovery, and build boundary
-  with excess properties rejected.
+- Decode every shell, filesystem, Git, auth, extension, observation, recovery,
+  and build boundary with excess properties rejected.
 - Test `GitWorkspace`, `BrowserBuild`, `PiAuthentication`,
+  `SandboxedShell`, `ShellFilesystem`, `ShellCommandBroker`,
   `CapsuleAgentPackage`, `AppAgentRuntime`, `ExtensionCatalog`,
   `AgentSupervisor`, and `GuardianRecovery` through test Layers.
 - Use scoped workers and finalizer assertions to prove interruption and
@@ -711,11 +849,20 @@ failure, Guardian recovery, restart, and rollback.
 - Prove extensions cannot load before explicit enablement or enter Guardian.
 - Prove App Agent has no Git or source-editing capabilities, Shaper has no
   product API capabilities, and an extension grant never crosses roles.
+- Prove role shells expose only one Pi `bash` tool by default, and capability
+  and extension schemas enter model context only after explicit shell
+  discovery.
 
 ### Real-browser tests
 
 Playwright runs against a production build in Chromium and verifies:
 
+- the pinned `just-bash` bundle loads without Node globals or polyfills in the
+  opaque-origin shell host;
+- pipelines, redirection, text processing, filesystem writes, output limits,
+  cooperative cancellation, and forced Worker termination;
+- path traversal, symlink escape, direct OPFS, storage, and direct-network
+  access remain unavailable from every role shell;
 - `.flect` capsule import, manifest and hash verification, extension review,
   approval or decline, restricted opening, and refresh restoration;
 - OPFS repository creation, refresh restoration, and export;
@@ -725,7 +872,9 @@ Playwright runs against a production build in Chromium and verifies:
 - deterministic OAuth, device-code, API-key, cancellation, logout, and refresh
   flows through test Pi Layers;
 - App Agent conversation, approved test-API invocation, inert UI intent, and
-  explicit `RequestEditMode` handoff;
+  explicit `RequestEditMode` handoff through Bash and `flect` commands;
+- Shaper file edits and familiar `git status`, `diff`, `add`, and `commit`
+  commands against the exact proposal worktree;
 - capsule and external extension discovery, explicit role enablement,
   disablement, capability review, and incompatibility;
 - App Agent failure, instant supervisor observation, base-agent fallback, and
@@ -739,7 +888,8 @@ Playwright runs against a production build in Chromium and verifies:
 
 The packaged Tauri app uses the same Wasm Git and browser build path. Tests
 verify its private Pi transport, URL opening boundary, sidecar/process cleanup,
-OPFS persistence, restart recovery, and absence of a system Git dependency.
+OPFS persistence, restart recovery, the same browser-resident shell, and
+absence of system Bash and Git dependencies.
 
 ### Live smoke
 
@@ -750,9 +900,10 @@ An opt-in smoke uses the developer's existing Pi state to:
 3. review its agent package, extensions, and capability requests;
 4. perform or confirm in-app provider login;
 5. select a model;
-6. ask App Agent to invoke an approved reversible test operation;
+6. ask App Agent to discover and invoke an approved reversible operation
+   through Bash;
 7. request and confirm an edit-mode handoff;
-8. make a Shaper edit in a proposal worktree;
+8. make and commit a Shaper edit through Bash in a proposal worktree;
 9. build, preview, and accept;
 10. induce a controlled role-scoped extension failure;
 11. observe Guardian containment and recovery; and
@@ -770,8 +921,12 @@ No live credential or provider payload is captured in test artifacts.
   intentional non-capability.
 - `DESIGN.md` receives the final composer and provider-picker tokens.
 - `docs/trust-model.md` owns capsule and external extension trust, role and
-  capability isolation, Guardian authority, embedded Git, OPFS, and recovery
-  explanations.
+  capability isolation, the browser shell boundary, Guardian authority,
+  embedded Git, OPFS, and recovery explanations.
+- Root `AGENTS.md` changes only after the shell boundary is implemented and
+  proven. It then records that Bash is allowed solely through
+  `SandboxedShell`; host shell, ambient filesystem, and direct network remain
+  prohibited.
 - T3-derived code and repository notices include the required MIT attribution.
 - GitHub issues remain the executable acceptance criteria for capsule,
   authoring, capability, and ecosystem delivery.
@@ -781,6 +936,7 @@ No live credential or provider payload is captured in test artifacts.
 This design does not promise:
 
 - arbitrary Node/Vite plugins in a browser;
+- arbitrary native binaries or the host shell;
 - unrestricted package scripts;
 - automatic trust of external Pi extensions;
 - silent capability grants;
@@ -797,9 +953,11 @@ The design is complete when a new user can install or open Flect, authenticate
 Pi from inside the product, select a provider and model through the T3-derived
 picker, install a shareable `.flect` whose portable Pi extensions survive the
 round trip, review and approve each role and capability, talk to App Agent in
-run mode to perform an approved product operation, explicitly hand a change to
-Shaper in edit mode, inspect the real Git diff and isolated build, accept or
-reject it, restart without losing the workspace, and recover from an induced
-App Agent, Shaper, or extension failure through Guardian and deterministic
-safe mode—all without installing Git, a separate Pi client, or using a
-terminal.
+run mode through one Bash tool, discover and perform an approved product
+operation without loading its complete schema into initial model context,
+explicitly hand a change to Shaper in edit mode, use familiar shell and Git
+commands against its proposal worktree, inspect the real Git diff and isolated
+build, accept or reject it, restart without losing the workspace, and recover
+from an induced App Agent, Shaper, or extension failure through Guardian and
+deterministic safe mode—all without installing Bash, Git, a separate Pi client,
+or using a terminal.
