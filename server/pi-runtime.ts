@@ -293,12 +293,13 @@ export const PiSdkLive = Layer.effect(
           )((requestId: string, shellResult: BunCommandResult) =>
             shellBridge.complete(requestId, shellResult),
           ),
-          abort: Effect.fn("Flect.PiSession.abort")(() =>
-            Effect.tryPromise({
+          abort: Effect.fn("Flect.PiSession.abort")(function* () {
+            yield* shellBridge.cancel;
+            yield* Effect.tryPromise({
               try: () => result.session.abort(),
               catch: () => piFailure("cancel"),
-            }),
-          ),
+            });
+          }),
           dispose: shellBridge.close.pipe(
             Effect.andThen(
               Effect.sync(() => {
@@ -356,9 +357,7 @@ type OperationController = {
     operation: ActiveOperation,
   ) => Effect.Effect<void, SessionBusy | SessionNotFound>;
   readonly finish: (operation: ActiveOperation) => Effect.Effect<void>;
-  readonly cancelActive: (
-    kind: OperationKind,
-  ) => Effect.Effect<void, PiOperationFailed>;
+  readonly cancelActive: () => Effect.Effect<void, PiOperationFailed>;
   readonly interruptActive: Effect.Effect<void>;
   readonly close: Effect.Effect<void>;
 };
@@ -424,13 +423,12 @@ const makeOperationController = Effect.fn(
   });
 
   const cancelActive = Effect.fn("Flect.Runtime.cancelActiveOperation")(
-    (kind: OperationKind) =>
+    () =>
       Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const operation = yield* Ref.modify(state, (current) => {
             if (
-              current.active?.kind !== kind ||
-              current.cancelling !== undefined
+              current.active === undefined || current.cancelling !== undefined
             ) {
               return [undefined, current] satisfies readonly [
                 undefined,
@@ -979,7 +977,7 @@ export const FlectRuntimeLive = Layer.effect(
       sessionId: string,
     ) {
       const record = yield* findSession(sessionId);
-      yield* record.sessionOperation.cancelActive("prompt");
+      yield* record.sessionOperation.cancelActive();
     });
 
     const makeShape = Effect.fn("Flect.Runtime.makeShape")(function* (

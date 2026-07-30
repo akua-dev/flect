@@ -87,19 +87,22 @@ export const makePiShellBridge = Effect.fn("Flect.PiShellBridge.make")(
       }
     });
 
-    const close = Ref.getAndSet(pending, new Map()).pipe(
-      Effect.flatMap((current) =>
-        Effect.forEach(
-          current.values(),
-          (response) =>
-            Deferred.succeed(
-              response,
-              shellFailureResult("bash: session closed", 130),
+    const releasePending = Effect.fn("Flect.PiShellBridge.releasePending")(
+      (message: string) =>
+        Ref.getAndSet(pending, new Map()).pipe(
+          Effect.flatMap((current) =>
+            Effect.forEach(
+              current.values(),
+              (response) =>
+                Deferred.succeed(response, shellFailureResult(message, 130)),
+              { discard: true },
             ),
-          { discard: true },
+          ),
         ),
-      ),
     );
+
+    const cancel = releasePending("bash: operation cancelled");
+    const close = releasePending("bash: session closed");
 
     const tool = defineTool({
       name: "bash",
@@ -137,6 +140,7 @@ export const makePiShellBridge = Effect.fn("Flect.PiShellBridge.make")(
     return {
       request,
       complete,
+      cancel,
       close,
       tool,
     };

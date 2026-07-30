@@ -515,35 +515,46 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
-  it.effect(
-    "does not cancel an active Shaper when cancelling a session",
-    () => {
-      const promptStarted = Deferred.makeUnsafe<void>();
-      const promptGate = Deferred.makeUnsafe<void>();
-      const fake = createFakePi({
-        promptGate,
-        promptStarted,
-        promptResponse: JSON.stringify(defaultInterfaceDocument),
-      });
+  it.effect("cancels an active Shaper during a pending shell request", () => {
+    const shellRequest = {
+      requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+      command: "bun run src/index.ts",
+      started: Deferred.makeUnsafe<void>(),
+      completed: Deferred.makeUnsafe<BunCommandResult>(),
+    };
+    const fake = createFakePi({
+      shellRequest,
+      promptResponse: JSON.stringify(defaultInterfaceDocument),
+    });
 
-      return Effect.gen(function* () {
-        const runtime = yield* FlectRuntime;
-        const sessionId = yield* runtime.createSession(
-          new SessionSelection({}),
-        );
-        const shapeFiber = yield* runtime
-          .shape(sessionId, "Shape this", defaultInterfaceDocument)
-          .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
-        yield* Deferred.await(promptStarted);
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const shapeFiber = yield* runtime
+        .shape(sessionId, "Shape this", defaultInterfaceDocument)
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(shellRequest.started);
 
-        yield* runtime.cancel(sessionId);
-        expect(fake.abort).not.toHaveBeenCalled();
+      const cancelFiber = yield* runtime
+        .cancel(sessionId)
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Effect.yieldNow;
+      expect(fake.abort).toHaveBeenCalledOnce();
+      expect(cancelFiber.pollUnsafe()).toBeUndefined();
 
-        yield* Deferred.succeed(promptGate, undefined);
-        yield* Fiber.join(shapeFiber);
-      }).pipe(Effect.provide(fake.layer));
-    },
-  );
+      yield* Deferred.succeed(
+        shellRequest.completed,
+        BunCommandResult.make({
+          version: 1,
+          exitCode: 130,
+          stdout: "",
+          stderr: "bash: operation cancelled\n",
+        }),
+      );
+      yield* Fiber.join(shapeFiber);
+      yield* Fiber.join(cancelFiber);
+    }).pipe(Effect.provide(fake.layer));
+  });
 
   it.effect(
     "waits for an interrupted prompt before acknowledging cancel",
@@ -564,7 +575,7 @@ describe("FlectRuntimeLive", () => {
         );
         const promptFiber = yield* runtime
           .prompt(sessionId, "Keep talking")
-          .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+          .pipe(Stream.runCollect, Effect.forkChild({ startImmediately: true }));
         yield* Deferred.await(promptStarted);
 
         const cancelFiber = yield* runtime
@@ -575,7 +586,8 @@ describe("FlectRuntimeLive", () => {
         expect(cancelFiber.pollUnsafe()).toBeUndefined();
 
         yield* Deferred.succeed(promptGate, undefined);
-        yield* Fiber.join(promptFiber);
+        const events = yield* Fiber.join(promptFiber);
+        expect(events.at(-1)).toEqual({ type: "cancelled" });
         yield* Fiber.join(cancelFiber);
       }).pipe(Effect.provide(fake.layer));
     },

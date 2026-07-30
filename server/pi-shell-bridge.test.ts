@@ -53,4 +53,27 @@ describe("Pi shell bridge", () => {
       assert.strictEqual(error.operation, "shell");
     }),
   );
+
+  it.effect("releases a pending command when its operation is cancelled", () =>
+    Effect.gen(function* () {
+      const requestId = yield* Deferred.make<string>();
+      const bridge = yield* makePiShellBridge((event) => {
+        Effect.runSync(Deferred.succeed(requestId, event.requestId));
+      });
+      const fiber = yield* bridge
+        .request("sleep 30")
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      const observedRequestId = yield* Deferred.await(requestId);
+
+      yield* bridge.cancel;
+
+      const result = yield* Fiber.join(fiber);
+      assert.strictEqual(result.exitCode, 130);
+      assert.strictEqual(result.stderr, "bash: operation cancelled\n");
+      const error = yield* Effect.flip(
+        bridge.complete(observedRequestId, result),
+      );
+      assert.strictEqual(error.operation, "shell");
+    }),
+  );
 });
