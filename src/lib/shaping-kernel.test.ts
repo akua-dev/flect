@@ -151,27 +151,27 @@ describe("ShapingKernel", () => {
     }),
   });
 
-  it.layer(
-    makePersistentHarness(JSON.stringify(safeModeRestoredSnapshot)),
-  )((it) => {
-    it.effect("restores safe mode on the built-in document", () =>
-      Effect.gen(function* () {
-        const kernel = yield* ShapingKernel;
-        const snapshot = yield* kernel.snapshot;
+  it.layer(makePersistentHarness(JSON.stringify(safeModeRestoredSnapshot)))(
+    (it) => {
+      it.effect("restores safe mode on the built-in document", () =>
+        Effect.gen(function* () {
+          const kernel = yield* ShapingKernel;
+          const snapshot = yield* kernel.snapshot;
 
-        assert.deepStrictEqual(
-          snapshot.active.document,
-          defaultInterfaceDocument,
-        );
-        assert.deepStrictEqual(
-          snapshot.lastKnownGood.document,
-          defaultInterfaceDocument,
-        );
-        assert.strictEqual(snapshot.safeMode, true);
-        assert.strictEqual(snapshot.proposal, undefined);
-      }),
-    );
-  });
+          assert.deepStrictEqual(
+            snapshot.active.document,
+            defaultInterfaceDocument,
+          );
+          assert.deepStrictEqual(
+            snapshot.lastKnownGood.document,
+            defaultInterfaceDocument,
+          );
+          assert.strictEqual(snapshot.safeMode, true);
+          assert.strictEqual(snapshot.proposal, undefined);
+        }),
+      );
+    },
+  );
 
   it.layer(makePersistentHarness())((it) => {
     it.effect("persists accepted revisions as one journal transaction", () =>

@@ -427,46 +427,51 @@ describe("FlectRuntimeLive", () => {
     },
   );
 
-  it.effect("keeps an interrupted Pi promise occupying its session slot", () => {
-    const pendingPromptStarted = Deferred.makeUnsafe<void>();
-    const fake = createFakePi({
-      abortFailure: true,
-      pendingPromptStarted,
-      promptResponse: JSON.stringify(defaultInterfaceDocument),
-    });
+  it.effect(
+    "keeps an interrupted Pi promise occupying its session slot",
+    () => {
+      const pendingPromptStarted = Deferred.makeUnsafe<void>();
+      const fake = createFakePi({
+        abortFailure: true,
+        pendingPromptStarted,
+        promptResponse: JSON.stringify(defaultInterfaceDocument),
+      });
 
-    return Effect.gen(function* () {
-      const runtime = yield* FlectRuntime;
-      const sessionId = yield* runtime.createSession(new SessionSelection({}));
-      const promptFiber = yield* runtime
-        .prompt(sessionId, "Keep talking")
-        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
-      yield* Deferred.await(pendingPromptStarted);
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const sessionId = yield* runtime.createSession(
+          new SessionSelection({}),
+        );
+        const promptFiber = yield* runtime
+          .prompt(sessionId, "Keep talking")
+          .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+        yield* Deferred.await(pendingPromptStarted);
 
-      const cancelError = yield* runtime.cancel(sessionId).pipe(Effect.flip);
-      expect(cancelError).toEqual(
-        new PiOperationFailed({
-          operation: "cancel",
-          message: "The model runtime could not complete the request.",
-        }),
-      );
-      yield* Fiber.interrupt(promptFiber);
+        const cancelError = yield* runtime.cancel(sessionId).pipe(Effect.flip);
+        expect(cancelError).toEqual(
+          new PiOperationFailed({
+            operation: "cancel",
+            message: "The model runtime could not complete the request.",
+          }),
+        );
+        yield* Fiber.interrupt(promptFiber);
 
-      const busy = yield* runtime
-        .shape(sessionId, "Start another request", defaultInterfaceDocument)
-        .pipe(Effect.flip);
-      expect(busy).toEqual(
-        new SessionBusy({
-          sessionId,
-          message: "The session is busy.",
-        }),
-      );
-      expect(fake.prompt).toHaveBeenCalledOnce();
+        const busy = yield* runtime
+          .shape(sessionId, "Start another request", defaultInterfaceDocument)
+          .pipe(Effect.flip);
+        expect(busy).toEqual(
+          new SessionBusy({
+            sessionId,
+            message: "The session is busy.",
+          }),
+        );
+        expect(fake.prompt).toHaveBeenCalledOnce();
 
-      fake.releasePendingPrompt();
-      yield* Effect.yieldNow;
-    }).pipe(Effect.provide(fake.layer));
-  });
+        fake.releasePendingPrompt();
+        yield* Effect.yieldNow;
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 
   it.effect(
     "rejects conflicts and waits before disposing an active session",

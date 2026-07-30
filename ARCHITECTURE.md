@@ -110,8 +110,8 @@ Each session has its own in-memory `SessionManager`, `SettingsManager`, and
 `DefaultResourceLoader`. Their only shared object is the provider/model runtime.
 Prompts and responses are not persisted by Flect. Disposing the Effect runtime
 unsubscribes and disposes both sessions. The client closes its current pair
-when the model changes, the runtime is refreshed, a transport operation fails,
-or the UI unmounts. Session handles are keyed by model selection, and the
+when the model changes, the runtime is refreshed, a prompt or shaping operation
+fails, or the UI unmounts. Session handles are keyed by model selection, and the
 runtime evicts and disposes the oldest pair before exceeding 32 active pairs.
 Each protected session admits one active operation at a time: overlapping shape
 requests fail with a typed busy conflict, while prompt-stream conflicts become
@@ -208,7 +208,8 @@ design.
 - rollback -> last-known-good becomes active;
 - rollback failure -> the protected kernel remains authoritative and may ask
   Guardian for a bounded, inert explanation;
-- repeated extension failures -> extension disabled and deterministic rollback;
+- repeated extension failures -> extension disabled and protected launcher
+  restored;
 - unavailable model runtime -> visible offline state while local interface
   recovery remains available;
 - public runtime failures -> stable redacted messages, never raw provider

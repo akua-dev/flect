@@ -62,9 +62,7 @@ describe("ShaperPanel", () => {
       />,
     );
 
-    await user.click(
-      within(container).getByRole("button", { name: "Reject" }),
-    );
+    await user.click(within(container).getByRole("button", { name: "Reject" }));
     rerender(
       <ShaperPanel
         agentStatus="ready"

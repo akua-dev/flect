@@ -4,8 +4,8 @@ import { TestClock } from "effect/testing";
 import { SandboxResult, SetTextIntent } from "../../shared/sandbox";
 import {
   ExtensionSandbox,
-  makeSandboxWorkerHandle,
   makeExtensionSandboxTestLayer,
+  makeSandboxWorkerHandle,
 } from "./extension-sandbox";
 
 const request = {

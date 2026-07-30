@@ -107,28 +107,26 @@ fn start_runtime(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     tauri::async_runtime::spawn(async move {
         while let Some(event) = events.recv().await {
             match event {
-                CommandEvent::Stdout(line) => {
-                    match decode_rpc_response(&line) {
-                        Ok(payload) => {
-                            let response_type = payload
-                                .as_object()
-                                .and_then(|object| object.get("_tag"))
-                                .and_then(Value::as_str)
-                                .unwrap_or("unknown");
-                            eprintln!("Flect private runtime response received: {response_type}.");
-                            let _ = handle.emit("flect://rpc", payload);
-                        }
-                        Err(reason) => {
-                            eprintln!("Flect private runtime returned an invalid frame: {reason}");
-                            if let Ok(mut guard) = handle.state::<RuntimeChild>().0.lock() {
-                                if let Some(child) = guard.take() {
-                                    let _ = child.kill();
-                                }
-                            }
-                            break;
-                        }
+                CommandEvent::Stdout(line) => match decode_rpc_response(&line) {
+                    Ok(payload) => {
+                        let response_type = payload
+                            .as_object()
+                            .and_then(|object| object.get("_tag"))
+                            .and_then(Value::as_str)
+                            .unwrap_or("unknown");
+                        eprintln!("Flect private runtime response received: {response_type}.");
+                        let _ = handle.emit("flect://rpc", payload);
                     }
-                }
+                    Err(reason) => {
+                        eprintln!("Flect private runtime returned an invalid frame: {reason}");
+                        if let Ok(mut guard) = handle.state::<RuntimeChild>().0.lock() {
+                            if let Some(child) = guard.take() {
+                                let _ = child.kill();
+                            }
+                        }
+                        break;
+                    }
+                },
                 CommandEvent::Stderr(_) | CommandEvent::Error(_) => {
                     eprintln!("Flect private runtime reported an internal error.");
                 }
@@ -170,8 +168,8 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::{
-        decode_rpc_response, encode_rpc_request, require_runtime_child, validate_rpc_request,
-        runtime_unavailable_response, MAX_RPC_MESSAGE_BYTES,
+        decode_rpc_response, encode_rpc_request, require_runtime_child,
+        runtime_unavailable_response, validate_rpc_request, MAX_RPC_MESSAGE_BYTES,
     };
     use serde_json::json;
 
