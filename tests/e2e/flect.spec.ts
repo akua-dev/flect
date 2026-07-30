@@ -108,9 +108,7 @@ test("uses the protected composer controls in a real browser", async ({
       { message: "the protected composer should stream or complete" },
     )
     .not.toBe("pending");
-  await expect(
-    response,
-  ).toBeVisible();
+  await expect(response).toBeVisible();
   await expect(stop).toBeHidden();
 });
 

@@ -222,24 +222,26 @@ describe("interface document", () => {
       }),
   );
 
-  it.effect("drops unsupported actions while migrating the legacy launcher", () =>
-    Effect.gen(function* () {
-      const document = yield* decodeInterfaceDocument(
-        JSON.stringify({
-          version: 1,
-          headline: "Where should we begin?",
-          placeholder: "Describe an interface",
-          secondaryActions: ["open"],
-        }),
-      );
+  it.effect(
+    "drops unsupported actions while migrating the legacy launcher",
+    () =>
+      Effect.gen(function* () {
+        const document = yield* decodeInterfaceDocument(
+          JSON.stringify({
+            version: 1,
+            headline: "Where should we begin?",
+            placeholder: "Describe an interface",
+            secondaryActions: ["open"],
+          }),
+        );
 
-      assert.strictEqual(document.version, 2);
-      assert.strictEqual(document.name, "Where should we begin?");
-      assert.strictEqual(document.root.type, "stack");
-      if (document.root.type !== "stack") {
-        return assert.fail("expected the migrated root to be a stack");
-      }
-      assert.strictEqual(document.root.children.length, 2);
-    }),
+        assert.strictEqual(document.version, 2);
+        assert.strictEqual(document.name, "Where should we begin?");
+        assert.strictEqual(document.root.type, "stack");
+        if (document.root.type !== "stack") {
+          return assert.fail("expected the migrated root to be a stack");
+        }
+        assert.strictEqual(document.root.children.length, 2);
+      }),
   );
 });
