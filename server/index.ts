@@ -1,5 +1,5 @@
-import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import { registerBunOAuthFlows } from "@earendil-works/pi-ai/bun-oauth";
+import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { makeFlectHttpApp } from "./app";

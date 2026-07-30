@@ -176,10 +176,11 @@ The current vertical slice uses a closed schema-defined renderer rather than
 arbitrary UI capsules. It implements model-backed proposals, preview, keep,
 reject, a versioned revision journal, rollback, safe mode, separate Guardian
 and Shaper Pi sessions, a resource-limited QuickJS logic worker, and a minimal
-capability broker. That broker requires both manifest declaration and a user
-grant before invoking its current interface-local adapter; denied requests
-never reach the adapter. Repeated sandbox or broker failures disable the
-extension and request deterministic recovery.
+capability broker. That broker requires both manifest declaration and an
+explicit grant supplied by the protected caller before invoking its current
+interface-local adapter; denied requests never reach the adapter. Repeated
+sandbox or broker failures disable the extension and request deterministic
+recovery.
 
 Arbitrary generated React, the isolated capsule renderer, browser source
 building, product/API adapters, privileged native brokerage, sharing, signing,

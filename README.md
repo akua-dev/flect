@@ -94,8 +94,8 @@ browser development HTTP server.
   `agent-panel` nodes;
 - strict extension manifests and a QuickJS-NG/WASM logic sandbox with resource
   limits and no ambient browser, network, process, module, Tauri, or Pi access;
-- an explicit capability broker that requires both manifest declaration and a
-  user grant before applying the current interface-local intent;
+- an explicit capability broker that requires both manifest declaration and an
+  explicit grant before invoking the current interface-local adapter;
 - browser and native transports behind the same Effect service; and
 - automated production-build Chromium coverage for chat, shaping, accept,
   reject, persistence, rollback, corrupt-journal recovery, keyboard use,
