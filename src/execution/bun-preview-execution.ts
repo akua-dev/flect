@@ -41,6 +41,38 @@ const previewFailure = () =>
     message: "The isolated Bun-compatible preview failed safely.",
   });
 
+export interface BunPreviewExecutionRelease {
+  readonly runId: string;
+  readonly port: number;
+  readonly stopRealm: () => void;
+  readonly stopPreview: (
+    runId: string,
+  ) => Effect.Effect<void, BunCommandFailed>;
+  readonly stopRoute: (
+    runId: string,
+    port: number,
+  ) => Effect.Effect<void>;
+  readonly clearActive: (runId: string) => Effect.Effect<void>;
+}
+
+export const releaseBunPreviewExecution = Effect.fn(
+  "Flect.BunPreviewExecution.release",
+)((release: BunPreviewExecutionRelease) =>
+  Effect.gen(function* () {
+    yield* Effect.sync(release.stopRealm).pipe(
+      Effect.catchDefect(() => Effect.void),
+    );
+    yield* release.stopPreview(release.runId).pipe(Effect.ignore);
+    yield* release
+      .stopRoute(release.runId, release.port)
+      .pipe(Effect.ignore);
+    yield* release.clearActive(release.runId);
+  }).pipe(
+    Effect.catch(() => Effect.void),
+    Effect.catchDefect(() => Effect.void),
+  ),
+);
+
 const dirname = (path: string) => {
   const slash = path.lastIndexOf("/");
   return slash <= 0 ? "/" : path.slice(0, slash);
@@ -618,20 +650,18 @@ export const BunPreviewExecutionLive = Layer.effect(
             catch: previewFailure,
           });
           let committed = false;
-          const release = Effect.gen(function* () {
-            yield* Effect.sync(() => realm.stop()).pipe(
-              Effect.catchDefect(() => Effect.void),
-            );
-            yield* preview.stop(runId).pipe(Effect.ignore);
-            yield* Effect.tryPromise({
-              try: () => stopPreviewRoute(runId, realm.port),
-              catch: () => undefined,
-            }).pipe(Effect.ignore);
-            yield* clearActive(runId);
-          }).pipe(
-            Effect.catch(() => Effect.void),
-            Effect.catchDefect(() => Effect.void),
-          );
+          const release = releaseBunPreviewExecution({
+            runId,
+            port: realm.port,
+            stopRealm: () => realm.stop(),
+            stopPreview: preview.stop,
+            stopRoute: (ownerRunId, ownerPort) =>
+              Effect.tryPromise({
+                try: () => stopPreviewRoute(ownerRunId, ownerPort),
+                catch: () => undefined,
+              }),
+            clearActive,
+          });
 
           return yield* Effect.gen(function* () {
             const registration = yield* preview.register({
