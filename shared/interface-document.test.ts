@@ -54,6 +54,31 @@ const validDocument = {
   },
 } as const;
 
+const deeplyNestedDocument = (depth: number) => {
+  let node: unknown = {
+    id: "leaf",
+    type: "text",
+    text: "Too deep",
+    style: "body",
+  };
+
+  for (let index = 0; index < depth; index += 1) {
+    node = {
+      id: `stack-${index}`,
+      type: "stack",
+      direction: "column",
+      gap: "sm",
+      children: [node],
+    };
+  }
+
+  return {
+    version: 2,
+    name: "Pathological depth",
+    root: node,
+  };
+};
+
 describe("interface document", () => {
   it.effect("decodes a recursive document from the trusted component set", () =>
     Effect.gen(function* () {
@@ -200,6 +225,16 @@ describe("interface document", () => {
           name: "Too deep",
           root: node,
         }),
+      );
+
+      assert.strictEqual(error._tag, "InvalidInterfaceDocument");
+    }),
+  );
+
+  it.effect("rejects pathological depth before recursive decoding", () =>
+    Effect.gen(function* () {
+      const error = yield* Effect.flip(
+        validateInterfaceDocument(deeplyNestedDocument(2_000)),
       );
 
       assert.strictEqual(error._tag, "InvalidInterfaceDocument");

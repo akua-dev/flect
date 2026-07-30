@@ -5,6 +5,10 @@ const strictOptions: SchemaAST.ParseOptions = {
   onExcessProperty: "error",
 };
 
+const MAX_TREE_DEPTH = 10;
+const MAX_TREE_NODES = 100;
+const MAX_STACK_CHILDREN = 30;
+
 const DisplayText = (maximum: number) =>
   Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(maximum));
 
@@ -73,7 +77,7 @@ export const StackNode: Schema.Codec<StackNode> = Schema.Struct({
   gap: Schema.Literals(["sm", "md", "lg"]),
   children: Schema.Array(
     Schema.suspend((): Schema.Codec<InterfaceNode> => InterfaceNode),
-  ).check(Schema.isMaxLength(30)),
+  ).check(Schema.isMaxLength(MAX_STACK_CHILDREN)),
 });
 
 export const TextNode: Schema.Codec<TextNode> = Schema.Struct({
@@ -141,6 +145,53 @@ const invalidDocument = () =>
   InvalidInterfaceDocument.make({
     message: "The interface document is invalid.",
   });
+
+const isRecord = (input: unknown): input is Record<string, unknown> =>
+  typeof input === "object" && input !== null && !Array.isArray(input);
+
+const preflightTree = (input: unknown) => {
+  if (!isRecord(input) || !isRecord(input.root)) {
+    return false;
+  }
+
+  const pending: Array<readonly [unknown, number]> = [[input.root, 1]];
+  const seen = new Set<object>();
+  let count = 0;
+
+  while (pending.length > 0) {
+    const entry = pending.pop();
+    if (entry === undefined) {
+      continue;
+    }
+    const [node, depth] = entry;
+    count += 1;
+
+    if (
+      depth > MAX_TREE_DEPTH ||
+      count > MAX_TREE_NODES ||
+      !isRecord(node) ||
+      seen.has(node)
+    ) {
+      return false;
+    }
+    seen.add(node);
+
+    const children = node.children;
+    if (node.type === "stack" && !Array.isArray(children)) {
+      return false;
+    }
+    if (Array.isArray(children)) {
+      if (children.length > MAX_STACK_CHILDREN) {
+        return false;
+      }
+      for (const child of children) {
+        pending.push([child, depth + 1]);
+      }
+    }
+  }
+
+  return true;
+};
 
 const decodeCurrentDocument = Schema.decodeUnknownEffect(
   InterfaceDocument,
@@ -246,7 +297,11 @@ const validateTree = Effect.fn("Flect.InterfaceDocument.validateTree")(
       const [node, depth] = entry;
       count += 1;
 
-      if (depth > 10 || count > 100 || identifiers.has(node.id)) {
+      if (
+        depth > MAX_TREE_DEPTH ||
+        count > MAX_TREE_NODES ||
+        identifiers.has(node.id)
+      ) {
         return yield* Effect.fail(invalidDocument());
       }
       identifiers.add(node.id);
@@ -263,6 +318,10 @@ const validateTree = Effect.fn("Flect.InterfaceDocument.validateTree")(
 export const validateInterfaceDocument = Effect.fn(
   "Flect.InterfaceDocument.validate",
 )(function* (input: unknown) {
+  if (!preflightTree(input)) {
+    return yield* Effect.fail(invalidDocument());
+  }
+
   const document = yield* decodeCurrentDocument(input).pipe(
     Effect.mapError(invalidDocument),
   );

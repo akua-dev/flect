@@ -22,6 +22,31 @@ const revision = (status: "proposed" | "previewed" | "accepted" | "rejected") =>
     createdAt: 1,
   }) as const;
 
+const deeplyNestedDocument = (depth: number) => {
+  let node: unknown = {
+    id: "leaf",
+    type: "text",
+    text: "Too deep",
+    style: "body",
+  };
+
+  for (let index = 0; index < depth; index += 1) {
+    node = {
+      id: `stack-${index}`,
+      type: "stack",
+      direction: "column",
+      gap: "sm",
+      children: [node],
+    };
+  }
+
+  return {
+    version: 2,
+    name: "Pathological depth",
+    root: node,
+  };
+};
+
 describe("interface revisions", () => {
   it.effect("decodes a schema-defined immutable revision", () =>
     Effect.gen(function* () {
@@ -46,6 +71,43 @@ describe("interface revisions", () => {
 
         assert.strictEqual(error._tag, "InvalidRevision");
         assert.notInclude(error.message, "must-never-land-here");
+      }),
+  );
+
+  it.effect(
+    "rejects pathological proposal depth before recursive journal decoding",
+    () =>
+      Effect.gen(function* () {
+        const builtIn = {
+          version: 1 as const,
+          id: "built-in",
+          status: "accepted" as const,
+          source: "built-in" as const,
+          document: defaultInterfaceDocument,
+          createdAt: 0,
+        };
+        const error = yield* Effect.flip(
+          validateShapingSnapshot({
+            version: 1,
+            active: builtIn,
+            lastKnownGood: builtIn,
+            proposal: {
+              ...revision("proposed"),
+              parentId: "built-in",
+              document: deeplyNestedDocument(2_000),
+            },
+            safeMode: false,
+            disabledExtensions: [],
+            lastEvent: {
+              version: 1,
+              sequence: 1,
+              type: "revision-proposed",
+              revisionId: "revision-1",
+            },
+          }),
+        );
+
+        assert.strictEqual(error._tag, "InvalidRevision");
       }),
   );
 

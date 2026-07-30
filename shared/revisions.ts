@@ -102,14 +102,29 @@ const invalidRevision = () =>
     message: "The interface revision is invalid.",
   });
 
+const readProperty = (input: unknown, key: string) =>
+  typeof input === "object" && input !== null
+    ? (input as Record<string, unknown>)[key]
+    : undefined;
+
+const validateRawRevisionDocument = Effect.fn(
+  "Flect.InterfaceRevision.preflightDocument",
+)((input: unknown) =>
+  validateInterfaceDocument(readProperty(input, "document")).pipe(
+    Effect.mapError(invalidRevision),
+    Effect.asVoid,
+  ),
+);
+
 export const validateInterfaceRevision = Effect.fn(
   "Flect.InterfaceRevision.validate",
-)((input: unknown) =>
-  Schema.decodeUnknownEffect(
+)(function* (input: unknown) {
+  yield* validateRawRevisionDocument(input);
+  return yield* Schema.decodeUnknownEffect(
     InterfaceRevision,
     strictOptions,
-  )(input).pipe(Effect.mapError(invalidRevision)),
-);
+  )(input).pipe(Effect.mapError(invalidRevision));
+});
 
 const validateRevisionDocument = Effect.fn(
   "Flect.ShapingSnapshot.validateRevisionDocument",
@@ -138,6 +153,13 @@ export const validateShapingSnapshot = Effect.fn(
 )(function* (
   input: unknown,
 ): Effect.fn.Return<ShapingSnapshot, InvalidRevision, never> {
+  yield* validateRawRevisionDocument(readProperty(input, "active"));
+  yield* validateRawRevisionDocument(readProperty(input, "lastKnownGood"));
+  const rawProposal = readProperty(input, "proposal");
+  if (rawProposal !== undefined) {
+    yield* validateRawRevisionDocument(rawProposal);
+  }
+
   const snapshot = yield* Schema.decodeUnknownEffect(
     ShapingSnapshot,
     strictOptions,
