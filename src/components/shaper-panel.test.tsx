@@ -24,6 +24,7 @@ describe("ShaperPanel", () => {
           reject: () => Promise.resolve(),
           rollback: () => Promise.resolve(),
         }}
+        agentStatus="ready"
         onClose={() => undefined}
       />,
     );
@@ -54,7 +55,11 @@ describe("ShaperPanel", () => {
       rollback: () => Promise.resolve(),
     };
     const { container, rerender } = render(
-      <ShaperPanel controller={controller} onClose={() => undefined} />,
+      <ShaperPanel
+        agentStatus="ready"
+        controller={controller}
+        onClose={() => undefined}
+      />,
     );
 
     await user.click(
@@ -62,6 +67,7 @@ describe("ShaperPanel", () => {
     );
     rerender(
       <ShaperPanel
+        agentStatus="ready"
         controller={{ ...controller, status: "idle" }}
         onClose={() => undefined}
       />,
@@ -70,5 +76,65 @@ describe("ShaperPanel", () => {
     expect(
       within(container).getByLabelText("Describe the interface change"),
     ).toHaveFocus();
+  });
+
+  it("prevents shaping and rollback while a prompt is active", async () => {
+    const user = userEvent.setup();
+    const request = vi.fn(() => Promise.resolve());
+    const rollback = vi.fn(() => Promise.resolve());
+    render(
+      <ShaperPanel
+        agentStatus="streaming"
+        controller={{
+          status: "idle",
+          isolation: "ready",
+          verifyIsolation: () => Promise.resolve(),
+          request,
+          accept: () => Promise.resolve(),
+          reject: () => Promise.resolve(),
+          rollback,
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    const instruction = screen.getByLabelText("Describe the interface change");
+    expect(instruction).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Propose change" }),
+    ).toBeDisabled();
+    const rollbackButton = screen.getByRole("button", {
+      name: "Roll back last change",
+    });
+    expect(rollbackButton).toBeDisabled();
+
+    await user.click(rollbackButton);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(rollback).not.toHaveBeenCalled();
+  });
+
+  it("prevents rollback while a proposal is running", () => {
+    const rollback = vi.fn(() => Promise.resolve());
+    render(
+      <ShaperPanel
+        agentStatus="ready"
+        controller={{
+          status: "shaping",
+          isolation: "ready",
+          verifyIsolation: () => Promise.resolve(),
+          request: () => Promise.resolve(),
+          accept: () => Promise.resolve(),
+          reject: () => Promise.resolve(),
+          rollback,
+        }}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Roll back last change" }),
+    ).toBeDisabled();
+    expect(rollback).not.toHaveBeenCalled();
   });
 });

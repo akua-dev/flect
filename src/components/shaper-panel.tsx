@@ -1,4 +1,8 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  isAgentSessionActive,
+  type AgentSessionStatus,
+} from "../hooks/use-agent-session";
 
 export interface ShapingController {
   readonly status: "idle" | "shaping" | "preview" | "error";
@@ -13,14 +17,18 @@ export interface ShapingController {
 
 export function ShaperPanel({
   controller,
+  agentStatus,
   onClose,
 }: {
   readonly controller: ShapingController;
+  readonly agentStatus: AgentSessionStatus;
   readonly onClose: () => void;
 }) {
   const [instruction, setInstruction] = useState("");
   const instructionRef = useRef<HTMLTextAreaElement>(null);
   const previousStatus = useRef(controller.status);
+  const operationActive =
+    controller.status === "shaping" || isAgentSessionActive(agentStatus);
 
   useEffect(() => {
     if (
@@ -35,7 +43,7 @@ export function ShaperPanel({
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const next = instruction.trim();
-    if (next && controller.status !== "shaping") {
+    if (next && !operationActive) {
       void controller.request(next);
     }
   };
@@ -67,7 +75,7 @@ export function ShaperPanel({
           Describe the interface change
         </label>
         <textarea
-          disabled={controller.status === "shaping"}
+          disabled={operationActive}
           id="shaper-instruction"
           onChange={(event) => setInstruction(event.target.value)}
           placeholder="Make this a focused project dashboard…"
@@ -76,7 +84,7 @@ export function ShaperPanel({
         />
         <button
           className="shaper-primary"
-          disabled={!instruction.trim() || controller.status === "shaping"}
+          disabled={!instruction.trim() || operationActive}
           type="submit"
         >
           {controller.status === "shaping" ? "Shaping…" : "Propose change"}
@@ -118,6 +126,7 @@ export function ShaperPanel({
       <footer className="shaper-panel__footer">
         <button
           className="shaper-secondary"
+          disabled={operationActive}
           onClick={() => void controller.rollback()}
           type="button"
         >

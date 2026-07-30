@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ExtensionManifest } from "../shared/extensions";
 import {
   defaultInterfaceDocument,
@@ -8,7 +8,10 @@ import {
 import type { RevisionId } from "../shared/revisions";
 import { Launcher } from "./components/launcher";
 import type { ShapingController } from "./components/shaper-panel";
-import { useAgentSession } from "./hooks/use-agent-session";
+import {
+  isAgentSessionActive,
+  useAgentSession,
+} from "./hooks/use-agent-session";
 import {
   consumeLegacyInterfaceDocument,
   loadInterfaceDocument,
@@ -45,6 +48,7 @@ export function App() {
   );
   const [protectedMode, setProtectedMode] = useState(safeMode);
   const session = useAgentSession();
+  const shapeRequestRef = useRef(0);
   const [shapingStatus, setShapingStatus] =
     useState<ShapingController["status"]>("idle");
   const [shapingError, setShapingError] = useState<string>();
@@ -116,7 +120,12 @@ export function App() {
         setShapingError("Leave safe mode before shaping the interface.");
         return;
       }
+      if (isAgentSessionActive(session.status) || shapingStatus === "shaping") {
+        return;
+      }
 
+      const requestId = shapeRequestRef.current + 1;
+      shapeRequestRef.current = requestId;
       setShapingStatus("shaping");
       setShapingError(undefined);
       try {
@@ -127,6 +136,9 @@ export function App() {
           }),
         );
         const candidate = await session.shape(instruction, active);
+        if (shapeRequestRef.current !== requestId) {
+          return;
+        }
         const preview = await shapingRuntime.runPromise(
           Effect.gen(function* () {
             const kernel = yield* ShapingKernel;
@@ -134,15 +146,21 @@ export function App() {
             return yield* kernel.preview(proposal.id);
           }),
         );
+        if (shapeRequestRef.current !== requestId) {
+          return;
+        }
         setProposalId(preview.id);
         setDocument(preview.document);
         setShapingStatus("preview");
       } catch {
+        if (shapeRequestRef.current !== requestId) {
+          return;
+        }
         setShapingStatus("error");
         setShapingError("Shaper could not produce a valid interface proposal.");
       }
     },
-    [protectedMode, session.shape],
+    [protectedMode, session.shape, session.status, shapingStatus],
   );
 
   const acceptShape = useCallback(async () => {
@@ -189,6 +207,10 @@ export function App() {
   }, [proposalId]);
 
   const rollbackShape = useCallback(async () => {
+    if (isAgentSessionActive(session.status) || shapingStatus === "shaping") {
+      return;
+    }
+    shapeRequestRef.current += 1;
     try {
       const recovered = await shapingRuntime.runPromise(
         Effect.gen(function* () {
@@ -211,7 +233,7 @@ export function App() {
       setShapingStatus("error");
       setShapingError(message);
     }
-  }, [session.diagnoseRecovery]);
+  }, [session.diagnoseRecovery, session.status, shapingStatus]);
 
   const verifyIsolation = useCallback(async () => {
     if (isolation === "checking" || isolation === "ready") {

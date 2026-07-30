@@ -281,6 +281,7 @@ export function Launcher({
       </main>
       {shaperOpen && (
         <ShaperPanel
+          agentStatus={session.status}
           controller={shaping}
           onClose={() => setShaperOpen(false)}
         />

@@ -21,6 +21,9 @@ export type AgentSessionStatus =
   | "setup-required"
   | "unavailable";
 
+export const isAgentSessionActive = (status: AgentSessionStatus) =>
+  status === "submitting" || status === "streaming";
+
 export interface ConversationMessage {
   readonly id: string;
   readonly role: "user" | "assistant";

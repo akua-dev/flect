@@ -140,6 +140,30 @@ describe("Launcher", () => {
     expect(session.cancel).toHaveBeenCalledOnce();
   });
 
+  it("prevents opening a shaping operation while a prompt is streaming", async () => {
+    const user = userEvent.setup();
+    render(
+      <Launcher
+        document={defaultInterfaceDocument}
+        safeMode={false}
+        session={controller({ status: "streaming" })}
+        shaping={shaping()}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Shape interface" }));
+
+    expect(
+      screen.getByRole("textbox", { name: "Describe the interface change" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Propose change" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Roll back last change" }),
+    ).toBeDisabled();
+  });
+
   it("does not present a completed empty assistant turn as still responding", () => {
     const session = controller({
       status: "ready",
