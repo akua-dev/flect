@@ -8,13 +8,13 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
   Context,
+  Deferred,
   Effect,
   HashMap,
   Layer,
   Option,
   Queue,
   Ref,
-  Semaphore,
   Stream,
 } from "effect";
 import {
@@ -25,6 +25,7 @@ import {
   PiOperationFailed,
   type RecoveryReason,
   RuntimeStatus,
+  SessionBusy,
   SessionNotFound,
   type SessionSelection,
   TextDelta,
@@ -299,12 +300,124 @@ export const PiSdkLive = Layer.effect(
   }),
 );
 
+type OperationKind = "prompt" | "shape" | "diagnose";
+
+type ActiveOperation = {
+  readonly kind: OperationKind;
+  readonly interrupt: Effect.Effect<void, PiOperationFailed>;
+  readonly done: Deferred.Deferred<void>;
+};
+
+type OperationState = {
+  readonly closed: boolean;
+  readonly active: ActiveOperation | undefined;
+};
+
+type OperationController = {
+  readonly start: (
+    operation: ActiveOperation,
+  ) => Effect.Effect<void, SessionBusy | SessionNotFound>;
+  readonly finish: (operation: ActiveOperation) => Effect.Effect<void>;
+  readonly active: Effect.Effect<ActiveOperation | undefined>;
+  readonly close: Effect.Effect<void>;
+};
+
+const makeOperationController = Effect.fn(
+  "Flect.Runtime.makeOperationController",
+)(function* (
+  sessionId: string,
+  abort: () => Effect.Effect<void, PiOperationFailed>,
+) {
+  const state = yield* Ref.make<OperationState>({
+    closed: false,
+    active: undefined,
+  });
+
+  const start = Effect.fn("Flect.Runtime.startOperation")(function* (
+    operation: ActiveOperation,
+  ) {
+    const result = yield* Ref.modify(state, (current) => {
+      const outcome = current.closed
+        ? "closed"
+        : current.active === undefined
+          ? "started"
+          : "busy";
+      const next =
+        outcome === "started"
+          ? { ...current, active: operation }
+          : current;
+      return [outcome, next] satisfies readonly [
+        "started" | "busy" | "closed",
+        OperationState,
+      ];
+    });
+
+    if (result === "busy") {
+      return yield* Effect.fail(
+        new SessionBusy({
+          sessionId,
+          message: "The session is busy.",
+        }),
+      );
+    }
+    if (result === "closed") {
+      return yield* Effect.fail(
+        new SessionNotFound({
+          sessionId,
+          message: "Session not found.",
+        }),
+      );
+    }
+  });
+
+  const finish = Effect.fn("Flect.Runtime.finishOperation")(function* (
+    operation: ActiveOperation,
+  ) {
+    yield* Ref.update(state, (current) =>
+      current.active === operation
+        ? { ...current, active: undefined }
+        : current,
+    );
+    yield* Deferred.succeed(operation.done, undefined);
+  });
+
+  const close = Effect.fn("Flect.Runtime.closeOperationController")(function* () {
+    const active = yield* Ref.modify(state, (current) => [
+      current.active,
+      current.closed ? current : { ...current, closed: true },
+    ] satisfies readonly [ActiveOperation | undefined, OperationState]);
+
+    if (active !== undefined) {
+      yield* active.interrupt.pipe(Effect.catch(() => Effect.void));
+      yield* Deferred.await(active.done);
+    } else {
+      yield* Effect.suspend(abort).pipe(Effect.catch(() => Effect.void));
+    }
+  });
+
+  return {
+    start,
+    finish,
+    active: Ref.get(state).pipe(Effect.map((current) => current.active)),
+    close: close(),
+  } satisfies OperationController;
+});
+
+const executeOperation = <A, E>(
+  controller: OperationController,
+  operation: ActiveOperation,
+  effect: Effect.Effect<A, E>,
+): Effect.Effect<A, E | SessionBusy | SessionNotFound> =>
+  controller.start(operation).pipe(
+    Effect.andThen(effect),
+    Effect.ensuring(controller.finish(operation)),
+  );
+
 type SessionRecord = {
   readonly session: PiSession;
   readonly guardian: PiSession;
-  readonly cancelled: Ref.Ref<boolean>;
-  readonly sessionOperation: Semaphore.Semaphore;
-  readonly guardianOperation: Semaphore.Semaphore;
+  readonly sessionOperation: OperationController;
+  readonly guardianOperation: OperationController;
   readonly sequence: number;
 };
 
@@ -402,13 +515,15 @@ export const FlectRuntimeLive = Layer.effect(
       "Flect.Runtime.disposeSessionRecord",
     )((record: SessionRecord) =>
       Effect.all(
-        [
-          record.session.abort().pipe(Effect.catch(() => Effect.void)),
-          record.guardian.abort().pipe(Effect.catch(() => Effect.void)),
-          record.session.dispose,
-          record.guardian.dispose,
-        ],
+        [record.sessionOperation.close, record.guardianOperation.close],
         { concurrency: "unbounded", discard: true },
+      ).pipe(
+        Effect.andThen(
+          Effect.all([record.session.dispose, record.guardian.dispose], {
+            concurrency: "unbounded",
+            discard: true,
+          }),
+        ),
       ),
     );
 
@@ -460,9 +575,14 @@ export const FlectRuntimeLive = Layer.effect(
       }
 
       const pair = yield* pi.createAgentPair(model, protectedAgentPolicies);
-      const cancelled = yield* Ref.make(false);
-      const sessionOperation = yield* Semaphore.make(1);
-      const guardianOperation = yield* Semaphore.make(1);
+      const sessionOperation = yield* makeOperationController(
+        pair.shaper.sessionId,
+        pair.shaper.abort,
+      );
+      const guardianOperation = yield* makeOperationController(
+        pair.guardian.sessionId,
+        pair.guardian.abort,
+      );
       const sequence = yield* Ref.getAndUpdate(
         sessionSequence,
         (current) => current + 1,
@@ -470,7 +590,6 @@ export const FlectRuntimeLive = Layer.effect(
       const record: SessionRecord = {
         session: pair.shaper,
         guardian: pair.guardian,
-        cancelled,
         sessionOperation,
         guardianOperation,
         sequence,
@@ -528,7 +647,14 @@ export const FlectRuntimeLive = Layer.effect(
     const diagnoseRecovery = Effect.fn("Flect.Runtime.diagnoseRecovery")(
       function* (sessionId: string, reason: RecoveryReason) {
         const record = yield* findSession(sessionId);
-        return yield* record.guardianOperation.withPermit(
+        const operation: ActiveOperation = {
+          kind: "diagnose",
+          interrupt: Effect.suspend(() => record.guardian.abort()),
+          done: yield* Deferred.make<void>(),
+        };
+        return yield* executeOperation(
+          record.guardianOperation,
+          operation,
           Effect.gen(function* () {
             const response = makeBoundedResponse(
               MAX_GUARDIAN_RESPONSE_BYTES,
@@ -567,70 +693,89 @@ export const FlectRuntimeLive = Layer.effect(
       Stream.fromEffect(findSession(sessionId)).pipe(
         Stream.flatMap((record) =>
           Stream.callback((queue) =>
-            record.sessionOperation.withPermit(
-              Effect.gen(function* () {
-                const completed = yield* Ref.make(false);
-                yield* Ref.set(record.cancelled, false);
-                Queue.offerUnsafe(
-                  queue,
-                  new TurnStarted({ type: "turn_started" }),
-                );
+            Effect.gen(function* () {
+              const cancelled = yield* Ref.make(false);
+              const operation: ActiveOperation = {
+                kind: "prompt",
+                interrupt: Effect.gen(function* () {
+                  yield* Ref.set(cancelled, true);
+                  yield* record.session.abort();
+                }),
+                done: yield* Deferred.make<void>(),
+              };
 
-                const unsubscribe = yield* record.session.subscribe((event) => {
+              yield* executeOperation(
+                record.sessionOperation,
+                operation,
+                Effect.gen(function* () {
+                  const completed = yield* Ref.make(false);
                   Queue.offerUnsafe(
                     queue,
-                    new TextDelta({
-                      type: "text_delta",
-                      delta: event.delta,
-                    }),
-                  );
-                });
-
-                const turn = Effect.gen(function* () {
-                  const terminal = yield* record.session.prompt(text).pipe(
-                    Effect.matchEffect({
-                      onFailure: () =>
-                        Ref.get(record.cancelled).pipe(
-                          Effect.map((cancelled) =>
-                            cancelled
-                              ? new TurnCancelled({ type: "cancelled" })
-                              : new TurnError({
-                                  type: "error",
-                                  message: PUBLIC_TURN_ERROR,
-                                }),
-                          ),
-                        ),
-                      onSuccess: () =>
-                        Ref.get(record.cancelled).pipe(
-                          Effect.map((cancelled) =>
-                            cancelled
-                              ? new TurnCancelled({ type: "cancelled" })
-                              : new TurnCompleted({ type: "turn_completed" }),
-                          ),
-                        ),
-                    }),
+                    new TurnStarted({ type: "turn_started" }),
                   );
 
-                  Queue.offerUnsafe(queue, terminal);
-                  yield* Ref.set(completed, true);
-                  Queue.endUnsafe(queue);
-                });
+                  const unsubscribe = yield* record.session.subscribe((event) => {
+                    Queue.offerUnsafe(
+                      queue,
+                      new TextDelta({
+                        type: "text_delta",
+                        delta: event.delta,
+                      }),
+                    );
+                  });
 
-                yield* turn.pipe(
-                  Effect.ensuring(Effect.sync(() => unsubscribe())),
-                  Effect.ensuring(
-                    Ref.get(completed).pipe(
-                      Effect.flatMap((isComplete) =>
-                        isComplete
-                          ? Effect.void
-                          : record.session
-                              .abort()
-                              .pipe(Effect.catch(() => Effect.void)),
+                  const turn = Effect.gen(function* () {
+                    const terminal = yield* record.session.prompt(text).pipe(
+                      Effect.matchEffect({
+                        onFailure: () =>
+                          Ref.get(cancelled).pipe(
+                            Effect.map((isCancelled) =>
+                              isCancelled
+                                ? new TurnCancelled({ type: "cancelled" })
+                                : new TurnError({
+                                    type: "error",
+                                    message: PUBLIC_TURN_ERROR,
+                                  }),
+                            ),
+                          ),
+                        onSuccess: () =>
+                          Ref.get(cancelled).pipe(
+                            Effect.map((isCancelled) =>
+                              isCancelled
+                                ? new TurnCancelled({ type: "cancelled" })
+                                : new TurnCompleted({
+                                    type: "turn_completed",
+                                  }),
+                            ),
+                          ),
+                      }),
+                    );
+
+                    Queue.offerUnsafe(queue, terminal);
+                    yield* Ref.set(completed, true);
+                    Queue.endUnsafe(queue);
+                  });
+
+                  yield* turn.pipe(
+                    Effect.ensuring(Effect.sync(() => unsubscribe())),
+                    Effect.ensuring(
+                      Ref.get(completed).pipe(
+                        Effect.flatMap((isComplete) =>
+                          isComplete
+                            ? Effect.void
+                            : record.session
+                                .abort()
+                                .pipe(Effect.catch(() => Effect.void)),
+                        ),
                       ),
                     ),
-                  ),
-                );
-              }),
+                  );
+                }),
+              );
+            }).pipe(
+              Effect.catch((error) =>
+                Queue.fail(queue, error).pipe(Effect.asVoid),
+              ),
             ),
           ),
         ),
@@ -640,8 +785,10 @@ export const FlectRuntimeLive = Layer.effect(
       sessionId: string,
     ) {
       const record = yield* findSession(sessionId);
-      yield* Ref.set(record.cancelled, true);
-      yield* record.session.abort();
+      const operation = yield* record.sessionOperation.active;
+      if (operation?.kind === "prompt") {
+        yield* operation.interrupt;
+      }
     });
 
     const shape = Effect.fn("Flect.Runtime.shape")(function* (
@@ -650,7 +797,14 @@ export const FlectRuntimeLive = Layer.effect(
       document: InterfaceDocument,
     ) {
       const record = yield* findSession(sessionId);
-      return yield* record.sessionOperation.withPermit(
+      const operation: ActiveOperation = {
+        kind: "shape",
+        interrupt: Effect.suspend(() => record.session.abort()),
+        done: yield* Deferred.make<void>(),
+      };
+      return yield* executeOperation(
+        record.sessionOperation,
+        operation,
         Effect.gen(function* () {
           const response = makeBoundedResponse(
             MAX_SHAPER_RESPONSE_BYTES,

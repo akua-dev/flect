@@ -157,6 +157,14 @@ export class SessionNotFound extends Schema.TaggedErrorClass<SessionNotFound>()(
   },
 ) {}
 
+export class SessionBusy extends Schema.TaggedErrorClass<SessionBusy>()(
+  "SessionBusy",
+  {
+    sessionId: NonEmptyText,
+    message: Schema.Literal("The session is busy."),
+  },
+) {}
+
 export class CloseSessionResponse extends Schema.Class<CloseSessionResponse>(
   "CloseSessionResponse",
 )({
@@ -191,6 +199,7 @@ export class PiOperationFailed extends Schema.TaggedErrorClass<PiOperationFailed
 
 export const FlectRuntimeError = Schema.Union([
   SessionNotFound,
+  SessionBusy,
   NoModelAvailable,
   PiOperationFailed,
 ]);
