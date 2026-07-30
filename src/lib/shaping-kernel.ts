@@ -379,63 +379,79 @@ const makeShapingKernel = (
     const restoreLastKnownGood = Effect.fn(
       "Flect.ShapingKernel.restoreLastKnownGood",
     )(function* () {
-      return yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
-        if (!state.safeMode) {
-          return Effect.fail(invalidTransition(state.active.id));
-        }
-        const recovered = InterfaceRevision.make({
-          ...state.lastKnownGood,
-          source: "recovery",
-          status: "accepted",
-        });
-        const next: KernelState = {
-          ...state,
-          active: recovered,
-          lastKnownGood: recovered,
-          proposal: undefined,
-          safeMode: false,
-          failureCounts: new Map(),
-          sequence: state.sequence + 1,
-          lastEvent: eventFor(state, "revision-rolled-back", {
-            revisionId: recovered.id,
-          }),
-        };
-        const transition: readonly [InterfaceRevision, KernelState] = [
-          recovered,
-          next,
-        ];
-        return persist(next).pipe(Effect.as(transition));
-      });
+      return yield* SubscriptionRef.modifyEffect(
+        stateRef,
+        (
+          state,
+        ): Effect.Effect<
+          readonly [InterfaceRevision, KernelState],
+          InvalidRevisionTransition | InterfaceStorageError
+        > => {
+          if (!state.safeMode) {
+            return Effect.fail(invalidTransition(state.active.id));
+          }
+          const recovered = InterfaceRevision.make({
+            ...state.lastKnownGood,
+            source: "recovery",
+            status: "accepted",
+          });
+          const next: KernelState = {
+            ...state,
+            active: recovered,
+            lastKnownGood: recovered,
+            proposal: undefined,
+            safeMode: false,
+            failureCounts: new Map(),
+            sequence: state.sequence + 1,
+            lastEvent: eventFor(state, "revision-rolled-back", {
+              revisionId: recovered.id,
+            }),
+          };
+          const transition: readonly [InterfaceRevision, KernelState] = [
+            recovered,
+            next,
+          ];
+          return persist(next).pipe(Effect.as(transition));
+        },
+      );
     });
 
     const rollback = Effect.fn("Flect.ShapingKernel.rollback")(function* () {
-      return yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
-        if (!isRollbackAvailable(snapshotFromState(state))) {
-          return Effect.fail(invalidTransition(state.active.id));
-        }
-        const recovered = InterfaceRevision.make({
-          ...state.lastKnownGood,
-          source: "recovery",
-          status: "accepted",
-        });
-        const next: KernelState = {
-          ...state,
-          active: recovered,
-          lastKnownGood: recovered,
-          proposal: undefined,
-          safeMode: false,
-          failureCounts: new Map(),
-          sequence: state.sequence + 1,
-          lastEvent: eventFor(state, "revision-rolled-back", {
-            revisionId: recovered.id,
-          }),
-        };
-        const transition: readonly [InterfaceRevision, KernelState] = [
-          recovered,
-          next,
-        ];
-        return persist(next).pipe(Effect.as(transition));
-      });
+      return yield* SubscriptionRef.modifyEffect(
+        stateRef,
+        (
+          state,
+        ): Effect.Effect<
+          readonly [InterfaceRevision, KernelState],
+          InvalidRevisionTransition | InterfaceStorageError
+        > => {
+          if (!isRollbackAvailable(snapshotFromState(state))) {
+            return Effect.fail(invalidTransition(state.active.id));
+          }
+          const recovered = InterfaceRevision.make({
+            ...state.lastKnownGood,
+            source: "recovery",
+            status: "accepted",
+          });
+          const next: KernelState = {
+            ...state,
+            active: recovered,
+            lastKnownGood: recovered,
+            proposal: undefined,
+            safeMode: false,
+            failureCounts: new Map(),
+            sequence: state.sequence + 1,
+            lastEvent: eventFor(state, "revision-rolled-back", {
+              revisionId: recovered.id,
+            }),
+          };
+          const transition: readonly [InterfaceRevision, KernelState] = [
+            recovered,
+            next,
+          ];
+          return persist(next).pipe(Effect.as(transition));
+        },
+      );
     });
 
     const enterSafeMode = Effect.fn("Flect.ShapingKernel.enterSafeMode")(
