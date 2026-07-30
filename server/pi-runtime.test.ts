@@ -256,71 +256,81 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
-  it.effect("does not cancel an active Shaper when cancelling a session", () => {
-    const promptStarted = Deferred.makeUnsafe<void>();
-    const promptGate = Deferred.makeUnsafe<void>();
-    const fake = createFakePi({
-      promptGate,
-      promptStarted,
-      promptResponse: JSON.stringify(defaultInterfaceDocument),
-    });
+  it.effect(
+    "does not cancel an active Shaper when cancelling a session",
+    () => {
+      const promptStarted = Deferred.makeUnsafe<void>();
+      const promptGate = Deferred.makeUnsafe<void>();
+      const fake = createFakePi({
+        promptGate,
+        promptStarted,
+        promptResponse: JSON.stringify(defaultInterfaceDocument),
+      });
 
-    return Effect.gen(function* () {
-      const runtime = yield* FlectRuntime;
-      const sessionId = yield* runtime.createSession(new SessionSelection({}));
-      const shapeFiber = yield* runtime
-        .shape(sessionId, "Shape this", defaultInterfaceDocument)
-        .pipe(Effect.forkChild({ startImmediately: true }));
-      yield* Deferred.await(promptStarted);
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const sessionId = yield* runtime.createSession(
+          new SessionSelection({}),
+        );
+        const shapeFiber = yield* runtime
+          .shape(sessionId, "Shape this", defaultInterfaceDocument)
+          .pipe(Effect.forkChild({ startImmediately: true }));
+        yield* Deferred.await(promptStarted);
 
-      yield* runtime.cancel(sessionId);
-      expect(fake.abort).not.toHaveBeenCalled();
+        yield* runtime.cancel(sessionId);
+        expect(fake.abort).not.toHaveBeenCalled();
 
-      yield* Deferred.succeed(promptGate, undefined);
-      yield* Fiber.join(shapeFiber);
-    }).pipe(Effect.provide(fake.layer));
-  });
+        yield* Deferred.succeed(promptGate, undefined);
+        yield* Fiber.join(shapeFiber);
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 
-  it.effect("rejects conflicts and waits before disposing an active session", () => {
-    const promptStarted = Deferred.makeUnsafe<void>();
-    const promptGate = Deferred.makeUnsafe<void>();
-    const fake = createFakePi({
-      promptGate,
-      promptStarted,
-      promptResponse: JSON.stringify(defaultInterfaceDocument),
-    });
+  it.effect(
+    "rejects conflicts and waits before disposing an active session",
+    () => {
+      const promptStarted = Deferred.makeUnsafe<void>();
+      const promptGate = Deferred.makeUnsafe<void>();
+      const fake = createFakePi({
+        promptGate,
+        promptStarted,
+        promptResponse: JSON.stringify(defaultInterfaceDocument),
+      });
 
-    return Effect.gen(function* () {
-      const runtime = yield* FlectRuntime;
-      const sessionId = yield* runtime.createSession(new SessionSelection({}));
-      const shapeFiber = yield* runtime
-        .shape(sessionId, "Shape this", defaultInterfaceDocument)
-        .pipe(Effect.forkChild({ startImmediately: true }));
-      yield* Deferred.await(promptStarted);
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const sessionId = yield* runtime.createSession(
+          new SessionSelection({}),
+        );
+        const shapeFiber = yield* runtime
+          .shape(sessionId, "Shape this", defaultInterfaceDocument)
+          .pipe(Effect.forkChild({ startImmediately: true }));
+        yield* Deferred.await(promptStarted);
 
-      const busy = yield* runtime
-        .prompt(sessionId, "Keep talking")
-        .pipe(Stream.runDrain, Effect.flip);
-      expect(busy).toEqual(
-        new SessionBusy({
-          sessionId,
-          message: "The session is busy.",
-        }),
-      );
+        const busy = yield* runtime
+          .prompt(sessionId, "Keep talking")
+          .pipe(Stream.runDrain, Effect.flip);
+        expect(busy).toEqual(
+          new SessionBusy({
+            sessionId,
+            message: "The session is busy.",
+          }),
+        );
 
-      const closeFiber = yield* runtime
-        .closeSession(sessionId)
-        .pipe(Effect.forkChild({ startImmediately: true }));
-      yield* Effect.yieldNow;
-      expect(fake.dispose).not.toHaveBeenCalled();
+        const closeFiber = yield* runtime
+          .closeSession(sessionId)
+          .pipe(Effect.forkChild({ startImmediately: true }));
+        yield* Effect.yieldNow;
+        expect(fake.dispose).not.toHaveBeenCalled();
 
-      yield* Deferred.succeed(promptGate, undefined);
-      yield* Fiber.join(shapeFiber);
-      yield* Fiber.join(closeFiber);
-      expect(fake.dispose).toHaveBeenCalledOnce();
-      expect(fake.guardianDispose).toHaveBeenCalledOnce();
-    }).pipe(Effect.provide(fake.layer));
-  });
+        yield* Deferred.succeed(promptGate, undefined);
+        yield* Fiber.join(shapeFiber);
+        yield* Fiber.join(closeFiber);
+        expect(fake.dispose).toHaveBeenCalledOnce();
+        expect(fake.guardianDispose).toHaveBeenCalledOnce();
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 
   it.effect("completes disposal when the close fiber is interrupted", () => {
     const promptStarted = Deferred.makeUnsafe<void>();

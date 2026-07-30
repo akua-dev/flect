@@ -74,7 +74,8 @@ node registry currently contains:
 
 Unknown types, unknown fields, duplicate node identifiers, unsupported
 versions, excessive nesting, and unsafe actions fail before React renders them.
-There is no generated HTML, CSS, JSX, or executable code path.
+An `InterfaceDocument` contains no generated HTML, CSS, JSX, or executable code
+path.
 
 The `ShapingKernel` owns the active, proposed, previewed, accepted,
 last-known-good, rejected, and recovered revision transitions. A Shaper result
@@ -112,6 +113,12 @@ unsubscribes and disposes both sessions. The client closes its current pair
 when the model changes, the runtime is refreshed, a transport operation fails,
 or the UI unmounts. Session handles are keyed by model selection, and the
 runtime evicts and disposes the oldest pair before exceeding 32 active pairs.
+Each protected session admits one active operation at a time: overlapping shape
+requests fail with a typed busy conflict, while prompt-stream conflicts become
+public turn errors. Closing or evicting a pair interrupts its active operation,
+waits for completion for up to two seconds, and then disposes both sessions.
+Raw Shaper output is capped at 256 KiB and raw Guardian output at 16 KiB before
+either can cross the runtime boundary.
 
 Pi remains the sole owner of provider login state. Flect neither creates a
 credential format nor exposes provider tokens to the WebView, browser APIs,

@@ -82,9 +82,9 @@ function RuntimeState({ status }: { readonly status: AgentSessionStatus }) {
         ? "Finding Pi"
         : status === "setup-required"
           ? "Pi setup needed"
-        : ready
-          ? "Pi ready"
-          : "Runtime offline"}
+          : ready
+            ? "Pi ready"
+            : "Runtime offline"}
     </span>
   );
 }

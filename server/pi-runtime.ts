@@ -344,9 +344,7 @@ const makeOperationController = Effect.fn(
           ? "started"
           : "busy";
       const next =
-        outcome === "started"
-          ? { ...current, active: operation }
-          : current;
+        outcome === "started" ? { ...current, active: operation } : current;
       return [outcome, next] satisfies readonly [
         "started" | "busy" | "closed",
         OperationState,
@@ -382,19 +380,25 @@ const makeOperationController = Effect.fn(
     yield* Deferred.succeed(operation.done, undefined);
   });
 
-  const close = Effect.fn("Flect.Runtime.closeOperationController")(function* () {
-    const active = yield* Ref.modify(state, (current) => [
-      current.active,
-      current.closed ? current : { ...current, closed: true },
-    ] satisfies readonly [ActiveOperation | undefined, OperationState]);
+  const close = Effect.fn("Flect.Runtime.closeOperationController")(
+    function* () {
+      const active = yield* Ref.modify(
+        state,
+        (current) =>
+          [
+            current.active,
+            current.closed ? current : { ...current, closed: true },
+          ] satisfies readonly [ActiveOperation | undefined, OperationState],
+      );
 
-    if (active !== undefined) {
-      yield* active.interrupt.pipe(Effect.catch(() => Effect.void));
-      yield* Deferred.await(active.done);
-    } else {
-      yield* Effect.suspend(abort).pipe(Effect.catch(() => Effect.void));
-    }
-  });
+      if (active !== undefined) {
+        yield* active.interrupt.pipe(Effect.catch(() => Effect.void));
+        yield* Deferred.await(active.done);
+      } else {
+        yield* Effect.suspend(abort).pipe(Effect.catch(() => Effect.void));
+      }
+    },
+  );
 
   return {
     start,
@@ -409,10 +413,12 @@ const executeOperation = <A, E>(
   operation: ActiveOperation,
   effect: Effect.Effect<A, E>,
 ): Effect.Effect<A, E | SessionBusy | SessionNotFound> =>
-  controller.start(operation).pipe(
-    Effect.andThen(effect),
-    Effect.ensuring(controller.finish(operation)),
-  );
+  controller
+    .start(operation)
+    .pipe(
+      Effect.andThen(effect),
+      Effect.ensuring(controller.finish(operation)),
+    );
 
 type SessionRecord = {
   readonly session: PiSession;
@@ -513,7 +519,9 @@ export const FlectRuntimeLive = Layer.effect(
     const sessions = yield* Ref.make(HashMap.empty<string, SessionRecord>());
     const sessionSequence = yield* Ref.make(0);
 
-    const closeOperation = (operation: Effect.Effect<void, PiOperationFailed>) =>
+    const closeOperation = (
+      operation: Effect.Effect<void, PiOperationFailed>,
+    ) =>
       operation.pipe(
         Effect.interruptible,
         Effect.timeoutOption(SESSION_DISPOSAL_TIMEOUT),
@@ -742,15 +750,17 @@ export const FlectRuntimeLive = Layer.effect(
                     new TurnStarted({ type: "turn_started" }),
                   );
 
-                  const unsubscribe = yield* record.session.subscribe((event) => {
-                    Queue.offerUnsafe(
-                      queue,
-                      new TextDelta({
-                        type: "text_delta",
-                        delta: event.delta,
-                      }),
-                    );
-                  });
+                  const unsubscribe = yield* record.session.subscribe(
+                    (event) => {
+                      Queue.offerUnsafe(
+                        queue,
+                        new TextDelta({
+                          type: "text_delta",
+                          delta: event.delta,
+                        }),
+                      );
+                    },
+                  );
 
                   const turn = Effect.gen(function* () {
                     const terminal = yield* record.session.prompt(text).pipe(

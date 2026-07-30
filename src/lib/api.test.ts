@@ -222,16 +222,22 @@ describe("FlectClient", () => {
   });
 
   it.effect("preserves a typed busy response for interface shaping", () => {
-    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
-      jsonResponse({ version: 1, error: "The session is busy." }, 409),
-    );
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(
+        jsonResponse({ version: 1, error: "The session is busy." }, 409),
+      );
 
     return withClient(
       fetcher,
       Effect.gen(function* () {
         const client = yield* FlectClient;
         const error = yield* client
-          .shape("session-1", "Make this more focused", defaultInterfaceDocument)
+          .shape(
+            "session-1",
+            "Make this more focused",
+            defaultInterfaceDocument,
+          )
           .pipe(Effect.flip);
 
         expect(error).toEqual(

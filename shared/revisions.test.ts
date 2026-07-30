@@ -6,8 +6,8 @@ import {
   RevisionId,
   ShapingEvent,
   ShapingSnapshot,
-  validateShapingSnapshot,
   validateInterfaceRevision,
+  validateShapingSnapshot,
 } from "./revisions";
 
 const revision = (status: "proposed" | "previewed" | "accepted" | "rejected") =>
@@ -48,70 +48,72 @@ describe("interface revisions", () => {
       }),
   );
 
-  it.effect("rejects built-in revisions outside the exact initial revision", () =>
-    Effect.gen(function* () {
-      const initial = InterfaceRevision.make({
-        version: 1,
-        id: RevisionId.make("built-in"),
-        status: "accepted",
-        source: "built-in",
-        document: defaultInterfaceDocument,
-        createdAt: 0,
-      });
-      const forged = InterfaceRevision.make({
-        version: 1,
-        id: RevisionId.make("revision-1"),
-        parentId: initial.id,
-        status: "accepted",
-        source: "built-in",
-        document: defaultInterfaceDocument,
-        createdAt: 1,
-      });
-      const validActive = InterfaceRevision.make({
-        version: 1,
-        id: RevisionId.make("revision-2"),
-        parentId: forged.id,
-        status: "accepted",
-        source: "shaper",
-        document: defaultInterfaceDocument,
-        createdAt: 2,
-      });
-      const activeForged = ShapingSnapshot.make({
-        version: 1,
-        active: forged,
-        lastKnownGood: initial,
-        safeMode: false,
-        disabledExtensions: [],
-        lastEvent: ShapingEvent.make({
+  it.effect(
+    "rejects built-in revisions outside the exact initial revision",
+    () =>
+      Effect.gen(function* () {
+        const initial = InterfaceRevision.make({
           version: 1,
-          sequence: 1,
-          type: "revision-accepted",
-          revisionId: forged.id,
-        }),
-      });
-      const lastKnownGoodForged = ShapingSnapshot.make({
-        version: 1,
-        active: validActive,
-        lastKnownGood: forged,
-        safeMode: false,
-        disabledExtensions: [],
-        lastEvent: ShapingEvent.make({
+          id: RevisionId.make("built-in"),
+          status: "accepted",
+          source: "built-in",
+          document: defaultInterfaceDocument,
+          createdAt: 0,
+        });
+        const forged = InterfaceRevision.make({
           version: 1,
-          sequence: 1,
-          type: "revision-accepted",
-          revisionId: validActive.id,
-        }),
-      });
+          id: RevisionId.make("revision-1"),
+          parentId: initial.id,
+          status: "accepted",
+          source: "built-in",
+          document: defaultInterfaceDocument,
+          createdAt: 1,
+        });
+        const validActive = InterfaceRevision.make({
+          version: 1,
+          id: RevisionId.make("revision-2"),
+          parentId: forged.id,
+          status: "accepted",
+          source: "shaper",
+          document: defaultInterfaceDocument,
+          createdAt: 2,
+        });
+        const activeForged = ShapingSnapshot.make({
+          version: 1,
+          active: forged,
+          lastKnownGood: initial,
+          safeMode: false,
+          disabledExtensions: [],
+          lastEvent: ShapingEvent.make({
+            version: 1,
+            sequence: 1,
+            type: "revision-accepted",
+            revisionId: forged.id,
+          }),
+        });
+        const lastKnownGoodForged = ShapingSnapshot.make({
+          version: 1,
+          active: validActive,
+          lastKnownGood: forged,
+          safeMode: false,
+          disabledExtensions: [],
+          lastEvent: ShapingEvent.make({
+            version: 1,
+            sequence: 1,
+            type: "revision-accepted",
+            revisionId: validActive.id,
+          }),
+        });
 
-      const activeError = yield* Effect.flip(
-        validateShapingSnapshot(activeForged),
-      );
-      const lastKnownGoodError = yield* Effect.flip(
-        validateShapingSnapshot(lastKnownGoodForged),
-      );
+        const activeError = yield* Effect.flip(
+          validateShapingSnapshot(activeForged),
+        );
+        const lastKnownGoodError = yield* Effect.flip(
+          validateShapingSnapshot(lastKnownGoodForged),
+        );
 
-      assert.strictEqual(activeError._tag, "InvalidRevision");
-      assert.strictEqual(lastKnownGoodError._tag, "InvalidRevision");
-    }),
+        assert.strictEqual(activeError._tag, "InvalidRevision");
+        assert.strictEqual(lastKnownGoodError._tag, "InvalidRevision");
+      }),
   );
 });

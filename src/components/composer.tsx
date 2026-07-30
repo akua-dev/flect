@@ -46,9 +46,9 @@ export function Composer({
         ? "Start the local runtime before shaping."
         : status === "setup-required"
           ? "Sign in to a Pi provider before shaping."
-        : prompt.trim().length === 0
-          ? "Enter a prompt to enable Shape."
-          : "Press Enter to shape. Press Shift Enter for a new line.";
+          : prompt.trim().length === 0
+            ? "Enter a prompt to enable Shape."
+            : "Press Enter to shape. Press Shift Enter for a new line.";
 
   const submit = async () => {
     const nextPrompt = prompt.trim();

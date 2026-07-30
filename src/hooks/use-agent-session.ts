@@ -239,10 +239,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   const submit = useCallback(
     (text: string): Promise<void> => {
       const prompt = text.trim();
-      if (
-        !prompt ||
-        (status !== "ready" && status !== "error")
-      ) {
+      if (!prompt || (status !== "ready" && status !== "error")) {
         return Promise.resolve();
       }
 
@@ -362,8 +359,8 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
       setError(undefined);
       setStatus((current) =>
         current === "booting" ||
-          current === "unavailable" ||
-          current === "setup-required"
+        current === "unavailable" ||
+        current === "setup-required"
           ? current
           : "ready",
       );

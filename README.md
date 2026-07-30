@@ -103,8 +103,8 @@ browser development HTTP server.
   reject, persistence, rollback, corrupt-journal recovery, keyboard use,
   reduced motion, sandbox isolation, and compact layout.
 
-The Guardian is reachable only for a short, typed recovery diagnostic after a
-protected operation fails. It cannot change revisions or replace deterministic
+The current UI uses the Guardian only for a short, typed recovery diagnostic
+when rollback fails. It cannot change revisions or replace deterministic
 validation, safe mode, or rollback.
 
 ## Security boundary
