@@ -66,6 +66,58 @@ const previewResponse = (status, body, headers = {}) => {
   return new Response(body, { status, headers: outputHeaders });
 };
 
+const declaredBodyLength = (request) => {
+  const value = request.headers.get("content-length");
+  if (value === null) {
+    return undefined;
+  }
+  if (!/^(?:0|[1-9]\d*)$/.test(value)) {
+    return null;
+  }
+  const length = Number(value);
+  return Number.isSafeInteger(length) && length <= BODY_LIMIT ? length : null;
+};
+
+const readBoundedBody = async (request) => {
+  const declared = declaredBodyLength(request);
+  if (declared === null) {
+    return null;
+  }
+  if (request.method === "GET" || request.method === "HEAD") {
+    return "";
+  }
+  if (request.body === null) {
+    return "";
+  }
+  const reader = request.body.getReader();
+  const chunks = [];
+  let byteLength = 0;
+  try {
+    while (true) {
+      const next = await reader.read();
+      if (next.done) {
+        break;
+      }
+      byteLength += next.value.byteLength;
+      if (byteLength > BODY_LIMIT) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(next.value);
+    }
+  } catch (error) {
+    await reader.cancel().catch(() => undefined);
+    throw error;
+  }
+  const bytes = new Uint8Array(byteLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
+};
+
 const routePreview = async (request, port, path) => {
   const registration = previews.get(port);
   if (!registration) {
@@ -81,13 +133,6 @@ const routePreview = async (request, port, path) => {
   if (!client) {
     return previewResponse(503, "Preview owner is unavailable.");
   }
-  const body =
-    request.method === "GET" || request.method === "HEAD"
-      ? ""
-      : await request.text();
-  if (body.length > BODY_LIMIT) {
-    return previewResponse(413, "Preview request is too large.");
-  }
   const headers = {};
   let headerCount = 0;
   for (const [name, value] of request.headers) {
@@ -95,6 +140,10 @@ const routePreview = async (request, port, path) => {
       return previewResponse(431, "Preview request headers are too large.");
     }
     headers[name.toLowerCase()] = value;
+  }
+  const body = await readBoundedBody(request);
+  if (body === null) {
+    return previewResponse(413, "Preview request is too large.");
   }
 
   const channel = new MessageChannel();

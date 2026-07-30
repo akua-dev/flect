@@ -17,8 +17,10 @@ native Bun executable and never falls back to a system shell or system Bun.
 | `bun stop` | Interrupts the active run or preview and waits for resource disposal |
 | `bun --help`, `bun --version` | Reports the Flect compatibility surface and `flect-browser/1` |
 
-JavaScript, TypeScript, JSX, TSX, MJS, CJS, and JSON source files are accepted
-within `/workspace`. TypeScript-family syntax is transformed by the pinned
+JavaScript, TypeScript, JSX, TSX, MJS, and JSON source files are accepted within
+`/workspace`. Module execution is ESM-oriented: `require`, `module.exports`,
+and CommonJS dependency graphs are unsupported, and `.cjs` files are not part
+of the compatibility promise. TypeScript-family syntax is transformed by the pinned
 `esbuild-wasm@0.28.1` browser build. Flect reports this as a compatible
 transpiler; it does not claim exact Bun parser or runtime semantics.
 

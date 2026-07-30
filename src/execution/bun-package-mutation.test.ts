@@ -10,6 +10,7 @@ import {
 import {
   badIntegrityRegistryFetch,
   fixtureRegistryFetch,
+  traversalRegistryFetch,
 } from "./fixtures/package-registry";
 
 const decoder = new TextDecoder();
@@ -145,6 +146,29 @@ describe("BunPackageMutation", () => {
 
           assert.strictEqual(error.reason, "package");
           assert.notInclude(error.message, "sha512");
+        }),
+      );
+    },
+  );
+
+  it.layer(makeBunPackageMutationLayer({ fetch: traversalRegistryFetch }))(
+    (it) => {
+      it.effect("rejects archive paths outside the package subtree", () =>
+        Effect.gen(function* () {
+          const packages = yield* BunPackageMutation;
+          const error = yield* packages
+            .install({
+              cwd: "/workspace",
+              workspace: {
+                files: {
+                  ...installWorkspace().files,
+                  "/workspace/src/important.ts": "export const safe = true;\n",
+                },
+              },
+            })
+            .pipe(Effect.flip);
+
+          assert.strictEqual(error.reason, "package");
         }),
       );
     },

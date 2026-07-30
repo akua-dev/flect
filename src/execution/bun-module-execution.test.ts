@@ -100,6 +100,29 @@ describe("BunModuleExecution", () => {
     }),
   );
 
+  it.effect("rejects CommonJS entry files", () =>
+    Effect.gen(function* () {
+      const layer = makeBunModuleExecutionTestLayer(() =>
+        Effect.succeed({ stdout: "", stderr: "" }),
+      );
+      const error = yield* Effect.gen(function* () {
+        const execution = yield* BunModuleExecution;
+        return yield* execution.build({
+          cwd: "/workspace",
+          args: ["index.cjs"],
+          workspace: {
+            files: {
+              "/workspace/package.json": '{"type":"module"}',
+              "/workspace/index.cjs": "module.exports = {};\n",
+            },
+          },
+        });
+      }).pipe(Effect.provide(layer), Effect.flip);
+
+      assert.strictEqual(error.reason, "workspace");
+    }),
+  );
+
   it.effect("releases the runtime after a guest failure", () =>
     Effect.gen(function* () {
       const releases = yield* Ref.make(0);

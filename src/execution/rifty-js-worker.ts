@@ -1,4 +1,17 @@
+import { installMemoryFs } from "@riftydev/vfs/internal";
 import { installRiftyCapabilityBoundary } from "./rifty-capability-boundary";
+
+const forceMemoryVfs = (): void => {
+  Object.defineProperty(globalThis, "crossOriginIsolated", {
+    configurable: false,
+    enumerable: false,
+    value: false,
+    writable: false,
+  });
+};
+
+forceMemoryVfs();
+installMemoryFs();
 
 const postMessage = globalThis.postMessage.bind(globalThis);
 function forwardPostMessage(

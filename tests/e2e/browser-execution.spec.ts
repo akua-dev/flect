@@ -30,6 +30,9 @@ test("runs the pinned browser execution substrate in production Chromium", async
   await expect(page.getByTestId("execution-capabilities")).toHaveText(
     "blocked,blocked,blocked,blocked,blocked,blocked,blocked,blocked,blocked,blocked,blocked",
   );
+  await expect(page.getByTestId("execution-vfs-isolation")).toHaveText(
+    "isolated",
+  );
   await expect(page.getByTestId("execution-wasi")).toHaveText("0");
   await expect(page.getByTestId("execution-packages")).toHaveText("1");
   await expect(page.getByTestId("execution-release")).toHaveText("disposed");

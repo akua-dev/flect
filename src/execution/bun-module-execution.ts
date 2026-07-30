@@ -24,7 +24,7 @@ const MODULE_DEADLINE = "5 seconds";
 const SOURCE_LIMIT = 262_144;
 const WORKSPACE_FILE_LIMIT = 4_096;
 
-const sourceExtensions = [".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs"];
+const sourceExtensions = [".ts", ".tsx", ".js", ".jsx", ".mjs"];
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const encoder = new TextEncoder();
 
@@ -143,6 +143,9 @@ const resolveSource = (
 ): string | undefined => {
   const path = normalizeWorkspacePath(base, specifier);
   if (path === undefined) {
+    return undefined;
+  }
+  if (extension(path) === ".cjs") {
     return undefined;
   }
   const candidates = extension(path)

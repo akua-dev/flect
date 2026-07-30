@@ -1,5 +1,10 @@
-import { type Fetcher, install, RegistryClient } from "@riftydev/npm-client";
-import { MemoryVfs, type Vfs } from "@riftydev/vfs";
+import {
+  install,
+  RegistryClient,
+  type Fetcher,
+  type ResolvedPackage,
+} from "@riftydev/npm-client";
+import { MemoryVfs, normalizePath, type Vfs } from "@riftydev/vfs";
 import { Context, Effect, Layer } from "effect";
 import {
   BunCommandFailed,
@@ -73,6 +78,99 @@ const bytesEqual = (left: Uint8Array, right: Uint8Array) => {
   return left.every((value, index) => value === right[index]);
 };
 
+const isWithin = (path: string, root: string) =>
+  path === root || path.startsWith(`${root}/`);
+
+const isCanonicalRelativePath = (path: string) =>
+  path.length > 0 &&
+  !path.startsWith("/") &&
+  !path.includes("\\") &&
+  !path.includes("%") &&
+  !path.includes("\0") &&
+  path === normalizePath(path) &&
+  path
+    .split("/")
+    .every(
+      (segment) =>
+        segment.length > 0 && segment !== "." && segment !== "..",
+    );
+
+const isOwnedMutationPath = (path: string) => {
+  if (
+    path !== normalizePath(path) ||
+    path.includes("\0") ||
+    path.includes("\\") ||
+    path.includes("%")
+  ) {
+    return false;
+  }
+  return (
+    path === "/workspace" ||
+    path === "/workspace/package.json" ||
+    path === "/workspace/package-lock.json" ||
+    isWithin(path, "/workspace/node_modules") ||
+    isWithin(path, "/.rifty")
+  );
+};
+
+const isAppliedMutationPath = (path: string) =>
+  path === "/workspace/package.json" ||
+  path === "/workspace/package-lock.json" ||
+  isWithin(path, "/workspace/node_modules");
+
+const guardedPackageVfs = (vfs: Vfs): Vfs => {
+  const assertOwned = (path: string) => {
+    if (!isOwnedMutationPath(path)) {
+      throw packageFailure();
+    }
+  };
+  return {
+    readFile: (path) => vfs.readFile(path),
+    readFileText: (path, encoding) => vfs.readFileText(path, encoding),
+    writeFile: (path, data) => {
+      assertOwned(path);
+      return vfs.writeFile(path, data);
+    },
+    readdir: (path) => vfs.readdir(path),
+    mkdir: (path, options) => {
+      assertOwned(path);
+      return vfs.mkdir(path, options);
+    },
+    rm: (path, options) => {
+      assertOwned(path);
+      return vfs.rm(path, options);
+    },
+    stat: (path) => vfs.stat(path),
+    exists: (path) => vfs.exists(path),
+    utimes: (path, atimeMs, mtimeMs) => {
+      assertOwned(path);
+      return vfs.utimes(path, atimeMs, mtimeMs);
+    },
+    openReadable: (path, options) => vfs.openReadable(path, options),
+  };
+};
+
+const validateResolvedPackages = (packages: ReadonlyArray<ResolvedPackage>) => {
+  for (const pkg of packages) {
+    const installPath = pkg.installPath ?? `node_modules/${pkg.name}`;
+    const packageRoot = `/workspace/${installPath}`;
+    if (
+      !isCanonicalRelativePath(installPath) ||
+      !isWithin(packageRoot, "/workspace/node_modules")
+    ) {
+      throw packageFailure();
+    }
+    for (const entryPath of Object.keys(pkg.files)) {
+      if (
+        !isCanonicalRelativePath(entryPath) ||
+        !isWithin(`${packageRoot}/${entryPath}`, packageRoot)
+      ) {
+        throw packageFailure();
+      }
+    }
+  }
+};
+
 const cloneWorkspace = async (
   workspace: BunPackageWorkspace,
 ): Promise<MemoryVfs> => {
@@ -133,8 +231,14 @@ const makeDelta = (
     const before = original[path];
     const after = staged[path];
     if (after === undefined) {
+      if (!isAppliedMutationPath(path)) {
+        throw packageFailure();
+      }
       files.push(WorkspaceFileRemove.make({ operation: "remove", path }));
     } else if (before === undefined || !bytesEqual(before, after)) {
+      if (!isAppliedMutationPath(path)) {
+        throw packageFailure();
+      }
       byteLength += after.byteLength;
       files.push(
         WorkspaceFileWrite.make({
@@ -278,10 +382,11 @@ const mutate = (
         maxRetries: 0,
       });
       const installed = await install({
-        vfs,
+        vfs: guardedPackageVfs(vfs),
         cwd: WORKSPACE_ROOT,
         registry,
       });
+      validateResolvedPackages(installed.packages);
       const lockfile: unknown = JSON.parse(
         await vfs.readFileText("/workspace/package-lock.json"),
       );

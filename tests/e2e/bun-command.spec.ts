@@ -5,7 +5,10 @@ test("runs the browser Bun command and isolated preview in production Chromium",
 }) => {
   const errors: Array<string> = [];
   page.on("console", (message) => {
-    if (message.type() === "error") {
+    if (
+      message.type() === "error" &&
+      !message.text().includes("status of 413")
+    ) {
       errors.push(message.text());
     }
   });
@@ -14,9 +17,21 @@ test("runs the browser Bun command and isolated preview in production Chromium",
   await page.goto("/?bun-diagnostic=1");
 
   const diagnostic = page.getByTestId("bun-diagnostic");
-  await expect(diagnostic).toHaveAttribute("data-status", "passed", {
-    timeout: 30_000,
-  });
+  await expect
+    .poll(
+      async () => {
+        const status = await diagnostic.getAttribute("data-status");
+        if (status === "failed") {
+          throw new Error(
+            (await page.getByTestId("bun-error").textContent()) ??
+              "Browser Bun diagnostic failed.",
+          );
+        }
+        return status;
+      },
+      { timeout: 30_000 },
+    )
+    .toBe("passed");
   await expect(page.getByTestId("bun-run")).toHaveText("42");
   await expect(page.getByTestId("bun-packages")).toHaveText(
     "Installed 1 package.",
@@ -32,6 +47,14 @@ test("runs the browser Bun command and isolated preview in production Chromium",
   await expect(preview.getByTestId("preview-path")).toHaveText("/");
   await expect(preview.getByTestId("network-denied")).toHaveText("true");
   await expect(preview.getByTestId("opfs-denied")).toHaveText("true");
+
+  const oversizedRequestStatus = await page.evaluate(async () =>
+    (await fetch("/preview/3417/", {
+      method: "POST",
+      body: "x".repeat(1_048_577),
+    })).status,
+  );
+  expect(oversizedRequestStatus).toBe(413);
 
   await page.getByRole("button", { name: "Stop preview" }).click();
   await expect(diagnostic).toHaveAttribute("data-status", "stopped");

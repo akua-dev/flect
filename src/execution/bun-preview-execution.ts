@@ -71,7 +71,6 @@ const sourceExtensions = [
   "",
   ".js",
   ".mjs",
-  ".cjs",
   ".ts",
   ".tsx",
   ".jsx",
@@ -83,6 +82,9 @@ const resolveFile = (
   candidate: string,
 ) => {
   const path = normalize(candidate);
+  if (extension(path) === ".cjs") {
+    return undefined;
+  }
   const candidates = [
     ...sourceExtensions.map((suffix) => `${path}${suffix}`),
     ...sourceExtensions.slice(1).map((suffix) => `${path}/index${suffix}`),
@@ -524,6 +526,35 @@ export const BunPreviewExecutionLive = Layer.effect(
   BunPreviewExecution,
   Effect.gen(function* () {
     const preview = yield* BunPreview;
+    const active = yield* Ref.make<
+      | {
+          readonly runId: string;
+          readonly realm: RealmHandle;
+        }
+      | undefined
+    >(undefined);
+
+    const stop = Effect.fn("Flect.BunPreviewExecution.stop")(() =>
+      Effect.gen(function* () {
+        const current = yield* Ref.get(active);
+        if (current === undefined) {
+          return;
+        }
+        yield* Effect.sync(() => current.realm.stop()).pipe(
+          Effect.catchDefect(() => Effect.void),
+        );
+        yield* preview.stop(current.runId).pipe(Effect.ignore);
+        yield* Effect.tryPromise({
+          try: () => stopPreviewRoute(current.runId, current.realm.port),
+          catch: () => undefined,
+        }).pipe(Effect.ignore);
+        yield* Ref.set(active, undefined);
+      }).pipe(
+        Effect.ensuring(Ref.set(active, undefined)),
+        Effect.catchDefect(() => Effect.void),
+      ),
+    );
+
     const serviceWorkerMessage = (event: MessageEvent) => {
       if (
         event.data?.type !== "flect-preview-request" ||
@@ -557,40 +588,15 @@ export const BunPreviewExecutionLive = Layer.effect(
         );
       }),
       () =>
-        Effect.sync(() => {
-          navigator.serviceWorker?.removeEventListener(
-            "message",
-            serviceWorkerMessage,
-          );
+        Effect.gen(function* () {
+          yield* Effect.sync(() => {
+            navigator.serviceWorker?.removeEventListener(
+              "message",
+              serviceWorkerMessage,
+            );
+          });
+          yield* stop();
         }),
-    );
-    const active = yield* Ref.make<
-      | {
-          readonly runId: string;
-          readonly realm: RealmHandle;
-        }
-      | undefined
-    >(undefined);
-
-    const stop = Effect.fn("Flect.BunPreviewExecution.stop")(() =>
-      Effect.gen(function* () {
-        const current = yield* Ref.get(active);
-        if (current === undefined) {
-          return;
-        }
-        yield* Effect.sync(() => current.realm.stop()).pipe(
-          Effect.catchDefect(() => Effect.void),
-        );
-        yield* preview.stop(current.runId).pipe(Effect.ignore);
-        yield* Effect.tryPromise({
-          try: () => stopPreviewRoute(current.runId, current.realm.port),
-          catch: () => undefined,
-        }).pipe(Effect.ignore);
-        yield* Ref.set(active, undefined);
-      }).pipe(
-        Effect.ensuring(Ref.set(active, undefined)),
-        Effect.catchDefect(() => Effect.void),
-      ),
     );
 
     return {

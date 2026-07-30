@@ -15,6 +15,7 @@ interface DiagnosticState {
   readonly status: "running" | "passed" | "failed";
   readonly javascript: string;
   readonly capabilities: string;
+  readonly vfsIsolation: string;
   readonly wasi: string;
   readonly packages: string;
   readonly release: string;
@@ -24,6 +25,7 @@ const initialState: DiagnosticState = {
   status: "running",
   javascript: "",
   capabilities: "",
+  vfsIsolation: "",
   wasi: "",
   packages: "",
   release: "pending",
@@ -73,6 +75,22 @@ Promise.all([
 ]).then(values => console.log(values.join(",")));`,
             }),
           );
+          yield* javascript.evaluate(
+            JavaScriptExecutionRequest.make({
+              version: 1,
+              source: `const { mkdirSync, writeFileSync } = require("node:fs");
+mkdirSync("/workspace", { recursive: true });
+writeFileSync("/workspace/.flect-memory-probe", "written");
+console.log("written");`,
+            }),
+          );
+          const vfsIsolationResult = yield* javascript.evaluate(
+            JavaScriptExecutionRequest.make({
+              version: 1,
+              source: `const { existsSync } = require("node:fs");
+console.log(existsSync("/workspace/.flect-memory-probe") ? "persistent" : "isolated");`,
+            }),
+          );
           const wasiResult = yield* wasi.run(
             WasiExecutionRequest.make({
               version: 1,
@@ -95,6 +113,7 @@ Promise.all([
           return {
             javascript: javascriptResult.stdout.trim(),
             capabilities: capabilitiesResult.stdout.trim(),
+            vfsIsolation: vfsIsolationResult.stdout.trim(),
             wasi: String(wasiResult.exitCode),
             packages: String(packageResult.packageCount),
           };
@@ -115,6 +134,7 @@ Promise.all([
             status: "failed",
             javascript: "",
             capabilities: "",
+            vfsIsolation: "",
             wasi: "",
             packages: "",
             release: "disposed",
@@ -135,6 +155,7 @@ Promise.all([
     >
       <output data-testid="execution-js">{state.javascript}</output>
       <output data-testid="execution-capabilities">{state.capabilities}</output>
+      <output data-testid="execution-vfs-isolation">{state.vfsIsolation}</output>
       <output data-testid="execution-wasi">{state.wasi}</output>
       <output data-testid="execution-packages">{state.packages}</output>
       <output data-testid="execution-release">{state.release}</output>
