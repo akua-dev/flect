@@ -14,7 +14,10 @@ import {
   InterfaceRepository,
   makeInterfaceRepositoryLayer,
 } from "./interface-repository";
-import { InterfaceStorage } from "./interface-store";
+import {
+  InterfaceStorage,
+  InterfaceStorageError,
+} from "./interface-store";
 import {
   makePersistentShapingKernelLayer,
   makeShapingKernelTestLayer,
@@ -67,6 +70,26 @@ const makePersistentHarness = (initial: string | null = null) => {
     })(),
     now: () => 1,
   }).pipe(Layer.provideMerge(repository));
+};
+
+const makeFailingRepairHarness = (initial: string) => {
+  const storage = Layer.succeed(InterfaceStorage)({
+    read: () => Effect.succeed(initial),
+    write: () =>
+      Effect.fail(
+        new InterfaceStorageError({
+          message: "Interface storage is unavailable.",
+        }),
+      ),
+    remove: () => Effect.void,
+  });
+  const repository = makeInterfaceRepositoryLayer({
+    safeMode: false,
+  }).pipe(Layer.provide(storage));
+
+  return makePersistentShapingKernelLayer().pipe(
+    Layer.provideMerge(repository),
+  );
 };
 
 describe("ShapingKernel", () => {
@@ -193,6 +216,23 @@ describe("ShapingKernel", () => {
       );
     },
   );
+
+  it.layer(
+    makeFailingRepairHarness(JSON.stringify(pendingProposalSnapshot)),
+  )((it) => {
+    it.effect(
+      "keeps recovery available when proposal repair cannot persist",
+      () =>
+        Effect.gen(function* () {
+          const kernel = yield* ShapingKernel;
+          const snapshot = yield* kernel.snapshot;
+
+          assert.strictEqual(snapshot.proposal?.status, "previewed");
+          assert.strictEqual(snapshot.lastEvent.type, "revision-previewed");
+          assert.strictEqual(snapshot.lastEvent.sequence, 2);
+        }),
+    );
+  });
 
   const restoredDocument = customizedDocument("Restored workspace");
   const restoredSnapshot = ShapingSnapshot.make({

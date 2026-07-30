@@ -197,7 +197,9 @@ const makeShapingKernel = (
           : repository.save(snapshotFromState(state)),
     );
     if (pendingProposal !== undefined) {
-      yield* persist(reconciledState);
+      yield* persist(reconciledState).pipe(
+        Effect.catchTag("InterfaceStorageError", () => Effect.void),
+      );
     }
 
     const eventFor = (
