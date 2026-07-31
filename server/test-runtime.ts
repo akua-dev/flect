@@ -123,7 +123,7 @@ export const FlectTestRuntimeLive = Layer.effect(
           ),
         ),
       cancel: () => Effect.void,
-      completeShellRequest: (_sessionId, requestId, result) =>
+      completeShellRequest: (_sessionId, _role, requestId, result) =>
         Ref.modify(pending, (current) => {
           const response = current.get(requestId);
           if (response === undefined) {

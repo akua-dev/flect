@@ -58,6 +58,9 @@ export class SessionSelection extends Schema.Class<SessionSelection>(
   model: Schema.optionalKey(ModelSelection),
 }) {}
 
+export const InteractiveAgentRole = Schema.Literals(["app", "shaper"]);
+export type InteractiveAgentRole = typeof InteractiveAgentRole.Type;
+
 export class PromptRequest extends Schema.Class<PromptRequest>("PromptRequest")(
   {
     text: PromptText,
@@ -194,6 +197,12 @@ export class CancelResponse extends Schema.Class<CancelResponse>(
   status: Schema.Literal("cancelled"),
 }) {}
 
+export class CancelRequest extends Schema.Class<CancelRequest>("CancelRequest")(
+  {
+    role: InteractiveAgentRole,
+  },
+) {}
+
 export class PublicErrorResponse extends Schema.Class<PublicErrorResponse>(
   "PublicErrorResponse",
 )({
@@ -212,6 +221,7 @@ export class SessionNotFound extends Schema.TaggedErrorClass<SessionNotFound>()(
 export class AgentShellResultRequest extends Schema.Class<AgentShellResultRequest>(
   "AgentShellResultRequest",
 )({
+  role: InteractiveAgentRole,
   requestId: ShellRequestId,
   result: BunCommandResult,
 }) {}

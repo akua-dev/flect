@@ -1,6 +1,8 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import {
+  AgentShellResultRequest,
+  CancelRequest,
   decodeFlectEvent,
   decodeModelSummary,
   decodePromptRequest,
@@ -13,6 +15,51 @@ import {
 } from "./contracts";
 
 describe("runtime contracts", () => {
+  it.effect("requires a closed role on cancellation requests", () =>
+    Effect.gen(function* () {
+      const decode = Schema.decodeUnknownEffect(CancelRequest, {
+        errors: "all",
+        onExcessProperty: "error",
+      });
+
+      expect(yield* decode({ role: "app" })).toEqual(
+        CancelRequest.make({ role: "app" }),
+      );
+      expect(yield* decode({ role: "shaper" })).toEqual(
+        CancelRequest.make({ role: "shaper" }),
+      );
+      yield* decode({}).pipe(Effect.flip);
+      yield* decode({ role: "guardian" }).pipe(Effect.flip);
+      yield* decode({ role: "app", credential: "not-a-real-secret" }).pipe(
+        Effect.flip,
+      );
+    }),
+  );
+
+  it.effect("requires a closed role on browser-shell results", () =>
+    Effect.gen(function* () {
+      const decode = Schema.decodeUnknownEffect(AgentShellResultRequest, {
+        errors: "all",
+        onExcessProperty: "error",
+      });
+      const shellResult = {
+        requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        result: {
+          version: 1 as const,
+          exitCode: 0,
+          stdout: "42\n",
+          stderr: "",
+        },
+      };
+
+      expect(yield* decode({ role: "shaper", ...shellResult })).toEqual(
+        AgentShellResultRequest.make({ role: "shaper", ...shellResult }),
+      );
+      yield* decode(shellResult).pipe(Effect.flip);
+      yield* decode({ role: "guardian", ...shellResult }).pipe(Effect.flip);
+    }),
+  );
+
   it.effect("decodes a public model summary into its schema class", () =>
     Effect.gen(function* () {
       const model = yield* decodeModelSummary({

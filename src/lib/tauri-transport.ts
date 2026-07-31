@@ -211,11 +211,11 @@ export const makeTauriFlectClientLayer = () =>
               ),
             ),
           ),
-        cancel: (sessionId) =>
-          mapError(rpc.Cancel({ sessionId })).pipe(Effect.asVoid),
-        completeShellRequest: (sessionId, requestId, result) =>
+        cancel: (sessionId, role) =>
+          mapError(rpc.Cancel({ sessionId, role })).pipe(Effect.asVoid),
+        completeShellRequest: (sessionId, role, requestId, result) =>
           mapError(
-            rpc.CompleteShellRequest({ sessionId, requestId, result }),
+            rpc.CompleteShellRequest({ sessionId, role, requestId, result }),
           ).pipe(Effect.asVoid),
         diagnoseRecovery: (sessionId, reason) =>
           mapSessionError(rpc.DiagnoseRecovery({ sessionId, reason })),

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BunCommandResult } from "../../shared/bun-command";
 import {
   type FlectEvent,
+  type InteractiveAgentRole,
   ModelSelection,
   type ModelSummary,
   type RecoveryReason,
@@ -215,6 +216,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   const executeShellRequest = useCallback(
     (
       sessionId: string,
+      role: InteractiveAgentRole,
       event: { readonly requestId: string; readonly command: string },
     ) =>
       Effect.gen(function* () {
@@ -232,7 +234,12 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
             ),
           ),
         );
-        yield* client.completeShellRequest(sessionId, event.requestId, result);
+        yield* client.completeShellRequest(
+          sessionId,
+          role,
+          event.requestId,
+          result,
+        );
       }),
     [],
   );
@@ -248,7 +255,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
       FlectClient | SandboxedShell
     > => {
       if (event.type === "shell_request") {
-        return executeShellRequest(sessionId, event);
+        return executeShellRequest(sessionId, "app", event);
       }
       return Effect.sync(() => {
         switch (event.type) {
@@ -360,7 +367,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
                 () => Option.none<InterfaceDocument>(),
                 (current, event) => {
                   if (event.type === "shell_request") {
-                    return executeShellRequest(sessionId, event).pipe(
+                    return executeShellRequest(sessionId, "shaper", event).pipe(
                       Effect.as(current),
                     );
                   }
@@ -406,7 +413,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
 
       if (sessionId) {
         const client = yield* FlectClient;
-        yield* client.cancel(sessionId);
+        yield* client.cancel(sessionId, "app");
       }
     }).pipe(
       Effect.tap(() =>

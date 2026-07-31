@@ -24,6 +24,7 @@ import {
   type FlectEvent,
   type FlectRuntimeError,
   GuardianDiagnostic,
+  type InteractiveAgentRole,
   ModelSummary,
   NoModelAvailable,
   PiOperationFailed,
@@ -1027,24 +1028,23 @@ export const FlectRuntimeLive = Layer.effect(
       "Flect.Runtime.completeShellRequest",
     )(function* (
       sessionId: string,
+      role: InteractiveAgentRole,
       requestId: string,
       result: BunCommandResult,
     ) {
       const record = yield* findSession(sessionId);
-      yield* record.shaper.completeShellRequest(requestId, result);
+      const session = role === "app" ? record.app : record.shaper;
+      yield* session.completeShellRequest(requestId, result);
     });
 
     const cancel = Effect.fn("Flect.Runtime.cancel")(function* (
       sessionId: string,
+      role: InteractiveAgentRole,
     ) {
       const record = yield* findSession(sessionId);
-      yield* Effect.all(
-        [
-          record.appOperation.cancelActive(),
-          record.shaperOperation.cancelActive(),
-        ],
-        { concurrency: "unbounded", discard: true },
-      );
+      const controller =
+        role === "app" ? record.appOperation : record.shaperOperation;
+      yield* controller.cancelActive();
     });
 
     const makeShape = Effect.fn("Flect.Runtime.makeShape")(function* (

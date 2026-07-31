@@ -7,6 +7,7 @@ import {
 import {
   AgentShellResultAccepted,
   AgentShellResultRequest,
+  CancelRequest,
   CancelResponse,
   CloseSessionResponse,
   FlectEvent,
@@ -184,12 +185,13 @@ const cancelRoute = HttpRouter.add(
   "/api/sessions/:sessionId/cancel",
   Effect.gen(function* () {
     const path = yield* sessionPath;
-    if (Option.isNone(path)) {
+    const cancel = yield* decodeBody(CancelRequest);
+    if (Option.isNone(path) || Option.isNone(cancel)) {
       return yield* invalidRequest();
     }
 
     const runtime = yield* FlectRuntime;
-    yield* runtime.cancel(path.value.sessionId);
+    yield* runtime.cancel(path.value.sessionId, cancel.value.role);
     return yield* cancelJson(
       new CancelResponse({ version: 1, status: "cancelled" }),
     );
@@ -209,6 +211,7 @@ const shellResultRoute = HttpRouter.add(
     const runtime = yield* FlectRuntime;
     yield* runtime.completeShellRequest(
       path.value.sessionId,
+      shell.value.role,
       shell.value.requestId,
       shell.value.result,
     );

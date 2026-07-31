@@ -214,6 +214,7 @@ describe("Flect HTTP application", () => {
           request("/api/sessions/session-1/shell-results", {
             method: "POST",
             body: JSON.stringify({
+              role: "app",
               requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
               result: {
                 version: 1,
@@ -232,6 +233,7 @@ describe("Flect HTTP application", () => {
         });
         expect(runtime.completeShellRequest).toHaveBeenCalledWith(
           "session-1",
+          "app",
           "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
           BunCommandResult.make({
             version: 1,
@@ -277,23 +279,68 @@ describe("Flect HTTP application", () => {
     },
   );
 
-  it.effect("cancels a session through the Effect service", () => {
-    const runtime = createFakeRuntime();
-    return Effect.gen(function* () {
-      const app = yield* useApp(runtime);
-      const response = yield* send(
+  it.effect(
+    "cancels one selected agent role through the Effect service",
+    () => {
+      const runtime = createFakeRuntime();
+      return Effect.gen(function* () {
+        const app = yield* useApp(runtime);
+        const response = yield* send(
+          app,
+          request("/api/sessions/session-1/cancel", {
+            method: "POST",
+            body: JSON.stringify({ role: "shaper" }),
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(yield* readJson(response)).toEqual({
+          version: 1,
+          status: "cancelled",
+        });
+        expect(runtime.cancel).toHaveBeenCalledWith("session-1", "shaper");
+      });
+    },
+  );
+
+  it.effect("rejects missing and unknown interactive roles", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const missingCancel = yield* send(
         app,
-        request("/api/sessions/session-1/cancel", { method: "POST" }),
+        request("/api/sessions/session-1/cancel", {
+          method: "POST",
+          body: JSON.stringify({}),
+        }),
+      );
+      const unknownCancel = yield* send(
+        app,
+        request("/api/sessions/session-1/cancel", {
+          method: "POST",
+          body: JSON.stringify({ role: "guardian" }),
+        }),
+      );
+      const missingShellRole = yield* send(
+        app,
+        request("/api/sessions/session-1/shell-results", {
+          method: "POST",
+          body: JSON.stringify({
+            requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+            result: {
+              version: 1,
+              exitCode: 0,
+              stdout: "",
+              stderr: "",
+            },
+          }),
+        }),
       );
 
-      expect(response.status).toBe(200);
-      expect(yield* readJson(response)).toEqual({
-        version: 1,
-        status: "cancelled",
-      });
-      expect(runtime.cancel).toHaveBeenCalledWith("session-1");
-    });
-  });
+      expect(missingCancel.status).toBe(400);
+      expect(unknownCancel.status).toBe(400);
+      expect(missingShellRole.status).toBe(400);
+    }),
+  );
 
   it.effect("closes a session through the Effect service", () => {
     const runtime = createFakeRuntime();
@@ -403,6 +450,7 @@ describe("Flect HTTP application", () => {
         request("/api/sessions/session-1/shell-results", {
           method: "POST",
           body: JSON.stringify({
+            role: "shaper",
             requestId,
             result: {
               version: 1,
@@ -422,6 +470,7 @@ describe("Flect HTTP application", () => {
       expect(output).toContain('data: {"type":"shape_completed","document":');
       expect(runtime.completeShellRequest).toHaveBeenCalledWith(
         "session-1",
+        "shaper",
         requestId,
         BunCommandResult.make({
           version: 1,

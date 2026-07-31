@@ -9,11 +9,13 @@ import type { BunCommandResult } from "../../shared/bun-command";
 import {
   AgentShellResultAccepted,
   AgentShellResultRequest,
+  CancelRequest,
   CancelResponse,
   CloseSessionResponse,
   decodePromptRequest,
   FlectEvent,
   GuardianDiagnostic,
+  type InteractiveAgentRole,
   type ModelSummary,
   ModelsResponse,
   PromptRequest,
@@ -89,9 +91,11 @@ export interface FlectClientShape {
   ) => Stream.Stream<ShapeEvent, FlectUnavailableError | SessionBusy>;
   readonly cancel: (
     sessionId: string,
+    role: InteractiveAgentRole,
   ) => Effect.Effect<void, FlectUnavailableError>;
   readonly completeShellRequest: (
     sessionId: string,
+    role: InteractiveAgentRole,
     requestId: string,
     result: BunCommandResult,
   ) => Effect.Effect<void, FlectUnavailableError>;
@@ -203,10 +207,15 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
           ),
       );
 
-      const cancel = Effect.fn("Flect.Client.cancel")((sessionId: string) =>
-        transport
-          .post(`/sessions/${encodeURIComponent(sessionId)}/cancel`)
-          .pipe(
+      const cancel = Effect.fn("Flect.Client.cancel")(
+        (sessionId: string, role: InteractiveAgentRole) =>
+          HttpClientRequest.post(
+            `/sessions/${encodeURIComponent(sessionId)}/cancel`,
+          ).pipe(
+            HttpClientRequest.schemaBodyJson(CancelRequest)(
+              CancelRequest.make({ role }),
+            ),
+            Effect.flatMap(transport.execute),
             Effect.flatMap(
               HttpClientResponse.schemaBodyJson(CancelResponse, strictOptions),
             ),
@@ -217,23 +226,29 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
 
       const completeShellRequest = Effect.fn(
         "Flect.Client.completeShellRequest",
-      )((sessionId: string, requestId: string, result: BunCommandResult) =>
-        HttpClientRequest.post(
-          `/sessions/${encodeURIComponent(sessionId)}/shell-results`,
-        ).pipe(
-          HttpClientRequest.schemaBodyJson(AgentShellResultRequest)(
-            AgentShellResultRequest.make({ requestId, result }),
-          ),
-          Effect.flatMap(transport.execute),
-          Effect.flatMap(
-            HttpClientResponse.schemaBodyJson(
-              AgentShellResultAccepted,
-              strictOptions,
+      )(
+        (
+          sessionId: string,
+          role: InteractiveAgentRole,
+          requestId: string,
+          result: BunCommandResult,
+        ) =>
+          HttpClientRequest.post(
+            `/sessions/${encodeURIComponent(sessionId)}/shell-results`,
+          ).pipe(
+            HttpClientRequest.schemaBodyJson(AgentShellResultRequest)(
+              AgentShellResultRequest.make({ role, requestId, result }),
             ),
+            Effect.flatMap(transport.execute),
+            Effect.flatMap(
+              HttpClientResponse.schemaBodyJson(
+                AgentShellResultAccepted,
+                strictOptions,
+              ),
+            ),
+            Effect.asVoid,
+            Effect.mapError(unavailable),
           ),
-          Effect.asVoid,
-          Effect.mapError(unavailable),
-        ),
       );
 
       const shape = (

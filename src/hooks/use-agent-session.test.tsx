@@ -199,6 +199,7 @@ describe("useAgentSession", () => {
     expect(shell.execute).toHaveBeenCalledWith("bun run src/index.ts");
     expect(client.completeShellRequest).toHaveBeenCalledWith(
       "session-1",
+      "app",
       "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
       shellResult,
     );
@@ -263,6 +264,7 @@ describe("useAgentSession", () => {
     expect(shell.execute).toHaveBeenCalledWith("bun run src/index.ts");
     expect(client.completeShellRequest).toHaveBeenCalledWith(
       "session-1",
+      "shaper",
       "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
       shellResult,
     );
@@ -427,7 +429,7 @@ describe("useAgentSession", () => {
       await result.current.cancel();
     });
 
-    expect(client.cancel).toHaveBeenCalledWith("session-1");
+    expect(client.cancel).toHaveBeenCalledWith("session-1", "app");
     expect(streamInterrupted).toBe(true);
     expect(result.current.status).toBe("ready");
     unmount();

@@ -6,6 +6,7 @@ import {
   FlectEvent,
   FlectRuntimeError,
   GuardianDiagnostic,
+  InteractiveAgentRole,
   ModelSummary,
   RecoveryReason,
   RuntimeStatus,
@@ -55,6 +56,7 @@ export class Prompt extends Rpc.make("Prompt", {
 export class Cancel extends Rpc.make("Cancel", {
   payload: {
     sessionId: Identifier,
+    role: InteractiveAgentRole,
   },
   success: Schema.Void,
   error: FlectRuntimeError,
@@ -63,6 +65,7 @@ export class Cancel extends Rpc.make("Cancel", {
 export class CompleteShellRequest extends Rpc.make("CompleteShellRequest", {
   payload: {
     sessionId: Identifier,
+    role: InteractiveAgentRole,
     requestId: Schema.String.check(
       Schema.isMinLength(7),
       Schema.isMaxLength(80),

@@ -19,6 +19,64 @@ import {
 } from "./tauri-transport";
 
 describe("Tauri RPC transport", () => {
+  it.effect("encodes the selected agent role for private operations", () =>
+    Effect.gen(function* () {
+      const listener = yield* Ref.make<
+        ((payload: unknown) => void) | undefined
+      >(undefined);
+      const requests = yield* Ref.make<ReadonlyArray<unknown>>([]);
+
+      const bridge: TauriBridgeShape = {
+        listen: (handler) =>
+          Ref.set(listener, handler).pipe(Effect.as(Effect.void)),
+        send: (request) =>
+          Effect.gen(function* () {
+            yield* Ref.update(requests, (current) => [...current, request]);
+            if (
+              typeof request === "object" &&
+              request !== null &&
+              "id" in request
+            ) {
+              const active = yield* Ref.get(listener);
+              active?.({
+                _tag: "Exit",
+                requestId: request.id,
+                exit: { _tag: "Success", value: null },
+              });
+            }
+          }),
+      };
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const client = yield* FlectClient;
+          yield* client.cancel("session-1", "app");
+          yield* client.completeShellRequest(
+            "session-1",
+            "shaper",
+            "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+            {
+              version: 1,
+              exitCode: 0,
+              stdout: "42\n",
+              stderr: "",
+            },
+          );
+        }).pipe(
+          Effect.provide(
+            makeTauriFlectClientLayer().pipe(
+              Layer.provide(Layer.succeed(TauriBridge)(bridge)),
+            ),
+          ),
+        ),
+      );
+
+      const encoded = JSON.stringify(yield* Ref.get(requests));
+      assert.include(encoded, '"role":"app"');
+      assert.include(encoded, '"role":"shaper"');
+    }),
+  );
+
   it.effect(
     "routes an Effect RPC request through invoke and a private event",
     () =>

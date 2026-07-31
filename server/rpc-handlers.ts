@@ -18,9 +18,9 @@ export const makeFlectRpcHandlers = () =>
             const validated = yield* validateInterfaceDocument(document);
             return runtime.shape(sessionId, instruction, validated);
           }).pipe(Stream.unwrap),
-        Cancel: ({ sessionId }) => runtime.cancel(sessionId),
-        CompleteShellRequest: ({ sessionId, requestId, result }) =>
-          runtime.completeShellRequest(sessionId, requestId, result),
+        Cancel: ({ sessionId, role }) => runtime.cancel(sessionId, role),
+        CompleteShellRequest: ({ sessionId, role, requestId, result }) =>
+          runtime.completeShellRequest(sessionId, role, requestId, result),
         DiagnoseRecovery: ({ sessionId, reason }) =>
           runtime.diagnoseRecovery(sessionId, reason),
       });

@@ -103,9 +103,10 @@ describe("Flect RPC handlers", () => {
             document: defaultInterfaceDocument,
           })
           .pipe(Stream.runCollect);
-        yield* client.Cancel({ sessionId });
+        yield* client.Cancel({ sessionId, role: "app" });
         yield* client.CompleteShellRequest({
           sessionId,
+          role: "shaper",
           requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
           result: BunCommandResult.make({
             version: 1,

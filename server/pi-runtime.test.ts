@@ -235,6 +235,7 @@ function createFakePi(options: FakeOptions = {}) {
 
   return {
     appAbort: app.abort,
+    appCompleteShellRequest: app.completeShellRequest,
     appDispose: app.dispose,
     appPrompt: app.prompt,
     appUnsubscribe: app.unsubscribe,
@@ -469,6 +470,74 @@ describe("FlectRuntimeLive", () => {
     },
   );
 
+  it.effect("cancels only the selected interactive role", () => {
+    const appStarted = Deferred.makeUnsafe<void>();
+    const appGate = Deferred.makeUnsafe<void>();
+    const shaperStarted = Deferred.makeUnsafe<void>();
+    const shaperGate = Deferred.makeUnsafe<void>();
+    const fake = createFakePi({
+      appPromptStarted: appStarted,
+      appPromptGate: appGate,
+      shaperPromptStarted: shaperStarted,
+      shaperPromptGate: shaperGate,
+      promptResponse: JSON.stringify(defaultInterfaceDocument),
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const appFiber = yield* runtime
+        .prompt(sessionId, "Use the app")
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+      const shaperFiber = yield* runtime
+        .shape(sessionId, "Shape the app", defaultInterfaceDocument)
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(appStarted);
+      yield* Deferred.await(shaperStarted);
+
+      const cancelFiber = yield* runtime
+        .cancel(sessionId, "app")
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      yield* Effect.yieldNow;
+
+      expect(fake.appAbort).toHaveBeenCalledOnce();
+      expect(fake.shaperAbort).not.toHaveBeenCalled();
+
+      yield* Deferred.succeed(appGate, undefined);
+      yield* Deferred.succeed(shaperGate, undefined);
+      yield* Fiber.join(appFiber);
+      yield* Fiber.join(shaperFiber);
+      yield* Fiber.join(cancelFiber);
+    }).pipe(Effect.provide(fake.layer));
+  });
+
+  it.effect("completes a shell request only in its selected role", () => {
+    const fake = createFakePi();
+    const result = BunCommandResult.make({
+      version: 1,
+      exitCode: 0,
+      stdout: "42\n",
+      stderr: "",
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      yield* runtime.completeShellRequest(
+        sessionId,
+        "app",
+        "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        result,
+      );
+
+      expect(fake.appCompleteShellRequest).toHaveBeenCalledWith(
+        "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        result,
+      );
+      expect(fake.shaperCompleteShellRequest).not.toHaveBeenCalled();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
   it.effect("reduces Pi models to public schema values", () => {
     const fake = createFakePi();
     return Effect.gen(function* () {
@@ -585,6 +654,7 @@ describe("FlectRuntimeLive", () => {
 
       yield* runtime.completeShellRequest(
         sessionId,
+        "shaper",
         "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
         result,
       );
@@ -683,6 +753,7 @@ describe("FlectRuntimeLive", () => {
       });
       yield* runtime.completeShellRequest(
         sessionId,
+        "shaper",
         shellRequest.requestId,
         result,
       );
@@ -800,7 +871,7 @@ describe("FlectRuntimeLive", () => {
       yield* Deferred.await(shellRequest.started);
 
       const cancelFiber = yield* runtime
-        .cancel(sessionId)
+        .cancel(sessionId, "shaper")
         .pipe(Effect.forkChild({ startImmediately: true }));
       yield* Effect.yieldNow;
       expect(fake.shaperAbort).toHaveBeenCalledOnce();
@@ -846,7 +917,7 @@ describe("FlectRuntimeLive", () => {
         yield* Deferred.await(promptStarted);
 
         const cancelFiber = yield* runtime
-          .cancel(sessionId)
+          .cancel(sessionId, "app")
           .pipe(Effect.forkChild({ startImmediately: true }));
         yield* Deferred.await(abortStarted);
         yield* Effect.yieldNow;
@@ -911,7 +982,7 @@ describe("FlectRuntimeLive", () => {
       yield* Deferred.await(promptStarted);
 
       const cancelFiber = yield* runtime
-        .cancel(sessionId)
+        .cancel(sessionId, "app")
         .pipe(Effect.forkChild({ startImmediately: true }));
       yield* Deferred.await(abortStarted);
       yield* Deferred.succeed(promptGate, undefined);
@@ -952,7 +1023,9 @@ describe("FlectRuntimeLive", () => {
           .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
         yield* Deferred.await(pendingPromptStarted);
 
-        const cancelError = yield* runtime.cancel(sessionId).pipe(Effect.flip);
+        const cancelError = yield* runtime
+          .cancel(sessionId, "app")
+          .pipe(Effect.flip);
         expect(cancelError).toEqual(
           new PiOperationFailed({
             operation: "cancel",
@@ -1166,7 +1239,7 @@ describe("FlectRuntimeLive", () => {
       const runtime = yield* FlectRuntime;
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
 
-      yield* runtime.cancel(sessionId);
+      yield* runtime.cancel(sessionId, "app");
       expect(fake.appAbort).not.toHaveBeenCalled();
       expect(fake.shaperAbort).not.toHaveBeenCalled();
     }).pipe(Effect.provide(fake.layer));
@@ -1224,7 +1297,7 @@ describe("FlectRuntimeLive", () => {
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
 
       yield* runtime.closeSession(sessionId);
-      const error = yield* runtime.cancel(sessionId).pipe(Effect.flip);
+      const error = yield* runtime.cancel(sessionId, "app").pipe(Effect.flip);
 
       expect(error).toEqual(
         new SessionNotFound({
@@ -1302,7 +1375,9 @@ describe("FlectRuntimeLive", () => {
           () => runtime.createSession(new SessionSelection({})),
           { discard: true },
         );
-        const missing = yield* runtime.cancel("session-1").pipe(Effect.flip);
+        const missing = yield* runtime
+          .cancel("session-1", "app")
+          .pipe(Effect.flip);
 
         expect(missing).toEqual(
           new SessionNotFound({
@@ -1327,7 +1402,9 @@ describe("FlectRuntimeLive", () => {
       const promptError = yield* runtime
         .prompt("missing", "Shape this")
         .pipe(Stream.runDrain, Effect.flip);
-      const cancelError = yield* runtime.cancel("missing").pipe(Effect.flip);
+      const cancelError = yield* runtime
+        .cancel("missing", "app")
+        .pipe(Effect.flip);
 
       expect(promptError).toEqual(
         new SessionNotFound({

@@ -4,6 +4,7 @@ import type {
   FlectEvent,
   FlectRuntimeError,
   GuardianDiagnostic,
+  InteractiveAgentRole,
   ModelSummary,
   RecoveryReason,
   RuntimeStatus,
@@ -34,9 +35,11 @@ export interface FlectRuntimeShape {
   ) => Stream.Stream<ShapeEvent, FlectRuntimeError>;
   readonly cancel: (
     sessionId: string,
+    role: InteractiveAgentRole,
   ) => Effect.Effect<void, FlectRuntimeError>;
   readonly completeShellRequest: (
     sessionId: string,
+    role: InteractiveAgentRole,
     requestId: string,
     result: BunCommandResult,
   ) => Effect.Effect<void, FlectRuntimeError>;

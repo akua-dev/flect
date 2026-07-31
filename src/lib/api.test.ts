@@ -185,6 +185,7 @@ describe("FlectClient", () => {
           const client = yield* FlectClient;
           yield* client.completeShellRequest(
             "session-1",
+            "shaper",
             "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
             result,
           );
@@ -201,6 +202,7 @@ describe("FlectClient", () => {
                 : String(init?.body),
             ),
           ).toEqual({
+            role: "shaper",
             requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
             result: {
               version: 1,
@@ -213,6 +215,33 @@ describe("FlectClient", () => {
       );
     },
   );
+
+  it.effect("encodes the selected role when cancelling an agent", () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ version: 1, status: "cancelled" }));
+
+    return withClient(
+      fetcher,
+      Effect.gen(function* () {
+        const client = yield* FlectClient;
+        yield* client.cancel("session-1", "app");
+
+        const [input, init] = fetcher.mock.calls[0] ?? [];
+        expect(String(input)).toBe(
+          "http://flect.local/api/sessions/session-1/cancel",
+        );
+        expect(init?.method).toBe("POST");
+        expect(
+          JSON.parse(
+            init?.body instanceof Uint8Array
+              ? new TextDecoder().decode(init.body)
+              : String(init?.body),
+          ),
+        ).toEqual({ role: "app" });
+      }),
+    );
+  });
 
   it.effect("decodes SSE split across arbitrary byte chunks", () => {
     const fetcher = vi
