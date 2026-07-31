@@ -30,6 +30,8 @@ vi.mock("./hooks/use-agent-session", async (importOriginal) => {
       selectedModel: undefined,
       selectModel: vi.fn(),
       refresh: vi.fn(() => Promise.resolve()),
+      externalExtensions: { app: false, shaper: false },
+      toggleExternalExtensions: vi.fn(() => Promise.resolve()),
       app: {
         role: "app" as const,
         status: "ready" as const,
@@ -126,6 +128,49 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("App", () => {
+  it("keeps the protected recovery shell available when workspace loading fails", async () => {
+    const shaping = ManagedRuntime.make(
+      Layer.mergeAll(
+        makeShapingKernelTestLayer(),
+        Layer.succeed(ExtensionExecution)({
+          execute: () =>
+            Effect.succeed(
+              SandboxResult.make({
+                version: 1,
+                intents: [],
+              }),
+            ),
+        }),
+        Layer.succeed(ExtensionSandbox)({
+          execute: () =>
+            Effect.succeed(
+              SandboxResult.make({
+                version: 1,
+                intents: [],
+              }),
+            ),
+        }),
+        Layer.succeed(SandboxCapabilityBroker)({
+          apply: () => Effect.void,
+        }),
+      ),
+    );
+
+    render(
+      <App
+        consumeLegacyInterface={() => Promise.resolve()}
+        loadLegacyInterface={() => Promise.reject(new Error("storage failed"))}
+        shaping={shaping}
+      />,
+    );
+
+    expect(
+      await screen.findByText("Custom interface state is bypassed."),
+    ).toBeVisible();
+    expect(screen.queryByText("Opening workspace")).not.toBeInTheDocument();
+    await shaping.dispose();
+  });
+
   it("routes the first blank-workspace instruction only to Shaper", async () => {
     const user = userEvent.setup();
     const shaping = ManagedRuntime.make(

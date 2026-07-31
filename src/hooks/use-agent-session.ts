@@ -4,6 +4,7 @@ import { BunCommandResult } from "../../shared/bun-command";
 import {
   type FlectEvent,
   type InteractiveAgentRole,
+  ExternalPiExtensionSelection,
   ModelSelection,
   type ModelSummary,
   type RecoveryReason,
@@ -60,6 +61,10 @@ export interface AgentWorkspaceController {
   readonly selectedModel: ModelSummary | undefined;
   readonly selectModel: (model: ModelSummary | undefined) => void;
   readonly refresh: () => Promise<void>;
+  readonly externalExtensions: ExternalPiExtensionSelection;
+  readonly toggleExternalExtensions: (
+    role: InteractiveAgentRole,
+  ) => Promise<void>;
   readonly app: AppConversationController;
   readonly shaper: ShaperConversationController;
   readonly diagnoseRecovery: (
@@ -92,20 +97,32 @@ const messageId = () => crypto.randomUUID();
 
 const sessionSelection = (
   selectedModel: ModelSummary | undefined,
+  externalExtensions: ExternalPiExtensionSelection,
 ): SessionSelection =>
-  selectedModel
-    ? new SessionSelection({
-        model: new ModelSelection({
-          provider: selectedModel.provider,
-          id: selectedModel.id,
+  new SessionSelection({
+    ...(selectedModel === undefined
+      ? {}
+      : {
+          model: new ModelSelection({
+            provider: selectedModel.provider,
+            id: selectedModel.id,
+          }),
         }),
-      })
-    : new SessionSelection({});
+    ...(externalExtensions.app || externalExtensions.shaper
+      ? { externalExtensions }
+      : {}),
+  });
 
-const modelSelectionKey = (selectedModel: ModelSummary | undefined) =>
-  selectedModel === undefined
-    ? "auto"
-    : JSON.stringify([selectedModel.provider, selectedModel.id]);
+const modelSelectionKey = (
+  selectedModel: ModelSummary | undefined,
+  externalExtensions: ExternalPiExtensionSelection,
+) =>
+  JSON.stringify([
+    selectedModel?.provider ?? "auto",
+    selectedModel?.id ?? "auto",
+    externalExtensions.app,
+    externalExtensions.shaper,
+  ]);
 
 const ensurePiSession = Effect.fn("Flect.AgentWorkspace.ensureSession")(
   function* (
@@ -160,6 +177,9 @@ export function useAgentSession(
 } {
   const [models, setModels] = useState<ReadonlyArray<ModelSummary>>([]);
   const [selectedModel, setSelectedModel] = useState<ModelSummary>();
+  const [externalExtensions, setExternalExtensions] = useState(
+    ExternalPiExtensionSelection.make({ app: false, shaper: false }),
+  );
   const [appState, setAppState] = useState(initialConversation);
   const [shaperState, setShaperState] = useState(initialConversation);
   const sessionRef = useRef<SessionHandle | undefined>(undefined);
@@ -310,12 +330,12 @@ export function useAgentSession(
   }, [interruptRoleFibers, refresh, releaseSession, runtime]);
 
   const selection = useMemo(
-    () => sessionSelection(selectedModel),
-    [selectedModel],
+    () => sessionSelection(selectedModel, externalExtensions),
+    [externalExtensions, selectedModel],
   );
   const selectionKey = useMemo(
-    () => modelSelectionKey(selectedModel),
-    [selectedModel],
+    () => modelSelectionKey(selectedModel, externalExtensions),
+    [externalExtensions, selectedModel],
   );
   const ensureSession = useCallback(
     () =>
@@ -632,6 +652,41 @@ export function useAgentSession(
   const cancelApp = useCallback(() => cancelRole("app"), [cancelRole]);
   const cancelShaper = useCallback(() => cancelRole("shaper"), [cancelRole]);
 
+  const toggleExternalExtensions = useCallback(
+    (role: InteractiveAgentRole) => {
+      const sessionId = sessionRef.current?.id;
+      setExternalExtensions((current) =>
+        ExternalPiExtensionSelection.make({
+          ...current,
+          [role]: !current[role],
+        }),
+      );
+      const reset = (current: ConversationSnapshot) => ({
+        ...current,
+        status:
+          current.status === "unavailable" ||
+          current.status === "setup-required"
+            ? current.status
+            : ("ready" as const),
+        error: undefined,
+      });
+
+      return runtime
+        .runPromise(
+          interruptRoleFibers().pipe(
+            Effect.andThen(
+              sessionId === undefined ? Effect.void : releaseSession(sessionId),
+            ),
+          ),
+        )
+        .then(() => {
+          setAppState(reset);
+          setShaperState(reset);
+        });
+    },
+    [interruptRoleFibers, releaseSession, runtime],
+  );
+
   const selectModel = useCallback(
     (model: ModelSummary | undefined) => {
       const sessionId = sessionRef.current?.id;
@@ -697,6 +752,8 @@ export function useAgentSession(
     selectedModel,
     selectModel,
     refresh,
+    externalExtensions,
+    toggleExternalExtensions,
     app,
     shaper,
     diagnoseRecovery,

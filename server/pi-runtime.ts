@@ -52,7 +52,7 @@ export type PiSessionPolicy = {
   readonly role: "guardian" | "app" | "shaper";
   readonly tools: "none" | "sandbox-bash";
   readonly storage: "memory";
-  readonly extensions: "disabled";
+  readonly extensions: "disabled" | "enabled";
   readonly userResources: "disabled";
 };
 
@@ -141,38 +141,60 @@ export class PiSdk extends Context.Service<PiSdk, PiSdkShape>()(
   "flect/server/PiSdk",
 ) {}
 
-const protectedAgentPolicies = Object.freeze({
-  guardian: Object.freeze({
-    role: "guardian",
-    tools: "none",
-    storage: "memory",
-    extensions: "disabled",
-    userResources: "disabled",
-  } satisfies PiSessionPolicy),
-  app: Object.freeze({
-    role: "app",
-    tools: "sandbox-bash",
-    storage: "memory",
-    extensions: "disabled",
-    userResources: "disabled",
-  } satisfies PiSessionPolicy),
-  shaper: Object.freeze({
-    role: "shaper",
-    tools: "sandbox-bash",
-    storage: "memory",
-    extensions: "disabled",
-    userResources: "disabled",
-  } satisfies PiSessionPolicy),
-});
+const protectedAgentPolicies = (selection: SessionSelection) => {
+  const extensions = selection.externalExtensions ?? {
+    app: false,
+    shaper: false,
+  };
+
+  return Object.freeze({
+    guardian: Object.freeze({
+      role: "guardian",
+      tools: "none",
+      storage: "memory",
+      extensions: "disabled",
+      userResources: "disabled",
+    } satisfies PiSessionPolicy),
+    app: Object.freeze({
+      role: "app",
+      tools: "sandbox-bash",
+      storage: "memory",
+      extensions: extensions.app ? "enabled" : "disabled",
+      userResources: "disabled",
+    } satisfies PiSessionPolicy),
+    shaper: Object.freeze({
+      role: "shaper",
+      tools: "sandbox-bash",
+      storage: "memory",
+      extensions: extensions.shaper ? "enabled" : "disabled",
+      userResources: "disabled",
+    } satisfies PiSessionPolicy),
+  });
+};
 
 const guardianSystemPrompt =
   "You are Flect Guardian, the protected recovery agent. You may reason about typed validation summaries and request deterministic recovery actions only. You cannot load user resources, modify the revision journal, execute extensions, or use shell, filesystem, browser, network, or process tools.";
 
 const appSystemPrompt =
-  "You are Flect App Agent, the user-facing agent inside the current product experience. Help the user operate the product through its exposed interface and API capabilities. You may use the bash tool only inside Flect's disposable App workspace. It cannot access Shaper source, the host filesystem, credentials, the parent UI, the canonical workspace, or ambient network. You cannot reshape the interface, activate revisions, modify Guardian or safe mode, or load user resources and extensions.";
+  "You are Flect App Agent, the user-facing agent inside the current product experience. Help the user operate the product through its exposed interface and API capabilities. You may use the bash tool only inside Flect's disposable App workspace. It cannot access Shaper source, the host filesystem, credentials, the parent UI, the canonical workspace, or ambient network. You cannot reshape the interface, activate revisions, modify Guardian or safe mode, or load user resources.";
 
 const shaperSystemPrompt =
-  "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may use the bash tool only inside Flect's disposable browser workspace. It cannot access the host filesystem, credentials, parent UI, canonical workspace, or ambient network; the reserved compatible bun command provides bounded run, build, package, preview, and stop operations. You cannot activate revisions, modify Guardian or safe mode, or load user resources and extensions.";
+  "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may use the bash tool only inside Flect's disposable browser workspace. It cannot access the host filesystem, credentials, parent UI, canonical workspace, or ambient network; the reserved compatible bun command provides bounded run, build, package, preview, and stop operations. You cannot activate revisions, modify Guardian or safe mode, or load user resources.";
+
+const systemPrompt = (policy: PiSessionPolicy) => {
+  const extensionBoundary =
+    policy.extensions === "enabled"
+      ? "The user explicitly enabled Pi's configured external extensions for this role; those extensions are trusted local code and remain outside the protected Guardian domain."
+      : "You cannot load user resources or external extensions.";
+
+  return `${
+    policy.role === "guardian"
+      ? guardianSystemPrompt
+      : policy.role === "app"
+        ? appSystemPrompt
+        : shaperSystemPrompt
+  } ${extensionBoundary}`;
+};
 
 const piFailure = (operation: PiOperationFailed["operation"]) =>
   new PiOperationFailed({
@@ -233,7 +255,20 @@ export const PiSdkLive = Layer.effect(
       const createProtectedSession = Effect.fn(
         "Flect.PiSdk.createProtectedSession",
       )(function* (policy: PiSessionPolicy) {
-        const settingsManager = SettingsManager.inMemory();
+        const configuredSettings =
+          policy.extensions === "enabled"
+            ? SettingsManager.create(process.cwd(), getAgentDir(), {
+                projectTrusted: false,
+              })
+            : undefined;
+        const settingsManager = SettingsManager.inMemory(
+          configuredSettings === undefined
+            ? {}
+            : {
+                packages: configuredSettings.getPackages(),
+                extensions: configuredSettings.getExtensionPaths(),
+              },
+        );
         const sessionManager = SessionManager.inMemory();
         const listeners = new Set<(event: PiEvent) => void>();
         const emit = (event: PiEvent) => {
@@ -253,12 +288,7 @@ export const PiSdkLive = Layer.effect(
           noPromptTemplates: policy.userResources === "disabled",
           noThemes: policy.userResources === "disabled",
           noContextFiles: policy.userResources === "disabled",
-          systemPrompt:
-            policy.role === "guardian"
-              ? guardianSystemPrompt
-              : policy.role === "app"
-                ? appSystemPrompt
-                : shaperSystemPrompt,
+          systemPrompt: systemPrompt(policy),
         });
 
         yield* Effect.tryPromise({
@@ -759,7 +789,10 @@ export const FlectRuntimeLive = Layer.effect(
         );
       }
 
-      const agents = yield* pi.createAgentSet(model, protectedAgentPolicies);
+      const agents = yield* pi.createAgentSet(
+        model,
+        protectedAgentPolicies(selection),
+      );
       return yield* Effect.gen(function* () {
         const appAbort = agents.app.abort;
         yield* Effect.yieldNow;

@@ -143,6 +143,11 @@ permissions. Guardian output is advisory text behind a typed diagnostic
 operation; the Guardian cannot mutate the revision journal, invoke rollback, or
 authorize capabilities.
 
+External Pi extensions are loaded only after an explicit role-scoped user
+enablement. App Agent and Shaper receive separate extension-enabled sessions;
+Guardian never does. The enabled sessions load only the user's configured Pi
+extension sources and keep them outside the protected recovery domain.
+
 ## Interface change flow
 
 ```text

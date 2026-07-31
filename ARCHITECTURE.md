@@ -122,12 +122,14 @@ then creates three isolated agent sessions:
 - **App Agent** is the Run-mode agent for using an accepted product experience.
   It has its own prompt, history, operation controller, and role-owned
   browser-shell workspace. It does not receive shaping context or revision
-  authority.
+  authority. Configured external Pi extensions remain disabled unless the user
+  explicitly enables them for App Agent.
 - **Shaper** receives the current validated document and a shaping instruction.
   It has no ambient host resources. Its only Pi tool is Flect's custom `bash`,
   which runs in a disposable browser workspace and returns through a typed
-  request/result bridge. A shaped document still returns as an untrusted
-  candidate for Flect to validate.
+  request/result bridge. Configured external Pi extensions remain disabled
+  unless the user explicitly enables them for Shaper. A shaped document still
+  returns as an untrusted candidate for Flect to validate.
 
 Each session has its own in-memory `SessionManager`, `SettingsManager`, and
 `DefaultResourceLoader`. Their only shared object is the provider/model runtime.

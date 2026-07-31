@@ -19,11 +19,13 @@ const props = (
   rollbackDisabled: false,
   onRollback: vi.fn(() => Promise.resolve()),
   onOpenSafeMode: vi.fn(),
+  externalExtensionsEnabled: false,
+  onToggleExternalExtensions: vi.fn(() => Promise.resolve()),
   ...overrides,
 });
 
 describe("ComposerActionsMenu", () => {
-  it("exposes only implemented protected actions", async () => {
+  it("exposes implemented protected and extension actions", async () => {
     const user = userEvent.setup();
     render(<ComposerActionsMenu {...props()} />);
 
@@ -35,10 +37,25 @@ describe("ComposerActionsMenu", () => {
       screen.getByRole("menuitem", { name: "Open safe mode" }),
     ).toBeVisible();
     expect(
-      screen.queryByRole("menuitem", {
-        name: /voice|attach|extensions|shape interface/i,
-      }),
-    ).not.toBeInTheDocument();
+      screen.getByRole("menuitem", { name: "Enable trusted Pi extensions" }),
+    ).toBeVisible();
+  });
+
+  it("toggles trusted Pi extensions for the active role", async () => {
+    const user = userEvent.setup();
+    const onToggleExternalExtensions = vi.fn(() => Promise.resolve());
+    render(
+      <ComposerActionsMenu
+        {...props({ onToggleExternalExtensions })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: "Enable trusted Pi extensions" }),
+    );
+
+    expect(onToggleExternalExtensions).toHaveBeenCalledOnce();
   });
 
   it("runs rollback only when a prior revision is available", async () => {

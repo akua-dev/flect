@@ -6,9 +6,11 @@ import {
   type InterfaceDocument,
 } from "../shared/interface-document";
 import {
+  InterfaceRevision,
+  RevisionId,
+  ShapingEvent,
+  ShapingSnapshot,
   isRollbackAvailable,
-  type RevisionId,
-  type ShapingSnapshot,
 } from "../shared/revisions";
 import type { ShapingController } from "./components/agent-rail";
 import { RoleAwareShell } from "./components/role-aware-shell";
@@ -46,6 +48,28 @@ const isolationCheck = ExtensionManifest.make({
     ].join(",")
   })`,
   capabilities: ["interface:propose"],
+});
+
+const protectedFallbackRevision = InterfaceRevision.make({
+  version: 1,
+  id: RevisionId.make("built-in"),
+  status: "accepted",
+  source: "built-in",
+  document: defaultInterfaceDocument,
+  createdAt: 0,
+});
+
+const protectedFallbackSnapshot = ShapingSnapshot.make({
+  version: 1,
+  active: protectedFallbackRevision,
+  lastKnownGood: protectedFallbackRevision,
+  safeMode: true,
+  disabledExtensions: [],
+  lastEvent: ShapingEvent.make({
+    version: 1,
+    sequence: 0,
+    type: "safe-mode-entered",
+  }),
 });
 
 export interface AppProps {
@@ -120,12 +144,18 @@ export function App({
         !snapshot.safeMode &&
         snapshot.lastEvent.type === "initialized"
       ) {
-        const legacy = yield* Effect.promise(loadLegacyInterface);
+        const legacy = yield* Effect.tryPromise({
+          try: loadLegacyInterface,
+          catch: () => "legacy-interface-load-failed" as const,
+        });
         if (!Equal.equals(legacy, defaultInterfaceDocument)) {
           const restored = yield* kernel.propose(legacy, "user");
           yield* kernel.preview(restored.id);
           yield* kernel.accept(restored.id);
-          yield* Effect.promise(consumeLegacyInterface);
+          yield* Effect.tryPromise({
+            try: consumeLegacyInterface,
+            catch: () => "legacy-interface-consume-failed" as const,
+          });
         }
       }
 
@@ -142,10 +172,12 @@ export function App({
         Effect.sync(() => {
           if (mounted) {
             setDocument(defaultInterfaceDocument);
-            setSnapshot(undefined);
+            setSnapshot(protectedFallbackSnapshot);
             setProtectedMode(true);
             setProposalId(undefined);
             setRollbackAvailable(false);
+            setShapingStatus("idle");
+            setShapingError(undefined);
           }
         }),
       ),

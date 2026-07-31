@@ -11,6 +11,7 @@ import {
   ModelSummary,
   RuntimeStatus,
   SessionBusy,
+  SessionSelection,
   ShapeCompleted,
 } from "../../shared/contracts";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
@@ -115,6 +116,35 @@ function createFakeRuntime({
 }
 
 describe("useAgentSession", () => {
+  it("recreates a session with role-scoped external Pi extensions", async () => {
+    const { client, runtime } = createFakeRuntime();
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.app.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.toggleExternalExtensions("shaper");
+    });
+    await waitFor(() =>
+      expect(result.current.externalExtensions.shaper).toBe(true),
+    );
+
+    await act(async () => {
+      await result.current.shaper.shape(
+        "Use the enabled extension",
+        defaultInterfaceDocument,
+      );
+    });
+
+    expect(client.createSession).toHaveBeenLastCalledWith(
+      new SessionSelection({
+        externalExtensions: { app: false, shaper: true },
+      }),
+    );
+
+    unmount();
+    await runtime.dispose();
+  });
+
   it("keeps App and Shaper conversations separate behind one session", async () => {
     const { client, runtime } = createFakeRuntime();
     const { result, unmount } = renderHook(() => useAgentSession(runtime));

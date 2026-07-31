@@ -33,6 +33,8 @@ const props = (overrides: Partial<ComposerProps> = {}): ComposerProps => ({
   onCancel: vi.fn(() => Promise.resolve()),
   onRollback: vi.fn(() => Promise.resolve()),
   onOpenSafeMode: vi.fn(),
+  externalExtensionsEnabled: false,
+  onToggleExternalExtensions: vi.fn(() => Promise.resolve()),
   ...overrides,
 });
 

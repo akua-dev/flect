@@ -286,6 +286,11 @@ export function AgentRail({
               ? "Keep or reject the preview before shaping again."
               : undefined
           }
+          externalExtensionsEnabled={
+            mode === "run"
+              ? workspace.externalExtensions.app
+              : workspace.externalExtensions.shaper
+          }
           mode={mode}
           modelFavorites={preferences.value.modelFavorites}
           models={workspace.models}
@@ -294,6 +299,9 @@ export function AgentRail({
           onOpenSafeMode={onOpenSafeMode}
           onRollback={shaping.rollback}
           onSelectModel={workspace.selectModel}
+          onToggleExternalExtensions={() =>
+            workspace.toggleExternalExtensions(mode === "run" ? "app" : "shaper")
+          }
           onSubmit={
             mode === "run"
               ? workspace.app.submit

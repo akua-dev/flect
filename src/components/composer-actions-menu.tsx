@@ -7,6 +7,8 @@ export interface ComposerActionsMenuProps {
   readonly rollbackDisabled: boolean;
   readonly onRollback: () => Promise<void>;
   readonly onOpenSafeMode: () => void;
+  readonly externalExtensionsEnabled: boolean;
+  readonly onToggleExternalExtensions: () => Promise<void>;
 }
 
 const menuItems = (menu: HTMLDivElement) =>
@@ -22,6 +24,8 @@ export function ComposerActionsMenu({
   rollbackDisabled,
   onRollback,
   onOpenSafeMode,
+  externalExtensionsEnabled,
+  onToggleExternalExtensions,
 }: ComposerActionsMenuProps) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -154,6 +158,31 @@ export function ComposerActionsMenu({
               {rollbackAvailable
                 ? "Restore the previous interface"
                 : "No previous revision"}
+            </small>
+          </button>
+          <button
+            aria-label={
+              externalExtensionsEnabled
+                ? "Disable trusted Pi extensions"
+                : "Enable trusted Pi extensions"
+            }
+            className="composer-popover__item"
+            onClick={() => {
+              setOpen(false);
+              void onToggleExternalExtensions();
+            }}
+            role="menuitem"
+            type="button"
+          >
+            <span>
+              {externalExtensionsEnabled
+                ? "Disable trusted Pi extensions"
+                : "Enable trusted Pi extensions"}
+            </span>
+            <small>
+              {externalExtensionsEnabled
+                ? "Keep configured external code out of this role"
+                : "Allow Pi's configured external code in this role"}
             </small>
           </button>
           <button

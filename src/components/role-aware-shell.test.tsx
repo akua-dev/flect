@@ -83,6 +83,8 @@ const workspace = (
   selectedModel: undefined,
   selectModel: vi.fn(),
   refresh: vi.fn(() => Promise.resolve()),
+  externalExtensions: { app: false, shaper: false },
+  toggleExternalExtensions: vi.fn(() => Promise.resolve()),
   app: {
     ...appRole(),
     submit: vi.fn(() => Promise.resolve()),

@@ -52,10 +52,18 @@ export class ModelSelection extends Schema.Class<ModelSelection>(
   id: NonEmptyText,
 }) {}
 
+export class ExternalPiExtensionSelection extends Schema.Class<ExternalPiExtensionSelection>(
+  "ExternalPiExtensionSelection",
+)({
+  app: Schema.Boolean,
+  shaper: Schema.Boolean,
+}) {}
+
 export class SessionSelection extends Schema.Class<SessionSelection>(
   "SessionSelection",
 )({
   model: Schema.optionalKey(ModelSelection),
+  externalExtensions: Schema.optionalKey(ExternalPiExtensionSelection),
 }) {}
 
 export const InteractiveAgentRole = Schema.Literals(["app", "shaper"]);

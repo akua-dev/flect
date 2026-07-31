@@ -30,6 +30,8 @@ export interface ComposerProps {
   readonly onCancel: () => Promise<void>;
   readonly onRollback: () => Promise<void>;
   readonly onOpenSafeMode: () => void;
+  readonly externalExtensionsEnabled: boolean;
+  readonly onToggleExternalExtensions: () => Promise<void>;
 }
 
 export function Composer({
@@ -50,6 +52,8 @@ export function Composer({
   onCancel,
   onRollback,
   onOpenSafeMode,
+  externalExtensionsEnabled,
+  onToggleExternalExtensions,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState({ edit: "", run: "" });
   const composingRef = useRef(false);
@@ -158,8 +162,10 @@ export function Composer({
         <div className="composer__tools">
           <ComposerActionsMenu
             disabled={isUnavailable || isActive}
+            externalExtensionsEnabled={externalExtensionsEnabled}
             onOpenSafeMode={onOpenSafeMode}
             onRollback={onRollback}
+            onToggleExternalExtensions={onToggleExternalExtensions}
             rollbackAvailable={rollbackAvailable}
             rollbackDisabled={isUnavailable || isActive}
           />

@@ -166,6 +166,18 @@ describe("runtime contracts", () => {
     }),
   );
 
+  it.effect("decodes role-scoped external Pi extension enablement", () =>
+    Effect.gen(function* () {
+      const selection = yield* decodeSessionSelection({
+        externalExtensions: { app: true, shaper: false },
+      });
+
+      expect(selection).toMatchObject({
+        externalExtensions: { app: true, shaper: false },
+      });
+    }),
+  );
+
   it.effect("keeps runtime status versioned", () =>
     Effect.gen(function* () {
       const status = yield* decodeRuntimeStatus({
