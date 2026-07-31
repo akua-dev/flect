@@ -25,6 +25,10 @@ import {
 } from "../lib/interface-store";
 import type { FlectBrowserRuntime } from "../lib/runtime";
 import {
+  defaultShellPreferences,
+  ShellPreferences,
+} from "../lib/shell-preferences";
+import {
   SandboxedShell,
   type SandboxedShellShape,
 } from "../shell/sandboxed-shell-service";
@@ -100,6 +104,10 @@ function createFakeRuntime({
       Layer.succeed(FlectClient)(client),
       Layer.succeed(InterfaceStorage)(storage),
       Layer.succeed(SandboxedShell)(shell),
+      Layer.succeed(ShellPreferences)({
+        load: Effect.succeed(defaultShellPreferences),
+        save: () => Effect.void,
+      }),
     ),
   );
 

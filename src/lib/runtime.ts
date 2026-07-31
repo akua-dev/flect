@@ -19,6 +19,10 @@ import {
 import { makeInterfaceRepositoryLayer } from "./interface-repository";
 import { type InterfaceStorage, InterfaceStorageLive } from "./interface-store";
 import { makePersistentShapingKernelLayer } from "./shaping-kernel";
+import {
+  makeShellPreferencesLayer,
+  type ShellPreferences,
+} from "./shell-preferences";
 import { makeTauriFlectClientLayer, TauriBridgeLive } from "./tauri-transport";
 
 const ClientLive = isTauri()
@@ -42,16 +46,22 @@ const AgentShellLive = makeLiveRoleSandboxedShellLayer({
   },
 });
 
+const ShellPreferencesLive = makeShellPreferencesLayer.pipe(
+  Layer.provide(InterfaceStorageLive),
+);
+
 const BrowserLive = Layer.mergeAll(
   ClientLive,
   InterfaceStorageLive,
   AgentShellLive,
+  ShellPreferencesLive,
 );
 
 export type FlectBrowserServices =
   | FlectClient
   | InterfaceStorage
-  | SandboxedShell;
+  | SandboxedShell
+  | ShellPreferences;
 export type FlectBrowserRuntime = ManagedRuntime.ManagedRuntime<
   FlectBrowserServices,
   FlectUnavailableError
