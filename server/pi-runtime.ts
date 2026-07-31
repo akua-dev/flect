@@ -48,7 +48,7 @@ import { makePiShellBridge } from "./pi-shell-bridge";
 import { FlectRuntime } from "./runtime";
 
 export type PiSessionPolicy = {
-  readonly role: "guardian" | "shaper";
+  readonly role: "guardian" | "app" | "shaper";
   readonly tools: "none" | "sandbox-bash";
   readonly storage: "memory";
   readonly extensions: "disabled";
@@ -80,23 +80,60 @@ export interface PiSession {
   readonly dispose: Effect.Effect<void>;
 }
 
-export interface PiAgentPair {
+export interface PiAgentSet {
   readonly guardian: PiSession;
+  readonly app: PiSession;
   readonly shaper: PiSession;
 }
+
+type PiAgentPolicies = {
+  readonly guardian: PiSessionPolicy;
+  readonly app: PiSessionPolicy;
+  readonly shaper: PiSessionPolicy;
+};
+
+export const acquireProtectedAgentSet = Effect.fn(
+  "Flect.PiSdk.acquireProtectedAgentSet",
+)(function* (
+  policies: PiAgentPolicies,
+  createProtectedSession: (
+    policy: PiSessionPolicy,
+  ) => Effect.Effect<PiSession, PiOperationFailed>,
+) {
+  const guardian = yield* createProtectedSession(policies.guardian);
+  const app = yield* createProtectedSession(policies.app).pipe(
+    Effect.tapError(() => guardian.dispose),
+    Effect.onInterrupt(() => guardian.dispose),
+  );
+  const disposeEarlierSessions = Effect.all([app.dispose, guardian.dispose], {
+    concurrency: "unbounded",
+    discard: true,
+  });
+  const shaper = yield* createProtectedSession(policies.shaper).pipe(
+    Effect.tapError(() => disposeEarlierSessions),
+    Effect.onInterrupt(() => disposeEarlierSessions),
+  );
+
+  return {
+    guardian,
+    app,
+    shaper,
+  } satisfies PiAgentSet;
+});
 
 export interface PiSdkShape {
   readonly listModels: Effect.Effect<
     ReadonlyArray<ModelSummary>,
     PiOperationFailed
   >;
-  readonly createAgentPair: (
+  readonly createAgentSet: (
     model: ModelSummary,
     policies: {
       readonly guardian: PiSessionPolicy;
+      readonly app: PiSessionPolicy;
       readonly shaper: PiSessionPolicy;
     },
-  ) => Effect.Effect<PiAgentPair, PiOperationFailed | NoModelAvailable>;
+  ) => Effect.Effect<PiAgentSet, PiOperationFailed | NoModelAvailable>;
 }
 
 export class PiSdk extends Context.Service<PiSdk, PiSdkShape>()(
@@ -107,6 +144,13 @@ const protectedAgentPolicies = Object.freeze({
   guardian: Object.freeze({
     role: "guardian",
     tools: "none",
+    storage: "memory",
+    extensions: "disabled",
+    userResources: "disabled",
+  } satisfies PiSessionPolicy),
+  app: Object.freeze({
+    role: "app",
+    tools: "sandbox-bash",
     storage: "memory",
     extensions: "disabled",
     userResources: "disabled",
@@ -122,6 +166,9 @@ const protectedAgentPolicies = Object.freeze({
 
 const guardianSystemPrompt =
   "You are Flect Guardian, the protected recovery agent. You may reason about typed validation summaries and request deterministic recovery actions only. You cannot load user resources, modify the revision journal, execute extensions, or use shell, filesystem, browser, network, or process tools.";
+
+const appSystemPrompt =
+  "You are Flect App Agent, the user-facing agent inside the current product experience. Help the user operate the product through its exposed interface and API capabilities. You may use the bash tool only inside Flect's disposable App workspace. It cannot access Shaper source, the host filesystem, credentials, the parent UI, the canonical workspace, or ambient network. You cannot reshape the interface, activate revisions, modify Guardian or safe mode, or load user resources and extensions.";
 
 const shaperSystemPrompt =
   "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may use the bash tool only inside Flect's disposable browser workspace. It cannot access the host filesystem, credentials, parent UI, canonical workspace, or ambient network; the reserved compatible bun command provides bounded run, build, package, preview, and stop operations. You cannot activate revisions, modify Guardian or safe mode, or load user resources and extensions.";
@@ -160,10 +207,11 @@ export const PiSdkLive = Layer.effect(
       ),
     );
 
-    const createAgentPair = Effect.fn("Flect.PiSdk.createAgentPair")(function* (
+    const createAgentSet = Effect.fn("Flect.PiSdk.createAgentSet")(function* (
       model: ModelSummary,
       policies: {
         readonly guardian: PiSessionPolicy;
+        readonly app: PiSessionPolicy;
         readonly shaper: PiSessionPolicy;
       },
     ) {
@@ -207,7 +255,9 @@ export const PiSdkLive = Layer.effect(
           systemPrompt:
             policy.role === "guardian"
               ? guardianSystemPrompt
-              : shaperSystemPrompt,
+              : policy.role === "app"
+                ? appSystemPrompt
+                : shaperSystemPrompt,
         });
 
         yield* Effect.tryPromise({
@@ -318,21 +368,12 @@ export const PiSdkLive = Layer.effect(
         } satisfies PiSession;
       });
 
-      const guardian = yield* createProtectedSession(policies.guardian);
-      const shaper = yield* createProtectedSession(policies.shaper).pipe(
-        Effect.tapError(() => guardian.dispose),
-        Effect.onInterrupt(() => guardian.dispose),
-      );
-
-      return {
-        guardian,
-        shaper,
-      };
+      return yield* acquireProtectedAgentSet(policies, createProtectedSession);
     });
 
     return {
       listModels,
-      createAgentPair,
+      createAgentSet,
     };
   }),
 );
@@ -530,9 +571,11 @@ const executeOperation = <A, E>(
   );
 
 type SessionRecord = {
-  readonly session: PiSession;
+  readonly app: PiSession;
+  readonly shaper: PiSession;
   readonly guardian: PiSession;
-  readonly sessionOperation: OperationController;
+  readonly appOperation: OperationController;
+  readonly shaperOperation: OperationController;
   readonly guardianOperation: OperationController;
   readonly sequence: number;
 };
@@ -645,16 +688,24 @@ export const FlectRuntimeLive = Layer.effect(
       Effect.uninterruptible(
         Effect.all(
           [
-            closeOperation(record.sessionOperation),
+            closeOperation(record.appOperation),
+            closeOperation(record.shaperOperation),
             closeOperation(record.guardianOperation),
           ],
           { concurrency: "unbounded", discard: true },
         ).pipe(
           Effect.andThen(
-            Effect.all([record.session.dispose, record.guardian.dispose], {
-              concurrency: "unbounded",
-              discard: true,
-            }),
+            Effect.all(
+              [
+                record.app.dispose,
+                record.shaper.dispose,
+                record.guardian.dispose,
+              ],
+              {
+                concurrency: "unbounded",
+                discard: true,
+              },
+            ),
           ),
         ),
       ),
@@ -707,33 +758,39 @@ export const FlectRuntimeLive = Layer.effect(
         );
       }
 
-      const pair = yield* pi.createAgentPair(model, protectedAgentPolicies);
+      const agents = yield* pi.createAgentSet(model, protectedAgentPolicies);
       return yield* Effect.gen(function* () {
-        const shaperAbort = pair.shaper.abort;
+        const appAbort = agents.app.abort;
         yield* Effect.yieldNow;
-        const sessionOperation = yield* makeOperationController(
-          pair.shaper.sessionId,
-          shaperAbort,
+        const appOperation = yield* makeOperationController(
+          agents.app.sessionId,
+          appAbort,
+        );
+        const shaperOperation = yield* makeOperationController(
+          agents.app.sessionId,
+          agents.shaper.abort,
         );
         const guardianOperation = yield* makeOperationController(
-          pair.guardian.sessionId,
-          pair.guardian.abort,
+          agents.app.sessionId,
+          agents.guardian.abort,
         );
         const sequence = yield* Ref.getAndUpdate(
           sessionSequence,
           (current) => current + 1,
         );
         const record: SessionRecord = {
-          session: pair.shaper,
-          guardian: pair.guardian,
-          sessionOperation,
+          app: agents.app,
+          shaper: agents.shaper,
+          guardian: agents.guardian,
+          appOperation,
+          shaperOperation,
           guardianOperation,
           sequence,
         };
         yield* Effect.uninterruptible(
           Effect.gen(function* () {
             const evicted = yield* Ref.modify(sessions, (current) => {
-              const replaced = HashMap.get(current, pair.shaper.sessionId);
+              const replaced = HashMap.get(current, agents.app.sessionId);
               let oldest: SessionRecord | undefined;
               if (
                 Option.isNone(replaced) &&
@@ -752,10 +809,10 @@ export const FlectRuntimeLive = Layer.effect(
               const withoutEvicted =
                 evictedRecord === undefined
                   ? current
-                  : HashMap.remove(current, evictedRecord.session.sessionId);
+                  : HashMap.remove(current, evictedRecord.app.sessionId);
               return [
                 evictedRecord,
-                HashMap.set(withoutEvicted, pair.shaper.sessionId, record),
+                HashMap.set(withoutEvicted, agents.app.sessionId, record),
               ];
             });
             if (evicted !== undefined) {
@@ -763,23 +820,31 @@ export const FlectRuntimeLive = Layer.effect(
             }
           }),
         );
-        return pair.shaper.sessionId;
+        return agents.app.sessionId;
       }).pipe(
         Effect.onInterrupt(() =>
           Effect.uninterruptible(
             Ref.update(sessions, (current) => {
-              const registered = HashMap.get(current, pair.shaper.sessionId);
+              const registered = HashMap.get(current, agents.app.sessionId);
               return Option.isSome(registered) &&
-                registered.value.session === pair.shaper &&
-                registered.value.guardian === pair.guardian
-                ? HashMap.remove(current, pair.shaper.sessionId)
+                registered.value.app === agents.app &&
+                registered.value.shaper === agents.shaper &&
+                registered.value.guardian === agents.guardian
+                ? HashMap.remove(current, agents.app.sessionId)
                 : current;
             }).pipe(
               Effect.andThen(
-                Effect.all([pair.shaper.dispose, pair.guardian.dispose], {
-                  concurrency: "unbounded",
-                  discard: true,
-                }),
+                Effect.all(
+                  [
+                    agents.app.dispose,
+                    agents.shaper.dispose,
+                    agents.guardian.dispose,
+                  ],
+                  {
+                    concurrency: "unbounded",
+                    discard: true,
+                  },
+                ),
               ),
             ),
           ),
@@ -869,14 +934,14 @@ export const FlectRuntimeLive = Layer.effect(
                 kind: "prompt",
                 interrupt: Effect.gen(function* () {
                   yield* Ref.set(cancelled, true);
-                  yield* record.session.abort();
+                  yield* record.app.abort();
                 }),
                 done: yield* Deferred.make<void>(),
                 fiber: undefined,
               };
 
               const terminal = yield* executeOperation(
-                record.sessionOperation,
+                record.appOperation,
                 operation,
                 Effect.gen(function* () {
                   const completed = yield* Ref.make(false);
@@ -885,26 +950,24 @@ export const FlectRuntimeLive = Layer.effect(
                     new TurnStarted({ type: "turn_started" }),
                   );
 
-                  const unsubscribe = yield* record.session.subscribe(
-                    (event) => {
-                      Queue.offerUnsafe(
-                        queue,
-                        event.type === "text_delta"
-                          ? new TextDelta({
-                              type: "text_delta",
-                              delta: event.delta,
-                            })
-                          : new AgentShellRequest({
-                              type: "shell_request",
-                              requestId: event.requestId,
-                              command: event.command,
-                            }),
-                      );
-                    },
-                  );
+                  const unsubscribe = yield* record.app.subscribe((event) => {
+                    Queue.offerUnsafe(
+                      queue,
+                      event.type === "text_delta"
+                        ? new TextDelta({
+                            type: "text_delta",
+                            delta: event.delta,
+                          })
+                        : new AgentShellRequest({
+                            type: "shell_request",
+                            requestId: event.requestId,
+                            command: event.command,
+                          }),
+                    );
+                  });
 
                   const turn = Effect.gen(function* () {
-                    return yield* record.session.prompt(text).pipe(
+                    return yield* record.app.prompt(text).pipe(
                       Effect.matchEffect({
                         onFailure: () =>
                           Ref.get(cancelled).pipe(
@@ -939,7 +1002,7 @@ export const FlectRuntimeLive = Layer.effect(
                         Effect.flatMap((isComplete) =>
                           isComplete
                             ? Effect.void
-                            : record.session
+                            : record.app
                                 .abort()
                                 .pipe(Effect.catch(() => Effect.void)),
                         ),
@@ -968,14 +1031,20 @@ export const FlectRuntimeLive = Layer.effect(
       result: BunCommandResult,
     ) {
       const record = yield* findSession(sessionId);
-      yield* record.session.completeShellRequest(requestId, result);
+      yield* record.shaper.completeShellRequest(requestId, result);
     });
 
     const cancel = Effect.fn("Flect.Runtime.cancel")(function* (
       sessionId: string,
     ) {
       const record = yield* findSession(sessionId);
-      yield* record.sessionOperation.cancelActive();
+      yield* Effect.all(
+        [
+          record.appOperation.cancelActive(),
+          record.shaperOperation.cancelActive(),
+        ],
+        { concurrency: "unbounded", discard: true },
+      );
     });
 
     const makeShape = Effect.fn("Flect.Runtime.makeShape")(function* (
@@ -989,19 +1058,19 @@ export const FlectRuntimeLive = Layer.effect(
         Effect.gen(function* () {
           const operation: ActiveOperation = {
             kind: "shape",
-            interrupt: Effect.suspend(() => record.session.abort()),
+            interrupt: Effect.suspend(() => record.shaper.abort()),
             done: yield* Deferred.make<void>(),
             fiber: undefined,
           };
           const shaped = yield* executeOperation(
-            record.sessionOperation,
+            record.shaperOperation,
             operation,
             Effect.gen(function* () {
               const response = makeBoundedResponse(
                 MAX_SHAPER_RESPONSE_BYTES,
-                record.session.abort,
+                record.shaper.abort,
               );
-              const unsubscribe = yield* record.session.subscribe((event) => {
+              const unsubscribe = yield* record.shaper.subscribe((event) => {
                 if (event.type === "text_delta") {
                   response.append(event.delta);
                 } else {
@@ -1016,7 +1085,7 @@ export const FlectRuntimeLive = Layer.effect(
                 }
               });
 
-              yield* record.session
+              yield* record.shaper
                 .prompt(shapePrompt(instruction, document))
                 .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
 

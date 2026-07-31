@@ -16,8 +16,9 @@ import {
   InvalidInterfaceDocument,
 } from "../shared/interface-document";
 import {
+  acquireProtectedAgentSet,
   FlectRuntimeLive,
-  type PiAgentPair,
+  type PiAgentSet,
   type PiEvent,
   PiSdk,
   type PiSession,
@@ -32,6 +33,10 @@ type FakeOptions = {
   readonly guardianResponse?: string;
   readonly promptGate?: Deferred.Deferred<void>;
   readonly promptStarted?: Deferred.Deferred<void>;
+  readonly appPromptGate?: Deferred.Deferred<void>;
+  readonly appPromptStarted?: Deferred.Deferred<void>;
+  readonly shaperPromptGate?: Deferred.Deferred<void>;
+  readonly shaperPromptStarted?: Deferred.Deferred<void>;
   readonly pendingPromptStarted?: Deferred.Deferred<void>;
   readonly abortStarted?: Deferred.Deferred<void>;
   readonly abortGate?: Deferred.Deferred<void>;
@@ -45,86 +50,11 @@ type FakeOptions = {
 };
 
 function createFakePi(options: FakeOptions = {}) {
-  let listener: ((event: PiEvent) => void) | undefined;
   let guardianListener: ((delta: string) => void) | undefined;
-  let promptCalls = 0;
   let releasePendingPrompt: (() => void) | undefined;
-  const unsubscribe = vi.fn();
   const guardianUnsubscribe = vi.fn();
-  const abort = vi.fn(() =>
-    Effect.gen(function* () {
-      if (options.abortStarted !== undefined) {
-        yield* Deferred.succeed(options.abortStarted, undefined);
-      }
-      if (options.abortGate !== undefined) {
-        yield* Deferred.await(options.abortGate);
-      }
-      if (options.abortFailure) {
-        return yield* Effect.fail(
-          new PiOperationFailed({
-            operation: "cancel",
-            message: "The model runtime could not complete the request.",
-          }),
-        );
-      }
-    }),
-  );
   const guardianAbort = vi.fn(() => Effect.void);
-  const dispose = vi.fn(() => undefined);
   const guardianDispose = vi.fn(() => undefined);
-  const prompt = vi.fn((_: string) => {
-    promptCalls += 1;
-    if (options.promptFailure) {
-      return Effect.fail(
-        new PiOperationFailed({
-          operation: "prompt",
-          message: "The model runtime could not complete the request.",
-        }),
-      );
-    }
-    const pendingPromptStarted = options.pendingPromptStarted;
-    if (pendingPromptStarted !== undefined && promptCalls === 1) {
-      const pending = new Promise<void>((resolve) => {
-        releasePendingPrompt = resolve;
-      });
-      return Effect.gen(function* () {
-        yield* Deferred.succeed(pendingPromptStarted, undefined);
-        yield* Effect.tryPromise({
-          try: () => pending,
-          catch: () =>
-            new PiOperationFailed({
-              operation: "prompt",
-              message: "The model runtime could not complete the request.",
-            }),
-        });
-        listener?.({
-          type: "text_delta",
-          delta: options.promptResponse ?? "A shaped response",
-        });
-      });
-    }
-    return Effect.gen(function* () {
-      if (options.promptStarted !== undefined) {
-        yield* Deferred.succeed(options.promptStarted, undefined);
-      }
-      if (options.promptGate !== undefined) {
-        yield* Deferred.await(options.promptGate);
-      }
-      if (options.shellRequest !== undefined && promptCalls === 1) {
-        yield* Deferred.succeed(options.shellRequest.started, undefined);
-        listener?.({
-          type: "shell_request",
-          requestId: options.shellRequest.requestId,
-          command: options.shellRequest.command,
-        });
-        yield* Deferred.await(options.shellRequest.completed);
-      }
-      listener?.({
-        type: "text_delta",
-        delta: options.promptResponse ?? "A shaped response",
-      });
-    });
-  });
   const guardianPrompt = vi.fn(() =>
     Effect.sync(() =>
       guardianListener?.(
@@ -132,32 +62,136 @@ function createFakePi(options: FakeOptions = {}) {
       ),
     ),
   );
-  const completeShellRequest = vi.fn(
-    (_requestId: string, result: BunCommandResult) =>
-      options.shellRequest === undefined
-        ? Effect.void
-        : Deferred.succeed(options.shellRequest.completed, result).pipe(
-            Effect.asVoid,
-          ),
-  );
 
-  const session: PiSession = {
-    sessionId: "session-1",
-    subscribe: (next) =>
-      Effect.sync(() => {
-        listener = next;
-        return unsubscribe;
+  const makeInteractiveSession = (
+    role: "app" | "shaper",
+    sessionId: string,
+  ) => {
+    let listener: ((event: PiEvent) => void) | undefined;
+    let promptCalls = 0;
+    const unsubscribe = vi.fn();
+    const abort = vi.fn(() =>
+      Effect.gen(function* () {
+        if (options.abortStarted !== undefined) {
+          yield* Deferred.succeed(options.abortStarted, undefined);
+        }
+        if (options.abortGate !== undefined) {
+          yield* Deferred.await(options.abortGate);
+        }
+        if (options.abortFailure) {
+          return yield* Effect.fail(
+            new PiOperationFailed({
+              operation: "cancel",
+              message: "The model runtime could not complete the request.",
+            }),
+          );
+        }
       }),
-    prompt,
-    completeShellRequest,
-    get abort() {
-      if (options.pairObserved !== undefined) {
-        Effect.runSync(Deferred.succeed(options.pairObserved, undefined));
+    );
+    const dispose = vi.fn(() => undefined);
+    const prompt = vi.fn((_: string) => {
+      promptCalls += 1;
+      if (options.promptFailure) {
+        return Effect.fail(
+          new PiOperationFailed({
+            operation: "prompt",
+            message: "The model runtime could not complete the request.",
+          }),
+        );
       }
-      return abort;
-    },
-    dispose: Effect.sync(dispose),
+      const pendingPromptStarted =
+        role === "app" ? options.pendingPromptStarted : undefined;
+      if (pendingPromptStarted !== undefined && promptCalls === 1) {
+        const pending = new Promise<void>((resolve) => {
+          releasePendingPrompt = resolve;
+        });
+        return Effect.gen(function* () {
+          yield* Deferred.succeed(pendingPromptStarted, undefined);
+          yield* Effect.tryPromise({
+            try: () => pending,
+            catch: () =>
+              new PiOperationFailed({
+                operation: "prompt",
+                message: "The model runtime could not complete the request.",
+              }),
+          });
+          listener?.({
+            type: "text_delta",
+            delta: options.promptResponse ?? "A shaped response",
+          });
+        });
+      }
+      return Effect.gen(function* () {
+        const promptStarted =
+          role === "app"
+            ? (options.appPromptStarted ?? options.promptStarted)
+            : (options.shaperPromptStarted ?? options.promptStarted);
+        const promptGate =
+          role === "app"
+            ? (options.appPromptGate ?? options.promptGate)
+            : (options.shaperPromptGate ?? options.promptGate);
+        if (promptStarted !== undefined) {
+          yield* Deferred.succeed(promptStarted, undefined);
+        }
+        if (promptGate !== undefined) {
+          yield* Deferred.await(promptGate);
+        }
+        if (
+          role === "shaper" &&
+          options.shellRequest !== undefined &&
+          promptCalls === 1
+        ) {
+          yield* Deferred.succeed(options.shellRequest.started, undefined);
+          listener?.({
+            type: "shell_request",
+            requestId: options.shellRequest.requestId,
+            command: options.shellRequest.command,
+          });
+          yield* Deferred.await(options.shellRequest.completed);
+        }
+        listener?.({
+          type: "text_delta",
+          delta: options.promptResponse ?? "A shaped response",
+        });
+      });
+    });
+    const completeShellRequest = vi.fn(
+      (_requestId: string, result: BunCommandResult) =>
+        role === "shaper" && options.shellRequest !== undefined
+          ? Deferred.succeed(options.shellRequest.completed, result).pipe(
+              Effect.asVoid,
+            )
+          : Effect.void,
+    );
+    const session: PiSession = {
+      sessionId,
+      subscribe: (next) =>
+        Effect.sync(() => {
+          listener = next;
+          return unsubscribe;
+        }),
+      prompt,
+      completeShellRequest,
+      get abort() {
+        if (role === "app" && options.pairObserved !== undefined) {
+          Effect.runSync(Deferred.succeed(options.pairObserved, undefined));
+        }
+        return abort;
+      },
+      dispose: Effect.sync(dispose),
+    };
+    return {
+      abort,
+      completeShellRequest,
+      dispose,
+      prompt,
+      session,
+      unsubscribe,
+    };
   };
+
+  const app = makeInteractiveSession("app", "session-1");
+  const shaper = makeInteractiveSession("shaper", "shaper-1");
 
   const guardian: PiSession = {
     sessionId: "guardian-1",
@@ -172,17 +206,19 @@ function createFakePi(options: FakeOptions = {}) {
     dispose: Effect.sync(guardianDispose),
   };
 
-  const createAgentPair = vi.fn(
+  const createAgentSet = vi.fn(
     (
       _model: ModelSummary,
       _policies: {
         readonly guardian: PiSessionPolicy;
+        readonly app: PiSessionPolicy;
         readonly shaper: PiSessionPolicy;
       },
-    ): Effect.Effect<PiAgentPair> =>
+    ): Effect.Effect<PiAgentSet> =>
       Effect.succeed({
         guardian,
-        shaper: session,
+        app: app.session,
+        shaper: shaper.session,
       }),
   );
 
@@ -194,26 +230,245 @@ function createFakePi(options: FakeOptions = {}) {
         name: "GPT-5.6",
       }),
     ]),
-    createAgentPair,
+    createAgentSet,
   });
 
   return {
-    abort,
-    createAgentPair,
-    dispose,
+    appAbort: app.abort,
+    appDispose: app.dispose,
+    appPrompt: app.prompt,
+    appUnsubscribe: app.unsubscribe,
+    createAgentSet,
     guardianAbort,
     guardianDispose,
     guardianPrompt,
     guardianUnsubscribe,
     layer: FlectRuntimeLive.pipe(Layer.provide(layer)),
-    completeShellRequest,
-    prompt,
     releasePendingPrompt: () => releasePendingPrompt?.(),
-    unsubscribe,
+    shaperAbort: shaper.abort,
+    shaperCompleteShellRequest: shaper.completeShellRequest,
+    shaperDispose: shaper.dispose,
+    shaperPrompt: shaper.prompt,
+    shaperUnsubscribe: shaper.unsubscribe,
   };
 }
 
 describe("FlectRuntimeLive", () => {
+  it.effect("disposes Guardian when App Agent acquisition fails", () => {
+    const guardianDispose = vi.fn(() => undefined);
+    const createSession = vi.fn((policy: PiSessionPolicy) =>
+      policy.role === "app"
+        ? Effect.fail(
+            new PiOperationFailed({
+              operation: "create_session",
+              message: "The model runtime could not complete the request.",
+            }),
+          )
+        : Effect.succeed({
+            sessionId: policy.role,
+            subscribe: () => Effect.succeed(() => undefined),
+            prompt: () => Effect.void,
+            completeShellRequest: () => Effect.void,
+            abort: () => Effect.void,
+            dispose: Effect.sync(guardianDispose),
+          } satisfies PiSession),
+    );
+
+    return Effect.gen(function* () {
+      yield* acquireProtectedAgentSet(
+        {
+          guardian: {
+            role: "guardian",
+            tools: "none",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+          app: {
+            role: "app",
+            tools: "sandbox-bash",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+          shaper: {
+            role: "shaper",
+            tools: "sandbox-bash",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+        },
+        createSession,
+      ).pipe(Effect.flip);
+
+      expect(createSession).toHaveBeenCalledTimes(2);
+      expect(guardianDispose).toHaveBeenCalledOnce();
+    });
+  });
+
+  it.effect("disposes Guardian and App when Shaper acquisition fails", () => {
+    const guardianDispose = vi.fn(() => undefined);
+    const appDispose = vi.fn(() => undefined);
+    const createSession = vi.fn((policy: PiSessionPolicy) =>
+      policy.role === "shaper"
+        ? Effect.fail(
+            new PiOperationFailed({
+              operation: "create_session",
+              message: "The model runtime could not complete the request.",
+            }),
+          )
+        : Effect.succeed({
+            sessionId: policy.role,
+            subscribe: () => Effect.succeed(() => undefined),
+            prompt: () => Effect.void,
+            completeShellRequest: () => Effect.void,
+            abort: () => Effect.void,
+            dispose: Effect.sync(
+              policy.role === "guardian" ? guardianDispose : appDispose,
+            ),
+          } satisfies PiSession),
+    );
+
+    return Effect.gen(function* () {
+      yield* acquireProtectedAgentSet(
+        {
+          guardian: {
+            role: "guardian",
+            tools: "none",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+          app: {
+            role: "app",
+            tools: "sandbox-bash",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+          shaper: {
+            role: "shaper",
+            tools: "sandbox-bash",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+        },
+        createSession,
+      ).pipe(Effect.flip);
+
+      expect(createSession).toHaveBeenCalledTimes(3);
+      expect(guardianDispose).toHaveBeenCalledOnce();
+      expect(appDispose).toHaveBeenCalledOnce();
+    });
+  });
+
+  it.effect(
+    "routes each operation to its independent protected Pi role",
+    () => {
+      const makeSession = (sessionId: string, response: string) => {
+        let listener: ((event: PiEvent) => void) | undefined;
+        const prompt = vi.fn(() =>
+          Effect.sync(() => {
+            listener?.({ type: "text_delta", delta: response });
+          }),
+        );
+        const session: PiSession = {
+          sessionId,
+          subscribe: (next) =>
+            Effect.sync(() => {
+              listener = next;
+              return () => {
+                listener = undefined;
+              };
+            }),
+          prompt,
+          completeShellRequest: () => Effect.void,
+          abort: () => Effect.void,
+          dispose: Effect.void,
+        };
+        return { prompt, session };
+      };
+      const app = makeSession("app-1", "The product action completed.");
+      const shaper = makeSession(
+        "shaper-1",
+        JSON.stringify(defaultInterfaceDocument),
+      );
+      const guardian = makeSession(
+        "guardian-1",
+        "The protected launcher remains available.",
+      );
+      const createAgentSet = vi.fn(
+        (
+          _model: ModelSummary,
+          _policies: {
+            readonly guardian: PiSessionPolicy;
+            readonly app: PiSessionPolicy;
+            readonly shaper: PiSessionPolicy;
+          },
+        ): Effect.Effect<PiAgentSet> =>
+          Effect.succeed({
+            guardian: guardian.session,
+            app: app.session,
+            shaper: shaper.session,
+          }),
+      );
+      const piLayer = Layer.succeed(PiSdk)({
+        listModels: Effect.succeed([
+          new ModelSummary({
+            provider: "openai-codex",
+            id: "gpt-5.6",
+            name: "GPT-5.6",
+          }),
+        ]),
+        createAgentSet,
+      });
+
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const sessionId = yield* runtime.createSession(
+          new SessionSelection({}),
+        );
+
+        yield* runtime
+          .prompt(sessionId, "Use the product")
+          .pipe(Stream.runDrain);
+        yield* runtime
+          .shape(sessionId, "Change the product", defaultInterfaceDocument)
+          .pipe(Stream.runDrain);
+        yield* runtime.diagnoseRecovery(sessionId, "rollback-failed");
+
+        expect(app.prompt).toHaveBeenCalledWith("Use the product");
+        expect(shaper.prompt).toHaveBeenCalledOnce();
+        expect(guardian.prompt).toHaveBeenCalledOnce();
+        expect(createAgentSet).toHaveBeenCalledWith(expect.any(ModelSummary), {
+          guardian: {
+            role: "guardian",
+            tools: "none",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+          app: {
+            role: "app",
+            tools: "sandbox-bash",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+          shaper: {
+            role: "shaper",
+            tools: "sandbox-bash",
+            storage: "memory",
+            extensions: "disabled",
+            userResources: "disabled",
+          },
+        });
+      }).pipe(Effect.provide(FlectRuntimeLive.pipe(Layer.provide(piLayer))));
+    },
+  );
+
   it.effect("reduces Pi models to public schema values", () => {
     const fake = createFakePi();
     return Effect.gen(function* () {
@@ -241,7 +496,7 @@ describe("FlectRuntimeLive", () => {
         );
 
         expect(sessionId).toBe("session-1");
-        expect(fake.createAgentPair).toHaveBeenCalledWith(
+        expect(fake.createAgentSet).toHaveBeenCalledWith(
           new ModelSummary({
             provider: "openai-codex",
             id: "gpt-5.6",
@@ -251,6 +506,13 @@ describe("FlectRuntimeLive", () => {
             guardian: {
               role: "guardian",
               tools: "none",
+              storage: "memory",
+              extensions: "disabled",
+              userResources: "disabled",
+            },
+            app: {
+              role: "app",
+              tools: "sandbox-bash",
               storage: "memory",
               extensions: "disabled",
               userResources: "disabled",
@@ -269,7 +531,7 @@ describe("FlectRuntimeLive", () => {
   );
 
   it.effect(
-    "disposes a Pi pair when session registration is interrupted",
+    "disposes every protected Pi role when registration is interrupted",
     () => {
       const pairObserved = Deferred.makeUnsafe<void>();
       const fake = createFakePi({ pairObserved });
@@ -283,7 +545,8 @@ describe("FlectRuntimeLive", () => {
         yield* Deferred.await(pairObserved);
         yield* Fiber.interrupt(createFiber);
 
-        expect(fake.dispose).toHaveBeenCalledOnce();
+        expect(fake.appDispose).toHaveBeenCalledOnce();
+        expect(fake.shaperDispose).toHaveBeenCalledOnce();
         expect(fake.guardianDispose).toHaveBeenCalledOnce();
       }).pipe(Effect.provide(fake.layer));
     },
@@ -303,8 +566,8 @@ describe("FlectRuntimeLive", () => {
         { type: "text_delta", delta: "A shaped response" },
         { type: "turn_completed" },
       ]);
-      expect(fake.unsubscribe).toHaveBeenCalledOnce();
-      expect(fake.abort).not.toHaveBeenCalled();
+      expect(fake.appUnsubscribe).toHaveBeenCalledOnce();
+      expect(fake.appAbort).not.toHaveBeenCalled();
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -326,7 +589,7 @@ describe("FlectRuntimeLive", () => {
         result,
       );
 
-      expect(fake.completeShellRequest).toHaveBeenCalledWith(
+      expect(fake.shaperCompleteShellRequest).toHaveBeenCalledWith(
         "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
         result,
       );
@@ -382,7 +645,7 @@ describe("FlectRuntimeLive", () => {
       expect(result).toEqual([
         ShapeCompleted.make({ type: "shape_completed", document: shaped }),
       ]);
-      expect(fake.prompt).toHaveBeenCalledOnce();
+      expect(fake.shaperPrompt).toHaveBeenCalledOnce();
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -432,7 +695,7 @@ describe("FlectRuntimeLive", () => {
         },
         ShapeCompleted.make({ type: "shape_completed", document: shaped }),
       ]);
-      expect(fake.completeShellRequest).toHaveBeenCalledWith(
+      expect(fake.shaperCompleteShellRequest).toHaveBeenCalledWith(
         shellRequest.requestId,
         result,
       );
@@ -478,16 +741,16 @@ describe("FlectRuntimeLive", () => {
           message: "The interface document is invalid.",
         }),
       );
-      expect(fake.prompt).not.toHaveBeenCalled();
+      expect(fake.shaperPrompt).not.toHaveBeenCalled();
     }).pipe(Effect.provide(fake.layer));
   });
 
-  it.effect("rejects shaping while a prompt is active", () => {
+  it.effect("keeps App and Shaper operation slots independent", () => {
     const promptStarted = Deferred.makeUnsafe<void>();
     const promptGate = Deferred.makeUnsafe<void>();
     const fake = createFakePi({
-      promptGate,
-      promptStarted,
+      appPromptGate: promptGate,
+      appPromptStarted: promptStarted,
       promptResponse: JSON.stringify(defaultInterfaceDocument),
     });
 
@@ -499,16 +762,17 @@ describe("FlectRuntimeLive", () => {
         .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
       yield* Deferred.await(promptStarted);
 
-      const shapeError = yield* runtime
+      const shaped = yield* runtime
         .shape(sessionId, "Shape this", defaultInterfaceDocument)
-        .pipe(Stream.runDrain, Effect.flip);
-      expect(shapeError).toEqual(
-        new SessionBusy({
-          sessionId,
-          message: "The session is busy.",
+        .pipe(Stream.runCollect);
+      expect(shaped).toEqual([
+        ShapeCompleted.make({
+          type: "shape_completed",
+          document: defaultInterfaceDocument,
         }),
-      );
-      expect(fake.prompt).toHaveBeenCalledOnce();
+      ]);
+      expect(fake.appPrompt).toHaveBeenCalledOnce();
+      expect(fake.shaperPrompt).toHaveBeenCalledOnce();
 
       yield* Deferred.succeed(promptGate, undefined);
       yield* Fiber.join(promptFiber);
@@ -539,7 +803,7 @@ describe("FlectRuntimeLive", () => {
         .cancel(sessionId)
         .pipe(Effect.forkChild({ startImmediately: true }));
       yield* Effect.yieldNow;
-      expect(fake.abort).toHaveBeenCalledOnce();
+      expect(fake.shaperAbort).toHaveBeenCalledOnce();
       expect(cancelFiber.pollUnsafe()).toBeUndefined();
 
       yield* Deferred.succeed(
@@ -615,22 +879,14 @@ describe("FlectRuntimeLive", () => {
         .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
       yield* Deferred.await(promptStarted);
 
-      yield* Fiber.interrupt(shapeFiber);
-      yield* Deferred.await(abortStarted);
-      expect(fake.abort).toHaveBeenCalledOnce();
-
-      const busy = yield* runtime
-        .prompt(sessionId, "Do not overlap")
-        .pipe(Stream.runDrain, Effect.flip);
-      expect(busy).toEqual(
-        new SessionBusy({
-          sessionId,
-          message: "The session is busy.",
-        }),
+      const interruptFiber = yield* Fiber.interrupt(shapeFiber).pipe(
+        Effect.forkChild({ startImmediately: true }),
       );
+      yield* Deferred.await(abortStarted);
+      expect(fake.shaperAbort).toHaveBeenCalledOnce();
 
       yield* Deferred.succeed(promptGate, undefined);
-      yield* Effect.yieldNow;
+      yield* Fiber.join(interruptFiber);
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -706,7 +962,7 @@ describe("FlectRuntimeLive", () => {
         yield* Fiber.interrupt(promptFiber);
 
         const busy = yield* runtime
-          .shape(sessionId, "Start another request", defaultInterfaceDocument)
+          .prompt(sessionId, "Start another request")
           .pipe(Stream.runDrain, Effect.flip);
         expect(busy).toEqual(
           new SessionBusy({
@@ -714,7 +970,7 @@ describe("FlectRuntimeLive", () => {
             message: "The session is busy.",
           }),
         );
-        expect(fake.prompt).toHaveBeenCalledOnce();
+        expect(fake.appPrompt).toHaveBeenCalledOnce();
 
         fake.releasePendingPrompt();
         yield* Effect.yieldNow;
@@ -744,7 +1000,7 @@ describe("FlectRuntimeLive", () => {
         yield* Deferred.await(promptStarted);
 
         const busy = yield* runtime
-          .prompt(sessionId, "Keep talking")
+          .shape(sessionId, "Keep shaping", defaultInterfaceDocument)
           .pipe(Stream.runDrain, Effect.flip);
         expect(busy).toEqual(
           new SessionBusy({
@@ -757,12 +1013,14 @@ describe("FlectRuntimeLive", () => {
           .closeSession(sessionId)
           .pipe(Effect.forkChild({ startImmediately: true }));
         yield* Effect.yieldNow;
-        expect(fake.dispose).not.toHaveBeenCalled();
+        expect(fake.appDispose).not.toHaveBeenCalled();
+        expect(fake.shaperDispose).not.toHaveBeenCalled();
 
         yield* Deferred.succeed(promptGate, undefined);
         yield* Fiber.join(shapeFiber);
         yield* Fiber.join(closeFiber);
-        expect(fake.dispose).toHaveBeenCalledOnce();
+        expect(fake.appDispose).toHaveBeenCalledOnce();
+        expect(fake.shaperDispose).toHaveBeenCalledOnce();
         expect(fake.guardianDispose).toHaveBeenCalledOnce();
       }).pipe(Effect.provide(fake.layer));
     },
@@ -795,12 +1053,14 @@ describe("FlectRuntimeLive", () => {
         Effect.forkChild({ startImmediately: true }),
       );
       yield* Effect.yieldNow;
-      expect(fake.dispose).not.toHaveBeenCalled();
+      expect(fake.appDispose).not.toHaveBeenCalled();
+      expect(fake.shaperDispose).not.toHaveBeenCalled();
 
       yield* Deferred.succeed(promptGate, undefined);
       yield* Fiber.join(shapeFiber);
       yield* Fiber.join(interruptedClose);
-      expect(fake.dispose).toHaveBeenCalledOnce();
+      expect(fake.appDispose).toHaveBeenCalledOnce();
+      expect(fake.shaperDispose).toHaveBeenCalledOnce();
       expect(fake.guardianDispose).toHaveBeenCalledOnce();
     }).pipe(Effect.provide(fake.layer));
   });
@@ -832,7 +1092,8 @@ describe("FlectRuntimeLive", () => {
       yield* Fiber.join(closeFiber);
       expect(shapeFiber.pollUnsafe()).not.toBeUndefined();
 
-      expect(fake.dispose).toHaveBeenCalledOnce();
+      expect(fake.appDispose).toHaveBeenCalledOnce();
+      expect(fake.shaperDispose).toHaveBeenCalledOnce();
       expect(fake.guardianDispose).toHaveBeenCalledOnce();
       yield* Fiber.interrupt(shapeFiber);
     }).pipe(Effect.provide(fake.layer));
@@ -857,7 +1118,7 @@ describe("FlectRuntimeLive", () => {
           message: "The model runtime could not complete the request.",
         }),
       );
-      expect(fake.abort).toHaveBeenCalledOnce();
+      expect(fake.shaperAbort).toHaveBeenCalledOnce();
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -906,7 +1167,8 @@ describe("FlectRuntimeLive", () => {
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
 
       yield* runtime.cancel(sessionId);
-      expect(fake.abort).not.toHaveBeenCalled();
+      expect(fake.appAbort).not.toHaveBeenCalled();
+      expect(fake.shaperAbort).not.toHaveBeenCalled();
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -927,7 +1189,8 @@ describe("FlectRuntimeLive", () => {
       });
       expect(fake.guardianPrompt).toHaveBeenCalledOnce();
       expect(fake.guardianUnsubscribe).toHaveBeenCalledOnce();
-      expect(fake.prompt).not.toHaveBeenCalled();
+      expect(fake.appPrompt).not.toHaveBeenCalled();
+      expect(fake.shaperPrompt).not.toHaveBeenCalled();
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -954,7 +1217,7 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
-  it.effect("closes and disposes both protected Pi sessions", () => {
+  it.effect("closes and disposes all protected Pi sessions", () => {
     const fake = createFakePi();
     return Effect.gen(function* () {
       const runtime = yield* FlectRuntime;
@@ -969,19 +1232,23 @@ describe("FlectRuntimeLive", () => {
           message: "Session not found.",
         }),
       );
-      expect(fake.abort).toHaveBeenCalledOnce();
+      expect(fake.appAbort).toHaveBeenCalledOnce();
+      expect(fake.shaperAbort).toHaveBeenCalledOnce();
       expect(fake.guardianAbort).toHaveBeenCalledOnce();
-      expect(fake.dispose).toHaveBeenCalledOnce();
+      expect(fake.appDispose).toHaveBeenCalledOnce();
+      expect(fake.shaperDispose).toHaveBeenCalledOnce();
       expect(fake.guardianDispose).toHaveBeenCalledOnce();
     }).pipe(Effect.provide(fake.layer));
   });
 
   it.effect(
-    "evicts the oldest protected pair when the session bound is reached",
+    "evicts the oldest protected agent set when the session bound is reached",
     () => {
       let sequence = 0;
+      const firstAppAbort = vi.fn(() => Effect.void);
       const firstShaperAbort = vi.fn(() => Effect.void);
       const firstGuardianAbort = vi.fn(() => Effect.void);
+      const firstAppDispose = vi.fn(() => undefined);
       const firstShaperDispose = vi.fn(() => undefined);
       const firstGuardianDispose = vi.fn(() => undefined);
       const makeSession = (
@@ -1004,12 +1271,17 @@ describe("FlectRuntimeLive", () => {
             name: "GPT-5.6",
           }),
         ]),
-        createAgentPair: () => {
+        createAgentSet: () => {
           sequence += 1;
           const isFirst = sequence === 1;
           return Effect.succeed({
-            shaper: makeSession(
+            app: makeSession(
               `session-${sequence}`,
+              isFirst ? firstAppAbort : () => Effect.void,
+              isFirst ? firstAppDispose : () => undefined,
+            ),
+            shaper: makeSession(
+              `shaper-${sequence}`,
               isFirst ? firstShaperAbort : () => Effect.void,
               isFirst ? firstShaperDispose : () => undefined,
             ),
@@ -1038,8 +1310,10 @@ describe("FlectRuntimeLive", () => {
             message: "Session not found.",
           }),
         );
+        expect(firstAppAbort).toHaveBeenCalledOnce();
         expect(firstShaperAbort).toHaveBeenCalledOnce();
         expect(firstGuardianAbort).toHaveBeenCalledOnce();
+        expect(firstAppDispose).toHaveBeenCalledOnce();
         expect(firstShaperDispose).toHaveBeenCalledOnce();
         expect(firstGuardianDispose).toHaveBeenCalledOnce();
       }).pipe(Effect.provide(layer));
