@@ -17,7 +17,6 @@ const props = (
   disabled: false,
   rollbackAvailable: true,
   rollbackDisabled: false,
-  onOpenShaper: vi.fn(),
   onRollback: vi.fn(() => Promise.resolve()),
   onOpenSafeMode: vi.fn(),
   ...overrides,
@@ -26,15 +25,19 @@ const props = (
 describe("ComposerActionsMenu", () => {
   it("exposes only implemented protected actions", async () => {
     const user = userEvent.setup();
-    const onOpenShaper = vi.fn();
-    render(<ComposerActionsMenu {...props({ onOpenShaper })} />);
+    render(<ComposerActionsMenu {...props()} />);
 
     await user.click(screen.getByRole("button", { name: "Actions" }));
-    await user.click(screen.getByRole("menuitem", { name: "Shape interface" }));
-
-    expect(onOpenShaper).toHaveBeenCalledOnce();
     expect(
-      screen.queryByRole("menuitem", { name: /voice|attach|extensions/i }),
+      screen.getByRole("menuitem", { name: "Roll back last change" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("menuitem", { name: "Open safe mode" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("menuitem", {
+        name: /voice|attach|extensions|shape interface/i,
+      }),
     ).not.toBeInTheDocument();
   });
 

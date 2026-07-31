@@ -10,18 +10,20 @@ import {
   type RevisionId,
   type ShapingSnapshot,
 } from "../shared/revisions";
-import { Launcher } from "./components/launcher";
-import type { ShapingController } from "./components/shaper-panel";
+import type { ShapingController } from "./components/agent-rail";
+import { RoleAwareShell } from "./components/role-aware-shell";
 import {
   isAgentSessionActive,
   useAgentSession,
 } from "./hooks/use-agent-session";
+import { useShellPreferences } from "./hooks/use-shell-preferences";
 import {
   consumeLegacyInterfaceDocument,
   loadInterfaceDocument,
 } from "./lib/interface-store";
 import { browserRuntime, shapingRuntime } from "./lib/runtime";
 import { ShapingKernel } from "./lib/shaping-kernel";
+import { workspacePhase } from "./lib/workspace-phase";
 import { ExtensionExecution } from "./sandbox/extension-execution";
 
 const safeMode =
@@ -46,12 +48,26 @@ const isolationCheck = ExtensionManifest.make({
   capabilities: ["interface:propose"],
 });
 
-export function App() {
+export interface AppProps {
+  readonly shaping?: typeof shapingRuntime;
+  readonly loadLegacyInterface?: () => Promise<InterfaceDocument>;
+  readonly consumeLegacyInterface?: () => Promise<void>;
+}
+
+export function App({
+  shaping = shapingRuntime,
+  loadLegacyInterface = () =>
+    browserRuntime.runPromise(loadInterfaceDocument({ safeMode: false })),
+  consumeLegacyInterface = () =>
+    browserRuntime.runPromise(consumeLegacyInterfaceDocument()),
+}: AppProps = {}) {
   const [document, setDocument] = useState<InterfaceDocument>(
     defaultInterfaceDocument,
   );
+  const [snapshot, setSnapshot] = useState<ShapingSnapshot>();
   const [protectedMode, setProtectedMode] = useState(safeMode);
   const session = useAgentSession();
+  const preferences = useShellPreferences();
   const shapeRequestRef = useRef(0);
   const decisionInFlightRef = useRef(false);
   const [shapingStatus, setShapingStatus] =
@@ -78,6 +94,7 @@ export function App() {
           ? defaultInterfaceDocument
           : (preview?.document ?? snapshot.active.document),
       );
+      setSnapshot(snapshot);
       setProtectedMode(snapshot.safeMode);
       setProposalId(preview?.id);
       setRollbackAvailable(!safeMode && isRollbackAvailable(snapshot));
@@ -99,16 +116,12 @@ export function App() {
         !snapshot.safeMode &&
         snapshot.lastEvent.type === "initialized"
       ) {
-        const legacy = yield* Effect.promise(() =>
-          browserRuntime.runPromise(loadInterfaceDocument({ safeMode: false })),
-        );
+        const legacy = yield* Effect.promise(loadLegacyInterface);
         if (!Equal.equals(legacy, defaultInterfaceDocument)) {
           const restored = yield* kernel.propose(legacy, "user");
           yield* kernel.preview(restored.id);
           yield* kernel.accept(restored.id);
-          yield* Effect.promise(() =>
-            browserRuntime.runPromise(consumeLegacyInterfaceDocument()),
-          );
+          yield* Effect.promise(consumeLegacyInterface);
         }
       }
 
@@ -125,6 +138,7 @@ export function App() {
         Effect.sync(() => {
           if (mounted) {
             setDocument(defaultInterfaceDocument);
+            setSnapshot(undefined);
             setProtectedMode(true);
             setProposalId(undefined);
             setRollbackAvailable(false);
@@ -132,13 +146,13 @@ export function App() {
         }),
       ),
     );
-    const observer = shapingRuntime.runFork(observeKernel);
+    const observer = shaping.runFork(observeKernel);
 
     return () => {
       mounted = false;
-      shapingRuntime.runFork(Fiber.interrupt(observer));
+      shaping.runFork(Fiber.interrupt(observer));
     };
-  }, []);
+  }, [consumeLegacyInterface, loadLegacyInterface, shaping]);
 
   const requestShape = useCallback(
     async (instruction: string) => {
@@ -148,7 +162,8 @@ export function App() {
         return;
       }
       if (
-        isAgentSessionActive(session.status) ||
+        isAgentSessionActive(session.app.status) ||
+        isAgentSessionActive(session.shaper.status) ||
         shapingStatus === "shaping" ||
         shapingStatus === "preview" ||
         decisionInFlightRef.current
@@ -161,17 +176,17 @@ export function App() {
       setShapingStatus("shaping");
       setShapingError(undefined);
       try {
-        const active = await shapingRuntime.runPromise(
+        const active = await shaping.runPromise(
           Effect.gen(function* () {
             const kernel = yield* ShapingKernel;
             return (yield* kernel.snapshot).active.document;
           }),
         );
-        const candidate = await session.shape(instruction, active);
+        const candidate = await session.shaper.shape(instruction, active);
         if (shapeRequestRef.current !== requestId) {
           return;
         }
-        const preview = await shapingRuntime.runPromise(
+        const preview = await shaping.runPromise(
           Effect.gen(function* () {
             const kernel = yield* ShapingKernel;
             const proposal = yield* kernel.propose(candidate, "shaper");
@@ -192,13 +207,21 @@ export function App() {
         setShapingError("Shaper could not produce a valid interface proposal.");
       }
     },
-    [protectedMode, session.shape, session.status, shapingStatus],
+    [
+      protectedMode,
+      session.app.status,
+      session.shaper.shape,
+      session.shaper.status,
+      shaping,
+      shapingStatus,
+    ],
   );
 
   const acceptShape = useCallback(async () => {
     if (
       proposalId === undefined ||
-      isAgentSessionActive(session.status) ||
+      isAgentSessionActive(session.app.status) ||
+      isAgentSessionActive(session.shaper.status) ||
       shapingStatus === "shaping" ||
       decisionInFlightRef.current
     ) {
@@ -207,7 +230,7 @@ export function App() {
     decisionInFlightRef.current = true;
     setShapingStatus("shaping");
     try {
-      const accepted = await shapingRuntime.runPromise(
+      const accepted = await shaping.runPromise(
         Effect.gen(function* () {
           const kernel = yield* ShapingKernel;
           return yield* kernel.accept(proposalId);
@@ -223,12 +246,19 @@ export function App() {
     } finally {
       decisionInFlightRef.current = false;
     }
-  }, [proposalId, session.status, shapingStatus]);
+  }, [
+    proposalId,
+    session.app.status,
+    session.shaper.status,
+    shaping,
+    shapingStatus,
+  ]);
 
   const rejectShape = useCallback(async () => {
     if (
       proposalId === undefined ||
-      isAgentSessionActive(session.status) ||
+      isAgentSessionActive(session.app.status) ||
+      isAgentSessionActive(session.shaper.status) ||
       shapingStatus === "shaping" ||
       decisionInFlightRef.current
     ) {
@@ -237,7 +267,7 @@ export function App() {
     decisionInFlightRef.current = true;
     setShapingStatus("shaping");
     try {
-      await shapingRuntime
+      await shaping
         .runPromise(
           Effect.gen(function* () {
             const kernel = yield* ShapingKernel;
@@ -254,11 +284,18 @@ export function App() {
     } finally {
       decisionInFlightRef.current = false;
     }
-  }, [proposalId, session.status, shapingStatus]);
+  }, [
+    proposalId,
+    session.app.status,
+    session.shaper.status,
+    shaping,
+    shapingStatus,
+  ]);
 
   const rollbackShape = useCallback(async () => {
     if (
-      isAgentSessionActive(session.status) ||
+      isAgentSessionActive(session.app.status) ||
+      isAgentSessionActive(session.shaper.status) ||
       shapingStatus === "shaping" ||
       decisionInFlightRef.current
     ) {
@@ -268,7 +305,7 @@ export function App() {
     decisionInFlightRef.current = true;
     setShapingStatus("shaping");
     try {
-      const recovered = await shapingRuntime.runPromise(
+      const recovered = await shaping.runPromise(
         Effect.gen(function* () {
           const kernel = yield* ShapingKernel;
           return yield* kernel.rollback;
@@ -291,7 +328,13 @@ export function App() {
     } finally {
       decisionInFlightRef.current = false;
     }
-  }, [session.diagnoseRecovery, session.status, shapingStatus]);
+  }, [
+    session.app.status,
+    session.diagnoseRecovery,
+    session.shaper.status,
+    shaping,
+    shapingStatus,
+  ]);
 
   const restoreSafeMode = useCallback(async () => {
     if (safeMode) {
@@ -306,7 +349,7 @@ export function App() {
     setShapingStatus("shaping");
     setShapingError(undefined);
     try {
-      const recovered = await shapingRuntime.runPromise(
+      const recovered = await shaping.runPromise(
         Effect.gen(function* () {
           const kernel = yield* ShapingKernel;
           return yield* kernel.restoreLastKnownGood;
@@ -324,7 +367,7 @@ export function App() {
     } finally {
       decisionInFlightRef.current = false;
     }
-  }, [protectedMode]);
+  }, [protectedMode, shaping]);
 
   const verifyIsolation = useCallback(async () => {
     if (isolation === "checking" || isolation === "ready") {
@@ -332,7 +375,7 @@ export function App() {
     }
     setIsolation("checking");
     try {
-      const result = await shapingRuntime.runPromise(
+      const result = await shaping.runPromise(
         Effect.gen(function* () {
           const execution = yield* ExtensionExecution;
           return yield* execution.execute(isolationCheck, {}, [
@@ -351,13 +394,33 @@ export function App() {
     } catch {
       setIsolation("unavailable");
     }
-  }, [isolation]);
+  }, [isolation, shaping]);
+
+  if (snapshot === undefined) {
+    return (
+      <div className="role-shell role-shell--loading">
+        <header className="topbar">
+          <a aria-label="Flect home" className="wordmark" href="/">
+            Flect
+          </a>
+        </header>
+        <main aria-busy="true" className="workspace-canvas">
+          <p className="shell-loading-status" role="status">
+            Opening workspace
+          </p>
+        </main>
+      </div>
+    );
+  }
 
   return (
-    <Launcher
+    <RoleAwareShell
       document={document}
-      safeMode={protectedMode}
-      session={session}
+      onOpenSafeMode={() => globalThis.location.assign("/?safe=1")}
+      onRestoreSafeMode={restoreSafeMode}
+      phase={workspacePhase(snapshot, safeMode)}
+      preferences={preferences}
+      preview={shapingStatus === "preview"}
       shaping={{
         status: shapingStatus,
         ...(shapingError === undefined ? {} : { error: shapingError }),
@@ -369,7 +432,7 @@ export function App() {
         reject: rejectShape,
         rollback: rollbackShape,
       }}
-      onRestoreSafeMode={restoreSafeMode}
+      workspace={session}
     />
   );
 }

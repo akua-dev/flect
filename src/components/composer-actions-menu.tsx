@@ -5,7 +5,6 @@ export interface ComposerActionsMenuProps {
   readonly disabled: boolean;
   readonly rollbackAvailable: boolean;
   readonly rollbackDisabled: boolean;
-  readonly onOpenShaper: () => void;
   readonly onRollback: () => Promise<void>;
   readonly onOpenSafeMode: () => void;
 }
@@ -21,7 +20,6 @@ export function ComposerActionsMenu({
   disabled,
   rollbackAvailable,
   rollbackDisabled,
-  onOpenShaper,
   onRollback,
   onOpenSafeMode,
 }: ComposerActionsMenuProps) {
@@ -140,19 +138,6 @@ export function ComposerActionsMenu({
           ref={menuRef}
           role="menu"
         >
-          <button
-            aria-label="Shape interface"
-            className="composer-popover__item"
-            onClick={() => {
-              setOpen(false);
-              onOpenShaper();
-            }}
-            role="menuitem"
-            type="button"
-          >
-            <span>Shape interface</span>
-            <small>Propose a validated revision</small>
-          </button>
           <button
             aria-label="Roll back last change"
             className="composer-popover__item"

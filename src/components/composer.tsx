@@ -7,65 +7,82 @@ import {
 import { ComposerActionsMenu } from "./composer-actions-menu";
 import { ArrowUpIcon, StopIcon } from "./icons";
 import { ModelMenu } from "./model-menu";
+import { RoleSwitcher, type ShellMode } from "./role-switcher";
 
 const MAX_COMPOSER_HEIGHT = 168;
 const MIN_COMPOSER_HEIGHT = 48;
 
 export interface ComposerProps {
+  readonly mode: ShellMode;
   readonly placeholder: string;
   readonly disabled?: boolean;
+  readonly disabledReason?: string;
+  readonly roleSwitchDisabled: boolean;
   readonly status: AgentSessionStatus;
   readonly models: ReadonlyArray<ModelSummary>;
   readonly selectedModel: ModelSummary | undefined;
+  readonly modelFavorites: ReadonlyArray<string>;
   readonly rollbackAvailable: boolean;
+  readonly onModeChange: (mode: Exclude<ShellMode, "safe">) => void;
   readonly onSelectModel: (model: ModelSummary | undefined) => void;
+  readonly onToggleModelFavorite: (modelKey: string) => Promise<void>;
   readonly onSubmit: (prompt: string) => Promise<void>;
   readonly onCancel: () => Promise<void>;
-  readonly onOpenShaper: () => void;
   readonly onRollback: () => Promise<void>;
   readonly onOpenSafeMode: () => void;
 }
 
 export function Composer({
+  mode,
   placeholder,
   disabled = false,
+  disabledReason,
+  roleSwitchDisabled,
   status,
   models,
   selectedModel,
+  modelFavorites,
   rollbackAvailable,
+  onModeChange,
   onSelectModel,
+  onToggleModelFavorite,
   onSubmit,
   onCancel,
-  onOpenShaper,
   onRollback,
   onOpenSafeMode,
 }: ComposerProps) {
-  const [prompt, setPrompt] = useState("");
+  const [drafts, setDrafts] = useState({ edit: "", run: "" });
   const composingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const helpId = useId();
+  const roleMode = mode === "safe" ? "edit" : mode;
+  const prompt = mode === "safe" ? "" : drafts[roleMode];
   const isActive = isAgentSessionActive(status);
   const isUnavailable =
     disabled ||
+    mode === "safe" ||
     status === "booting" ||
     status === "unavailable" ||
     status === "setup-required";
   const canSubmit = prompt.trim().length > 0 && !isUnavailable && !isActive;
-  const help = disabled
-    ? "Wait for the current interface proposal."
-    : status === "booting"
-      ? "Connecting to the local runtime."
-      : status === "unavailable"
-        ? "Start the local runtime before sending."
-        : status === "setup-required"
-          ? "Sign in to a Pi provider before sending."
-          : status === "cancelling"
-            ? "Stopping the current response."
-            : status === "submitting" || status === "streaming"
-              ? "Stop the current response before sending another message."
-              : prompt.trim().length === 0
-                ? "Enter a message to enable Send."
-                : "Press Enter to send. Press Shift Enter for a new line.";
+  const roleName = mode === "run" ? "App Agent" : "Shaper";
+  const help =
+    disabledReason ??
+    (mode === "safe"
+      ? "Restore the last-known-good interface before sending."
+      : status === "booting"
+        ? "Connecting to the local runtime."
+        : status === "unavailable"
+          ? "Start the local runtime before sending."
+          : status === "setup-required"
+            ? "Sign in to a Pi provider before sending."
+            : status === "cancelling"
+              ? "Stopping the current response."
+              : status === "submitting" || status === "streaming"
+                ? "Stop the current response before sending another message."
+                : prompt.trim().length === 0
+                  ? "Enter a message to enable Send."
+                  : "Press Enter to send. Press Shift Enter for a new line.");
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -90,7 +107,7 @@ export function Composer({
     }
 
     const operation = onSubmit(nextPrompt);
-    setPrompt("");
+    setDrafts((current) => ({ ...current, [roleMode]: "" }));
     await operation;
   };
 
@@ -98,6 +115,7 @@ export function Composer({
     <form
       aria-busy={isActive}
       className={`composer${isActive ? " composer--active" : ""}`}
+      data-composer-role={mode}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -105,10 +123,15 @@ export function Composer({
     >
       <textarea
         aria-describedby={helpId}
-        aria-label="Message Flect"
+        aria-label={`Message ${roleName}`}
         disabled={isUnavailable}
         name="prompt"
-        onChange={(event) => setPrompt(event.target.value)}
+        onChange={(event) =>
+          setDrafts((current) => ({
+            ...current,
+            [roleMode]: event.target.value,
+          }))
+        }
         onCompositionEnd={() => {
           composingRef.current = false;
         }}
@@ -136,15 +159,25 @@ export function Composer({
           <ComposerActionsMenu
             disabled={isUnavailable || isActive}
             onOpenSafeMode={onOpenSafeMode}
-            onOpenShaper={onOpenShaper}
             onRollback={onRollback}
             rollbackAvailable={rollbackAvailable}
             rollbackDisabled={isUnavailable || isActive}
           />
+          {mode === "safe" ? (
+            <span className="composer__safe-label">Safe mode</span>
+          ) : (
+            <RoleSwitcher
+              disabled={roleSwitchDisabled}
+              mode={mode}
+              onChange={onModeChange}
+            />
+          )}
           <ModelMenu
             disabled={isUnavailable || isActive}
+            favoriteKeys={modelFavorites}
             models={models}
             onSelect={onSelectModel}
+            onToggleFavorite={onToggleModelFavorite}
             selectedModel={selectedModel}
           />
         </div>
@@ -153,7 +186,7 @@ export function Composer({
           {isActive ? (
             <button
               aria-describedby={helpId}
-              aria-label="Stop response"
+              aria-label={`Stop ${roleName}`}
               className="submit-button submit-button--stop"
               disabled={status === "cancelling"}
               onClick={() => void onCancel()}
@@ -164,7 +197,7 @@ export function Composer({
           ) : (
             <button
               aria-describedby={helpId}
-              aria-label="Send message"
+              aria-label={`Send to ${roleName}`}
               className="submit-button"
               disabled={!canSubmit}
               type="submit"

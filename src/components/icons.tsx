@@ -77,3 +77,71 @@ export function RefreshIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} height={16} viewBox="0 0 16 16" width={16} {...props}>
+      <title>Search</title>
+      <circle cx="7" cy="7" r="4.25" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="m10.25 10.25 3 3"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.4"
+      />
+    </svg>
+  );
+}
+
+export function StarIcon({
+  filled = false,
+  ...props
+}: IconProps & { readonly filled?: boolean }) {
+  return (
+    <svg
+      {...baseProps}
+      fill={filled ? "currentColor" : "none"}
+      height={16}
+      viewBox="0 0 16 16"
+      width={16}
+      {...props}
+    >
+      <title>{filled ? "Favorite" : "Not favorite"}</title>
+      <path
+        d="m8 1.8 1.75 3.55 3.92.57-2.84 2.77.67 3.9L8 10.75l-3.5 1.84.67-3.9-2.84-2.77 3.92-.57L8 1.8Z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.2"
+      />
+    </svg>
+  );
+}
+
+export function PanelCloseIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <title>Close panel</title>
+      <path
+        d="M6 6h12v12H6zM15 6v12"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
+export function PanelOpenIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} {...props}>
+      <title>Open panel</title>
+      <path
+        d="M6 6h12v12H6zM15 6v12M11.5 9.5 9 12l2.5 2.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
