@@ -9,6 +9,7 @@ const browserExecutionHeaders = {
 };
 
 export default defineConfig({
+  base: "./",
   plugins: [react()],
   worker: {
     format: "es",

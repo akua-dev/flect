@@ -2,6 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
 
 const browserFailures = new WeakMap<Page, Array<string>>();
+const completedShapePages = new WeakSet<Page>();
 
 test.beforeEach(async ({ page }) => {
   const failures: Array<string> = [];
@@ -16,6 +17,14 @@ test.beforeEach(async ({ page }) => {
   });
   page.on("requestfailed", (request) => {
     const url = request.url();
+    if (
+      completedShapePages.has(page) &&
+      request.method() === "POST" &&
+      url.endsWith("/api/sessions/browser-test-session/shape") &&
+      request.failure()?.errorText === "net::ERR_ABORTED"
+    ) {
+      return;
+    }
     if (url.startsWith("http://127.0.0.1:")) {
       failures.push(
         `request: ${request.method()} ${url} ${request.failure()?.errorText ?? ""}`,
@@ -50,6 +59,7 @@ const shapeFirstInterface = async (page: Page) => {
   await expect(
     page.getByRole("region", { name: "Revision decision" }),
   ).toBeVisible();
+  completedShapePages.add(page);
   await expect(
     page.getByRole("textbox", { name: "Message Shaper" }),
   ).toHaveAttribute("data-composer-identity", "original");
