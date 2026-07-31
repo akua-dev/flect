@@ -7,7 +7,6 @@ import {
   ModelSelection,
   type ModelSummary,
   type RecoveryReason,
-  type SessionBusy,
   SessionSelection,
 } from "../../shared/contracts";
 import type { InterfaceDocument } from "../../shared/interface-document";
@@ -30,16 +29,66 @@ export const isAgentSessionActive = (status: AgentSessionStatus) =>
 
 export interface ConversationMessage {
   readonly id: string;
-  readonly role: "user" | "assistant";
+  readonly role: "user" | "assistant" | "activity";
   readonly content: string;
 }
 
-const messageId = () => crypto.randomUUID();
+export interface RoleConversationState {
+  readonly role: InteractiveAgentRole;
+  readonly status: AgentSessionStatus;
+  readonly messages: ReadonlyArray<ConversationMessage>;
+  readonly lastPrompt: string;
+  readonly error: string | undefined;
+  readonly cancel: () => Promise<void>;
+}
+
+export interface AppConversationController extends RoleConversationState {
+  readonly role: "app";
+  readonly submit: (text: string) => Promise<void>;
+}
+
+export interface ShaperConversationController extends RoleConversationState {
+  readonly role: "shaper";
+  readonly shape: (
+    instruction: string,
+    document: InterfaceDocument,
+  ) => Promise<InterfaceDocument>;
+}
+
+export interface AgentWorkspaceController {
+  readonly models: ReadonlyArray<ModelSummary>;
+  readonly selectedModel: ModelSummary | undefined;
+  readonly selectModel: (model: ModelSummary | undefined) => void;
+  readonly refresh: () => Promise<void>;
+  readonly app: AppConversationController;
+  readonly shaper: ShaperConversationController;
+  readonly diagnoseRecovery: (
+    reason: RecoveryReason,
+  ) => Promise<{ readonly version: 1; readonly message: string }>;
+}
+
+interface ConversationSnapshot {
+  readonly status: AgentSessionStatus;
+  readonly messages: ReadonlyArray<ConversationMessage>;
+  readonly lastPrompt: string;
+  readonly error: string | undefined;
+}
 
 interface SessionHandle {
   readonly id: string;
   readonly selectionKey: string;
 }
+
+type RoleFiber = Fiber.Fiber<unknown, unknown>;
+
+const initialConversation = (): ConversationSnapshot => ({
+  status: "booting",
+  messages: [],
+  lastPrompt: "",
+  error: undefined,
+});
+
+const messageId = () => crypto.randomUUID();
 
 const sessionSelection = (
   selectedModel: ModelSummary | undefined,
@@ -58,7 +107,7 @@ const modelSelectionKey = (selectedModel: ModelSummary | undefined) =>
     ? "auto"
     : JSON.stringify([selectedModel.provider, selectedModel.id]);
 
-const ensurePiSession = Effect.fn("Flect.AgentSession.ensureSession")(
+const ensurePiSession = Effect.fn("Flect.AgentWorkspace.ensureSession")(
   function* (
     selection: SessionSelection,
     selectionKey: string,
@@ -82,20 +131,62 @@ const ensurePiSession = Effect.fn("Flect.AgentSession.ensureSession")(
   },
 );
 
-export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
-  const [status, setStatus] = useState<AgentSessionStatus>("booting");
+const appendBoundedActivity = (
+  messages: ReadonlyArray<ConversationMessage>,
+  message: ConversationMessage,
+) => {
+  const next = [...messages, message];
+  const activity = next.filter((candidate) => candidate.role === "activity");
+  if (activity.length <= 20) {
+    return next;
+  }
+  const oldestActivity = activity[0];
+  return next.filter((candidate) => candidate.id !== oldestActivity?.id);
+};
+
+export function useAgentSession(
+  runtime: FlectBrowserRuntime = browserRuntime,
+): AgentWorkspaceController & {
+  readonly status: AgentSessionStatus;
+  readonly messages: ReadonlyArray<ConversationMessage>;
+  readonly lastPrompt: string;
+  readonly error: string | undefined;
+  readonly submit: (text: string) => Promise<void>;
+  readonly shape: (
+    instruction: string,
+    document: InterfaceDocument,
+  ) => Promise<InterfaceDocument>;
+  readonly cancel: () => Promise<void>;
+} {
   const [models, setModels] = useState<ReadonlyArray<ModelSummary>>([]);
   const [selectedModel, setSelectedModel] = useState<ModelSummary>();
-  const [messages, setMessages] = useState<ReadonlyArray<ConversationMessage>>(
+  const [appState, setAppState] = useState(initialConversation);
+  const [shaperState, setShaperState] = useState(initialConversation);
+  const sessionRef = useRef<SessionHandle | undefined>(undefined);
+  const requestRefs = useRef<
+    Record<InteractiveAgentRole, RoleFiber | undefined>
+  >({
+    app: undefined,
+    shaper: undefined,
+  });
+  const cancellingRefs = useRef<Record<InteractiveAgentRole, boolean>>({
+    app: false,
+    shaper: false,
+  });
+
+  const updateRole = useCallback(
+    (
+      role: InteractiveAgentRole,
+      update: (current: ConversationSnapshot) => ConversationSnapshot,
+    ) => {
+      if (role === "app") {
+        setAppState(update);
+      } else {
+        setShaperState(update);
+      }
+    },
     [],
   );
-  const [lastPrompt, setLastPrompt] = useState("");
-  const [error, setError] = useState<string>();
-  const sessionRef = useRef<SessionHandle | undefined>(undefined);
-  const requestRef = useRef<
-    Fiber.Fiber<void, FlectUnavailableError | SessionBusy> | undefined
-  >(undefined);
-  const cancellingRef = useRef(false);
 
   const releaseSession = useCallback(
     (expectedId: string) =>
@@ -118,17 +209,33 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
     [],
   );
 
+  const interruptRoleFibers = useCallback(() => {
+    const fibers = [requestRefs.current.app, requestRefs.current.shaper].filter(
+      (fiber): fiber is RoleFiber => fiber !== undefined,
+    );
+    requestRefs.current.app = undefined;
+    requestRefs.current.shaper = undefined;
+    return Effect.forEach(fibers, Fiber.interrupt, {
+      concurrency: "unbounded",
+      discard: true,
+    });
+  }, []);
+
   const refresh = useCallback(() => {
-    setStatus("booting");
-    setError(undefined);
-    const request = requestRef.current;
-    requestRef.current = undefined;
+    setAppState((current) => ({
+      ...current,
+      status: "booting",
+      error: undefined,
+    }));
+    setShaperState((current) => ({
+      ...current,
+      status: "booting",
+      error: undefined,
+    }));
     const sessionId = sessionRef.current?.id;
 
     const load = Effect.gen(function* () {
-      if (request) {
-        yield* Fiber.interrupt(request);
-      }
+      yield* interruptRoleFibers();
       if (sessionId !== undefined) {
         yield* releaseSession(sessionId);
       }
@@ -138,10 +245,9 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         [client.status, client.models],
         { concurrency: "unbounded" },
       );
-
       if (runtimeStatus.status !== "ready") {
         return yield* Effect.fail(
-          new FlectUnavailableError({
+          FlectUnavailableError.make({
             message: "The local Flect runtime is unavailable.",
           }),
         );
@@ -150,47 +256,58 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
       if (availableModels.length === 0) {
         yield* Effect.sync(() => {
           setModels(availableModels);
-          setStatus("setup-required");
-          setError("Sign in to a Pi provider, then try again.");
+          const setupRequired = (current: ConversationSnapshot) => ({
+            ...current,
+            status: "setup-required" as const,
+            error: "Sign in to a Pi provider, then try again.",
+          });
+          setAppState(setupRequired);
+          setShaperState(setupRequired);
         });
         return;
       }
 
       yield* Effect.sync(() => {
         setModels(availableModels);
-        setStatus("ready");
+        const ready = (current: ConversationSnapshot) => ({
+          ...current,
+          status: "ready" as const,
+          error: undefined,
+        });
+        setAppState(ready);
+        setShaperState(ready);
       });
     }).pipe(
       Effect.catch(() =>
         Effect.sync(() => {
           setModels([]);
-          setStatus("unavailable");
-          setError("Start the local Flect runtime to continue.");
+          const unavailable = (current: ConversationSnapshot) => ({
+            ...current,
+            status: "unavailable" as const,
+            error: "Start the local Flect runtime to continue.",
+          });
+          setAppState(unavailable);
+          setShaperState(unavailable);
         }),
       ),
     );
 
     return runtime.runPromise(load);
-  }, [releaseSession, runtime]);
+  }, [interruptRoleFibers, releaseSession, runtime]);
 
   useEffect(() => {
     void refresh();
-
     return () => {
-      const request = requestRef.current;
       const sessionId = sessionRef.current?.id;
       runtime.runFork(
-        Effect.gen(function* () {
-          if (request) {
-            yield* Fiber.interrupt(request);
-          }
-          if (sessionId !== undefined) {
-            yield* releaseSession(sessionId);
-          }
-        }),
+        interruptRoleFibers().pipe(
+          Effect.andThen(
+            sessionId === undefined ? Effect.void : releaseSession(sessionId),
+          ),
+        ),
       );
     };
-  }, [refresh, releaseSession, runtime]);
+  }, [interruptRoleFibers, refresh, releaseSession, runtime]);
 
   const selection = useMemo(
     () => sessionSelection(selectedModel),
@@ -222,6 +339,16 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
       Effect.gen(function* () {
         const client = yield* FlectClient;
         const shell = yield* SandboxedShell;
+        yield* Effect.sync(() => {
+          updateRole(role, (current) => ({
+            ...current,
+            messages: appendBoundedActivity(current.messages, {
+              id: messageId(),
+              role: "activity",
+              content: `${role === "app" ? "App Agent" : "Shaper"} used its sandbox.`,
+            }),
+          }));
+        });
         const result = yield* shell.execute(role, event.command).pipe(
           Effect.catch(() =>
             Effect.succeed(
@@ -241,10 +368,10 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
           result,
         );
       }),
-    [],
+    [updateRole],
   );
 
-  const handleEvent = useCallback(
+  const handleAppEvent = useCallback(
     (
       assistantId: string,
       sessionId: string,
@@ -258,35 +385,27 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
         return executeShellRequest(sessionId, "app", event);
       }
       return Effect.sync(() => {
-        switch (event.type) {
-          case "turn_started":
-            setStatus("streaming");
-            break;
-          case "text_delta":
-            setMessages((current) =>
-              current.map((message) =>
-                message.id === assistantId
-                  ? {
-                      ...message,
-                      content: message.content + event.delta,
-                    }
-                  : message,
-              ),
-            );
-            break;
-          case "turn_completed":
-          case "cancelled":
-            setStatus("ready");
-            break;
-          case "error":
-            setStatus("error");
-            setError(event.message);
-            break;
-          case "busy":
-            setStatus("error");
-            setError(event.message);
-            break;
-        }
+        setAppState((current) => {
+          switch (event.type) {
+            case "turn_started":
+              return { ...current, status: "streaming" };
+            case "text_delta":
+              return {
+                ...current,
+                messages: current.messages.map((message) =>
+                  message.id === assistantId
+                    ? { ...message, content: message.content + event.delta }
+                    : message,
+                ),
+              };
+            case "turn_completed":
+            case "cancelled":
+              return { ...current, status: "ready", error: undefined };
+            case "error":
+            case "busy":
+              return { ...current, status: "error", error: event.message };
+          }
+        });
       });
     },
     [executeShellRequest],
@@ -295,28 +414,32 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
   const submit = useCallback(
     (text: string): Promise<void> => {
       const prompt = text.trim();
-      if (!prompt || (status !== "ready" && status !== "error")) {
+      if (
+        !prompt ||
+        (appState.status !== "ready" && appState.status !== "error")
+      ) {
         return Promise.resolve();
       }
 
-      const userId = messageId();
       const assistantId = messageId();
-      setLastPrompt(prompt);
-      setError(undefined);
-      setStatus("submitting");
-      setMessages((current) => [
+      setAppState((current) => ({
         ...current,
-        { id: userId, role: "user", content: prompt },
-        { id: assistantId, role: "assistant", content: "" },
-      ]);
+        lastPrompt: prompt,
+        error: undefined,
+        status: "submitting",
+        messages: [
+          ...current.messages,
+          { id: messageId(), role: "user", content: prompt },
+          { id: assistantId, role: "assistant", content: "" },
+        ],
+      }));
 
       const request = Effect.gen(function* () {
         const client = yield* FlectClient;
         const sessionId = yield* ensureSession();
-
         yield* client.prompt(sessionId, prompt).pipe(
           Stream.runForEach((event) => {
-            const update = handleEvent(assistantId, sessionId, event);
+            const update = handleAppEvent(assistantId, sessionId, event);
             return event.type === "error"
               ? update.pipe(Effect.andThen(releaseSession(sessionId)))
               : update;
@@ -330,142 +453,210 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
       }).pipe(
         Effect.catch((failure) =>
           Effect.sync(() => {
-            setStatus("error");
-            setError(failure.message);
+            setAppState((current) => ({
+              ...current,
+              status: "error",
+              error: failure.message,
+            }));
           }),
         ),
       );
 
       const fiber = runtime.runFork(request);
-      requestRef.current = fiber;
-
+      requestRefs.current.app = fiber;
       return runtime
         .runPromise(Fiber.await(fiber))
         .then(() => undefined)
         .finally(() => {
-          if (requestRef.current === fiber) {
-            requestRef.current = undefined;
+          if (requestRefs.current.app === fiber) {
+            requestRefs.current.app = undefined;
           }
         });
     },
-    [ensureSession, handleEvent, releaseSession, runtime, status],
+    [appState.status, ensureSession, handleAppEvent, releaseSession, runtime],
   );
 
   const shape = useCallback(
     (
       instruction: string,
       document: InterfaceDocument,
-    ): Promise<InterfaceDocument> =>
-      runtime.runPromise(
-        Effect.gen(function* () {
-          const client = yield* FlectClient;
-          const sessionId = yield* ensureSession();
-          const shaped = yield* client
-            .shape(sessionId, instruction, document)
-            .pipe(
-              Stream.runFoldEffect(
-                () => Option.none<InterfaceDocument>(),
-                (current, event) => {
-                  if (event.type === "shell_request") {
-                    return executeShellRequest(sessionId, "shaper", event).pipe(
-                      Effect.as(current),
-                    );
-                  }
-                  return event.type === "shape_completed"
-                    ? Effect.succeed(Option.some(event.document))
-                    : Effect.succeed(current);
-                },
-              ),
-              Effect.tapError((failure) =>
-                failure._tag === "SessionBusy"
-                  ? Effect.void
-                  : releaseSession(sessionId),
-              ),
-            );
-          return yield* Option.match(shaped, {
-            onNone: () =>
-              Effect.fail(
-                new FlectUnavailableError({
-                  message: "The local Flect runtime is unavailable.",
-                }),
-              ),
-            onSome: Effect.succeed,
-          });
-        }),
-      ),
-    [ensureSession, executeShellRequest, releaseSession, runtime],
+    ): Promise<InterfaceDocument> => {
+      const prompt = instruction.trim();
+      if (
+        !prompt ||
+        (shaperState.status !== "ready" && shaperState.status !== "error")
+      ) {
+        return Promise.reject(
+          FlectUnavailableError.make({
+            message: "The local Flect runtime is unavailable.",
+          }),
+        );
+      }
+
+      setShaperState((current) => ({
+        ...current,
+        lastPrompt: prompt,
+        error: undefined,
+        status: "submitting",
+        messages: [
+          ...current.messages,
+          { id: messageId(), role: "user", content: prompt },
+        ],
+      }));
+
+      const request = Effect.gen(function* () {
+        const client = yield* FlectClient;
+        const sessionId = yield* ensureSession();
+        const shaped = yield* client.shape(sessionId, prompt, document).pipe(
+          Stream.tap((event) =>
+            event.type === "shell_request"
+              ? executeShellRequest(sessionId, "shaper", event)
+              : Effect.void,
+          ),
+          Stream.runFold(
+            () => Option.none<InterfaceDocument>(),
+            (current, event) =>
+              event.type === "shape_completed"
+                ? Option.some(event.document)
+                : current,
+          ),
+          Effect.tapError((failure) =>
+            failure._tag === "SessionBusy"
+              ? Effect.void
+              : releaseSession(sessionId),
+          ),
+        );
+        const candidate = yield* Option.match(shaped, {
+          onNone: () =>
+            Effect.fail(
+              FlectUnavailableError.make({
+                message: "The local Flect runtime is unavailable.",
+              }),
+            ),
+          onSome: Effect.succeed,
+        });
+        yield* Effect.sync(() => {
+          setShaperState((current) => ({
+            ...current,
+            status: "ready",
+            error: undefined,
+            messages: [
+              ...current.messages,
+              {
+                id: messageId(),
+                role: "assistant",
+                content: `Preview ready: ${candidate.name}`,
+              },
+            ],
+          }));
+        });
+        return candidate;
+      }).pipe(
+        Effect.tapError((failure) =>
+          Effect.sync(() => {
+            setShaperState((current) => ({
+              ...current,
+              status: "error",
+              error: failure.message,
+            }));
+          }),
+        ),
+      );
+
+      const fiber = runtime.runFork(request);
+      requestRefs.current.shaper = fiber;
+      return runtime.runPromise(Fiber.join(fiber)).finally(() => {
+        if (requestRefs.current.shaper === fiber) {
+          requestRefs.current.shaper = undefined;
+        }
+      });
+    },
+    [
+      ensureSession,
+      executeShellRequest,
+      releaseSession,
+      runtime,
+      shaperState.status,
+    ],
   );
 
-  const cancel = useCallback((): Promise<void> => {
-    if (cancellingRef.current) {
-      return Promise.resolve();
-    }
-
-    const request = requestRef.current;
-    const sessionId = sessionRef.current?.id;
-    cancellingRef.current = true;
-    setStatus("cancelling");
-
-    const cancelRequest = Effect.gen(function* () {
-      if (request) {
-        yield* Fiber.interrupt(request);
+  const cancelRole = useCallback(
+    (role: InteractiveAgentRole): Promise<void> => {
+      if (cancellingRefs.current[role]) {
+        return Promise.resolve();
       }
+      const request = requestRefs.current[role];
+      const sessionId = sessionRef.current?.id;
+      cancellingRefs.current[role] = true;
+      updateRole(role, (current) => ({ ...current, status: "cancelling" }));
 
-      if (sessionId) {
-        const client = yield* FlectClient;
-        yield* client.cancel(sessionId, "app");
-      }
-    }).pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          requestRef.current = undefined;
-          setError(undefined);
-          setStatus("ready");
-        }),
-      ),
-      Effect.catch(() =>
-        Effect.sync(() => {
-          requestRef.current = undefined;
-          setError("The response could not be stopped. Try again.");
-          setStatus("cancelling");
-        }),
-      ),
-      Effect.ensuring(
-        Effect.sync(() => {
-          cancellingRef.current = false;
-        }),
-      ),
-    );
+      const cancelRequest = Effect.gen(function* () {
+        if (sessionId !== undefined) {
+          const client = yield* FlectClient;
+          yield* client.cancel(sessionId, role);
+        }
+        if (request !== undefined) {
+          yield* Fiber.interrupt(request);
+        }
+      }).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            requestRefs.current[role] = undefined;
+            updateRole(role, (current) => ({
+              ...current,
+              status: "ready",
+              error: undefined,
+            }));
+          }),
+        ),
+        Effect.catch(() =>
+          Effect.sync(() => {
+            updateRole(role, (current) => ({
+              ...current,
+              status: "cancelling",
+              error: "The response could not be stopped. Try again.",
+            }));
+          }),
+        ),
+        Effect.ensuring(
+          Effect.sync(() => {
+            cancellingRefs.current[role] = false;
+          }),
+        ),
+      );
+      return runtime.runPromise(cancelRequest);
+    },
+    [runtime, updateRole],
+  );
 
-    return runtime.runPromise(cancelRequest);
-  }, [runtime]);
+  const cancelApp = useCallback(() => cancelRole("app"), [cancelRole]);
+  const cancelShaper = useCallback(() => cancelRole("shaper"), [cancelRole]);
 
   const selectModel = useCallback(
     (model: ModelSummary | undefined) => {
-      const request = requestRef.current;
       const sessionId = sessionRef.current?.id;
-      requestRef.current = undefined;
       runtime.runFork(
-        Effect.gen(function* () {
-          if (request) {
-            yield* Fiber.interrupt(request);
-          }
-          if (sessionId !== undefined) {
-            yield* releaseSession(sessionId);
-          }
-        }),
+        interruptRoleFibers().pipe(
+          Effect.andThen(
+            sessionId === undefined ? Effect.void : releaseSession(sessionId),
+          ),
+        ),
       );
       setSelectedModel(model);
-      setError(undefined);
-      setStatus((current) =>
-        current === "booting" ||
-        current === "unavailable" ||
-        current === "setup-required"
-          ? current
-          : "ready",
-      );
+      const reset = (current: ConversationSnapshot) => ({
+        ...current,
+        status:
+          current.status === "booting" ||
+          current.status === "unavailable" ||
+          current.status === "setup-required"
+            ? current.status
+            : ("ready" as const),
+        error: undefined,
+      });
+      setAppState(reset);
+      setShaperState(reset);
     },
-    [releaseSession, runtime],
+    [interruptRoleFibers, releaseSession, runtime],
   );
 
   const diagnoseRecovery = useCallback(
@@ -488,18 +679,33 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
     [ensureSession, releaseSession, runtime],
   );
 
+  const app: AppConversationController = {
+    role: "app",
+    ...appState,
+    submit,
+    cancel: cancelApp,
+  };
+  const shaper: ShaperConversationController = {
+    role: "shaper",
+    ...shaperState,
+    shape,
+    cancel: cancelShaper,
+  };
+
   return {
-    status,
     models,
     selectedModel,
     selectModel,
-    messages,
-    lastPrompt,
-    error,
-    submit,
-    shape,
-    cancel,
-    diagnoseRecovery,
     refresh,
+    app,
+    shaper,
+    diagnoseRecovery,
+    status: app.status,
+    messages: app.messages,
+    lastPrompt: app.lastPrompt,
+    error: app.error,
+    submit: app.submit,
+    shape: shaper.shape,
+    cancel: app.cancel,
   };
 }

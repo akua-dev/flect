@@ -115,6 +115,50 @@ function createFakeRuntime({
 }
 
 describe("useAgentSession", () => {
+  it("keeps App and Shaper conversations separate behind one session", async () => {
+    const { client, runtime } = createFakeRuntime();
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.app.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.app.submit("Use the product");
+      await result.current.shaper.shape(
+        "Change the interface",
+        defaultInterfaceDocument,
+      );
+    });
+
+    expect(client.createSession).toHaveBeenCalledOnce();
+    expect(result.current.app.messages).toEqual([
+      {
+        id: expect.any(String),
+        role: "user",
+        content: "Use the product",
+      },
+      {
+        id: expect.any(String),
+        role: "assistant",
+        content: "A shaped response",
+      },
+    ]);
+    expect(result.current.shaper.messages).toEqual([
+      {
+        id: expect.any(String),
+        role: "user",
+        content: "Change the interface",
+      },
+      {
+        id: expect.any(String),
+        role: "assistant",
+        content: `Preview ready: ${defaultInterfaceDocument.name}`,
+      },
+    ]);
+
+    unmount();
+    await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
+    await runtime.dispose();
+  });
+
   it("boots into a ready state with Pi models", async () => {
     const { runtime } = createFakeRuntime();
     const { result, unmount } = renderHook(() => useAgentSession(runtime));
@@ -279,6 +323,14 @@ describe("useAgentSession", () => {
       "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
       shellResult,
     );
+    expect(result.current.shaper.messages).toContainEqual({
+      id: expect.any(String),
+      role: "activity",
+      content: "Shaper used its sandbox.",
+    });
+    expect(JSON.stringify(result.current.shaper.messages)).not.toContain(
+      "bun run src/index.ts",
+    );
     unmount();
     await runtime.dispose();
   });
@@ -308,6 +360,8 @@ describe("useAgentSession", () => {
     });
 
     expect(client.closeSession).not.toHaveBeenCalled();
+    expect(result.current.shaper.status).toBe("error");
+    expect(result.current.app.status).toBe("ready");
     unmount();
     await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
     await runtime.dispose();
@@ -338,6 +392,8 @@ describe("useAgentSession", () => {
     await waitFor(() =>
       expect(client.closeSession).toHaveBeenCalledWith("session-1"),
     );
+    expect(result.current.shaper.status).toBe("error");
+    expect(result.current.app.status).toBe("ready");
     unmount();
     await runtime.dispose();
   });
@@ -448,6 +504,47 @@ describe("useAgentSession", () => {
     await runtime.dispose();
   });
 
+  it("cancels Shaper without changing the App conversation", async () => {
+    let shapeInterrupted = false;
+    const { client, runtime } = createFakeRuntime({
+      shape: () =>
+        Stream.never.pipe(
+          Stream.ensuring(
+            Effect.sync(() => {
+              shapeInterrupted = true;
+            }),
+          ),
+        ),
+    });
+    const { result, unmount } = renderHook(() => useAgentSession(runtime));
+    await waitFor(() => expect(result.current.app.status).toBe("ready"));
+
+    let shapeOutcome: Promise<unknown> | undefined;
+    act(() => {
+      shapeOutcome = result.current.shaper
+        .shape("Keep shaping", defaultInterfaceDocument)
+        .then(
+          () => undefined,
+          (error: unknown) => error,
+        );
+    });
+    await waitFor(() => expect(client.shape).toHaveBeenCalledOnce());
+
+    await act(async () => {
+      await result.current.shaper.cancel();
+    });
+
+    expect(client.cancel).toHaveBeenCalledWith("session-1", "shaper");
+    expect(shapeInterrupted).toBe(true);
+    expect(result.current.shaper.status).toBe("ready");
+    expect(result.current.app.status).toBe("ready");
+    expect(await shapeOutcome).toBeDefined();
+
+    unmount();
+    await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
+    await runtime.dispose();
+  });
+
   it("keeps the session active when cancellation is rejected", async () => {
     const { client, runtime } = createFakeRuntime({
       prompt: () => Stream.never,
@@ -515,6 +612,7 @@ describe("useAgentSession", () => {
 
     expect(client.createSession).toHaveBeenCalledTimes(2);
     expect(client.prompt).toHaveBeenLastCalledWith("session-2", "Use Claude");
+    expect(result.current.app.messages).toHaveLength(4);
     unmount();
     await waitFor(() =>
       expect(client.closeSession).toHaveBeenCalledWith("session-2"),
