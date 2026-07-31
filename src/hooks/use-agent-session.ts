@@ -222,7 +222,7 @@ export function useAgentSession(runtime: FlectBrowserRuntime = browserRuntime) {
       Effect.gen(function* () {
         const client = yield* FlectClient;
         const shell = yield* SandboxedShell;
-        const result = yield* shell.execute(event.command).pipe(
+        const result = yield* shell.execute(role, event.command).pipe(
           Effect.catch(() =>
             Effect.succeed(
               BunCommandResult.make({

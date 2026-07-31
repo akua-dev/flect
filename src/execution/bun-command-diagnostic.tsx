@@ -87,9 +87,15 @@ export function BunCommandDiagnostic() {
       .runPromise(
         Effect.gen(function* () {
           const shell = yield* SandboxedShell;
-          const run = yield* shell.execute("bun run src/index.ts");
-          const packages = yield* shell.execute("bun add flect-fixture@1.0.0");
-          const preview = yield* shell.execute("bun run src/server.ts");
+          const run = yield* shell.execute("shaper", "bun run src/index.ts");
+          const packages = yield* shell.execute(
+            "shaper",
+            "bun add flect-fixture@1.0.0",
+          );
+          const preview = yield* shell.execute(
+            "shaper",
+            "bun run src/server.ts",
+          );
           return {
             run: run.stdout.trim(),
             packages: packages.stdout.trim(),
@@ -129,7 +135,7 @@ export function BunCommandDiagnostic() {
       .runPromise(
         Effect.gen(function* () {
           const shell = yield* SandboxedShell;
-          return yield* shell.execute("bun stop");
+          return yield* shell.stop("shaper");
         }),
       )
       .then(() => {

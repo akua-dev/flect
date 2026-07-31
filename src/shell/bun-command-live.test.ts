@@ -113,6 +113,7 @@ describe("Shell Bun command live composition", () => {
       const output = yield* Effect.gen(function* () {
         const shell = yield* SandboxedShell;
         return yield* shell.execute(
+          "shaper",
           "bun add flect-fixture@1.0.0 && bun run src/index.ts",
         );
       }).pipe(Effect.provide(shellLayer));

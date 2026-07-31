@@ -8,7 +8,7 @@ import {
 import { ExtensionExecutionLive } from "../sandbox/extension-execution";
 import { ExtensionSandboxLive } from "../sandbox/extension-sandbox";
 import {
-  makeLiveSandboxedShellLayer,
+  makeLiveRoleSandboxedShellLayer,
   type SandboxedShell,
 } from "../shell/sandboxed-shell";
 import {
@@ -25,13 +25,20 @@ const ClientLive = isTauri()
   ? makeTauriFlectClientLayer().pipe(Layer.provide(TauriBridgeLive))
   : makeFlectClientLayer().pipe(Layer.provide(BrowserHttpClient.layerFetch));
 
-const AgentShellLive = makeLiveSandboxedShellLayer({
-  role: "shaper",
-  files: {
-    "/workspace/package.json":
-      '{\n  "name": "flect-workspace",\n  "private": true,\n  "type": "module",\n  "dependencies": {}\n}\n',
-    "/workspace/src/index.ts":
-      'console.log("Flect browser workspace is ready.");\n',
+const AgentShellLive = makeLiveRoleSandboxedShellLayer({
+  app: {
+    files: {
+      "/workspace/package.json":
+        '{\n  "name": "flect-app-workspace",\n  "private": true,\n  "type": "module",\n  "dependencies": {}\n}\n',
+    },
+  },
+  shaper: {
+    files: {
+      "/workspace/package.json":
+        '{\n  "name": "flect-shaper-workspace",\n  "private": true,\n  "type": "module",\n  "dependencies": {}\n}\n',
+      "/workspace/src/index.ts":
+        'console.log("Flect browser workspace is ready.");\n',
+    },
   },
 });
 

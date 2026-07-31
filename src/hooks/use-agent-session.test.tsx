@@ -87,8 +87,8 @@ function createFakeRuntime({
     diagnoseRecovery: vi.fn(diagnoseRecovery),
   };
   const shell: SandboxedShellShape = {
-    role: "shaper",
     execute: vi.fn(shellExecute),
+    stop: () => Effect.void,
   };
   const storage: InterfaceStorageShape = {
     read: () => Effect.succeed(null),
@@ -196,7 +196,7 @@ describe("useAgentSession", () => {
       await result.current.submit("Run the project");
     });
 
-    expect(shell.execute).toHaveBeenCalledWith("bun run src/index.ts");
+    expect(shell.execute).toHaveBeenCalledWith("app", "bun run src/index.ts");
     expect(client.completeShellRequest).toHaveBeenCalledWith(
       "session-1",
       "app",
@@ -261,7 +261,10 @@ describe("useAgentSession", () => {
       );
     });
 
-    expect(shell.execute).toHaveBeenCalledWith("bun run src/index.ts");
+    expect(shell.execute).toHaveBeenCalledWith(
+      "shaper",
+      "bun run src/index.ts",
+    );
     expect(client.completeShellRequest).toHaveBeenCalledWith(
       "session-1",
       "shaper",

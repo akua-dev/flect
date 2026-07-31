@@ -1,8 +1,13 @@
-import { assert, describe, it } from "@effect/vitest";
+import { assert, describe, it, vi } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Ref } from "effect";
 import { BunCommandResult } from "../../shared/bun-command";
 import { type BunOperationCall, makeBunCommandTestLayer } from "./bun-command";
-import { makeSandboxedShellLayer, SandboxedShell } from "./sandboxed-shell";
+import {
+  makeRoleSandboxedShellLayer,
+  makeRoleSandboxedShellService,
+  makeSandboxedShellLayer,
+  SandboxedShell,
+} from "./sandboxed-shell";
 
 const operationResult = (operation: string) =>
   BunCommandResult.make({
@@ -13,6 +18,61 @@ const operationResult = (operation: string) =>
   });
 
 describe("SandboxedShell", () => {
+  it.effect("keeps App and Shaper filesystems isolated in one service", () =>
+    Effect.gen(function* () {
+      const commandLayer = makeBunCommandTestLayer(() =>
+        Effect.succeed(operationResult("unused")),
+      );
+      const shellLayer = makeRoleSandboxedShellLayer({
+        app: {
+          files: { "/workspace/role.txt": "app\n" },
+        },
+        shaper: {
+          files: { "/workspace/role.txt": "shaper\n" },
+        },
+      }).pipe(Layer.provide(commandLayer));
+
+      const results = yield* Effect.gen(function* () {
+        const shell = yield* SandboxedShell;
+        const app = yield* shell.execute(
+          "app",
+          "cat role.txt; echo app > marker",
+        );
+        const shaper = yield* shell.execute(
+          "shaper",
+          "cat role.txt; test ! -e marker",
+        );
+        return { app, shaper };
+      }).pipe(Effect.provide(shellLayer));
+
+      assert.strictEqual(results.app.stdout, "app\n");
+      assert.strictEqual(results.shaper.stdout, "shaper\n");
+      assert.strictEqual(results.shaper.exitCode, 0);
+    }),
+  );
+
+  it.effect("stops only the selected role workspace", () =>
+    Effect.gen(function* () {
+      const appStop = vi.fn(() => undefined);
+      const shaperStop = vi.fn(() => undefined);
+      const shell = makeRoleSandboxedShellService({
+        app: {
+          execute: () => Effect.succeed(operationResult("app")),
+          stop: Effect.sync(appStop),
+        },
+        shaper: {
+          execute: () => Effect.succeed(operationResult("shaper")),
+          stop: Effect.sync(shaperStop),
+        },
+      });
+
+      yield* shell.stop("app");
+
+      assert.strictEqual(appStop.mock.calls.length, 1);
+      assert.strictEqual(shaperStop.mock.calls.length, 0);
+    }),
+  );
+
   it.effect("runs Bun commands through the actual just-bash parser", () =>
     Effect.gen(function* () {
       const calls = yield* Ref.make<Array<BunOperationCall>>([]);
@@ -31,10 +91,13 @@ describe("SandboxedShell", () => {
       const results = yield* Effect.gen(function* () {
         const shell = yield* SandboxedShell;
         return [
-          yield* shell.execute("bun run src/index.ts"),
-          yield* shell.execute("bun install && bun run src/index.ts"),
-          yield* shell.execute("bun add flect-fixture@1.0.0 | tee install.log"),
-          yield* shell.execute("bun stop"),
+          yield* shell.execute("shaper", "bun run src/index.ts"),
+          yield* shell.execute("shaper", "bun install && bun run src/index.ts"),
+          yield* shell.execute(
+            "shaper",
+            "bun add flect-fixture@1.0.0 | tee install.log",
+          ),
+          yield* shell.execute("shaper", "bun stop"),
         ] as const;
       }).pipe(Effect.provide(shellLayer));
 
@@ -69,7 +132,7 @@ describe("SandboxedShell", () => {
 
       const output = yield* Effect.gen(function* () {
         const shell = yield* SandboxedShell;
-        return yield* shell.execute("bun run src/server.ts");
+        return yield* shell.execute("shaper", "bun run src/server.ts");
       }).pipe(Effect.provide(shellLayer));
 
       assert.strictEqual(output.previewUrl, "/preview/3417/");
@@ -99,7 +162,7 @@ describe("SandboxedShell", () => {
               "bun() { echo function; }; bun run src/index.ts",
               "mkdir -p bin; echo '#!/bin/sh' > bin/bun; chmod +x bin/bun; PATH=/workspace/bin:$PATH bun run src/index.ts",
             ],
-            (line) => shell.execute(line),
+            (line) => shell.execute("app", line),
           );
         }).pipe(Effect.provide(shellLayer));
 
@@ -130,7 +193,7 @@ describe("SandboxedShell", () => {
 
         const fiber = yield* Effect.gen(function* () {
           const shell = yield* SandboxedShell;
-          return yield* shell.execute("bun run src/index.ts");
+          return yield* shell.execute("shaper", "bun run src/index.ts");
         }).pipe(Effect.provide(shellLayer), Effect.forkChild);
 
         yield* Deferred.await(started);
@@ -151,7 +214,7 @@ describe("SandboxedShell", () => {
       ) =>
         Effect.gen(function* () {
           const shell = yield* SandboxedShell;
-          return yield* shell.execute(script);
+          return yield* shell.execute(role, script);
         }).pipe(
           Effect.provide(
             makeSandboxedShellLayer({ role, files }).pipe(
