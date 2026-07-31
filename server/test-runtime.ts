@@ -26,7 +26,7 @@ const model = ModelSummary.make({
 const shapedDocument = (_current: InterfaceDocument): InterfaceDocument =>
   InterfaceDocumentSchema.make({
     version: 2,
-    name: "Focused workspace",
+    name: "Focused project overview",
     root: {
       id: "root",
       type: "stack",
@@ -36,7 +36,7 @@ const shapedDocument = (_current: InterfaceDocument): InterfaceDocument =>
         {
           id: "headline",
           type: "text",
-          text: "Focused workspace",
+          text: "Focused project overview",
           style: "headline",
         },
         {
@@ -99,7 +99,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                   Stream.map((result) =>
                     TextDelta.make({
                       type: "text_delta",
-                      delta: `Flect’s protected test runtime is ready. Browser sandbox returned: ${result.stdout.trim()}`,
+                      delta: `The product action completed. Browser sandbox returned: ${result.stdout.trim()}`,
                     }),
                   ),
                 ),

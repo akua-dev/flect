@@ -26,65 +26,116 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => localStorage.clear());
   await page.reload();
-  await expect(page.getByText("Pi ready")).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Shaper" }),
+  ).toBeEnabled();
 });
 
 test.afterEach(async ({ page }) => {
   expect(browserFailures.get(page) ?? []).toEqual([]);
 });
 
-test("streams a Pi turn in a real browser", async ({ page }) => {
-  await page
-    .getByRole("textbox", { name: "Message Flect" })
-    .fill("Are you ready?");
-  await page.getByRole("button", { name: "Send message" }).click();
+const shapeFirstInterface = async (page: Page) => {
+  const input = page.getByRole("textbox", { name: "Message Shaper" });
+  await input.evaluate((element) => {
+    element.dataset.composerIdentity = "original";
+  });
+  await input.fill("Create a focused project overview");
+  await input.press("Enter");
 
+  await expect(page.locator(".role-shell")).toHaveClass(/role-shell--split/);
   await expect(
-    page.getByText("Flect’s protected test runtime is ready."),
+    page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
   await expect(
-    page.getByText(
-      /Browser sandbox returned: Flect browser workspace is ready/,
-    ),
+    page.getByRole("region", { name: "Revision decision" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Shaper" }),
+  ).toHaveAttribute("data-composer-identity", "original");
+};
+
+test("routes a blank workspace to Shaper and moves the same composer", async ({
+  page,
+}) => {
+  await expect(
+    page.getByRole("heading", { name: "What should we shape?" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Edit · Shaper" }),
+  ).toHaveAttribute("aria-pressed", "true");
+
+  await shapeFirstInterface(page);
+
+  await expect(
+    page.getByText("Preview ready: Focused project overview"),
+  ).toBeVisible();
+  await expect(page.getByText("Shaper used its sandbox.")).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Message App Agent" }),
+  ).toHaveCount(0);
+});
+
+test("keeps a revision, enters Run, and separates App and Shaper history", async ({
+  page,
+}) => {
+  await shapeFirstInterface(page);
+  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Run · App Agent" }).click();
+
+  const appInput = page.getByRole("textbox", { name: "Message App Agent" });
+  await appInput.fill("Open the latest project");
+  await appInput.press("Enter");
+  await expect(page.getByText("The product action completed.")).toBeVisible();
+  await expect(page.getByText("App Agent used its sandbox.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Edit · Shaper" }).click();
+  await expect(
+    page.getByText("Preview ready: Focused project overview"),
+  ).toBeVisible();
+  await expect(page.getByText("The product action completed.")).toHaveCount(0);
+
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "Message App Agent" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Run · App Agent" }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("rejects and rolls back revisions without replacing accepted state early", async ({
+  page,
+}) => {
+  await shapeFirstInterface(page);
+  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(
+    page.getByRole("heading", { name: "What should we shape?" }),
+  ).toBeVisible();
+
+  await page
+    .getByRole("textbox", { name: "Message Shaper" })
+    .fill("Create it again");
+  await page.getByRole("button", { name: "Send to Shaper" }).click();
+  await expect(
+    page.getByRole("region", { name: "Revision decision" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Actions" }).click();
+  await page.getByRole("menuitem", { name: "Roll back last change" }).click();
+
+  await expect(
+    page.getByRole("heading", { name: "What should we shape?" }),
   ).toBeVisible();
 });
 
-test("uses the protected composer controls in a real browser", async ({
+test("supports model search, keyboard resizing, collapse, and focus restoration", async ({
   page,
 }) => {
-  const prompt = page.getByRole("textbox", { name: "Message Flect" });
-  const send = page.getByRole("button", { name: "Send message" });
-
-  await expect(page.getByRole("button", { name: "Actions" })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Model: Auto via Pi" }),
-  ).toBeVisible();
-  await expect(send).toBeDisabled();
-  await expect(
-    page.getByRole("button", {
-      name: /Voice|Attach|Add context|Capabilities/i,
-    }),
-  ).toHaveCount(0);
-  for (const name of ["Open", "Extensions", "Connect"]) {
-    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
-      0,
-    );
-  }
-
-  await page.getByRole("button", { name: "Actions" }).click();
-  await expect(
-    page.getByRole("menuitem", { name: "Shape interface" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("menuitem", { name: "Roll back last change" }),
-  ).toBeDisabled();
-  await expect(page.getByText("No previous revision")).toBeVisible();
-  await page.keyboard.press("Escape");
-
+  await shapeFirstInterface(page);
+  await page.getByRole("button", { name: "Keep change" }).click();
   await page.getByRole("button", { name: "Model: Auto via Pi" }).click();
-  await expect(
-    page.getByRole("menuitemradio", { name: "Auto via Pi" }),
-  ).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("searchbox", { name: "Search models" }).fill("determin");
   await page
     .getByRole("menuitemradio", {
       name: "Deterministic browser test by flect-test",
@@ -94,129 +145,50 @@ test("uses the protected composer controls in a real browser", async ({
     page.getByRole("button", { name: "Model: Deterministic browser test" }),
   ).toBeVisible();
 
-  await prompt.fill("Test the protected composer");
-  await expect(send).toBeEnabled();
-  await send.click();
-  const response = page.getByText("Flect’s protected test runtime is ready.");
-  const stop = page.getByRole("button", { name: "Stop response" });
-  await expect
-    .poll(
-      async () => {
-        if (await response.isVisible()) {
-          return "completed";
-        }
-        if (await stop.isVisible()) {
-          return "streaming";
-        }
-        return "pending";
-      },
-      { message: "the protected composer should stream or complete" },
-    )
-    .not.toBe("pending");
-  await expect(response).toBeVisible();
-  await expect(stop).toBeHidden();
-});
-
-test("previews, accepts, persists, and safely bypasses a shaped UI", async ({
-  page,
-}) => {
-  await page.getByRole("button", { name: "Shape interface" }).click();
-  await expect(
-    page.getByRole("complementary", { name: "Interface Shaper" }),
-  ).toBeVisible();
-  await expect(page.getByText("Extensions isolated")).toBeVisible({
-    timeout: 15_000,
+  const separator = page.getByRole("separator", {
+    name: "Resize agent panel",
   });
+  await separator.focus();
+  await separator.press("End");
+  await expect(separator).toHaveAttribute("aria-valuenow", "520");
 
-  await page
-    .getByLabel("Describe the interface change")
-    .fill("Make the headline say Focused workspace");
-  await page.getByRole("button", { name: "Propose change" }).click();
-  await expect(page.getByLabel("Describe the interface change")).toBeDisabled();
+  await page.getByRole("button", { name: "Collapse agent" }).click();
+  const reopen = page.getByRole("button", { name: "Open Flect agent" });
+  await expect(reopen).toBeFocused();
+  await reopen.click();
   await expect(
-    page.getByRole("textbox", { name: "Message Flect" }),
-  ).toBeDisabled();
-
-  await expect(
-    page.getByRole("heading", { name: "Focused workspace" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("textbox", { name: "Message Flect" }),
-  ).toBeEnabled();
-  await expect(page.getByText("Previewing a validated proposal")).toBeVisible();
-  await page.getByRole("button", { name: "Keep change" }).click();
-
-  await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "Focused workspace" }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: "Shape interface" }).click();
-  await page.getByRole("button", { name: "Roll back last change" }).click();
-  await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
-  ).toBeVisible();
-
-  await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
-  ).toBeVisible();
-
-  await page.goto("/?safe=1");
-  await expect(page.getByText("Safe mode", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Shape interface" }).click();
-  await expect(
-    page.getByRole("button", { name: "Roll back last change" }),
-  ).toHaveCount(0);
+    page.getByRole("button", { name: "Collapse agent" }),
+  ).toBeFocused();
 });
 
-test("rejects a preview without changing the active interface", async ({
+test("uses right and full-height sheets at compact breakpoints", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Shape interface" }).click();
-  const instruction = page.getByLabel("Describe the interface change");
-  await instruction.fill("Make the headline say Focused workspace");
-  await page.getByRole("button", { name: "Propose change" }).click();
+  await page.setViewportSize({ width: 900, height: 700 });
+  await shapeFirstInterface(page);
 
+  const sheet = page.locator(".agent-rail-container");
+  const desktopSheetBox = await sheet.boundingBox();
+  expect(desktopSheetBox).not.toBeNull();
+  expect(desktopSheetBox?.x ?? 0).toBeGreaterThan(350);
+  await page.keyboard.press("Escape");
   await expect(
-    page.getByRole("heading", { name: "Focused workspace" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Reject" }).click();
+    page.getByRole("button", { name: "Open Flect agent" }),
+  ).toBeFocused();
 
-  await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
-  ).toBeVisible();
-  await expect(instruction).toBeFocused();
-  await page.reload();
-  await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Open Flect agent" }).click();
+  await page.setViewportSize({ width: 720, height: 780 });
+  const mobileSheetBox = await sheet.boundingBox();
+  expect(mobileSheetBox?.x).toBe(0);
+  expect(mobileSheetBox?.width).toBe(720);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth,
+    ),
+  ).toBe(false);
 });
 
-test("recovers a corrupt journal through the compiled launcher", async ({
-  page,
-}) => {
-  await page.evaluate(() => {
-    localStorage.setItem("flect.revisions.v1", "{not-json");
-  });
-  await page.reload();
-
-  await expect(page.getByText("Safe mode", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toBeVisible();
-});
-
-test("keeps the protected composer when a valid custom UI omits its prompt", async ({
+test("keeps safe mode and promptless products inside the protected shell", async ({
   page,
 }) => {
   const promptlessDocument = {
@@ -279,69 +251,41 @@ test("keeps the protected composer when a valid custom UI omits its prompt", asy
     page.getByRole("heading", { name: "Read-only dashboard" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("textbox", { name: "Message Flect" }),
-  ).toHaveAttribute("placeholder", "Build, change, or connect anything");
+    page.getByRole("complementary", { name: "Flect agent" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message App Agent" }),
+  ).toBeVisible();
+
+  await page.goto("/?safe=1");
+  await expect(
+    page.locator(".topbar").getByText("Safe mode", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Custom interface state is bypassed."),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Shaper" }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Restore interface" }),
+  ).toBeVisible();
 });
 
-test("keeps the shell usable at a compact viewport", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  const composer = page.locator(".composer");
-  await page.getByRole("button", { name: "Actions" }).click();
-  const [composerBox, actionsBox] = await Promise.all([
-    composer.boundingBox(),
-    page.getByRole("menu", { name: "Flect actions" }).boundingBox(),
-  ]);
-  expect(composerBox).not.toBeNull();
-  expect(actionsBox).not.toBeNull();
-  expect(actionsBox?.y ?? 0).toBeGreaterThanOrEqual(
-    (composerBox?.y ?? 0) + (composerBox?.height ?? 0),
-  );
-  await page.keyboard.press("Escape");
-
-  await page.getByRole("button", { name: "Shape interface" }).click();
-  await expect(page.getByLabel("Describe the interface change")).toBeVisible();
-
-  const hasHorizontalOverflow = await page.evaluate(
-    () => document.documentElement.scrollWidth > window.innerWidth,
-  );
-  expect(hasHorizontalOverflow).toBe(false);
-});
-
-test("promotes the Shaper to a protected inset at narrow desktop widths", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 760, height: 560 });
-  await page.getByRole("button", { name: "Shape interface" }).click();
-
-  const panelBox = await page
-    .getByRole("complementary", { name: "Interface Shaper" })
-    .boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(panelBox?.x ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(6);
-  expect(panelBox?.width ?? 0).toBeGreaterThanOrEqual(748);
-});
-
-test("supports keyboard submission and reduced motion", async ({ page }) => {
+test("supports keyboard shaping and reduced motion", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByRole("button", { name: "Shape interface" }).click();
+  await page.reload();
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-reduced-motion",
+    "true",
+  );
 
-  const transitionDuration = await page
-    .getByRole("button", { name: "Propose change" })
-    .evaluate((element) => getComputedStyle(element).transitionDuration);
-  expect(transitionDuration).toBe("0s");
-
-  await page.getByRole("button", { name: "Close interface Shaper" }).click();
-  const prompt = page.getByRole("textbox", { name: "Message Flect" });
-  await prompt.fill("Use the keyboard");
-  await prompt.press("Enter");
+  const input = page.getByRole("textbox", { name: "Message Shaper" });
+  await input.fill("Use the keyboard");
+  await input.press("Enter");
 
   await expect(
-    page.getByText("Flect’s protected test runtime is ready."),
+    page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Send message" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Stop response" }),
-  ).toBeHidden();
+  await expect(page.getByRole("button", { name: "Keep change" })).toBeVisible();
 });

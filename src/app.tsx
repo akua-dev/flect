@@ -54,12 +54,16 @@ export interface AppProps {
   readonly consumeLegacyInterface?: () => Promise<void>;
 }
 
+const loadLegacyInterfaceDefault = () =>
+  browserRuntime.runPromise(loadInterfaceDocument({ safeMode: false }));
+
+const consumeLegacyInterfaceDefault = () =>
+  browserRuntime.runPromise(consumeLegacyInterfaceDocument());
+
 export function App({
   shaping = shapingRuntime,
-  loadLegacyInterface = () =>
-    browserRuntime.runPromise(loadInterfaceDocument({ safeMode: false })),
-  consumeLegacyInterface = () =>
-    browserRuntime.runPromise(consumeLegacyInterfaceDocument()),
+  loadLegacyInterface = loadLegacyInterfaceDefault,
+  consumeLegacyInterface = consumeLegacyInterfaceDefault,
 }: AppProps = {}) {
   const [document, setDocument] = useState<InterfaceDocument>(
     defaultInterfaceDocument,

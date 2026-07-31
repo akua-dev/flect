@@ -309,7 +309,7 @@ textarea:focus-visible,
 
 .agent-rail-container {
   position: relative;
-  z-index: 2;
+  z-index: 35;
   min-width: 0;
   height: 100dvh;
   container-type: inline-size;
@@ -318,7 +318,7 @@ textarea:focus-visible,
 
 .role-shell--centered .agent-rail-container {
   position: fixed;
-  z-index: 2;
+  z-index: 35;
   top: 50%;
   left: 50%;
   width: min(760px, calc(100vw - 32px));

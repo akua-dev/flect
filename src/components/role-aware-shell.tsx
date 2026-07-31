@@ -183,6 +183,26 @@ export function RoleAwareShell({
     void preferences.setRailCollapsed(false);
   }, [preferences]);
 
+  useEffect(() => {
+    if (!compactViewport || !docked || collapsed) {
+      return;
+    }
+    queueMicrotask(() => {
+      railContainerRef.current
+        ?.querySelector<HTMLElement>(".agent-rail button:not(:disabled)")
+        ?.focus();
+    });
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        event.preventDefault();
+        collapse();
+      }
+    };
+    globalThis.document.addEventListener("keydown", closeOnEscape);
+    return () =>
+      globalThis.document.removeEventListener("keydown", closeOnEscape);
+  }, [collapse, collapsed, compactViewport, docked]);
+
   const handleInterfaceAction = useCallback(
     (action: InterfaceAction) => {
       switch (action) {
@@ -257,6 +277,7 @@ export function RoleAwareShell({
     }
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       collapse();
       return;
     }
