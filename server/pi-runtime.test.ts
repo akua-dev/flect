@@ -470,32 +470,38 @@ describe("FlectRuntimeLive", () => {
     },
   );
 
-  it.effect("enables configured external extensions only for selected roles", () => {
-    const fake = createFakePi();
+  it.effect(
+    "enables configured external extensions only for selected roles",
+    () => {
+      const fake = createFakePi();
 
-    return Effect.gen(function* () {
-      const runtime = yield* FlectRuntime;
-      const selection = yield* Schema.decodeUnknownEffect(SessionSelection)({
-        externalExtensions: { app: true, shaper: false },
-      });
-      yield* runtime.createSession(selection);
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const selection = yield* Schema.decodeUnknownEffect(SessionSelection)({
+          externalExtensions: { app: true, shaper: false },
+        });
+        yield* runtime.createSession(selection);
 
-      expect(fake.createAgentSet).toHaveBeenCalledWith(expect.any(ModelSummary), {
-        guardian: expect.objectContaining({
-          role: "guardian",
-          extensions: "disabled",
-        }),
-        app: expect.objectContaining({
-          role: "app",
-          extensions: "enabled",
-        }),
-        shaper: expect.objectContaining({
-          role: "shaper",
-          extensions: "disabled",
-        }),
-      });
-    }).pipe(Effect.provide(fake.layer));
-  });
+        expect(fake.createAgentSet).toHaveBeenCalledWith(
+          expect.any(ModelSummary),
+          {
+            guardian: expect.objectContaining({
+              role: "guardian",
+              extensions: "disabled",
+            }),
+            app: expect.objectContaining({
+              role: "app",
+              extensions: "enabled",
+            }),
+            shaper: expect.objectContaining({
+              role: "shaper",
+              extensions: "disabled",
+            }),
+          },
+        );
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
 
   it.effect("cancels only the selected interactive role", () => {
     const appStarted = Deferred.makeUnsafe<void>();

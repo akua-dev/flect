@@ -60,24 +60,25 @@ Repository-wide constraints:
   screenshots, prompts, or generated artifacts.
 - Bind local services to loopback. A change that exposes the runtime to a
   network requires a separately reviewed authentication and threat model.
-- Keep the built-in launcher and safe-mode entry point independent from
+- Keep the built-in recovery shell and safe-mode entry point independent from
   user-modifiable interface documents and extensions.
 - Keep a compiled agent composer available when a customized interface omits
   its own prompt node; user-shaped documents must not remove every route back
   to the protected shell.
-- Fail closed to the built-in launcher when customized interface state is
+- Fail closed to the built-in recovery shell when customized interface state is
   invalid or unsupported.
-- Keep the Guardian and Shaper Pi trust domains separate. The Guardian uses
-  immutable bundled instructions and required recovery capabilities only; it
-  must never load user extensions or user-modifiable prompts. The Shaper may
+- Keep the Guardian, App Agent, and Shaper Pi trust domains separate. The
+  Guardian uses immutable bundled instructions and required recovery
+  capabilities only; it must never load user extensions or user-modifiable
+  prompts. App Agent cannot shape revisions or modify recovery. The Shaper may
   receive explicitly approved UI-shaping capabilities, but it cannot modify
   the Guardian, safe mode, recovery code, or revision journal.
 - A shared Pi `ModelRuntime` may resolve models and provider authentication,
-  but Guardian and Shaper sessions use separate `SessionManager`,
-  `SettingsManager`, and `ResourceLoader` instances. An Effect supervisor owns
-  their acquisition, communication, interruption, and disposal. Deterministic
-  validation and rollback must remain available when either agent or every
-  model provider is unavailable.
+  but Guardian, App Agent, and Shaper sessions use separate
+  `SessionManager`, `SettingsManager`, and `ResourceLoader` instances. An
+  Effect supervisor owns their acquisition, communication, interruption, and
+  disposal. Deterministic validation and rollback must remain available when
+  any agent or every model provider is unavailable.
 - Treat Guardian output as bounded advisory text only. Guardian operations use
   closed typed reasons and cannot mutate revisions, perform rollback, grant
   capabilities, or replace deterministic recovery.
@@ -86,10 +87,10 @@ Repository-wide constraints:
   and keep the server-side session registry bounded with disposal on eviction.
 - Pi tools are denied by default. Adding a tool or product capability requires
   an explicit, inspectable, revocable capability design.
-- The current Shaper exception is Flect's single custom `bash` tool. Its calls
-  must cross the typed Flect transport to the role-owned browser
-  `SandboxedShell`; never substitute Pi's native Bash, a host shell, a native
-  process, or a system Bun executable.
+- The current interactive-role exception is Flect's custom `bash` tool. App
+  Agent and Shaper calls must cross the typed Flect transport to their
+  role-owned browser `SandboxedShell`; never substitute Pi's native Bash, a
+  host shell, a native process, or a system Bun executable.
 - Inside App/Shaper execution, Bun is available only as the reserved `bun`
   command registered by `SandboxedShell`. Keep command routing, package
   mutation, module execution, preview, cancellation, and results behind their

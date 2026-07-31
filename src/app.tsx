@@ -7,10 +7,10 @@ import {
 } from "../shared/interface-document";
 import {
   InterfaceRevision,
+  isRollbackAvailable,
   RevisionId,
   ShapingEvent,
   ShapingSnapshot,
-  isRollbackAvailable,
 } from "../shared/revisions";
 import type { ShapingController } from "./components/agent-rail";
 import { RoleAwareShell } from "./components/role-aware-shell";
@@ -357,7 +357,7 @@ export function App({
         const diagnostic = await session.diagnoseRecovery("rollback-failed");
         message = `${message} ${diagnostic.message}`;
       } catch {
-        // The protected launcher remains usable without an AI diagnostic.
+        // The protected recovery shell remains usable without an AI diagnostic.
       }
       setShapingStatus("error");
       setShapingError(message);

@@ -44,11 +44,7 @@ describe("ComposerActionsMenu", () => {
   it("toggles trusted Pi extensions for the active role", async () => {
     const user = userEvent.setup();
     const onToggleExternalExtensions = vi.fn(() => Promise.resolve());
-    render(
-      <ComposerActionsMenu
-        {...props({ onToggleExternalExtensions })}
-      />,
-    );
+    render(<ComposerActionsMenu {...props({ onToggleExternalExtensions })} />);
 
     await user.click(screen.getByRole("button", { name: "Actions" }));
     await user.click(

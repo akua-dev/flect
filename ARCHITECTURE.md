@@ -294,7 +294,7 @@ round trip. The exact surface is maintained in
 
 ## Recovery and failure behavior
 
-- invalid interface state -> compiled launcher;
+- invalid interface state -> compiled recovery shell;
 - safe mode -> bypass customized state;
 - invalid Shaper output -> no proposal;
 - rejected preview -> active state unchanged;
@@ -302,7 +302,7 @@ round trip. The exact surface is maintained in
 - rollback -> last-known-good becomes active;
 - rollback failure -> the protected kernel remains authoritative and may ask
   Guardian for a bounded, inert explanation;
-- repeated extension failures -> extension disabled and protected launcher
+- repeated extension failures -> extension disabled and protected recovery shell
   restored;
 - unavailable model runtime -> visible offline state while local interface
   recovery remains available;

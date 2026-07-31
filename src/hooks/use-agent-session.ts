@@ -2,9 +2,9 @@ import { Effect, Fiber, Option, Stream } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BunCommandResult } from "../../shared/bun-command";
 import {
+  ExternalPiExtensionSelection,
   type FlectEvent,
   type InteractiveAgentRole,
-  ExternalPiExtensionSelection,
   ModelSelection,
   type ModelSummary,
   type RecoveryReason,

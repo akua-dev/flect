@@ -300,7 +300,9 @@ export function AgentRail({
           onRollback={shaping.rollback}
           onSelectModel={workspace.selectModel}
           onToggleExternalExtensions={() =>
-            workspace.toggleExternalExtensions(mode === "run" ? "app" : "shaper")
+            workspace.toggleExternalExtensions(
+              mode === "run" ? "app" : "shaper",
+            )
           }
           onSubmit={
             mode === "run"

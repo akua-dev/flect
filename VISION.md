@@ -108,7 +108,7 @@ A shared interface, component, or extension cannot:
 - access Pi credentials, model-provider tokens, or another product's secrets;
 - bypass product authentication, authorization, rate limits, or API policy;
 - grant itself capabilities or silently expand a previous grant;
-- modify the Guardian, safe launcher, capability broker, validation rules, or
+- modify the Guardian, recovery shell, capability broker, validation rules, or
   required recovery journal;
 - erase attribution required to explain and recover a change;
 - replace the accepted interface without a validated, attributable revision;
@@ -234,19 +234,22 @@ Flect is that foundation.
 
 The repository now implements a protected vertical slice in the browser and a
 macOS Tauri app. A user can ask the Shaper Pi to revise a schema-defined
-interface, preview the validated result, keep or reject it, and recover through
-last-known-good rollback or the compiled safe launcher.
+interface, preview the validated result, keep or reject it, then use the
+accepted experience through its separate App Agent. Recovery remains available
+through last-known-good rollback or the compiled recovery shell.
 
-Guardian and Shaper use separate in-memory Pi sessions behind one private
-runtime boundary. The desktop app carries that runtime as a compiled sidecar
-over stdio instead of exposing it on localhost. Optional pure extension logic
-can run in a disposable, resource-limited QuickJS WebAssembly worker and return
-only inert typed intents.
+Guardian, App Agent, and Shaper use separate in-memory Pi sessions behind one
+private runtime boundary. The same protected composer routes a blank workspace
+to Edit/Shaper and an accepted experience to Run/App Agent. The desktop app
+carries that runtime as a compiled sidecar over stdio instead of exposing it on
+localhost. Optional pure extension logic can run in a disposable,
+resource-limited QuickJS WebAssembly worker and return only inert typed intents.
 
 This slice intentionally does not run generated React, native extensions, or
-product API capabilities. Shaper may use the bounded browser-portable shell
-described in [`docs/bun-compatibility.md`](docs/bun-compatibility.md), but it
-does not grant host-shell, native-process, system-Bun, or ambient-network
-authority. The slice proves the model, credential, shaping, preview, transport,
-logic-sandbox, and deterministic recovery boundaries on which the larger
-ecosystem can safely build.
+product API capabilities. Interactive roles may use the bounded
+browser-portable shell described in
+[`docs/bun-compatibility.md`](docs/bun-compatibility.md), but it does not grant
+host-shell, native-process, system-Bun, or ambient-network authority. The slice
+proves the model, credential, shaping, preview, transport, logic-sandbox, and
+deterministic recovery boundaries on which the larger ecosystem can safely
+build.

@@ -57,11 +57,12 @@ or host-function authority by constructing a different return value.
 
 ### Browser agent workspace
 
-Shaper may use one Pi-visible `bash` tool. Pi does not run a host shell: the
-tool call returns over the Flect transport to a role-owned just-bash workspace
-inside the browser or desktop WebView. Guardian remains tool-free.
+App Agent and Shaper may each use one Pi-visible `bash` tool. Pi does not run a
+host shell: each tool call returns over the Flect transport to that role's
+just-bash workspace inside the browser or desktop WebView. Guardian remains
+tool-free.
 
-The workspace is disposable memory and has no handle to canonical interface
+Each workspace is disposable memory and has no handle to canonical interface
 state, OPFS, Git metadata, credentials, product APIs, Pi internals, Tauri, or
 the parent DOM. Its reserved Bun-compatible command may:
 
@@ -127,7 +128,7 @@ capabilities behind the same typed broker contract.
 
 The following remain independent from user-modifiable capsules and extensions:
 
-- the compiled safe launcher;
+- the compiled recovery shell;
 - a known-safe route to open the agent and recovery controls;
 - a compiled fallback composer when a customized document omits its prompt;
 - capability inspection and revocation;
@@ -200,7 +201,7 @@ broader substitute.
 
 ## Failure and recovery
 
-- invalid capsule or interface state falls back to the compiled launcher;
+- invalid capsule or interface state falls back to the compiled recovery shell;
 - invalid generated output never becomes an accepted revision;
 - rejecting a preview leaves the active revision unchanged;
 - revoking a capability prevents later invocations without uninstalling the
@@ -216,8 +217,8 @@ broader substitute.
 
 The current vertical slice uses a closed schema-defined renderer rather than
 arbitrary UI capsules. It implements model-backed proposals, preview, keep,
-reject, a versioned revision journal, rollback, safe mode, separate Guardian
-and Shaper Pi sessions with explicit close and bounded retention, a
+reject, a versioned revision journal, rollback, safe mode, separate Guardian,
+App Agent, and Shaper Pi sessions with explicit close and bounded retention, a
 resource-limited QuickJS logic worker, a browser-resident agent shell with
 bounded Bun-compatible source/package/preview operations, and a minimal
 capability broker. That broker requires both manifest declaration and an

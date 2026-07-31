@@ -100,8 +100,9 @@ retain distinct histories, drafts, Pi sessions, and sandbox workspaces.
 - propose, preview, keep, reject, rollback, last-known-good recovery, and a
   compiled `?safe=1` recovery shell;
 - a protected composer even when a shaped document omits its own prompt;
-- one Pi-visible `bash` tool backed by a role-owned browser workspace, with
-  reserved Bun-compatible run, build, package, preview, and stop commands;
+- one Pi-visible `bash` tool per interactive role, backed by a role-owned
+  browser workspace with reserved Bun-compatible run, build, package, preview,
+  and stop commands;
 - browser HTTP/SSE and native private-stdio transports behind the same Effect
   capabilities; and
 - optional pure extension logic in a disposable QuickJS/Wasm worker that may
