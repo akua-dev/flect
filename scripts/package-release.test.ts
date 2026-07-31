@@ -44,23 +44,23 @@ afterEach(async () => {
 });
 
 describe("release packaging", () => {
-  it("keeps every public version on 0.1.1", () => {
-    expect(packageVersion).toBe("0.1.1");
-    expect(cargoPackageVersion).toBe("0.1.1");
-    expect(tauriVersion).toBe("0.1.1");
+  it("keeps every public version on 0.2.0", () => {
+    expect(packageVersion).toBe("0.2.0");
+    expect(cargoPackageVersion).toBe("0.2.0");
+    expect(tauriVersion).toBe("0.2.0");
   });
 
   it("rejects a public version mismatch", async () => {
     await expect(
       Effect.runPromise(
         validateVersionManifest({
-          packageVersion: "0.1.1",
+          packageVersion: "0.2.0",
           cargoVersion: "0.0.1",
-          tauriVersion: "0.1.1",
+          tauriVersion: "0.2.0",
         }),
       ),
     ).rejects.toMatchObject({
-      message: "Every public Flect version must be 0.1.1.",
+      message: "Every public Flect version must be 0.2.0.",
     });
   });
 

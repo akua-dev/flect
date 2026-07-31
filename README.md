@@ -14,9 +14,9 @@ with one excellent composer, shape an interface in Edit mode, inspect and keep
 the validated preview, then use the resulting product through its separate App
 Agent in Run mode.
 
-[Download Flect for Apple Silicon macOS](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.1.1_aarch64.dmg)
+[Download Flect for Apple Silicon macOS](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.dmg)
 ·
-[SHA-256 checksum](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.1.1_aarch64.dmg.sha256)
+[SHA-256 checksum](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.dmg.sha256)
 
 ## Install Flect
 
@@ -34,10 +34,10 @@ Download the DMG and checksum into the same directory and verify them:
 
 ```bash
 cd ~/Downloads
-shasum -a 256 -c Flect_0.1.1_aarch64.dmg.sha256
+shasum -a 256 -c Flect_0.2.0_aarch64.dmg.sha256
 ```
 
-Open the DMG and drag Flect into Applications. The v0.1.1 app is ad-hoc signed
+Open the DMG and drag Flect into Applications. The v0.2.0 app is ad-hoc signed
 and unnotarized, so Gatekeeper may block the first launch. After verifying the
 checksum, use Finder’s **Open** action from the context menu. If quarantine
 still blocks the app:
@@ -67,7 +67,7 @@ credentials remain in Pi and never enter browser storage.
 
 ## See it shape
 
-![Flect interface shaping demo](assets/demo/flect-v0.1-demo.webp)
+![Flect interface shaping demo](assets/demo/flect-v0.2-demo.webp)
 
 Blank workspaces begin with the Shaper in a centered, protected composer. Ask
 for an interface and that same composer moves into the conversation rail while

@@ -41,12 +41,12 @@ const trackedMedia = [
     maxBytes: 3_000_000,
   },
   {
-    path: "assets/demo/flect-v0.1-demo.webm",
+    path: "assets/demo/flect-v0.2-demo.webm",
     format: "webm",
     maxBytes: 8_000_000,
   },
   {
-    path: "assets/demo/flect-v0.1-demo.webp",
+    path: "assets/demo/flect-v0.2-demo.webp",
     format: "webp",
     maxBytes: 5_000_000,
   },
@@ -91,9 +91,9 @@ describe("release media", () => {
     const readme = readFileSync(resolve(root, "README.md"), "utf8");
 
     expect(readme).toContain(
-      "releases/latest/download/Flect_0.1.1_aarch64.dmg",
+      "releases/latest/download/Flect_0.2.0_aarch64.dmg",
     );
-    expect(readme).toContain("assets/demo/flect-v0.1-demo.webp");
+    expect(readme).toContain("assets/demo/flect-v0.2-demo.webp");
     expect(readme).toContain("assets/screenshots/flect-edit-mode.png");
     expect(readme).toContain("assets/screenshots/flect-shaper-preview.png");
     expect(readme).toContain("assets/screenshots/flect-run-mode.png");

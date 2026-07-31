@@ -23,9 +23,9 @@ const paths = {
   shell: resolve(root, "assets/flect-shell.png"),
   heroSource: resolve(root, "assets/hero-source.html"),
   hero: resolve(root, "assets/flect-hero.png"),
-  webm: resolve(root, "assets/demo/flect-v0.1-demo.webm"),
-  webp: resolve(root, "assets/demo/flect-v0.1-demo.webp"),
-  mp4: resolve(root, "dist-release/flect-v0.1.1-demo.mp4"),
+  webm: resolve(root, "assets/demo/flect-v0.2-demo.webm"),
+  webp: resolve(root, "assets/demo/flect-v0.2-demo.webp"),
+  mp4: resolve(root, "dist-release/flect-v0.2.0-demo.mp4"),
 };
 
 type ChildProcess = ReturnType<typeof Bun.spawn>;
@@ -124,6 +124,15 @@ const openPreview = async (page: Page) => {
   await page.getByRole("region", { name: "Revision decision" }).waitFor();
 };
 
+const waitForAppAgentToSettle = async (page: Page) => {
+  await expect(
+    page.getByRole("button", { name: "Stop App Agent" }),
+  ).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Send to App Agent" }),
+  ).toBeDisabled();
+};
+
 const enterRunMode = async (page: Page) => {
   await page.getByRole("button", { name: "Keep change" }).click();
   await page.getByRole("button", { name: "Run · App Agent" }).click();
@@ -133,6 +142,7 @@ const enterRunMode = async (page: Page) => {
   await instruction.fill("Open the latest project");
   await instruction.press("Enter");
   await page.getByText("The product action completed.").waitFor();
+  await waitForAppAgentToSettle(page);
 };
 
 const captureScreenshots = async () => {
@@ -274,6 +284,7 @@ const recordDemo = async (videoDirectory: string) => {
     await captureFrames(20);
     await appInstruction.press("Enter");
     await page.getByText("The product action completed.").waitFor();
+    await waitForAppAgentToSettle(page);
     await page.mouse.move(1, 1);
     await captureFrames(24);
     await context.close();
@@ -421,7 +432,7 @@ try {
 
   const heroBytes = await readFile(paths.hero);
   console.log(
-    `Captured Flect v0.1 release media (${heroBytes.byteLength} byte hero).`,
+    `Captured Flect v0.2 release media (${heroBytes.byteLength} byte hero).`,
   );
 } finally {
   for (const child of children.toReversed()) {

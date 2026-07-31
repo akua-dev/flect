@@ -11,8 +11,8 @@ const generatedMedia = [
   "assets/screenshots/flect-edit-mode.png",
   "assets/screenshots/flect-shaper-preview.png",
   "assets/screenshots/flect-run-mode.png",
-  "assets/demo/flect-v0.1-demo.webm",
-  "assets/demo/flect-v0.1-demo.webp",
+  "assets/demo/flect-v0.2-demo.webm",
+  "assets/demo/flect-v0.2-demo.webp",
   "assets/flect-shell.png",
   "assets/flect-hero.png",
 ] as const;
