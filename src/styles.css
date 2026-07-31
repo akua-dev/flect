@@ -355,11 +355,6 @@ textarea:focus-visible,
   padding: 0 16px 0 18px;
 }
 
-.role-shell--centered .agent-rail__header,
-.role-shell--centered .conversation {
-  display: none;
-}
-
 .agent-rail__identity {
   display: grid;
   min-width: 0;
@@ -1201,14 +1196,18 @@ textarea:focus-visible,
   }
 }
 
+.role-shell--centered .agent-rail__header,
+.role-shell--centered .conversation {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
+  :root {
+    --state-motion: 0.01ms linear;
+  }
+
+  .thinking span {
+    animation: none;
   }
 }
 

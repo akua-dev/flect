@@ -34,9 +34,9 @@ Browser or Tauri WebView -> Effect application kernel -> React renderer
                     -> compiled Bun sidecar
                                     |
                                     v
-                        shared Pi ModelRuntime
-                           /               \
-                  Guardian session      Shaper session
+                         shared Pi ModelRuntime
+                      /          |           \
+             Guardian session  App session  Shaper session
 ```
 
 The browser never imports Pi. React never writes interface storage or revision
@@ -101,21 +101,28 @@ leaves the active document unchanged. Rollback and safe mode are deterministic
 and do not require Pi. The previous document-only storage key is read only as a
 one-time migration source when no journal exists.
 
-The built-in launcher is compiled with the app. `?safe=1` bypasses customized
-storage without reading or writing it. Invalid persisted state fails closed to
-that launcher in a protected recovery state. The shell also renders a compiled
-composer outside the customizable document whenever that document omits a
-`prompt` node, so shaping cannot remove the user's route back to the agent.
+The built-in recovery shell is compiled with the app. `?safe=1` bypasses
+customized storage without reading or writing it. Invalid persisted state fails
+closed to that shell in a protected recovery state. The shell renders one
+compiled composer outside the customizable document, so shaping cannot remove
+the user's route back to an agent. A blank workspace routes it to Edit/Shaper;
+an accepted product routes it to Run/App Agent. The same mounted composer moves
+from the centered blank state into the protected right rail when a document or
+conversation appears.
 
 ## Pi trust domains
 
 Flect creates one Pi `ModelRuntime` for provider discovery and authentication,
-then creates two isolated agent sessions:
+then creates three isolated agent sessions:
 
 - **Guardian** has immutable recovery instructions. It has no user extensions,
   skills, templates, themes, context files, or tools. It accepts only a closed
   set of typed recovery reasons and returns a bounded plain-text diagnostic; it
   cannot write revisions or perform recovery.
+- **App Agent** is the Run-mode agent for using an accepted product experience.
+  It has its own prompt, history, operation controller, and role-owned
+  browser-shell workspace. It does not receive shaping context or revision
+  authority.
 - **Shaper** receives the current validated document and a shaping instruction.
   It has no ambient host resources. Its only Pi tool is Flect's custom `bash`,
   which runs in a disposable browser workspace and returns through a typed
@@ -125,18 +132,35 @@ then creates two isolated agent sessions:
 Each session has its own in-memory `SessionManager`, `SettingsManager`, and
 `DefaultResourceLoader`. Their only shared object is the provider/model runtime.
 Prompts and responses are not persisted by Flect. Disposing the Effect runtime
-unsubscribes and disposes both sessions. The client closes its current pair
-when the model changes, the runtime is refreshed, a prompt or shaping operation
-fails, or the UI unmounts. Session handles are keyed by model selection, and the
-runtime evicts and disposes the oldest pair before exceeding 32 active pairs.
-Each protected session admits one active operation at a time: overlapping shape
-requests fail with a typed busy conflict, while prompt-stream conflicts become
-typed non-destructive busy events. The client preserves a busy session, and the
-shell disables its composer while a shaping proposal is running. Closing or
-evicting a pair interrupts its active operation, waits for completion for up to
-two seconds, and then disposes both sessions.
+unsubscribes and disposes all three sessions. The client closes its current
+agent set when the model changes, the runtime is refreshed, an operation fails,
+or the UI unmounts. Session handles are keyed by model selection, and the
+runtime evicts and disposes the oldest set before exceeding 32 active sets.
+Each protected session admits one active operation at a time: overlapping
+shape requests fail with a typed busy conflict, while prompt-stream conflicts
+become typed non-destructive busy events. App and Shaper cancellation and
+browser-shell completion carry an explicit role and cannot affect the other
+role. The client preserves a busy set, and the shell disables its composer
+while a shaping proposal is running. Closing or evicting a set interrupts its
+active operations, waits for completion for up to two seconds, and then
+disposes all three sessions.
 Raw Shaper output is capped at 256 KiB and raw Guardian output at 16 KiB before
 either can cross the runtime boundary.
+
+## Role-aware protected shell
+
+React derives four workspace phases from the validated revision snapshot:
+blank, preview, accepted, and safe. Blank and preview use Edit/Shaper; accepted
+opens in Run/App Agent; safe mode replaces both with protected recovery.
+Switching roles changes the visible role-owned timeline without relabeling
+messages or submitting the other role's draft.
+
+At wide sizes the agent rail is inline, 400 px by default, and keyboard- or
+pointer-resizable from 340–520 px. At 761–980 px it becomes a right sheet; at
+760 px and below it becomes a full-width sheet. Collapse, Escape, reopen, focus
+restoration, and reduced-motion behavior remain owned by the compiled shell.
+The revision decision, model picker, safe mode, rollback, send, and stop
+controls are protected rather than part of a shaped document.
 
 Pi remains the sole owner of provider login state. Flect neither creates a
 credential format nor exposes provider tokens to the WebView, browser APIs,
@@ -218,14 +242,14 @@ design.
 
 ## Browser agent shell and Bun compatibility
 
-Shaper's only Pi tool is a custom tool named `bash`; Pi's native host Bash is
-not enabled. A tool call becomes a strict `shell_request` event on the agent
-operation stream. The browser or Tauri WebView runs it in the role-owned
-`SandboxedShell`, then returns a bounded `BunCommandResult` through HTTP or
-private Effect RPC while the Pi tool awaits the response. Prompt turns and
-Shaper proposals both carry this typed event; the bridge times out, cleans up
-on interruption and session disposal, and never carries a filesystem handle or
-credential.
+App Agent and Shaper each receive one Pi tool named `bash`; Pi's native host
+Bash is not enabled. A tool call becomes a strict, role-tagged `shell_request`
+event on that agent's operation stream. The browser or Tauri WebView runs it in
+the matching role-owned `SandboxedShell`, then returns a bounded
+`BunCommandResult` through HTTP or private Effect RPC while the Pi tool awaits
+the response. Prompt turns and Shaper proposals both carry this typed event;
+the bridge times out, cleans up on interruption and session disposal, and never
+carries a filesystem handle or credential.
 
 `SandboxedShell` uses `just-bash@3.2.0` with a memory VFS, hardened execution
 limits, and one reserved `bun` command. Static AST rewriting prevents aliases,

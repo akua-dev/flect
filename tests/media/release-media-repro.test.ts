@@ -8,8 +8,9 @@ const root = resolve(import.meta.dirname, "../..");
 const verifyReproducibility =
   process.env.FLECT_VERIFY_MEDIA_REPRODUCIBILITY === "1";
 const generatedMedia = [
-  "assets/screenshots/flect-launcher.png",
+  "assets/screenshots/flect-edit-mode.png",
   "assets/screenshots/flect-shaper-preview.png",
+  "assets/screenshots/flect-run-mode.png",
   "assets/demo/flect-v0.1-demo.webm",
   "assets/demo/flect-v0.1-demo.webp",
   "assets/flect-shell.png",

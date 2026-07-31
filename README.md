@@ -9,9 +9,10 @@ changed from inside itself. It works as a local macOS app and in a browser,
 uses models already authenticated through [Pi](https://pi.dev), and keeps a
 protected path back when a customized interface fails.
 
-**v0.1.1 is a public developer preview of the protected vertical slice:** talk
-to Pi, propose an interface revision, inspect the preview, keep or reject it,
-roll back, or bypass custom state in safe mode.
+**Flect is a public developer preview of the protected vertical slice:** start
+with one excellent composer, shape an interface in Edit mode, inspect and keep
+the validated preview, then use the resulting product through its separate App
+Agent in Run mode.
 
 [Download Flect for Apple Silicon macOS](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.1.1_aarch64.dmg)
 ·
@@ -68,25 +69,36 @@ credentials remain in Pi and never enter browser storage.
 
 ![Flect interface shaping demo](assets/demo/flect-v0.1-demo.webp)
 
-The protected shell starts with an excellent default and keeps shaping,
-rollback, safe mode, model selection, send, and stop within reach.
+Blank workspaces begin with the Shaper in a centered, protected composer. Ask
+for an interface and that same composer moves into the conversation rail while
+the validated result appears on the canvas.
 
-![The Flect launcher and protected composer](assets/screenshots/flect-launcher.png)
+![Flect Edit mode with the centered Shaper composer](assets/screenshots/flect-edit-mode.png)
 
-The Shaper uses a separate Pi session, validates its proposal, and previews it
-before the active interface changes.
+The proposal is only a preview until you explicitly keep it. Reject and
+rollback remain deterministic, and safe mode always bypasses shaped state.
 
 ![A validated Flect interface proposal](assets/screenshots/flect-shaper-preview.png)
+
+Keep the interface and switch to Run to speak with its App Agent. Edit and Run
+retain distinct histories, drafts, Pi sessions, and sandbox workspaces.
+
+![Flect Run mode with the product App Agent](assets/screenshots/flect-run-mode.png)
 
 ## What works today
 
 - authenticated Pi model discovery, explicit selection, streamed turns, stop,
   and redacted public failures;
-- separate Guardian and Shaper Pi sessions with independent lifecycle state;
-  Guardian is tool-free and Shaper receives only Flect's browser-backed Bash;
+- separate Guardian, App Agent, and Shaper Pi sessions with independent
+  policies and lifecycle state; Guardian is tool-free while the interactive
+  roles receive isolated browser-backed Bash workspaces;
+- one role-explicit composer that starts centered, moves into an inline,
+  resizable right rail, and becomes an accessible sheet on compact screens;
+- separate Edit/Shaper and Run/App Agent conversations, including per-role
+  drafts, cancellation, shell results, and visible authority before send;
 - Effect Schema-validated interface documents and a closed trusted renderer;
 - propose, preview, keep, reject, rollback, last-known-good recovery, and a
-  compiled `?safe=1` launcher;
+  compiled `?safe=1` recovery shell;
 - a protected composer even when a shaped document omits its own prompt;
 - one Pi-visible `bash` tool backed by a role-owned browser workspace, with
   reserved Bun-compatible run, build, package, preview, and stop commands;
@@ -95,9 +107,9 @@ before the active interface changes.
 - optional pure extension logic in a disposable QuickJS/Wasm worker that may
   return inert, schema-decoded intents only.
 
-The current native app does not start the browser development server. It
-launches a compiled Bun/Pi sidecar and communicates through private NDJSON
-stdio exposed to the webview by one narrow Tauri command.
+The native app does not start the browser development server. It launches a
+compiled Bun/Pi sidecar and communicates through private NDJSON stdio exposed
+to the webview by one narrow Tauri command.
 
 ## Current security and product boundary
 
@@ -106,9 +118,9 @@ realms, not operating-system sandboxes. The source build can execute generated
 workspace code through its bounded browser shell, but it cannot invoke a host
 shell, native process, system Bun, ambient filesystem, or ambient network.
 Flect does not yet ship portable `.flect` capsules, a component registry,
-canonical OPFS/Git workspaces, product/API adapters, privileged host brokerage,
-remote runtimes, automatic updates, notarization, a macOS App Sandbox
-entitlement, or Intel, Windows, and Linux packages.
+canonical OPFS/Git workspaces, in-Flect provider login, product/API adapters,
+privileged host brokerage, remote runtimes, automatic updates, notarization, a
+macOS App Sandbox entitlement, or Intel, Windows, and Linux packages.
 
 User-shaped documents cannot replace deterministic validation, revision
 storage, rollback, safe mode, or the compiled recovery path. See the

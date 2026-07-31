@@ -6,7 +6,7 @@ const root = resolve(import.meta.dirname, "../..");
 
 const trackedMedia = [
   {
-    path: "assets/screenshots/flect-launcher.png",
+    path: "assets/screenshots/flect-edit-mode.png",
     format: "png",
     width: 1716,
     height: 916,
@@ -14,6 +14,13 @@ const trackedMedia = [
   },
   {
     path: "assets/screenshots/flect-shaper-preview.png",
+    format: "png",
+    width: 1716,
+    height: 916,
+    maxBytes: 2_500_000,
+  },
+  {
+    path: "assets/screenshots/flect-run-mode.png",
     format: "png",
     width: 1716,
     height: 916,
@@ -87,8 +94,9 @@ describe("release media", () => {
       "releases/latest/download/Flect_0.1.1_aarch64.dmg",
     );
     expect(readme).toContain("assets/demo/flect-v0.1-demo.webp");
-    expect(readme).toContain("assets/screenshots/flect-launcher.png");
+    expect(readme).toContain("assets/screenshots/flect-edit-mode.png");
     expect(readme).toContain("assets/screenshots/flect-shaper-preview.png");
+    expect(readme).toContain("assets/screenshots/flect-run-mode.png");
     expect(readme).toContain("ad-hoc signed");
     expect(readme).toContain("Apple Silicon");
 

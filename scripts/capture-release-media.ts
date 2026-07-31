@@ -2,7 +2,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { chromium, type Page } from "@playwright/test";
+import { chromium, expect, type Page } from "@playwright/test";
 
 const root = resolve(import.meta.dirname, "..");
 const runtimeUrl = "http://127.0.0.1:3210/api/runtime";
@@ -17,8 +17,9 @@ const stableCaptureStyles = `
 `;
 
 const paths = {
-  launcher: resolve(root, "assets/screenshots/flect-launcher.png"),
+  edit: resolve(root, "assets/screenshots/flect-edit-mode.png"),
   shaper: resolve(root, "assets/screenshots/flect-shaper-preview.png"),
+  run: resolve(root, "assets/screenshots/flect-run-mode.png"),
   shell: resolve(root, "assets/flect-shell.png"),
   heroSource: resolve(root, "assets/hero-source.html"),
   hero: resolve(root, "assets/flect-hero.png"),
@@ -100,24 +101,38 @@ const stopChild = async (child: ChildProcess) => {
 
 const waitForShell = async (page: Page) => {
   await page.goto(shellUrl, { waitUntil: "networkidle" });
-  await page.getByText("Pi ready").waitFor();
+  await expect(
+    page.getByRole("textbox", { name: "Message Shaper" }),
+  ).toBeEnabled();
 };
 
 const clearInterfaceState = async (page: Page) => {
   await page.evaluate(() => localStorage.clear());
   await page.reload({ waitUntil: "networkidle" });
-  await page.getByText("Pi ready").waitFor();
+  await expect(
+    page.getByRole("textbox", { name: "Message Shaper" }),
+  ).toBeEnabled();
 };
 
 const openPreview = async (page: Page) => {
-  await page.getByRole("button", { name: "Shape interface" }).click();
-  const instruction = page.getByLabel("Describe the interface change");
-  await instruction.waitFor();
-  await page.getByText("Extensions isolated").waitFor();
-  await instruction.fill("Make the headline say Focused workspace");
-  await page.getByRole("button", { name: "Propose change" }).click();
-  await page.getByRole("heading", { name: "Focused workspace" }).waitFor();
-  await page.getByText("Previewing a validated proposal").waitFor();
+  const instruction = page.getByRole("textbox", { name: "Message Shaper" });
+  await instruction.fill("Create a focused project overview");
+  await instruction.press("Enter");
+  await page
+    .getByRole("heading", { name: "Focused project overview" })
+    .waitFor();
+  await page.getByRole("region", { name: "Revision decision" }).waitFor();
+};
+
+const enterRunMode = async (page: Page) => {
+  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Run · App Agent" }).click();
+  const instruction = page.getByRole("textbox", {
+    name: "Message App Agent",
+  });
+  await instruction.fill("Open the latest project");
+  await instruction.press("Enter");
+  await page.getByText("The product action completed.").waitFor();
 };
 
 const captureScreenshots = async () => {
@@ -132,13 +147,19 @@ const captureScreenshots = async () => {
     await clearInterfaceState(page);
     await page.addStyleTag({ content: stableCaptureStyles });
     await page.screenshot({
-      path: paths.launcher,
+      path: paths.edit,
       animations: "disabled",
     });
 
     await openPreview(page);
     await page.screenshot({
       path: paths.shaper,
+      animations: "disabled",
+    });
+
+    await enterRunMode(page);
+    await page.screenshot({
+      path: paths.run,
       animations: "disabled",
     });
     await context.close();
@@ -215,40 +236,46 @@ const recordDemo = async (videoDirectory: string) => {
     await page.mouse.move(1, 1);
     await captureFrames(14);
 
-    await page.getByRole("button", { name: "Shape interface" }).click();
-    const instruction = page.getByLabel("Describe the interface change");
-    await instruction.waitFor();
-    await page.getByText("Extensions isolated").waitFor();
+    const instruction = page.getByRole("textbox", { name: "Message Shaper" });
     await instruction.evaluate((element) => {
       element.setAttribute("spellcheck", "false");
     });
-    await captureFrames(10);
 
-    const shapingInstruction = "Make the headline say Focused workspace";
+    const shapingInstruction = "Create a focused project overview";
     await instruction.fill(shapingInstruction);
-    await page.getByRole("heading", { name: "Shape with Pi" }).click();
-    await captureFrames(35);
+    await page.getByRole("heading", { name: "What should we shape?" }).click();
+    await captureFrames(24);
 
-    await page.getByRole("button", { name: "Propose change" }).click();
-    await page.getByRole("heading", { name: "Focused workspace" }).waitFor();
-    await page.getByText("Previewing a validated proposal").waitFor();
+    await instruction.press("Enter");
+    await page
+      .getByRole("heading", { name: "Focused project overview" })
+      .waitFor();
+    await page.getByRole("region", { name: "Revision decision" }).waitFor();
     await page.mouse.move(1, 1);
-    await captureFrames(15);
+    await captureFrames(20);
 
     await page.getByRole("button", { name: "Keep change" }).click();
     await page
-      .getByText("Previewing a validated proposal")
+      .getByRole("region", { name: "Revision decision" })
       .waitFor({ state: "detached" });
     await page.mouse.move(1, 1);
     await captureFrames(10);
 
-    await page.reload({ waitUntil: "networkidle" });
-    await page.getByRole("heading", { name: "Focused workspace" }).waitFor();
-    await page.addStyleTag({
-      content: stableCaptureStyles,
+    await page.getByRole("button", { name: "Run · App Agent" }).click();
+    await captureFrames(12);
+
+    const appInstruction = page.getByRole("textbox", {
+      name: "Message App Agent",
     });
+    await appInstruction.fill("Open the latest project");
+    await page
+      .getByRole("heading", { name: "Focused project overview" })
+      .click();
+    await captureFrames(20);
+    await appInstruction.press("Enter");
+    await page.getByText("The product action completed.").waitFor();
     await page.mouse.move(1, 1);
-    await captureFrames(17);
+    await captureFrames(24);
     await context.close();
   } finally {
     await browser.close();
@@ -289,7 +316,7 @@ const recordDemo = async (videoDirectory: string) => {
 };
 
 const captureHero = async () => {
-  await copyFile(paths.launcher, paths.shell);
+  await copyFile(paths.edit, paths.shell);
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage({ viewport });
@@ -350,7 +377,7 @@ const convertDemo = async (frames: ReadonlyArray<string>) => {
 
 await requireUnusedPort(runtimeUrl);
 await requireUnusedPort(shellUrl);
-await mkdir(dirname(paths.launcher), { recursive: true });
+await mkdir(dirname(paths.edit), { recursive: true });
 await mkdir(dirname(paths.webm), { recursive: true });
 await mkdir(dirname(paths.mp4), { recursive: true });
 await run([process.execPath, "run", "build"]);

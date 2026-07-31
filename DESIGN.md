@@ -221,10 +221,35 @@ Its input, model source, attachment entry, voice entry, and submit/cancel state
 share one visual grammar. The prompt itself is customizable; safe mode always
 restores the compiled default.
 
-The open Interface Shaper is a protected utility panel, not a card or prompt
-surface. It may use a 20px corner and a 28px backdrop blur while open so its
-protected controls remain distinct from the workspace. This is a transient
-functional separation, not a general glass treatment or a new surface token.
+The active role is explicit inside the composer before send:
+**Edit · Shaper** changes the interface and **Run · App Agent** uses the
+accepted product. Each role keeps its own draft and conversation. Switching
+roles changes context; it never submits text or relabels history.
+
+### Adaptive Agent Rail
+
+Flect does not bolt a second chat onto the product. The signature composer is
+one mounted instrument whose position reflects the workspace phase:
+
+- a blank workspace centers the Edit/Shaper composer beneath “What should we
+  shape?”;
+- the first message reveals the canvas and moves that same composer into the
+  right conversation rail;
+- a validated proposal adds a compact Keep/Reject decision immediately above
+  the composer;
+- an accepted product defaults to Run/App Agent while Edit remains one explicit
+  switch away.
+
+Above 980px, the rail is inline and resizable from 340–520px, with 400px as the
+default. From 761–980px it becomes a full-height right sheet. At 760px and
+below it becomes a full-width sheet. The sheet traps no one: Escape collapses
+it, reopening restores focus to its first enabled control, and the protected
+reopen control remains available on the canvas.
+
+The transition uses measured layout motion for at most 220ms. Under
+`prefers-reduced-motion: reduce`, layout changes are immediate. A role change,
+resized rail, collapse, or breakpoint must never create a second composer,
+horizontal page overflow, or hidden recovery control.
 
 ## 6. Do's and Don'ts
 
@@ -240,12 +265,11 @@ functional separation, not a general glass treatment or a new surface token.
 ### Don't:
 
 - **Don't** turn Flect into a fixed widget dashboard.
-- **Don't** present the agent as a chatbot bolted onto a static application.
+- **Don't** present the agent as a second chatbot bolted onto a static
+  application.
 - **Don't** use terminal cosplay, neon gradients, decorative glass panels, or
-  loud generative-AI activity chrome. The transient protected Shaper utility
-  panel is the intentional functional exception to the glass rule.
-- **Don't** use radii above 16px on cards, sections, or prompt surfaces. The
-  open Shaper utility panel is the intentional 20px utility-panel exception.
+  loud generative-AI activity chrome.
+- **Don't** use radii above 16px on cards, sections, or prompt surfaces.
 - **Don't** use controls whose novelty makes ordinary actions harder to
   recognize.
 - **Don't** pair a decorative 1px border with a broad soft shadow.
