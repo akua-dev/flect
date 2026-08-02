@@ -11,6 +11,7 @@ import type {
   SessionSelection,
   ShapeEvent,
 } from "../shared/contracts";
+import type { ProductActionResult } from "../shared/product-action";
 
 export interface FlectRuntimeShape {
   readonly status: Effect.Effect<RuntimeStatus>;
@@ -42,6 +43,11 @@ export interface FlectRuntimeShape {
     role: InteractiveAgentRole,
     requestId: string,
     result: BunCommandResult,
+  ) => Effect.Effect<void, FlectRuntimeError>;
+  readonly completeProductActionRequest: (
+    sessionId: string,
+    requestId: string,
+    result: ProductActionResult,
   ) => Effect.Effect<void, FlectRuntimeError>;
   readonly diagnoseRecovery: (
     sessionId: string,

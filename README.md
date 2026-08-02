@@ -97,6 +97,8 @@ retain distinct histories, drafts, Pi sessions, and sandbox workspaces.
 - separate Edit/Shaper and Run/App Agent conversations, including per-role
   drafts, cancellation, shell results, and visible authority before send;
 - Effect Schema-validated interface documents and a closed trusted renderer;
+- explicitly granted, revocable, loopback-only local product surfaces whose
+  credentials remain memory-only and whose product logic stays outside Flect;
 - propose, preview, keep, reject, rollback, last-known-good recovery, and a
   compiled `?safe=1` recovery shell;
 - a protected composer even when a shaped document omits its own prompt;

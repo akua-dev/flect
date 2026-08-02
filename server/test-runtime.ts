@@ -139,6 +139,7 @@ export const FlectTestRuntimeLive = Layer.effect(
               : Deferred.succeed(response, result).pipe(Effect.asVoid),
           ),
         ),
+      completeProductActionRequest: () => Effect.void,
       diagnoseRecovery: () =>
         Effect.succeed(
           GuardianDiagnostic.make({

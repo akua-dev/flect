@@ -13,10 +13,12 @@ import {
   defaultInterfaceDocument,
   InterfaceDocument,
 } from "../../shared/interface-document";
+import { ProductActionResult } from "../../shared/product-action";
 import {
   FlectClient,
   FlectUnavailableError,
   makeFlectClientLayer,
+  ProductSurfaceHostUnavailable,
 } from "./api";
 
 function jsonResponse(body: unknown, status = 200) {
@@ -215,6 +217,50 @@ describe("FlectClient", () => {
       );
     },
   );
+
+  it.effect("returns a schema-encoded product-action result", () => {
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(jsonResponse({ version: 1, status: "accepted" }));
+    const result = ProductActionResult.make({
+      version: 1,
+      status: "denied",
+      resultJson: '{"message":"Cancelled"}',
+    });
+
+    return withClient(
+      fetcher,
+      Effect.gen(function* () {
+        const client = yield* FlectClient;
+        yield* client.completeProductActionRequest(
+          "session-1",
+          "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+          result,
+        );
+
+        const [input, init] = fetcher.mock.calls[0] ?? [];
+        expect(String(input)).toBe(
+          "http://flect.local/api/sessions/session-1/product-action-results",
+        );
+        expect(init?.method).toBe("POST");
+        expect(
+          JSON.parse(
+            init?.body instanceof Uint8Array
+              ? new TextDecoder().decode(init.body)
+              : String(init?.body),
+          ),
+        ).toEqual({
+          role: "app",
+          requestId: "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+          result: {
+            version: 1,
+            status: "denied",
+            resultJson: '{"message":"Cancelled"}',
+          },
+        });
+      }),
+    );
+  });
 
   it.effect("encodes the selected role when cancelling an agent", () => {
     const fetcher = vi
@@ -447,4 +493,75 @@ describe("FlectClient", () => {
       }),
     );
   });
+
+  it.effect(
+    "decodes redacted and granted product surfaces with encoded paths",
+    () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(
+          jsonResponse({
+            version: 1,
+            capabilityId: "review-space",
+            title: "Review",
+            origin: "http://127.0.0.1:3211",
+            status: "pending",
+            expiresAt: "2099-08-02T12:00:00.000Z",
+          }),
+        )
+        .mockResolvedValueOnce(
+          jsonResponse({
+            version: 1,
+            capabilityId: "review-space",
+            title: "Review",
+            origin: "http://127.0.0.1:3211",
+            entryPath: "/?embed=1",
+            sessionCredential: "a-local-session-secret",
+          }),
+        );
+      return withClient(
+        fetcher,
+        Effect.gen(function* () {
+          const client = yield* FlectClient;
+          const summary = yield* client.productSurfaceSummary("review-space");
+          const resolved = yield* client.resolveProductSurface("review-space");
+          expect("sessionCredential" in summary).toBe(false);
+          expect(resolved.sessionCredential).toBe("a-local-session-secret");
+          expect(String(fetcher.mock.calls[0]?.[0])).toContain("review-space");
+          expect(String(fetcher.mock.calls[1]?.[0])).toContain(
+            "review-space/resolve",
+          );
+        }),
+      );
+    },
+  );
+
+  it.effect(
+    "maps product-surface failures without retaining response bodies",
+    () => {
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          jsonResponse({ version: 1, error: "secret internal response" }, 410),
+        );
+      return withClient(
+        fetcher,
+        Effect.gen(function* () {
+          const client = yield* FlectClient;
+          const error = yield* client
+            .productSurfaceSummary("review")
+            .pipe(Effect.flip);
+          expect(error).toEqual(
+            ProductSurfaceHostUnavailable.make({
+              reason: "expired",
+              message: "The local product surface is unavailable.",
+            }),
+          );
+          expect(JSON.stringify(error)).not.toContain(
+            "secret internal response",
+          );
+        }),
+      );
+    },
+  );
 });

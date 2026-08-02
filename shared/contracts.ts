@@ -4,6 +4,12 @@ import {
   InterfaceDocument,
   InvalidInterfaceDocument,
 } from "./interface-document";
+import {
+  AgentProductActionRequest,
+  ProductActionRequestId,
+  ProductActionResult,
+} from "./product-action";
+import { ProductSurfaceCapabilityId } from "./product-surface";
 
 const NonEmptyText = Schema.Trim.check(Schema.isMinLength(1));
 const PromptText = NonEmptyText.check(Schema.isMaxLength(100_000));
@@ -64,6 +70,7 @@ export class SessionSelection extends Schema.Class<SessionSelection>(
 )({
   model: Schema.optionalKey(ModelSelection),
   externalExtensions: Schema.optionalKey(ExternalPiExtensionSelection),
+  productCapabilityId: Schema.optionalKey(ProductSurfaceCapabilityId),
 }) {}
 
 export const InteractiveAgentRole = Schema.Literals(["app", "shaper"]);
@@ -177,6 +184,7 @@ export const FlectEvent = Schema.Union([
   TurnStarted,
   TextDelta,
   AgentShellRequest,
+  AgentProductActionRequest,
   TurnCompleted,
   TurnCancelled,
   TurnError,
@@ -249,6 +257,21 @@ export class SessionBusy extends Schema.TaggedErrorClass<SessionBusy>()(
   },
 ) {}
 
+export class AgentProductActionResultRequest extends Schema.Class<AgentProductActionResultRequest>(
+  "AgentProductActionResultRequest",
+)({
+  role: Schema.Literal("app"),
+  requestId: ProductActionRequestId,
+  result: ProductActionResult,
+}) {}
+
+export class AgentProductActionResultAccepted extends Schema.Class<AgentProductActionResultAccepted>(
+  "AgentProductActionResultAccepted",
+)({
+  version: Schema.Literal(1),
+  status: Schema.Literal("accepted"),
+}) {}
+
 export class CloseSessionResponse extends Schema.Class<CloseSessionResponse>(
   "CloseSessionResponse",
 )({
@@ -275,6 +298,7 @@ export class PiOperationFailed extends Schema.TaggedErrorClass<PiOperationFailed
       "cancel",
       "diagnose",
       "shell",
+      "product_action",
     ]),
     message: Schema.Literal(
       "The model runtime could not complete the request.",

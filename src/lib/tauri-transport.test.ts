@@ -11,7 +11,11 @@ import {
   Stream,
 } from "effect";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
-import { FlectClient, FlectUnavailableError } from "./api";
+import {
+  FlectClient,
+  FlectUnavailableError,
+  ProductSurfaceHostUnavailable,
+} from "./api";
 import {
   makeTauriFlectClientLayer,
   TauriBridge,
@@ -19,6 +23,38 @@ import {
 } from "./tauri-transport";
 
 describe("Tauri RPC transport", () => {
+  it.effect(
+    "fails product surfaces explicitly until the desktop host adapter exists",
+    () =>
+      Effect.gen(function* () {
+        const bridge: TauriBridgeShape = {
+          listen: () => Effect.succeed(Effect.void),
+          send: () => Effect.void,
+        };
+        const error = yield* Effect.scoped(
+          Effect.gen(function* () {
+            const client = yield* FlectClient;
+            return yield* client
+              .productSurfaceSummary("review")
+              .pipe(Effect.flip);
+          }).pipe(
+            Effect.provide(
+              makeTauriFlectClientLayer().pipe(
+                Layer.provide(Layer.succeed(TauriBridge)(bridge)),
+              ),
+            ),
+          ),
+        );
+        assert.deepStrictEqual(
+          error,
+          ProductSurfaceHostUnavailable.make({
+            reason: "unavailable",
+            message: "The local product surface is unavailable.",
+          }),
+        );
+      }),
+  );
+
   it.effect("encodes the selected agent role for private operations", () =>
     Effect.gen(function* () {
       const listener = yield* Ref.make<

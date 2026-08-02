@@ -7,6 +7,8 @@ import {
 } from "effect/unstable/http";
 import type { BunCommandResult } from "../../shared/bun-command";
 import {
+  AgentProductActionResultAccepted,
+  AgentProductActionResultRequest,
   AgentShellResultAccepted,
   AgentShellResultRequest,
   CancelRequest,
@@ -32,6 +34,12 @@ import {
   encodeInterfaceDocument,
   type InterfaceDocument,
 } from "../../shared/interface-document";
+import type { ProductActionResult } from "../../shared/product-action";
+import {
+  ProductSurfaceRevoked,
+  ProductSurfaceSummary,
+  ResolvedProductSurface,
+} from "../../shared/product-surface";
 
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
@@ -45,10 +53,41 @@ export class FlectUnavailableError extends Schema.TaggedErrorClass<FlectUnavaila
   },
 ) {}
 
+export class ProductSurfaceHostUnavailable extends Schema.TaggedErrorClass<ProductSurfaceHostUnavailable>()(
+  "ProductSurfaceHostUnavailable",
+  {
+    reason: Schema.Literals(["unavailable", "not-found", "pending", "expired"]),
+    message: Schema.Literal("The local product surface is unavailable."),
+  },
+) {}
+
 const unavailable = () =>
   new FlectUnavailableError({
     message: "The local Flect runtime is unavailable.",
   });
+
+const productSurfaceUnavailable = (
+  reason: "unavailable" | "not-found" | "pending" | "expired" = "unavailable",
+) =>
+  ProductSurfaceHostUnavailable.make({
+    reason,
+    message: "The local product surface is unavailable.",
+  });
+
+const productSurfaceFailure = (error: unknown) => {
+  if (error instanceof ProductSurfaceHostUnavailable) return error;
+  if (HttpClientError.isHttpClientError(error)) {
+    switch (error.response?.status) {
+      case 404:
+        return productSurfaceUnavailable("not-found");
+      case 409:
+        return productSurfaceUnavailable("pending");
+      case 410:
+        return productSurfaceUnavailable("expired");
+    }
+  }
+  return productSurfaceUnavailable();
+};
 
 const shapeFailure = (sessionId: string) => (error: unknown) =>
   error instanceof SessionBusy
@@ -99,10 +138,27 @@ export interface FlectClientShape {
     requestId: string,
     result: BunCommandResult,
   ) => Effect.Effect<void, FlectUnavailableError>;
+  readonly completeProductActionRequest: (
+    sessionId: string,
+    requestId: string,
+    result: ProductActionResult,
+  ) => Effect.Effect<void, FlectUnavailableError>;
   readonly diagnoseRecovery: (
     sessionId: string,
     reason: RecoveryReason,
   ) => Effect.Effect<GuardianDiagnostic, FlectUnavailableError | SessionBusy>;
+  readonly productSurfaceSummary: (
+    capabilityId: string,
+  ) => Effect.Effect<ProductSurfaceSummary, ProductSurfaceHostUnavailable>;
+  readonly approveProductSurface: (
+    capabilityId: string,
+  ) => Effect.Effect<ProductSurfaceSummary, ProductSurfaceHostUnavailable>;
+  readonly resolveProductSurface: (
+    capabilityId: string,
+  ) => Effect.Effect<ResolvedProductSurface, ProductSurfaceHostUnavailable>;
+  readonly revokeProductSurface: (
+    capabilityId: string,
+  ) => Effect.Effect<ProductSurfaceRevoked, ProductSurfaceHostUnavailable>;
 }
 
 export class FlectClient extends Context.Service<
@@ -251,6 +307,31 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
           ),
       );
 
+      const completeProductActionRequest = Effect.fn(
+        "Flect.Client.completeProductActionRequest",
+      )((sessionId: string, requestId: string, result: ProductActionResult) =>
+        HttpClientRequest.post(
+          `/sessions/${encodeURIComponent(sessionId)}/product-action-results`,
+        ).pipe(
+          HttpClientRequest.schemaBodyJson(AgentProductActionResultRequest)(
+            AgentProductActionResultRequest.make({
+              role: "app",
+              requestId,
+              result,
+            }),
+          ),
+          Effect.flatMap(transport.execute),
+          Effect.flatMap(
+            HttpClientResponse.schemaBodyJson(
+              AgentProductActionResultAccepted,
+              strictOptions,
+            ),
+          ),
+          Effect.asVoid,
+          Effect.mapError(unavailable),
+        ),
+      );
+
       const shape = (
         sessionId: string,
         instruction: string,
@@ -327,6 +408,89 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
           ),
       );
 
+      const productSurfacePath = (capabilityId: string) =>
+        `/product-surfaces/${encodeURIComponent(capabilityId)}`;
+
+      const productSurfaceSummary = Effect.fn(
+        "Flect.Client.productSurfaceSummary",
+      )((capabilityId: string) =>
+        transport.get(productSurfacePath(capabilityId)).pipe(
+          Effect.flatMap(
+            HttpClientResponse.schemaBodyJson(
+              ProductSurfaceSummary,
+              strictOptions,
+            ),
+          ),
+          Effect.flatMap((summary) =>
+            summary.capabilityId === capabilityId
+              ? Effect.succeed(summary)
+              : Effect.fail(productSurfaceUnavailable()),
+          ),
+          Effect.mapError(productSurfaceFailure),
+        ),
+      );
+
+      const approveProductSurface = Effect.fn(
+        "Flect.Client.approveProductSurface",
+      )((capabilityId: string) =>
+        HttpClientRequest.post(
+          `${productSurfacePath(capabilityId)}/approve`,
+        ).pipe(
+          transport.execute,
+          Effect.flatMap(
+            HttpClientResponse.schemaBodyJson(
+              ProductSurfaceSummary,
+              strictOptions,
+            ),
+          ),
+          Effect.flatMap((summary) =>
+            summary.capabilityId === capabilityId
+              ? Effect.succeed(summary)
+              : Effect.fail(productSurfaceUnavailable()),
+          ),
+          Effect.mapError(productSurfaceFailure),
+        ),
+      );
+
+      const resolveProductSurface = Effect.fn(
+        "Flect.Client.resolveProductSurface",
+      )((capabilityId: string) =>
+        transport.get(`${productSurfacePath(capabilityId)}/resolve`).pipe(
+          Effect.flatMap(
+            HttpClientResponse.schemaBodyJson(
+              ResolvedProductSurface,
+              strictOptions,
+            ),
+          ),
+          Effect.flatMap((resolved) =>
+            resolved.capabilityId === capabilityId
+              ? Effect.succeed(resolved)
+              : Effect.fail(productSurfaceUnavailable()),
+          ),
+          Effect.mapError(productSurfaceFailure),
+        ),
+      );
+
+      const revokeProductSurface = Effect.fn(
+        "Flect.Client.revokeProductSurface",
+      )((capabilityId: string) =>
+        HttpClientRequest.delete(productSurfacePath(capabilityId)).pipe(
+          transport.execute,
+          Effect.flatMap(
+            HttpClientResponse.schemaBodyJson(
+              ProductSurfaceRevoked,
+              strictOptions,
+            ),
+          ),
+          Effect.flatMap((revoked) =>
+            revoked.capabilityId === capabilityId
+              ? Effect.succeed(revoked)
+              : Effect.fail(productSurfaceUnavailable()),
+          ),
+          Effect.mapError(productSurfaceFailure),
+        ),
+      );
+
       return {
         status,
         models,
@@ -336,7 +500,12 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
         shape,
         cancel,
         completeShellRequest,
+        completeProductActionRequest,
         diagnoseRecovery,
+        productSurfaceSummary,
+        approveProductSurface,
+        resolveProductSurface,
+        revokeProductSurface,
       };
     }),
   );

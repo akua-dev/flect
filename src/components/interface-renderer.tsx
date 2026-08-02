@@ -3,6 +3,7 @@ import type {
   AgentPanelNode,
   InterfaceDocument,
   InterfaceNode,
+  ProductSurfaceNode,
   PromptNode,
 } from "../../shared/interface-document";
 
@@ -18,6 +19,7 @@ export interface InterfaceRendererProps {
   readonly onAction: (action: InterfaceAction) => void;
   readonly renderPrompt: (node: PromptNode) => ReactNode;
   readonly renderAgentPanel?: (node: AgentPanelNode) => ReactNode;
+  readonly renderProductSurface?: (node: ProductSurfaceNode) => ReactNode;
 }
 
 interface NodeRendererProps extends Omit<InterfaceRendererProps, "document"> {
@@ -29,6 +31,7 @@ function NodeRenderer({
   onAction,
   renderPrompt,
   renderAgentPanel,
+  renderProductSurface,
 }: NodeRendererProps) {
   switch (node.type) {
     case "stack":
@@ -43,6 +46,7 @@ function NodeRenderer({
               node={child}
               onAction={onAction}
               renderAgentPanel={renderAgentPanel}
+              renderProductSurface={renderProductSurface}
               renderPrompt={renderPrompt}
             />
           ))}
@@ -78,6 +82,18 @@ function NodeRenderer({
           <h2>{node.title}</h2>
         </aside>
       );
+    case "product-surface":
+      return renderProductSurface ? (
+        renderProductSurface(node)
+      ) : (
+        <section
+          aria-label={node.title}
+          className="interface-product-surface-unavailable"
+        >
+          <h2>{node.title}</h2>
+          <p>Product surface unavailable.</p>
+        </section>
+      );
   }
 }
 
@@ -86,6 +102,7 @@ export function InterfaceRenderer({
   onAction,
   renderPrompt,
   renderAgentPanel,
+  renderProductSurface,
 }: InterfaceRendererProps) {
   return (
     <section aria-label={document.name} className="interface-canvas">
@@ -93,6 +110,7 @@ export function InterfaceRenderer({
         node={document.root}
         onAction={onAction}
         renderAgentPanel={renderAgentPanel}
+        renderProductSurface={renderProductSurface}
         renderPrompt={renderPrompt}
       />
     </section>

@@ -23,6 +23,11 @@ const workspace: AgentWorkspaceController = {
   refresh: vi.fn(() => Promise.resolve()),
   externalExtensions: { app: false, shaper: false },
   toggleExternalExtensions: vi.fn(() => Promise.resolve()),
+  productAction: {
+    pending: undefined,
+    complete: vi.fn(() => Promise.resolve()),
+    deny: vi.fn(() => Promise.resolve()),
+  },
   app: {
     role: "app",
     status: "ready",

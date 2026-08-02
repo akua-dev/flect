@@ -17,11 +17,18 @@ import {
   FlectClient,
   type FlectClientShape,
   FlectUnavailableError,
+  ProductSurfaceHostUnavailable,
 } from "./api";
 
 const unavailable = () =>
   FlectUnavailableError.make({
     message: "The local Flect runtime is unavailable.",
+  });
+
+const productSurfaceUnavailable = () =>
+  ProductSurfaceHostUnavailable.make({
+    reason: "unavailable",
+    message: "The local product surface is unavailable.",
   });
 
 const mapSessionError = <A, R>(
@@ -217,8 +224,13 @@ export const makeTauriFlectClientLayer = () =>
           mapError(
             rpc.CompleteShellRequest({ sessionId, role, requestId, result }),
           ).pipe(Effect.asVoid),
+        completeProductActionRequest: () => Effect.fail(unavailable()),
         diagnoseRecovery: (sessionId, reason) =>
           mapSessionError(rpc.DiagnoseRecovery({ sessionId, reason })),
+        productSurfaceSummary: () => Effect.fail(productSurfaceUnavailable()),
+        approveProductSurface: () => Effect.fail(productSurfaceUnavailable()),
+        resolveProductSurface: () => Effect.fail(productSurfaceUnavailable()),
+        revokeProductSurface: () => Effect.fail(productSurfaceUnavailable()),
       } satisfies FlectClientShape;
     }),
   ).pipe(Layer.provide(TauriProtocolLive));

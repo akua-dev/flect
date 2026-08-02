@@ -16,6 +16,7 @@ import type { WorkspacePhase } from "../lib/workspace-phase";
 import { AgentRail, type ShapingController } from "./agent-rail";
 import { PanelOpenIcon } from "./icons";
 import { type InterfaceAction, InterfaceRenderer } from "./interface-renderer";
+import { ProductSurface } from "./product-surface";
 import type { ShellMode } from "./role-switcher";
 
 export type { ShellMode } from "./role-switcher";
@@ -341,6 +342,15 @@ export function RoleAwareShell({
           <InterfaceRenderer
             document={document}
             onAction={handleInterfaceAction}
+            renderProductSurface={(node) =>
+              phase === "safe" ? null : (
+                <ProductSurface
+                  enabled
+                  node={node}
+                  productAction={workspace.productAction}
+                />
+              )
+            }
             renderPrompt={() => (
               <button
                 className="canvas-agent-entry"

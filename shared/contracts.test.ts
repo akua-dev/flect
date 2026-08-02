@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
+  AgentProductActionResultRequest,
   AgentShellResultRequest,
   CancelRequest,
   decodeFlectEvent,
@@ -13,6 +14,7 @@ import {
   RuntimeStatus,
   SessionSelection,
 } from "./contracts";
+import { ProductActionResult } from "./product-action";
 
 describe("runtime contracts", () => {
   it.effect("requires a closed role on cancellation requests", () =>
@@ -57,6 +59,42 @@ describe("runtime contracts", () => {
       );
       yield* decode(shellResult).pipe(Effect.flip);
       yield* decode({ role: "guardian", ...shellResult }).pipe(Effect.flip);
+    }),
+  );
+
+  it.effect("accepts only App Agent product-action results", () =>
+    Effect.gen(function* () {
+      const decode = Schema.decodeUnknownEffect(
+        AgentProductActionResultRequest,
+        {
+          errors: "all",
+          onExcessProperty: "error",
+        },
+      );
+      const result = ProductActionResult.make({
+        version: 1,
+        status: "ok",
+        resultJson: '{"company":"Documenso"}',
+      });
+
+      expect(
+        yield* decode({
+          role: "app",
+          requestId: "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+          result,
+        }),
+      ).toEqual(
+        AgentProductActionResultRequest.make({
+          role: "app",
+          requestId: "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+          result,
+        }),
+      );
+      yield* decode({
+        role: "shaper",
+        requestId: "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        result,
+      }).pipe(Effect.flip);
     }),
   );
 
@@ -162,6 +200,23 @@ describe("runtime contracts", () => {
         new SessionSelection({
           model: { provider: "anthropic", id: "claude-sonnet" },
         }),
+      );
+    }),
+  );
+
+  it.effect("binds an App Agent session to one product capability", () =>
+    Effect.gen(function* () {
+      const selection = yield* decodeSessionSelection({
+        productCapabilityId: "akua-outreach-review",
+      });
+
+      expect(selection).toEqual(
+        SessionSelection.make({
+          productCapabilityId: "akua-outreach-review",
+        }),
+      );
+      yield* decodeSessionSelection({ productCapabilityId: "../unsafe" }).pipe(
+        Effect.flip,
       );
     }),
   );

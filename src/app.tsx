@@ -1,4 +1,4 @@
-import { Effect, Equal, Fiber, Stream } from "effect";
+import { Effect, Equal, Fiber, Option, Stream } from "effect";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExtensionManifest } from "../shared/extensions";
 import {
@@ -19,10 +19,15 @@ import {
   useAgentSession,
 } from "./hooks/use-agent-session";
 import { useShellPreferences } from "./hooks/use-shell-preferences";
+import { FlectClient } from "./lib/api";
 import {
   consumeLegacyInterfaceDocument,
   loadInterfaceDocument,
 } from "./lib/interface-store";
+import {
+  productSurfaceCapabilityFromSearch,
+  productSurfaceDocument,
+} from "./lib/product-surface-entry";
 import { browserRuntime, shapingRuntime } from "./lib/runtime";
 import { ShapingKernel } from "./lib/shaping-kernel";
 import { workspacePhase } from "./lib/workspace-phase";
@@ -30,6 +35,11 @@ import { ExtensionExecution } from "./sandbox/extension-execution";
 
 const safeMode =
   new URLSearchParams(globalThis.location.search).get("safe") === "1";
+
+const requestedProductSurface = productSurfaceCapabilityFromSearch(
+  globalThis.location.search,
+  safeMode,
+);
 
 const isolationCheck = ExtensionManifest.make({
   version: 1,
@@ -94,7 +104,7 @@ export function App({
   );
   const [snapshot, setSnapshot] = useState<ShapingSnapshot>();
   const [protectedMode, setProtectedMode] = useState(safeMode);
-  const session = useAgentSession();
+  const session = useAgentSession(browserRuntime, requestedProductSurface);
   const preferences = useShellPreferences();
   const shapeRequestRef = useRef(0);
   const decisionInFlightRef = useRef(false);
@@ -140,6 +150,24 @@ export function App({
       const snapshot = yield* kernel.snapshot;
       if (safeMode) {
         yield* kernel.enterSafeMode;
+      } else if (!snapshot.safeMode && requestedProductSurface !== undefined) {
+        const summary = yield* Effect.tryPromise({
+          try: () =>
+            browserRuntime.runPromise(
+              FlectClient.use((client) =>
+                client.productSurfaceSummary(requestedProductSurface),
+              ),
+            ),
+          catch: () => "product-surface-unavailable" as const,
+        }).pipe(Effect.option);
+        if (Option.isSome(summary)) {
+          const document = productSurfaceDocument(summary.value);
+          if (!Equal.equals(document, snapshot.active.document)) {
+            const proposal = yield* kernel.propose(document, "user");
+            yield* kernel.preview(proposal.id);
+            yield* kernel.accept(proposal.id);
+          }
+        }
       } else if (
         !snapshot.safeMode &&
         snapshot.lastEvent.type === "initialized"

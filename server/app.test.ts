@@ -18,6 +18,7 @@ import {
   defaultInterfaceDocument,
   InterfaceDocument,
 } from "../shared/interface-document";
+import { ProductActionResult } from "../shared/product-action";
 import { createApp, type FlectWebApp } from "./app";
 import type { FlectRuntimeShape } from "./runtime";
 
@@ -53,6 +54,7 @@ function createFakeRuntime(): FlectRuntimeShape {
     ),
     cancel: vi.fn(() => Effect.void),
     completeShellRequest: vi.fn(() => Effect.void),
+    completeProductActionRequest: vi.fn(() => Effect.void),
     diagnoseRecovery: vi.fn(() =>
       Effect.succeed(
         new GuardianDiagnostic({
@@ -121,6 +123,111 @@ const deeplyNestedDocument = (depth: number) => {
 };
 
 describe("Flect HTTP application", () => {
+  it.effect("keeps product-surface credentials behind explicit approval", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const registration = {
+        version: 1,
+        capabilityId: "akua-outreach-review",
+        title: "Outreach Review",
+        origin: "http://127.0.0.1:3211",
+        entryPath: "/?embed=1",
+        sessionCredential: "a-local-session-secret",
+        expiresAt: "2099-08-02T12:00:00.000Z",
+      };
+
+      const created = yield* send(
+        app,
+        request(
+          "/api/product-surfaces",
+          { method: "POST", body: JSON.stringify(registration) },
+          null,
+        ),
+      );
+      expect(created.status).toBe(201);
+      expect(yield* readJson(created)).toEqual({
+        version: 1,
+        capabilityId: "akua-outreach-review",
+        title: "Outreach Review",
+        origin: "http://127.0.0.1:3211",
+        status: "pending",
+        expiresAt: registration.expiresAt,
+      });
+
+      const pending = yield* send(
+        app,
+        request("/api/product-surfaces/akua-outreach-review/resolve"),
+      );
+      expect(pending.status).toBe(409);
+
+      const approved = yield* send(
+        app,
+        request("/api/product-surfaces/akua-outreach-review/approve", {
+          method: "POST",
+        }),
+      );
+      expect(approved.status).toBe(200);
+      expect(yield* readJson(approved)).toMatchObject({ status: "granted" });
+
+      const resolved = yield* send(
+        app,
+        request("/api/product-surfaces/akua-outreach-review/resolve"),
+      );
+      expect(resolved.status).toBe(200);
+      expect(yield* readJson(resolved)).toEqual({
+        version: 1,
+        capabilityId: "akua-outreach-review",
+        title: "Outreach Review",
+        origin: "http://127.0.0.1:3211",
+        entryPath: "/?embed=1",
+        sessionCredential: "a-local-session-secret",
+      });
+
+      const revoked = yield* send(
+        app,
+        request("/api/product-surfaces/akua-outreach-review", {
+          method: "DELETE",
+        }),
+      );
+      expect(revoked.status).toBe(200);
+      expect(yield* readJson(revoked)).toEqual({
+        version: 1,
+        capabilityId: "akua-outreach-review",
+        status: "revoked",
+      });
+    }),
+  );
+
+  it.effect("rejects unsafe product-surface registrations", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const response = yield* send(
+        app,
+        request(
+          "/api/product-surfaces",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              version: 1,
+              capabilityId: "akua-outreach-review",
+              title: "Outreach Review",
+              origin: "https://example.com",
+              entryPath: "/?token=leaked",
+              sessionCredential: "a-local-session-secret",
+              expiresAt: "2099-08-02T12:00:00.000Z",
+            }),
+          },
+          null,
+        ),
+      );
+      expect(response.status).toBe(400);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        error: "Invalid request",
+      });
+    }),
+  );
+
   it.effect("returns schema-encoded runtime and model responses", () =>
     Effect.gen(function* () {
       const app = yield* useApp(createFakeRuntime());
@@ -245,6 +352,40 @@ describe("Flect HTTP application", () => {
       });
     },
   );
+
+  it.effect("accepts a strict product-action result for the App Agent", () => {
+    const runtime = createFakeRuntime();
+    const result = ProductActionResult.make({
+      version: 1,
+      status: "ok",
+      resultJson: '{"company":"Documenso"}',
+    });
+    return Effect.gen(function* () {
+      const app = yield* useApp(runtime);
+      const response = yield* send(
+        app,
+        request("/api/sessions/session-1/product-action-results", {
+          method: "POST",
+          body: JSON.stringify({
+            role: "app",
+            requestId: "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+            result,
+          }),
+        }),
+      );
+
+      expect(response.status).toBe(200);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        status: "accepted",
+      });
+      expect(runtime.completeProductActionRequest).toHaveBeenCalledWith(
+        "session-1",
+        "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        result,
+      );
+    });
+  });
 
   it.effect(
     "streams a non-destructive busy event for a prompt conflict",
