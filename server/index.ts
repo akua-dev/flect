@@ -4,7 +4,6 @@ import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { makeFlectHttpApp } from "./app";
 import { FlectRuntimeLive, PiSdkLive } from "./pi-runtime";
-import { ProductSurfaceRegistryLive } from "./product-surface-registry";
 import { FlectTestRuntimeLive } from "./test-runtime";
 
 registerBunOAuthFlows();
@@ -15,9 +14,7 @@ const RuntimeLive =
     : FlectRuntimeLive.pipe(Layer.provide(PiSdkLive));
 
 const ApplicationLive = makeFlectHttpApp().pipe(
-  HttpRouter.provideRequest(
-    Layer.merge(RuntimeLive, ProductSurfaceRegistryLive),
-  ),
+  HttpRouter.provideRequest(RuntimeLive),
 );
 
 const ServerLive = HttpRouter.serve(ApplicationLive).pipe(

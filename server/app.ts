@@ -5,8 +5,6 @@ import {
   HttpServerResponse,
 } from "effect/unstable/http";
 import {
-  AgentProductActionResultAccepted,
-  AgentProductActionResultRequest,
   AgentShellResultAccepted,
   AgentShellResultRequest,
   CancelRequest,
@@ -29,17 +27,6 @@ import {
   TurnError,
 } from "../shared/contracts";
 import { validateInterfaceDocument } from "../shared/interface-document";
-import {
-  ProductSurfaceRegistration,
-  ProductSurfaceRevoked,
-  ProductSurfaceSummary,
-  ResolvedProductSurface,
-} from "../shared/product-surface";
-import {
-  ProductSurfaceRegistry,
-  type ProductSurfaceRegistryError,
-  ProductSurfaceRegistryLive,
-} from "./product-surface-registry";
 import { FlectRuntime, type FlectRuntimeShape } from "./runtime";
 
 const defaultAllowedOrigins = new Set([
@@ -62,12 +49,6 @@ class SessionPathParams extends Schema.Class<SessionPathParams>(
   sessionId: Schema.NonEmptyString,
 }) {}
 
-class ProductSurfacePathParams extends Schema.Class<ProductSurfacePathParams>(
-  "ProductSurfacePathParams",
-)({
-  capabilityId: Schema.NonEmptyString,
-}) {}
-
 const runtimeJson = HttpServerResponse.schemaJson(RuntimeStatus);
 const modelsJson = HttpServerResponse.schemaJson(ModelsResponse);
 const sessionJson = HttpServerResponse.schemaJson(SessionResponse);
@@ -75,18 +56,6 @@ const closeJson = HttpServerResponse.schemaJson(CloseSessionResponse);
 const cancelJson = HttpServerResponse.schemaJson(CancelResponse);
 const guardianJson = HttpServerResponse.schemaJson(GuardianDiagnostic);
 const shellResultJson = HttpServerResponse.schemaJson(AgentShellResultAccepted);
-const productActionResultJson = HttpServerResponse.schemaJson(
-  AgentProductActionResultAccepted,
-);
-const productSurfaceSummaryJson = HttpServerResponse.schemaJson(
-  ProductSurfaceSummary,
-);
-const resolvedProductSurfaceJson = HttpServerResponse.schemaJson(
-  ResolvedProductSurface,
-);
-const productSurfaceRevokedJson = HttpServerResponse.schemaJson(
-  ProductSurfaceRevoked,
-);
 const publicErrorJson = HttpServerResponse.schemaJson(PublicErrorResponse);
 const encodeEventJson = Schema.encodeEffect(Schema.fromJsonString(FlectEvent));
 const encodeShapeEventJson = Schema.encodeEffect(
@@ -111,24 +80,6 @@ const sessionPath = HttpRouter.schemaPathParams(
   SessionPathParams,
   strictOptions,
 ).pipe(Effect.option);
-
-const productSurfacePath = HttpRouter.schemaPathParams(
-  ProductSurfacePathParams,
-  strictOptions,
-).pipe(Effect.option);
-
-const productSurfaceFailure = (error: ProductSurfaceRegistryError) => {
-  switch (error.code) {
-    case "not-found":
-      return publicError("Product surface not found", 404);
-    case "expired":
-      return publicError("Product surface expired", 410);
-    case "pending":
-      return publicError("Product surface approval required", 409);
-    case "conflict":
-      return publicError("Product surface registration conflict", 409);
-  }
-};
 
 const runtimeRoute = HttpRouter.add(
   "GET",
@@ -273,31 +224,6 @@ const shellResultRoute = HttpRouter.add(
   }).pipe(Effect.catch(() => runtimeFailure())),
 );
 
-const productActionResultRoute = HttpRouter.add(
-  "POST",
-  "/api/sessions/:sessionId/product-action-results",
-  Effect.gen(function* () {
-    const path = yield* sessionPath;
-    const action = yield* decodeBody(AgentProductActionResultRequest);
-    if (Option.isNone(path) || Option.isNone(action)) {
-      return yield* invalidRequest();
-    }
-
-    const runtime = yield* FlectRuntime;
-    yield* runtime.completeProductActionRequest(
-      path.value.sessionId,
-      action.value.requestId,
-      action.value.result,
-    );
-    return yield* productActionResultJson(
-      AgentProductActionResultAccepted.make({
-        version: 1,
-        status: "accepted",
-      }),
-    );
-  }).pipe(Effect.catch(() => runtimeFailure())),
-);
-
 const guardianRoute = HttpRouter.add(
   "POST",
   "/api/sessions/:sessionId/guardian",
@@ -368,95 +294,6 @@ const shapeRoute = HttpRouter.add(
   ),
 );
 
-const registerProductSurfaceRoute = HttpRouter.add(
-  "POST",
-  "/api/product-surfaces",
-  Effect.gen(function* () {
-    const registration = yield* decodeBody(ProductSurfaceRegistration);
-    if (Option.isNone(registration)) {
-      return yield* invalidRequest();
-    }
-    const registry = yield* ProductSurfaceRegistry;
-    const registered = yield* registry.register(registration.value);
-    return yield* productSurfaceSummaryJson(registered, { status: 201 });
-  }).pipe(
-    Effect.catchTag("ProductSurfaceRegistryError", productSurfaceFailure),
-    Effect.catch(() => runtimeFailure()),
-  ),
-);
-
-const productSurfaceSummaryRoute = HttpRouter.add(
-  "GET",
-  "/api/product-surfaces/:capabilityId",
-  Effect.gen(function* () {
-    const path = yield* productSurfacePath;
-    if (Option.isNone(path)) {
-      return yield* invalidRequest();
-    }
-    const registry = yield* ProductSurfaceRegistry;
-    return yield* productSurfaceSummaryJson(
-      yield* registry.getSummary(path.value.capabilityId),
-    );
-  }).pipe(
-    Effect.catchTag("ProductSurfaceRegistryError", productSurfaceFailure),
-    Effect.catch(() => runtimeFailure()),
-  ),
-);
-
-const approveProductSurfaceRoute = HttpRouter.add(
-  "POST",
-  "/api/product-surfaces/:capabilityId/approve",
-  Effect.gen(function* () {
-    const path = yield* productSurfacePath;
-    if (Option.isNone(path)) {
-      return yield* invalidRequest();
-    }
-    const registry = yield* ProductSurfaceRegistry;
-    return yield* productSurfaceSummaryJson(
-      yield* registry.approve(path.value.capabilityId),
-    );
-  }).pipe(
-    Effect.catchTag("ProductSurfaceRegistryError", productSurfaceFailure),
-    Effect.catch(() => runtimeFailure()),
-  ),
-);
-
-const resolveProductSurfaceRoute = HttpRouter.add(
-  "GET",
-  "/api/product-surfaces/:capabilityId/resolve",
-  Effect.gen(function* () {
-    const path = yield* productSurfacePath;
-    if (Option.isNone(path)) {
-      return yield* invalidRequest();
-    }
-    const registry = yield* ProductSurfaceRegistry;
-    return yield* resolvedProductSurfaceJson(
-      yield* registry.resolve(path.value.capabilityId),
-    );
-  }).pipe(
-    Effect.catchTag("ProductSurfaceRegistryError", productSurfaceFailure),
-    Effect.catch(() => runtimeFailure()),
-  ),
-);
-
-const revokeProductSurfaceRoute = HttpRouter.add(
-  "DELETE",
-  "/api/product-surfaces/:capabilityId",
-  Effect.gen(function* () {
-    const path = yield* productSurfacePath;
-    if (Option.isNone(path)) {
-      return yield* invalidRequest();
-    }
-    const registry = yield* ProductSurfaceRegistry;
-    return yield* productSurfaceRevokedJson(
-      yield* registry.revoke(path.value.capabilityId),
-    );
-  }).pipe(
-    Effect.catchTag("ProductSurfaceRegistryError", productSurfaceFailure),
-    Effect.catch(() => runtimeFailure()),
-  ),
-);
-
 const makeOriginMiddleware = (allowedOrigins: ReadonlySet<string>) =>
   HttpRouter.middleware(
     (httpEffect) =>
@@ -483,13 +320,7 @@ export const makeFlectHttpApp = (
     shapeRoute,
     cancelRoute,
     shellResultRoute,
-    productActionResultRoute,
     guardianRoute,
-    registerProductSurfaceRoute,
-    productSurfaceSummaryRoute,
-    approveProductSurfaceRoute,
-    resolveProductSurfaceRoute,
-    revokeProductSurfaceRoute,
     makeOriginMiddleware(allowedOrigins),
   );
 
@@ -503,12 +334,7 @@ export function createApp(
   allowedOrigins: ReadonlySet<string> = defaultAllowedOrigins,
 ): FlectWebApp {
   const appLayer = makeFlectHttpApp(allowedOrigins).pipe(
-    HttpRouter.provideRequest(
-      Layer.merge(
-        Layer.succeed(FlectRuntime)(runtime),
-        ProductSurfaceRegistryLive,
-      ),
-    ),
+    HttpRouter.provideRequest(Layer.succeed(FlectRuntime)(runtime)),
   );
   return HttpRouter.toWebHandler(appLayer, { disableLogger: true });
 }

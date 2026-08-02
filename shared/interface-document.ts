@@ -1,5 +1,4 @@
 import { Effect, Schema, type SchemaAST } from "effect";
-import { ProductSurfaceCapabilityId } from "./product-surface";
 
 const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
@@ -63,21 +62,13 @@ export interface AgentPanelNode {
   readonly title: string;
 }
 
-export interface ProductSurfaceNode {
-  readonly id: string;
-  readonly type: "product-surface";
-  readonly capabilityId: string;
-  readonly title: string;
-}
-
 export type InterfaceNode =
   | StackNode
   | TextNode
   | PromptNode
   | ButtonNode
   | DividerNode
-  | AgentPanelNode
-  | ProductSurfaceNode;
+  | AgentPanelNode;
 
 export const StackNode: Schema.Codec<StackNode> = Schema.Struct({
   id: NodeId,
@@ -126,14 +117,6 @@ export const AgentPanelNode: Schema.Codec<AgentPanelNode> = Schema.Struct({
   title: DisplayText(80),
 });
 
-export const ProductSurfaceNode: Schema.Codec<ProductSurfaceNode> =
-  Schema.Struct({
-    id: NodeId,
-    type: Schema.Literal("product-surface"),
-    capabilityId: ProductSurfaceCapabilityId,
-    title: DisplayText(80),
-  });
-
 export const InterfaceNode: Schema.Codec<InterfaceNode> = Schema.Union([
   StackNode,
   TextNode,
@@ -141,7 +124,6 @@ export const InterfaceNode: Schema.Codec<InterfaceNode> = Schema.Union([
   ButtonNode,
   DividerNode,
   AgentPanelNode,
-  ProductSurfaceNode,
 ]);
 
 export class InterfaceDocument extends Schema.Class<InterfaceDocument>(

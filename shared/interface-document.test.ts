@@ -112,47 +112,6 @@ describe("interface document", () => {
     }),
   );
 
-  it.effect("accepts only a capability-id product surface", () =>
-    Effect.gen(function* () {
-      const document = yield* validateInterfaceDocument({
-        version: 2,
-        name: "Outreach review",
-        root: {
-          id: "outreach-review",
-          type: "product-surface",
-          capabilityId: "akua-outreach-review",
-          title: "Outreach Review",
-        },
-      });
-
-      assert.strictEqual(document.root.type, "product-surface");
-      if (document.root.type !== "product-surface") return;
-      assert.strictEqual(document.root.capabilityId, "akua-outreach-review");
-
-      for (const unsafe of [
-        { origin: "http://127.0.0.1:3211" },
-        { url: "http://127.0.0.1:3211" },
-        { credential: "secret" },
-        { html: "<iframe>" },
-      ]) {
-        const error = yield* Effect.flip(
-          validateInterfaceDocument({
-            version: 2,
-            name: "Unsafe product surface",
-            root: {
-              id: "outreach-review",
-              type: "product-surface",
-              capabilityId: "akua-outreach-review",
-              title: "Outreach Review",
-              ...unsafe,
-            },
-          }),
-        );
-        assert.strictEqual(error._tag, "InvalidInterfaceDocument");
-      }
-    }),
-  );
-
   it.effect("rejects unknown properties and unsafe actions", () =>
     Effect.gen(function* () {
       const unknownProperty = yield* Effect.flip(

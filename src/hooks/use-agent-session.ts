@@ -11,10 +11,6 @@ import {
   SessionSelection,
 } from "../../shared/contracts";
 import type { InterfaceDocument } from "../../shared/interface-document";
-import {
-  type AgentProductActionRequest,
-  ProductActionResult,
-} from "../../shared/product-action";
 import { FlectClient, FlectUnavailableError } from "../lib/api";
 import { browserRuntime, type FlectBrowserRuntime } from "../lib/runtime";
 import { SandboxedShell } from "../shell/sandboxed-shell-service";
@@ -71,16 +67,9 @@ export interface AgentWorkspaceController {
   ) => Promise<void>;
   readonly app: AppConversationController;
   readonly shaper: ShaperConversationController;
-  readonly productAction: ProductActionController;
   readonly diagnoseRecovery: (
     reason: RecoveryReason,
   ) => Promise<{ readonly version: 1; readonly message: string }>;
-}
-
-export interface ProductActionController {
-  readonly pending: AgentProductActionRequest | undefined;
-  readonly complete: (result: ProductActionResult) => Promise<void>;
-  readonly deny: (message?: string) => Promise<void>;
 }
 
 interface ConversationSnapshot {
@@ -109,7 +98,6 @@ const messageId = () => crypto.randomUUID();
 const sessionSelection = (
   selectedModel: ModelSummary | undefined,
   externalExtensions: ExternalPiExtensionSelection,
-  productCapabilityId: string | undefined,
 ): SessionSelection =>
   new SessionSelection({
     ...(selectedModel === undefined
@@ -123,20 +111,17 @@ const sessionSelection = (
     ...(externalExtensions.app || externalExtensions.shaper
       ? { externalExtensions }
       : {}),
-    ...(productCapabilityId === undefined ? {} : { productCapabilityId }),
   });
 
 const modelSelectionKey = (
   selectedModel: ModelSummary | undefined,
   externalExtensions: ExternalPiExtensionSelection,
-  productCapabilityId: string | undefined,
 ) =>
   JSON.stringify([
     selectedModel?.provider ?? "auto",
     selectedModel?.id ?? "auto",
     externalExtensions.app,
     externalExtensions.shaper,
-    productCapabilityId ?? "none",
   ]);
 
 const ensurePiSession = Effect.fn("Flect.AgentWorkspace.ensureSession")(
@@ -178,7 +163,6 @@ const appendBoundedActivity = (
 
 export function useAgentSession(
   runtime: FlectBrowserRuntime = browserRuntime,
-  productCapabilityId?: string,
 ): AgentWorkspaceController & {
   readonly status: AgentSessionStatus;
   readonly messages: ReadonlyArray<ConversationMessage>;
@@ -198,16 +182,6 @@ export function useAgentSession(
   );
   const [appState, setAppState] = useState(initialConversation);
   const [shaperState, setShaperState] = useState(initialConversation);
-  const [pendingProductAction, setPendingProductAction] = useState<
-    AgentProductActionRequest | undefined
-  >();
-  const pendingProductActionRef = useRef<
-    | {
-        readonly sessionId: string;
-        readonly request: AgentProductActionRequest;
-      }
-    | undefined
-  >(undefined);
   const sessionRef = useRef<SessionHandle | undefined>(undefined);
   const requestRefs = useRef<
     Record<InteractiveAgentRole, RoleFiber | undefined>
@@ -268,8 +242,6 @@ export function useAgentSession(
   }, []);
 
   const refresh = useCallback(() => {
-    pendingProductActionRef.current = undefined;
-    setPendingProductAction(undefined);
     setAppState((current) => ({
       ...current,
       status: "booting",
@@ -358,14 +330,12 @@ export function useAgentSession(
   }, [interruptRoleFibers, refresh, releaseSession, runtime]);
 
   const selection = useMemo(
-    () =>
-      sessionSelection(selectedModel, externalExtensions, productCapabilityId),
-    [externalExtensions, productCapabilityId, selectedModel],
+    () => sessionSelection(selectedModel, externalExtensions),
+    [externalExtensions, selectedModel],
   );
   const selectionKey = useMemo(
-    () =>
-      modelSelectionKey(selectedModel, externalExtensions, productCapabilityId),
-    [externalExtensions, productCapabilityId, selectedModel],
+    () => modelSelectionKey(selectedModel, externalExtensions),
+    [externalExtensions, selectedModel],
   );
   const ensureSession = useCallback(
     () =>
@@ -434,21 +404,6 @@ export function useAgentSession(
       if (event.type === "shell_request") {
         return executeShellRequest(sessionId, "app", event);
       }
-      if (event.type === "product_action_request") {
-        return Effect.sync(() => {
-          if (pendingProductActionRef.current !== undefined) return;
-          pendingProductActionRef.current = { sessionId, request: event };
-          setPendingProductAction(event);
-          setAppState((current) => ({
-            ...current,
-            messages: appendBoundedActivity(current.messages, {
-              id: messageId(),
-              role: "activity",
-              content: "App Agent proposed a product action.",
-            }),
-          }));
-        });
-      }
       return Effect.sync(() => {
         setAppState((current) => {
           switch (event.type) {
@@ -474,44 +429,6 @@ export function useAgentSession(
       });
     },
     [executeShellRequest],
-  );
-
-  const completeProductAction = useCallback(
-    (result: ProductActionResult): Promise<void> => {
-      const current = pendingProductActionRef.current;
-      if (current === undefined) return Promise.resolve();
-      const completion = Effect.gen(function* () {
-        const client = yield* FlectClient;
-        yield* client.completeProductActionRequest(
-          current.sessionId,
-          current.request.requestId,
-          result,
-        );
-        yield* Effect.sync(() => {
-          if (
-            pendingProductActionRef.current?.request.requestId ===
-            current.request.requestId
-          ) {
-            pendingProductActionRef.current = undefined;
-            setPendingProductAction(undefined);
-          }
-        });
-      });
-      return runtime.runPromise(completion);
-    },
-    [runtime],
-  );
-
-  const denyProductAction = useCallback(
-    (message = "The product action was cancelled.") =>
-      completeProductAction(
-        ProductActionResult.make({
-          version: 1,
-          status: "denied",
-          resultJson: JSON.stringify({ message }),
-        }),
-      ),
-    [completeProductAction],
   );
 
   const submit = useCallback(
@@ -701,12 +618,6 @@ export function useAgentSession(
         if (request !== undefined) {
           yield* Fiber.interrupt(request);
         }
-        if (role === "app") {
-          yield* Effect.sync(() => {
-            pendingProductActionRef.current = undefined;
-            setPendingProductAction(undefined);
-          });
-        }
       }).pipe(
         Effect.tap(() =>
           Effect.sync(() => {
@@ -829,11 +740,6 @@ export function useAgentSession(
     submit,
     cancel: cancelApp,
   };
-  const productAction: ProductActionController = {
-    pending: pendingProductAction,
-    complete: completeProductAction,
-    deny: denyProductAction,
-  };
   const shaper: ShaperConversationController = {
     role: "shaper",
     ...shaperState,
@@ -850,7 +756,6 @@ export function useAgentSession(
     toggleExternalExtensions,
     app,
     shaper,
-    productAction,
     diagnoseRecovery,
     status: app.status,
     messages: app.messages,

@@ -286,29 +286,6 @@ not hostile-code containment. The trust boundary is the isolated realm plus
 strict schemas, typed brokers, bounds, capability denial, validation, and
 deterministic recovery.
 
-## Local product surfaces
-
-Flect can display a separately owned local product UI through a generic
-`product-surface` interface node. The node contains only a capability id and a
-display title. A loopback service registers its exact origin, entry path,
-memory-only session credential, and expiry with the Flect server. Public status
-responses redact the credential.
-
-The browser must explicitly grant the registration before Flect resolves it.
-Only then does Flect mount an exact-origin iframe and transfer the credential
-in memory after the frame loads. The credential is never placed in a URL,
-document, revision, browser storage, or DOM attribute. Revocation removes the
-frame before the server operation completes; expiry and safe mode fail closed.
-The frame cannot navigate the top level, open popups, download files, or access
-device permissions. The protected Flect topbar, safe-mode control, and agent
-rail remain outside the product frame.
-
-Registrations live only in the web server process. The Tauri client reports a
-typed unavailable result until a reviewed native host adapter exists. Product
-logic, durable data, and authorization beyond display remain in the owning
-repository; Flect supplies only generic registration, consent, rendering, and
-revocation.
-
 Build-gated diagnostics still exercise fixed JavaScript, WASI Preview 1, npm
 fixture, Bun command, and preview flows. The ordinary composer is separately
 tested in production Chromium with a full Pi event -> browser shell -> result

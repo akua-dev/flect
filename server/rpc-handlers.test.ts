@@ -49,7 +49,6 @@ const runtimeLayer = Layer.succeed(FlectRuntime)({
     ),
   cancel: () => Effect.void,
   completeShellRequest: () => Effect.void,
-  completeProductActionRequest: () => Effect.void,
   diagnoseRecovery: () =>
     Effect.succeed(
       GuardianDiagnostic.make({

@@ -16,10 +16,6 @@ import {
 } from "../../shared/contracts";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
 import {
-  AgentProductActionRequest,
-  ProductActionResult,
-} from "../../shared/product-action";
-import {
   FlectClient,
   type FlectClientShape,
   FlectUnavailableError,
@@ -93,12 +89,7 @@ function createFakeRuntime({
     shape: vi.fn(shape),
     cancel: vi.fn(cancel),
     completeShellRequest: vi.fn(completeShellRequest),
-    completeProductActionRequest: vi.fn(() => Effect.void),
     diagnoseRecovery: vi.fn(diagnoseRecovery),
-    productSurfaceSummary: vi.fn(() => Effect.die("unused")),
-    approveProductSurface: vi.fn(() => Effect.die("unused")),
-    resolveProductSurface: vi.fn(() => Effect.die("unused")),
-    revokeProductSurface: vi.fn(() => Effect.die("unused")),
   };
   const shell: SandboxedShellShape = {
     execute: vi.fn(shellExecute),
@@ -294,57 +285,6 @@ describe("useAgentSession", () => {
       "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
       shellResult,
     );
-    unmount();
-    await runtime.dispose();
-  });
-
-  it("holds a product action for the granted surface to complete", async () => {
-    const action = AgentProductActionRequest.make({
-      type: "product_action_request",
-      requestId: "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
-      capabilityId: "akua-outreach-review",
-      action: "inspect",
-      inputJson: "{}",
-    });
-    const { client, runtime } = createFakeRuntime({
-      prompt: () =>
-        Stream.fromIterable([
-          { type: "turn_started" as const },
-          action,
-          { type: "turn_completed" as const },
-        ]),
-    });
-    const { result, unmount } = renderHook(() =>
-      useAgentSession(runtime, "akua-outreach-review"),
-    );
-    await waitFor(() => expect(result.current.status).toBe("ready"));
-
-    await act(async () => {
-      await result.current.submit("Show me the current review");
-    });
-
-    expect(client.createSession).toHaveBeenCalledWith(
-      SessionSelection.make({
-        productCapabilityId: "akua-outreach-review",
-      }),
-    );
-    expect(result.current.productAction.pending).toEqual(action);
-
-    const completed = ProductActionResult.make({
-      version: 1,
-      status: "ok",
-      resultJson: '{"company":"Documenso"}',
-    });
-    await act(async () => {
-      await result.current.productAction.complete(completed);
-    });
-
-    expect(client.completeProductActionRequest).toHaveBeenCalledWith(
-      "session-1",
-      action.requestId,
-      completed,
-    );
-    expect(result.current.productAction.pending).toBeUndefined();
     unmount();
     await runtime.dispose();
   });

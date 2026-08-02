@@ -15,7 +15,6 @@ import {
   InterfaceDocument,
   InvalidInterfaceDocument,
 } from "../shared/interface-document";
-import { ProductActionResult } from "../shared/product-action";
 import {
   acquireProtectedAgentSet,
   FlectRuntimeLive,
@@ -164,7 +163,6 @@ function createFakePi(options: FakeOptions = {}) {
             )
           : Effect.void,
     );
-    const completeProductActionRequest = vi.fn(() => Effect.void);
     const session: PiSession = {
       sessionId,
       subscribe: (next) =>
@@ -174,7 +172,6 @@ function createFakePi(options: FakeOptions = {}) {
         }),
       prompt,
       completeShellRequest,
-      completeProductActionRequest,
       get abort() {
         if (role === "app" && options.pairObserved !== undefined) {
           Effect.runSync(Deferred.succeed(options.pairObserved, undefined));
@@ -186,7 +183,6 @@ function createFakePi(options: FakeOptions = {}) {
     return {
       abort,
       completeShellRequest,
-      completeProductActionRequest,
       dispose,
       prompt,
       session,
@@ -240,7 +236,6 @@ function createFakePi(options: FakeOptions = {}) {
   return {
     appAbort: app.abort,
     appCompleteShellRequest: app.completeShellRequest,
-    appCompleteProductActionRequest: app.completeProductActionRequest,
     appDispose: app.dispose,
     appPrompt: app.prompt,
     appUnsubscribe: app.unsubscribe,
@@ -573,44 +568,6 @@ describe("FlectRuntimeLive", () => {
         result,
       );
       expect(fake.shaperCompleteShellRequest).not.toHaveBeenCalled();
-    }).pipe(Effect.provide(fake.layer));
-  });
-
-  it.effect("binds product actions to the App Agent capability", () => {
-    const fake = createFakePi();
-    const result = ProductActionResult.make({
-      version: 1,
-      status: "ok",
-      resultJson: '{"company":"Documenso"}',
-    });
-    return Effect.gen(function* () {
-      const runtime = yield* FlectRuntime;
-      const sessionId = yield* runtime.createSession(
-        SessionSelection.make({
-          productCapabilityId: "akua-outreach-review",
-        }),
-      );
-      yield* runtime.completeProductActionRequest(
-        sessionId,
-        "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
-        result,
-      );
-
-      expect(fake.createAgentSet).toHaveBeenCalledWith(
-        expect.any(ModelSummary),
-        expect.objectContaining({
-          app: expect.objectContaining({
-            productCapabilityId: "akua-outreach-review",
-          }),
-          shaper: expect.not.objectContaining({
-            productCapabilityId: expect.anything(),
-          }),
-        }),
-      );
-      expect(fake.appCompleteProductActionRequest).toHaveBeenCalledWith(
-        "action-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
-        result,
-      );
     }).pipe(Effect.provide(fake.layer));
   });
 

@@ -45,11 +45,6 @@ import {
   type InterfaceDocument,
   validateInterfaceDocument,
 } from "../shared/interface-document";
-import {
-  AgentProductActionRequest,
-  type ProductActionResult,
-} from "../shared/product-action";
-import { makePiProductActionBridge } from "./pi-product-action-bridge";
 import { makePiShellBridge } from "./pi-shell-bridge";
 import { FlectRuntime } from "./runtime";
 
@@ -59,7 +54,6 @@ export type PiSessionPolicy = {
   readonly storage: "memory";
   readonly extensions: "disabled" | "enabled";
   readonly userResources: "disabled";
-  readonly productCapabilityId?: string;
 };
 
 export type PiEvent =
@@ -71,13 +65,6 @@ export type PiEvent =
       readonly type: "shell_request";
       readonly requestId: string;
       readonly command: string;
-    }
-  | {
-      readonly type: "product_action_request";
-      readonly requestId: string;
-      readonly capabilityId: string;
-      readonly action: string;
-      readonly inputJson: string;
     };
 
 export interface PiSession {
@@ -89,10 +76,6 @@ export interface PiSession {
   readonly completeShellRequest: (
     requestId: string,
     result: BunCommandResult,
-  ) => Effect.Effect<void, PiOperationFailed>;
-  readonly completeProductActionRequest?: (
-    requestId: string,
-    result: ProductActionResult,
   ) => Effect.Effect<void, PiOperationFailed>;
   readonly abort: () => Effect.Effect<void, PiOperationFailed>;
   readonly dispose: Effect.Effect<void>;
@@ -178,9 +161,6 @@ const protectedAgentPolicies = (selection: SessionSelection) => {
       storage: "memory",
       extensions: extensions.app ? "enabled" : "disabled",
       userResources: "disabled",
-      ...(selection.productCapabilityId === undefined
-        ? {}
-        : { productCapabilityId: selection.productCapabilityId }),
     } satisfies PiSessionPolicy),
     shaper: Object.freeze({
       role: "shaper",
@@ -207,18 +187,13 @@ const systemPrompt = (policy: PiSessionPolicy) => {
       ? "The user explicitly enabled Pi's configured external extensions for this role; those extensions are trusted local code and remain outside the protected Guardian domain."
       : "You cannot load user resources or external extensions.";
 
-  const productBoundary =
-    policy.role === "app" && policy.productCapabilityId !== undefined
-      ? `The current granted product capability is ${policy.productCapabilityId}. Use product_action with inspect before proposing a product change. Every state-changing action requires the user's protected confirmation.`
-      : "No product action capability is available in this session.";
-
   return `${
     policy.role === "guardian"
       ? guardianSystemPrompt
       : policy.role === "app"
         ? appSystemPrompt
         : shaperSystemPrompt
-  } ${extensionBoundary} ${productBoundary}`;
+  } ${extensionBoundary}`;
 };
 
 const piFailure = (operation: PiOperationFailed["operation"]) =>
@@ -304,12 +279,6 @@ export const PiSdkLive = Layer.effect(
         const shellBridge = yield* makePiShellBridge((event) => {
           emit(event);
         });
-        const productActionBridge = yield* makePiProductActionBridge(
-          policy.productCapabilityId ?? "no-product-capability",
-          (event) => {
-            emit(event);
-          },
-        );
         const resourceLoader = new DefaultResourceLoader({
           cwd: process.cwd(),
           agentDir: getAgentDir(),
@@ -336,14 +305,8 @@ export const PiSdkLive = Layer.effect(
                 ? { noTools: "all" }
                 : {
                     noTools: "builtin",
-                    tools:
-                      policy.productCapabilityId === undefined
-                        ? ["bash"]
-                        : ["bash", "product_action"],
-                    customTools:
-                      policy.productCapabilityId === undefined
-                        ? [shellBridge.tool]
-                        : [shellBridge.tool, productActionBridge.tool],
+                    tools: ["bash"],
+                    customTools: [shellBridge.tool],
                   }),
               sessionManager,
               settingsManager,
@@ -411,25 +374,14 @@ export const PiSdkLive = Layer.effect(
           )((requestId: string, shellResult: BunCommandResult) =>
             shellBridge.complete(requestId, shellResult),
           ),
-          completeProductActionRequest: Effect.fn(
-            "Flect.PiSession.completeProductActionRequest",
-          )((requestId: string, actionResult: ProductActionResult) =>
-            productActionBridge.complete(requestId, actionResult),
-          ),
           abort: Effect.fn("Flect.PiSession.abort")(function* () {
-            yield* Effect.all(
-              [shellBridge.cancel, productActionBridge.cancel],
-              { concurrency: "unbounded", discard: true },
-            );
+            yield* shellBridge.cancel;
             yield* Effect.tryPromise({
               try: () => result.session.abort(),
               catch: () => piFailure("cancel"),
             });
           }),
-          dispose: Effect.all([shellBridge.close, productActionBridge.close], {
-            concurrency: "unbounded",
-            discard: true,
-          }).pipe(
+          dispose: shellBridge.close.pipe(
             Effect.andThen(
               Effect.sync(() => {
                 unsubscribeFromPi();
@@ -1040,19 +992,11 @@ export const FlectRuntimeLive = Layer.effect(
                             type: "text_delta",
                             delta: event.delta,
                           })
-                        : event.type === "shell_request"
-                          ? new AgentShellRequest({
-                              type: "shell_request",
-                              requestId: event.requestId,
-                              command: event.command,
-                            })
-                          : AgentProductActionRequest.make({
-                              type: "product_action_request",
-                              requestId: event.requestId,
-                              capabilityId: event.capabilityId,
-                              action: event.action,
-                              inputJson: event.inputJson,
-                            }),
+                        : new AgentShellRequest({
+                            type: "shell_request",
+                            requestId: event.requestId,
+                            command: event.command,
+                          }),
                     );
                   });
 
@@ -1126,21 +1070,6 @@ export const FlectRuntimeLive = Layer.effect(
       yield* session.completeShellRequest(requestId, result);
     });
 
-    const completeProductActionRequest = Effect.fn(
-      "Flect.Runtime.completeProductActionRequest",
-    )(function* (
-      sessionId: string,
-      requestId: string,
-      result: ProductActionResult,
-    ) {
-      const record = yield* findSession(sessionId);
-      const complete = record.app.completeProductActionRequest;
-      if (complete === undefined) {
-        return yield* Effect.fail(piFailure("product_action"));
-      }
-      yield* complete(requestId, result);
-    });
-
     const cancel = Effect.fn("Flect.Runtime.cancel")(function* (
       sessionId: string,
       role: InteractiveAgentRole,
@@ -1177,7 +1106,7 @@ export const FlectRuntimeLive = Layer.effect(
               const unsubscribe = yield* record.shaper.subscribe((event) => {
                 if (event.type === "text_delta") {
                   response.append(event.delta);
-                } else if (event.type === "shell_request") {
+                } else {
                   Queue.offerUnsafe(
                     queue,
                     new AgentShellRequest({
@@ -1231,7 +1160,6 @@ export const FlectRuntimeLive = Layer.effect(
       shape,
       cancel,
       completeShellRequest,
-      completeProductActionRequest,
       diagnoseRecovery,
     };
   }),
