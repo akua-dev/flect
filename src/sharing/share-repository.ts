@@ -74,6 +74,7 @@ export class ShareRepositoryFailure extends Schema.TaggedErrorClass<ShareReposit
       "unavailable",
     ]),
     message: Schema.String,
+    rollbackRestored: Schema.optionalKey(Schema.Boolean),
   },
 ) {}
 
@@ -593,8 +594,18 @@ export const makeShareRepositoryLayer = (options?: {
             };
           });
           return yield* accepted.pipe(
-            Effect.catch((error) =>
-              rollback.pipe(Effect.andThen(Effect.fail(error))),
+            Effect.catchTag("ShareRepositoryFailure", (error) =>
+              rollback.pipe(
+                Effect.as(
+                  ShareRepositoryFailure.make({
+                    reason: error.reason,
+                    message: error.message,
+                    rollbackRestored: true,
+                  }),
+                ),
+                Effect.catch(() => Effect.succeed(error)),
+                Effect.flatMap(Effect.fail),
+              ),
             ),
           );
         },

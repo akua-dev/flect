@@ -1598,8 +1598,17 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             },
           })
           .pipe(
-            Effect.mapError(() =>
-              commandRejected("The shared candidate changed before Keep."),
+            Effect.catchTag("ShareRepositoryFailure", (error) =>
+              (error.rollbackRestored === true && metadata !== undefined
+                ? Ref.set(metadata, undefined)
+                : Effect.void
+              ).pipe(
+                Effect.andThen(
+                  Effect.fail(
+                    commandRejected("The shared candidate changed before Keep."),
+                  ),
+                ),
+              ),
             ),
           );
         refs = ShareInstallationRefs.make({ ...accepted.refs });
@@ -1799,9 +1808,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
     const enterDegradedRecovery = Effect.fn(
       "Flect.Workspace.enterDegradedRecovery",
     )(function* () {
-      yield* kernel.enterSafeMode.pipe(Effect.result);
-        const shaping = yield* kernel.snapshot;
-        yield* SubscriptionRef.update(state, (current) =>
+      const safeModeResult = yield* kernel.enterSafeMode.pipe(Effect.result);
+      const shaping = yield* kernel.snapshot;
+      yield* SubscriptionRef.update(state, (current) =>
         FlectWorkspaceSnapshot.make({
           ...current,
           phase: shaping.safeMode ? "safe-mode" : "unavailable",
@@ -1821,7 +1830,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       );
       return yield* Effect.fail(
         commandRejected(
-          "The workspace entered safe mode for deterministic recovery.",
+          safeModeResult._tag === "Failure"
+            ? "Safe mode is active, but durable recovery could not be recorded."
+            : "The workspace entered safe mode for deterministic recovery.",
         ),
       );
     });

@@ -691,7 +691,7 @@ const makeShapingKernel = (
 
     const enterSafeMode = Effect.fn("Flect.ShapingKernel.enterSafeMode")(
       function* () {
-        yield* markRecovery;
+        const marker = yield* markRecovery.pipe(Effect.result);
         const persisted = yield* SubscriptionRef.modifyEffect(
           stateRef,
           (state) => {
@@ -713,6 +713,9 @@ const makeShapingKernel = (
         );
         if (persisted._tag === "Failure") {
           return yield* Effect.fail(persisted.failure);
+        }
+        if (marker._tag === "Failure") {
+          return yield* Effect.fail(marker.failure);
         }
       },
     );
