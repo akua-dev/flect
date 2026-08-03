@@ -8,11 +8,11 @@ import type {
   SandboxExecutionFailed,
   SandboxResult,
 } from "../../shared/sandbox";
-import type { InterfaceStorageError } from "../lib/interface-store";
 import { ShapingKernel } from "../lib/shaping-kernel";
 import {
-  type CapabilityAdapterFailure,
+  type CapabilityAdapterError,
   type CapabilityDenied,
+  isExtensionIntentPackageFailure,
   SandboxCapabilityBroker,
 } from "./capability-broker";
 import { ExtensionSandbox } from "./extension-sandbox";
@@ -33,10 +33,9 @@ export interface ExtensionExecutionShape {
   ) => Effect.Effect<
     SandboxResult,
     | SandboxExecutionFailed
-    | CapabilityAdapterFailure
+    | CapabilityAdapterError
     | CapabilityDenied
     | ExtensionDisabled
-    | InterfaceStorageError
   >;
 }
 
@@ -88,7 +87,6 @@ export const ExtensionExecutionLive = Layer.effect(
             result,
             grants,
           );
-          yield* kernel.recordExtensionSuccess(manifest.id);
           return result;
         },
         (effect, manifest) =>
@@ -96,7 +94,13 @@ export const ExtensionExecutionLive = Layer.effect(
             Effect.tapError((error) =>
               error._tag === "ExtensionDisabled"
                 ? Effect.void
-                : kernel.recordExtensionFailure(manifest.id),
+                : error._tag === "CapabilityDenied" ||
+                    error._tag === "SandboxExecutionFailed" ||
+                    (error._tag === "CapabilityAdapterFailure" ||
+                      (error._tag === "ExtensionIntentRejected" &&
+                        isExtensionIntentPackageFailure(error)))
+                  ? kernel.recordExtensionFailure(manifest.id)
+                  : Effect.void,
             ),
           ),
       ),

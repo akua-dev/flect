@@ -404,9 +404,12 @@ const makeShapingKernel = (
               document,
               createdAt: now(),
             });
+            const failureCounts = new Map(state.failureCounts);
+            failureCounts.delete(context.extensionId);
             const next: KernelState = {
               ...state,
               proposal: revision,
+              failureCounts,
               sequence: state.sequence + 1,
               lastEvent: eventFor(
                 state,

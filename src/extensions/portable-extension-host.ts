@@ -13,8 +13,9 @@ import type {
 import { ExtensionIntentContext } from "../../shared/sandbox";
 import { CapsuleStore } from "../capsule/capsule-store";
 import {
-  type CapabilityAdapterFailure,
+  type CapabilityAdapterError,
   type CapabilityDenied,
+  isExtensionIntentPackageFailure,
   SandboxCapabilityBroker,
 } from "../sandbox/capability-broker";
 import { ExtensionSandbox } from "../sandbox/extension-sandbox";
@@ -35,6 +36,15 @@ export class PortableExtensionSourceFailure extends Schema.TaggedErrorClass<Port
   "PortableExtensionSourceFailure",
   {
     message: Schema.Literal("Portable extension source is unavailable."),
+  },
+) {}
+
+export class PortableExtensionPersistenceDegraded extends Schema.TaggedErrorClass<PortableExtensionPersistenceDegraded>()(
+  "PortableExtensionPersistenceDegraded",
+  {
+    extensionId: Schema.String,
+    operationId: Schema.String,
+    message: Schema.Literal("Portable extension state needs recovery."),
   },
 ) {}
 
@@ -150,11 +160,12 @@ export interface PortableExtensionHostShape {
     input: unknown,
   ) => Effect.Effect<
     SandboxResult,
-    | CapabilityAdapterFailure
+    | CapabilityAdapterError
     | CapabilityDenied
     | ExtensionCatalogFailure
     | PortableExtensionSourceFailure
     | PortableExtensionUnavailable
+    | PortableExtensionPersistenceDegraded
     | SandboxExecutionFailed
   >;
 }
@@ -317,23 +328,25 @@ export const PortableExtensionHostLive = Layer.effect(
       extensionId: string,
       input: unknown,
     ) {
-      const selected = yield* descriptor(
-        callSource.role,
-        callSource.binding,
-        extensionId,
-      );
-      const runtimeManifest = ExtensionManifest.make({
-        version: 1,
-        id: selected.resolved.manifest.id,
-        name: selected.resolved.manifest.name,
-        source: selected.resolved.source,
-        capabilities: selected.resolved.manifest.capabilities.map(
-          (capability) => capability.id,
-        ),
-      });
-      const key = keyFor(selected.resolved, callSource.role);
-      return yield* sandbox
-        .execute({
+      let selectedKey: PortableExtensionKey | undefined;
+      return yield* Effect.gen(function* () {
+        const selected = yield* descriptor(
+          callSource.role,
+          callSource.binding,
+          extensionId,
+        );
+        const runtimeManifest = ExtensionManifest.make({
+          version: 1,
+          id: selected.resolved.manifest.id,
+          name: selected.resolved.manifest.name,
+          source: selected.resolved.source,
+          capabilities: selected.resolved.manifest.capabilities.map(
+            (capability) => capability.id,
+          ),
+        });
+        const key = keyFor(selected.resolved, callSource.role);
+        selectedKey = key;
+        const result = yield* sandbox.execute({
           extensionId,
           source: selected.resolved.source,
           input: {
@@ -342,34 +355,57 @@ export const PortableExtensionHostLive = Layer.effect(
             binding: callSource.binding,
             value: input,
           },
-        })
-        .pipe(
-          Effect.tap((result) =>
-            broker.apply(
-              ExtensionIntentContext.make({
-                extensionId,
-                role: callSource.role,
-                binding: callSource.binding,
-                operationId: callSource.operationId,
-              }),
-              runtimeManifest,
-              result,
-              selected.entry.grantedCapabilities,
+        });
+        const beforeCatalog = yield* catalog.snapshot;
+        yield* catalog.recordSuccess(key);
+        yield* broker
+          .apply(
+            ExtensionIntentContext.make({
+              extensionId,
+              role: callSource.role,
+              binding: callSource.binding,
+              operationId: callSource.operationId,
+            }),
+            runtimeManifest,
+            result,
+            selected.entry.grantedCapabilities,
+          )
+          .pipe(
+            Effect.catch((error) =>
+              catalog.restore(beforeCatalog).pipe(
+                Effect.mapError(() =>
+                  PortableExtensionPersistenceDegraded.make({
+                    extensionId,
+                    operationId: callSource.operationId,
+                    message: "Portable extension state needs recovery.",
+                  }),
+                ),
+                Effect.andThen(Effect.fail(error)),
+              ),
             ),
-          ),
-          Effect.tap(() => catalog.recordSuccess(key)),
-          Effect.tapError((error) =>
-            error._tag === "CapabilityDenied"
+          );
+        return result;
+      }).pipe(
+        Effect.tapError((error) =>
+          selectedKey === undefined
+            ? Effect.void
+            : error._tag === "CapabilityDenied"
               ? catalog
-                  .recordFailure(key, "capability-denied")
+                  .recordFailure(selectedKey, "capability-denied")
                   .pipe(Effect.ignore)
               : error._tag === "SandboxExecutionFailed"
-                ? catalog.recordFailure(key, error.reason).pipe(Effect.ignore)
-                : error._tag === "CapabilityAdapterFailure"
-                  ? catalog.recordFailure(key, "execution").pipe(Effect.ignore)
+                ? catalog
+                    .recordFailure(selectedKey, error.reason)
+                    .pipe(Effect.ignore)
+                : error._tag === "CapabilityAdapterFailure" ||
+                    (error._tag === "ExtensionIntentRejected" &&
+                      isExtensionIntentPackageFailure(error))
+                  ? catalog
+                      .recordFailure(selectedKey, "execution")
+                      .pipe(Effect.ignore)
                   : Effect.void,
-          ),
-        );
+        ),
+      );
     });
 
     return { list, describe, call };

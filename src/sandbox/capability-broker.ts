@@ -8,6 +8,10 @@ import type {
   ExtensionIntentContext,
   SandboxResult,
 } from "../../shared/sandbox";
+import type { InvalidInterfaceDocument } from "../../shared/interface-document";
+import type { InvalidRevisionTransition } from "../../shared/revisions";
+import type { InterfaceStorageError } from "../lib/interface-store";
+import type { ExtensionIntentRejected } from "../lib/shaping-kernel";
 
 export class CapabilityDenied extends Schema.TaggedErrorClass<CapabilityDenied>()(
   "CapabilityDenied",
@@ -27,11 +31,25 @@ export class CapabilityAdapterFailure extends Schema.TaggedErrorClass<Capability
   },
 ) {}
 
+export type CapabilityAdapterError =
+  | CapabilityAdapterFailure
+  | ExtensionIntentRejected
+  | InvalidInterfaceDocument
+  | InvalidRevisionTransition
+  | InterfaceStorageError;
+
+export const isExtensionIntentPackageFailure = (
+  error: CapabilityAdapterError,
+) =>
+  error._tag === "CapabilityAdapterFailure" ||
+  (error._tag === "ExtensionIntentRejected" &&
+    (error.reason === "empty" || error.reason === "target-not-found"));
+
 export interface CapabilityAdapterShape {
   readonly apply: (
     context: ExtensionIntentContext,
     intents: ReadonlyArray<CapabilityIntent>,
-  ) => Effect.Effect<void, CapabilityAdapterFailure>;
+  ) => Effect.Effect<void, CapabilityAdapterError>;
 }
 
 export class CapabilityAdapter extends Context.Service<
@@ -45,7 +63,7 @@ export interface SandboxCapabilityBrokerShape {
     manifest: ExtensionManifest,
     result: SandboxResult,
     grants: ReadonlyArray<ExtensionCapability>,
-  ) => Effect.Effect<void, CapabilityDenied | CapabilityAdapterFailure>;
+  ) => Effect.Effect<void, CapabilityDenied | CapabilityAdapterError>;
 }
 
 export class SandboxCapabilityBroker extends Context.Service<

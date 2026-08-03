@@ -51,7 +51,6 @@ import {
 import { type GitWorkspace, makeGitWorkspaceLayer } from "../git/git-workspace";
 import {
   CapabilityAdapter,
-  CapabilityAdapterFailure,
   SandboxCapabilityBrokerLive,
 } from "../sandbox/capability-broker";
 import { ExtensionExecutionLive } from "../sandbox/extension-execution";
@@ -382,14 +381,7 @@ const CapabilityAdapterLive = Layer.effect(
         context: ExtensionIntentContext,
         intents: ReadonlyArray<CapabilityIntent>,
       ) {
-        yield* kernel.applyExtensionIntents(context, intents).pipe(
-          Effect.mapError(() =>
-            CapabilityAdapterFailure.make({
-              reason: "unsupported",
-              message: "The extension interface intent is unsupported.",
-            }),
-          ),
-        );
+        yield* kernel.applyExtensionIntents(context, intents);
       }),
     };
   }),
