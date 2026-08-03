@@ -13,6 +13,7 @@ import {
 import {
   InterfaceRepository,
   makeInterfaceRepositoryLayer,
+  REVISION_JOURNAL_KEY,
 } from "./interface-repository";
 import { InterfaceStorage, InterfaceStorageError } from "./interface-store";
 import {
@@ -47,11 +48,17 @@ const customizedDocument = (headline: string) =>
   });
 
 const makePersistentHarness = (initial: string | null = null) => {
-  const stored = Ref.makeUnsafe<string | null>(initial);
+  const values = new Map<string, string>();
+  if (initial !== null) values.set(REVISION_JOURNAL_KEY, initial);
+  const stored = Ref.makeUnsafe(values);
   const storage = Layer.succeed(InterfaceStorage)({
-    read: () => Ref.get(stored),
-    write: (_key, value) => Ref.set(stored, value),
-    remove: () => Effect.void,
+    read: (key) => Ref.get(stored).pipe(Effect.map((current) => current.get(key) ?? null)),
+    write: (key, value) => Ref.update(stored, (current) => new Map(current).set(key, value)),
+    remove: (key) => Ref.update(stored, (current) => {
+      const next = new Map(current);
+      next.delete(key);
+      return next;
+    }),
   });
   const repository = makeInterfaceRepositoryLayer({
     safeMode: false,
@@ -71,7 +78,8 @@ const makePersistentHarness = (initial: string | null = null) => {
 
 const makeFailingRepairHarness = (initial: string) => {
   const storage = Layer.succeed(InterfaceStorage)({
-    read: () => Effect.succeed(initial),
+    read: (key) =>
+      Effect.succeed(key === REVISION_JOURNAL_KEY ? initial : null),
     write: () =>
       Effect.fail(
         new InterfaceStorageError({

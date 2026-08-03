@@ -201,17 +201,19 @@ const makeShapingKernel = (
       repository === undefined ? undefined : yield* repository.load;
     const restored = loaded?.snapshot;
     const recovered = loaded?.recovered ?? false;
+    const recoveryRequested = loaded?.recovery === true;
+    const forcedSafeMode = recovered || recoveryRequested;
     const initialState: KernelState =
       restored === undefined
         ? {
             active: initialRevision,
             lastKnownGood: initialRevision,
             proposal: undefined,
-            safeMode: recovered,
+            safeMode: forcedSafeMode,
             disabledExtensions: [],
             failureCounts: new Map(),
-            sequence: recovered ? 1 : 0,
-            lastEvent: recovered
+            sequence: forcedSafeMode ? 1 : 0,
+            lastEvent: forcedSafeMode
               ? ShapingEvent.make({
                   version: 1,
                   sequence: 1,
@@ -221,10 +223,16 @@ const makeShapingKernel = (
               : initialEvent,
           }
         : {
-            active: restored.safeMode ? initialRevision : restored.active,
+            active:
+              restored.safeMode || forcedSafeMode
+                ? initialRevision
+                : restored.active,
             lastKnownGood: restored.lastKnownGood,
-            proposal: restored.safeMode ? undefined : restored.proposal,
-            safeMode: restored.safeMode,
+            proposal:
+              restored.safeMode || forcedSafeMode
+                ? undefined
+                : restored.proposal,
+            safeMode: restored.safeMode || forcedSafeMode,
             disabledExtensions: restored.disabledExtensions,
             failureCounts: new Map(),
             sequence: restored.lastEvent.sequence,
@@ -263,7 +271,15 @@ const makeShapingKernel = (
       (state: KernelState) =>
         repository === undefined
           ? Effect.void
-          : repository.save(snapshotFromState(state)),
+          : repository
+              .save(snapshotFromState(state))
+              .pipe(
+                Effect.andThen(
+                  state.safeMode
+                    ? Effect.void
+                    : (repository.clearRecovery ?? Effect.void),
+                ),
+              ),
     );
     if (pendingProposal !== undefined) {
       yield* persist(reconciledState).pipe(
@@ -674,23 +690,31 @@ const makeShapingKernel = (
 
     const enterSafeMode = Effect.fn("Flect.ShapingKernel.enterSafeMode")(
       function* () {
-        yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
-          const next: KernelState = {
-            ...state,
-            active: initialRevision,
-            proposal: undefined,
-            safeMode: true,
-            sequence: state.sequence + 1,
-            lastEvent: eventFor(state, "safe-mode-entered", {
-              revisionId: state.lastKnownGood.id,
-            }),
-          };
-          const transition: readonly [undefined, KernelState] = [
-            undefined,
-            next,
-          ];
-          return persist(next).pipe(Effect.as(transition));
-        });
+        const persisted = yield* SubscriptionRef.modifyEffect(
+          stateRef,
+          (state) => {
+            const next: KernelState = {
+              ...state,
+              active: initialRevision,
+              proposal: undefined,
+              safeMode: true,
+              sequence: state.sequence + 1,
+              lastEvent: eventFor(state, "safe-mode-entered", {
+                revisionId: state.lastKnownGood.id,
+              }),
+            };
+            return persist(next).pipe(
+              Effect.result,
+              Effect.map((result) => [result, next] as const),
+            );
+          },
+        );
+        if (persisted._tag === "Failure") {
+          yield* (repository?.markRecovery ?? Effect.void).pipe(
+            Effect.catch(() => Effect.void),
+          );
+          return yield* Effect.fail(persisted.failure);
+        }
       },
     );
 

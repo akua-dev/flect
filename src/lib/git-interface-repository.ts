@@ -9,9 +9,11 @@ import {
 } from "../../shared/revisions";
 import { GitWorkspace } from "../git/git-workspace";
 import {
+  decodeRecoveryMarker,
   InterfaceRepository,
   InterfaceRepositoryLoad,
   REVISION_JOURNAL_KEY,
+  RecoveryMarker,
 } from "./interface-repository";
 import { InterfaceStorage, InterfaceStorageError } from "./interface-store";
 
@@ -22,6 +24,8 @@ const sourcePath = (path: string) =>
   path !== SNAPSHOT_PATH && path !== INTERFACE_PATH;
 const ACCEPTED_BRANCH = "flect/accepted";
 const LAST_KNOWN_GOOD_BRANCH = "flect/last-known-good";
+const RECOVERY_BRANCH = "flect/shared/recovery";
+const RECOVERY_PATH = ".flect/recovery.json";
 const ObjectId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 const BranchName = Schema.String.check(
   Schema.isMinLength(1),
@@ -310,6 +314,87 @@ export const makeGitInterfaceRepositoryLayer = ({
         },
       );
 
+      const loadRecoveryMarker = Effect.fn(
+        "Flect.GitInterfaceRepository.loadRecoveryMarker",
+      )(function* () {
+        const status = yield* git
+          .status({ proposalBranch: RECOVERY_BRANCH })
+          .pipe(Effect.mapError(storageFailure));
+        const commit = status.proposalCommit;
+        if (commit === undefined) return false;
+        const read = yield* git
+          .readAtRef({
+            branch: RECOVERY_BRANCH,
+            expectedCommit: commit,
+            paths: [RECOVERY_PATH],
+          })
+          .pipe(Effect.option);
+        if (Option.isNone(read)) return true;
+        const file = read.value.files[0];
+        if (file === undefined) return true;
+        const marker = yield* parseJson(
+          new TextDecoder().decode(file.contents),
+        ).pipe(Effect.flatMap(decodeRecoveryMarker), Effect.option);
+        return Option.isNone(marker) || marker.value.status === "pending";
+      });
+
+      const markRecovery = Effect.fn(
+        "Flect.GitInterfaceRepository.markRecovery",
+      )(function* () {
+        const status = yield* git
+          .status({ proposalBranch: RECOVERY_BRANCH })
+          .pipe(Effect.mapError(storageFailure));
+        const commit = status.proposalCommit;
+        const baseCommit = status.acceptedCommit ?? status.lastKnownGoodCommit;
+        if (commit === undefined && baseCommit === undefined) {
+          return yield* Effect.fail(storageFailure());
+        }
+        const checkpoint = yield* git
+          .checkpoint({
+            branch: RECOVERY_BRANCH,
+            ...(commit === undefined
+              ? { baseCommit }
+              : { expectedCommit: commit }),
+            files: [
+              {
+                path: RECOVERY_PATH,
+                contents: new TextEncoder().encode(
+                  JSON.stringify(RecoveryMarker.make({ version: 1, status: "pending" })),
+                ),
+              },
+            ],
+            message: "Flect deterministic recovery requested",
+          })
+          .pipe(Effect.mapError(storageFailure));
+      });
+
+      const clearRecovery = Effect.fn(
+        "Flect.GitInterfaceRepository.clearRecovery",
+      )(function* () {
+        const status = yield* git
+          .status({ proposalBranch: RECOVERY_BRANCH })
+          .pipe(Effect.mapError(storageFailure));
+        const commit = status.proposalCommit;
+        if (commit === undefined) {
+          return;
+        }
+        const checkpoint = yield* git
+          .checkpoint({
+            branch: RECOVERY_BRANCH,
+            expectedCommit: commit,
+            files: [
+              {
+                path: RECOVERY_PATH,
+                contents: new TextEncoder().encode(
+                  JSON.stringify(RecoveryMarker.make({ version: 1, status: "clear" })),
+                ),
+              },
+            ],
+            message: "Flect deterministic recovery cleared",
+          })
+          .pipe(Effect.mapError(storageFailure));
+      });
+
       const recoverActivation = Effect.fn(
         "Flect.GitInterfaceRepository.recoverActivation",
       )(function* () {
@@ -404,6 +489,13 @@ export const makeGitInterfaceRepositoryLayer = ({
 
       const load = Effect.fn("Flect.GitInterfaceRepository.load")(function* () {
         const existed = yield* ensureOpen();
+        const recovery = yield* loadRecoveryMarker().pipe(
+          Effect.orElseSucceed(() => true),
+        );
+        const withRecovery = (load: InterfaceRepositoryLoad) =>
+          recovery
+            ? InterfaceRepositoryLoad.make({ ...load, recovery: true })
+            : load;
         const receipt = yield* loadReceipt().pipe(Effect.option);
         const activation = Option.getOrUndefined(receipt);
         if (activation === undefined) {
@@ -420,31 +512,33 @@ export const makeGitInterfaceRepositoryLayer = ({
               yield* storage
                 .remove(REVISION_JOURNAL_KEY)
                 .pipe(Effect.catch(() => Effect.void));
-              return InterfaceRepositoryLoad.make({
+              return withRecovery(InterfaceRepositoryLoad.make({
                 snapshot: safeMode
                   ? safeRecoverySnapshot(legacy.value)
                   : legacy.value,
                 recovered: safeMode,
-              });
+              }));
             }
           }
           if (!existed) {
             const initial = initialBuiltInSnapshot();
             yield* initialize(initial);
-            return InterfaceRepositoryLoad.make({
+            return withRecovery(InterfaceRepositoryLoad.make({
               snapshot: safeMode ? safeRecoverySnapshot(initial) : initial,
               recovered: safeMode,
-            });
+            }));
           }
           return yield* recoverActivation().pipe(
             Effect.map((snapshot) =>
-              InterfaceRepositoryLoad.make({
+              withRecovery(InterfaceRepositoryLoad.make({
                 snapshot,
                 recovered: true,
-              }),
+              })),
             ),
             Effect.catch(() =>
-              Effect.succeed(InterfaceRepositoryLoad.make({ recovered: true })),
+              Effect.succeed(
+                withRecovery(InterfaceRepositoryLoad.make({ recovered: true })),
+              ),
             ),
           );
         }
@@ -515,23 +609,25 @@ export const makeGitInterfaceRepositoryLayer = ({
         }).pipe(Effect.option);
 
         if (loaded._tag === "Some") {
-          return InterfaceRepositoryLoad.make({
+          return withRecovery(InterfaceRepositoryLoad.make({
             snapshot:
               safeMode && !loaded.value.safeMode
                 ? safeRecoverySnapshot(loaded.value)
                 : loaded.value,
             recovered: safeMode,
-          });
+          }));
         }
         return yield* recoverActivation().pipe(
           Effect.map((snapshot) =>
-            InterfaceRepositoryLoad.make({
+            withRecovery(InterfaceRepositoryLoad.make({
               snapshot,
               recovered: true,
-            }),
+            })),
           ),
           Effect.catch(() =>
-            Effect.succeed(InterfaceRepositoryLoad.make({ recovered: true })),
+            Effect.succeed(
+              withRecovery(InterfaceRepositoryLoad.make({ recovered: true })),
+            ),
           ),
         );
       });
@@ -781,6 +877,8 @@ export const makeGitInterfaceRepositoryLayer = ({
           ),
         ),
         save,
+        markRecovery: markRecovery(),
+        clearRecovery: clearRecovery(),
       };
     }),
   );

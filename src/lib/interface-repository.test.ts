@@ -13,6 +13,7 @@ import {
 import {
   InterfaceRepository,
   makeInterfaceRepositoryLayer,
+  REVISION_JOURNAL_KEY,
 } from "./interface-repository";
 import { InterfaceStorage } from "./interface-store";
 
@@ -139,7 +140,9 @@ const forgedBuiltInSnapshot = ShapingSnapshot.make({
 });
 
 const makeStorage = (initial: string | null = null) => {
-  const value = Ref.makeUnsafe<string | null>(initial);
+  const values = new Map<string, string>();
+  if (initial !== null) values.set(REVISION_JOURNAL_KEY, initial);
+  const value = Ref.makeUnsafe(values);
   const reads = Ref.makeUnsafe(0);
   const writes = Ref.makeUnsafe(0);
 
@@ -147,15 +150,26 @@ const makeStorage = (initial: string | null = null) => {
     reads,
     writes,
     layer: Layer.succeed(InterfaceStorage)({
-      read: () =>
+      read: (key) =>
         Ref.update(reads, (count) => count + 1).pipe(
-          Effect.andThen(Ref.get(value)),
+          Effect.andThen(
+            Ref.get(value).pipe(
+              Effect.map((current) => current.get(key) ?? null),
+            ),
+          ),
         ),
       write: (_key, next) =>
         Ref.update(writes, (count) => count + 1).pipe(
-          Effect.andThen(Ref.set(value, next)),
+          Effect.andThen(
+            Ref.update(value, (current) => new Map(current).set(_key, next)),
+          ),
         ),
-      remove: () => Effect.void,
+      remove: (key) =>
+        Ref.update(value, (current) => {
+          const next = new Map(current);
+          next.delete(key);
+          return next;
+        }),
     }),
   };
 };

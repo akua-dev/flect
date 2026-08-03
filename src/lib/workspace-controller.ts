@@ -1493,7 +1493,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 
     const finalizeShareActivation = Effect.fn(
       "Flect.Workspace.finalizeShareActivation",
-    )(function* () {
+    )(function* (metadata?: Ref.Ref<FinalizedShareActivation | undefined>) {
       const activation = yield* Ref.get(shareActivation);
       if (activation === undefined) return undefined;
       if (
@@ -1633,6 +1633,16 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               before: beforeRefs,
               after: refs,
             });
+      const transaction = {
+        before: installation,
+        ...(beforeRefs === undefined ? {} : { beforeRefs }),
+        afterRefs: refs,
+        candidateArchive: stored.slice(),
+        candidateArchiveSha256: pending.archiveSha256,
+      } satisfies FinalizedShareActivation;
+      if (metadata !== undefined) {
+        yield* Ref.set(metadata, transaction);
+      }
       yield* shareInstallationStore.save(acceptedInstallation).pipe(
         Effect.mapError(() =>
           commandRejected("The shared Keep state could not be saved."),
@@ -1648,13 +1658,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         const { shareReview: _shareReview, ...rest } = current;
         return FlectWorkspaceSnapshot.make({ ...rest, shares });
       });
-      return {
-        before: installation,
-        ...(beforeRefs === undefined ? {} : { beforeRefs }),
-        afterRefs: refs,
-        candidateArchive: stored.slice(),
-        candidateArchiveSha256: pending.archiveSha256,
-      };
+      return transaction;
     });
 
     const removeUnreferencedShareArchive = Effect.fn(
@@ -1682,7 +1686,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 
     const discardShareActivation = Effect.fn(
       "Flect.Workspace.discardShareActivation",
-    )(function* () {
+    )(function* (metadata?: Ref.Ref<DiscardedShareActivation | undefined>) {
       const activation = yield* Ref.get(shareActivation);
       if (activation === undefined || shareInstallationStore === undefined) {
         return undefined;
@@ -1693,6 +1697,21 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       if (installation?.pending === undefined) {
         yield* Ref.set(shareActivation, undefined);
         return undefined;
+      }
+      const { pending: _pending, ...retained } = installation;
+      const restored = ShareInstallationRecord.make({
+        ...retained,
+        refs: ShareInstallationRefs.make({
+          base: installation.refs.base,
+          upstream: installation.refs.upstream,
+          fork: installation.refs.fork,
+        }),
+        updatedAt: Date.now(),
+      });
+      const transaction = { before: installation, after: restored } satisfies
+        DiscardedShareActivation;
+      if (metadata !== undefined) {
+        yield* Ref.set(metadata, transaction);
       }
       if (installation.refs.candidate !== undefined) {
         if (shareRepository === undefined) {
@@ -1716,16 +1735,6 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             ),
           );
       }
-      const { pending: _pending, ...retained } = installation;
-      const restored = ShareInstallationRecord.make({
-        ...retained,
-        refs: ShareInstallationRefs.make({
-          base: installation.refs.base,
-          upstream: installation.refs.upstream,
-          fork: installation.refs.fork,
-        }),
-        updatedAt: Date.now(),
-      });
       const restoreRef =
         installation.refs.candidate === undefined
           ? Effect.void
@@ -1759,7 +1768,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         const { shareReview: _shareReview, ...rest } = current;
         return FlectWorkspaceSnapshot.make({ ...rest, shares });
       });
-      return { before: installation, after: restored };
+      return transaction;
     });
 
     const runCompensations = Effect.fn(
@@ -1836,6 +1845,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           extensionCatalog === undefined
             ? undefined
             : yield* extensionCatalog.snapshot;
+        const finalizedShareMetadata = yield* Ref.make<
+          FinalizedShareActivation | undefined
+        >(undefined);
         const restoreAcceptance = (
           finalizedShare: FinalizedShareActivation | undefined,
         ) =>
@@ -1933,7 +1945,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             );
             yield* syncExtensionSnapshot();
           }
-          finalizedShare = yield* finalizeShareActivation();
+          finalizedShare = yield* finalizeShareActivation(finalizedShareMetadata);
           yield* updateCapsulePresentation((current) => ({
             ...(current.candidate === undefined
               ? {}
@@ -1952,7 +1964,8 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           return { accepted, finalizedShare };
         }).pipe(
           Effect.catch((error) =>
-            restoreAcceptance(finalizedShare).pipe(
+            Ref.get(finalizedShareMetadata).pipe(
+              Effect.flatMap((metadata) => restoreAcceptance(metadata)),
               Effect.andThen(Effect.fail(error)),
             ),
           ),
@@ -1996,6 +2009,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           extensionCatalog === undefined
             ? undefined
             : yield* extensionCatalog.snapshot;
+        const discardedShareMetadata = yield* Ref.make<
+          DiscardedShareActivation | undefined
+        >(undefined);
         const restoreRejection = (
           discarded: DiscardedShareActivation | undefined,
         ) =>
@@ -2100,12 +2116,13 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               ? {}
               : { lastKnownGoodReview: current.lastKnownGoodReview }),
           }));
-          discarded = yield* discardShareActivation();
+          discarded = yield* discardShareActivation(discardedShareMetadata);
           const rejected = yield* kernel.reject(proposal.id);
           return { rejected, discarded };
         }).pipe(
           Effect.catch((error) =>
-            restoreRejection(discarded).pipe(
+            Ref.get(discardedShareMetadata).pipe(
+              Effect.flatMap((metadata) => restoreRejection(metadata)),
               Effect.andThen(Effect.fail(error)),
             ),
           ),
