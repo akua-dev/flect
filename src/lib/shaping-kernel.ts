@@ -723,7 +723,7 @@ const makeShapingKernel = (
     const recordExtensionFailure = Effect.fn(
       "Flect.ShapingKernel.recordExtensionFailure",
     )(function* (extensionId: string) {
-      yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
+      const recovery = yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
         if (state.disabledExtensions.includes(extensionId)) {
           return Effect.succeed([undefined, state] satisfies readonly [
             undefined,
@@ -759,13 +759,22 @@ const makeShapingKernel = (
         };
         const transition: readonly [undefined, KernelState] = [undefined, next];
         if (shouldRecover) {
-          return markRecovery.pipe(
-            Effect.andThen(persist(next).pipe(Effect.result)),
-            Effect.map((result) => [result, next] as const),
-          );
+          return Effect.gen(function* () {
+            const marker = yield* markRecovery.pipe(Effect.result);
+            const persisted = yield* persist(next).pipe(Effect.result);
+            return [{ marker, persisted }, next] as const;
+          });
         }
         return persist(next).pipe(Effect.as(transition));
       });
+      if (recovery !== undefined) {
+        if (recovery.marker._tag === "Failure") {
+          return yield* Effect.fail(recovery.marker.failure);
+        }
+        if (recovery.persisted._tag === "Failure") {
+          return yield* Effect.fail(recovery.persisted.failure);
+        }
+      }
     });
 
     const recordExtensionSuccess = Effect.fn(
