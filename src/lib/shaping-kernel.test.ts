@@ -155,6 +155,77 @@ describe("ShapingKernel", () => {
     );
   });
 
+  it.layer(makeShapingKernelTestLayer())((it) => {
+    it.effect(
+      "atomically supersedes a preview without changing accepted state",
+      () =>
+        Effect.gen(function* () {
+          const kernel = yield* ShapingKernel;
+          const first = yield* kernel.propose(
+            customizedDocument("First candidate"),
+            "shaper",
+          );
+          yield* kernel.preview(first.id);
+
+          const second = yield* kernel.supersede(
+            first.id,
+            customizedDocument("Corrected candidate"),
+            "shaper",
+          );
+          const snapshot = yield* kernel.snapshot;
+
+          assert.notStrictEqual(second.id, first.id);
+          assert.strictEqual(second.status, "previewed");
+          assert.strictEqual(snapshot.proposal?.id, second.id);
+          assert.strictEqual(
+            snapshot.proposal?.document.name,
+            "Corrected candidate",
+          );
+          assert.deepStrictEqual(
+            snapshot.active.document,
+            defaultInterfaceDocument,
+          );
+          assert.strictEqual(snapshot.lastEvent.type, "revision-previewed");
+          assert.strictEqual(snapshot.lastEvent.revisionId, second.id);
+        }),
+    );
+  });
+
+  it.layer(makeShapingKernelTestLayer())((it) => {
+    it.effect(
+      "preserves the current candidate after stale or invalid supersede",
+      () =>
+        Effect.gen(function* () {
+          const kernel = yield* ShapingKernel;
+          const first = yield* kernel.propose(
+            customizedDocument("Stable candidate"),
+            "shaper",
+          );
+          yield* kernel.preview(first.id);
+
+          const stale = yield* kernel
+            .supersede(
+              RevisionId.make("revision-stale"),
+              customizedDocument("Stale candidate"),
+              "shaper",
+            )
+            .pipe(Effect.flip);
+          const invalid = yield* kernel
+            .supersede(first.id, { executable: "<script />" }, "shaper")
+            .pipe(Effect.flip);
+          const snapshot = yield* kernel.snapshot;
+
+          assert.strictEqual(stale._tag, "RevisionNotFound");
+          assert.strictEqual(invalid._tag, "InvalidInterfaceDocument");
+          assert.strictEqual(snapshot.proposal?.id, first.id);
+          assert.strictEqual(
+            snapshot.proposal?.document.name,
+            "Stable candidate",
+          );
+        }),
+    );
+  });
+
   const pendingProposalSnapshot = ShapingSnapshot.make({
     version: 1,
     active: InterfaceRevision.make({

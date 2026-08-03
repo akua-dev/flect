@@ -1,6 +1,7 @@
 import { Schema } from "effect";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import { MAX_PORTABLE_EXTENSION_SOURCE_BYTES } from "./extensions";
 
 const IdentifierText = Schema.String.check(
   Schema.isMinLength(1),
@@ -55,7 +56,7 @@ export class ExecuteExtension extends Rpc.make("ExecuteExtension", {
     extensionId: IdentifierText,
     source: Schema.String.check(
       Schema.isMinLength(1),
-      Schema.isMaxLength(256 * 1024),
+      Schema.isMaxLength(MAX_PORTABLE_EXTENSION_SOURCE_BYTES),
     ),
     input: Schema.Unknown,
   },
@@ -73,7 +74,7 @@ export class SandboxWorkerRequest extends Schema.Class<SandboxWorkerRequest>(
     extensionId: IdentifierText,
     source: Schema.String.check(
       Schema.isMinLength(1),
-      Schema.isMaxLength(256 * 1024),
+      Schema.isMaxLength(MAX_PORTABLE_EXTENSION_SOURCE_BYTES),
     ),
     input: Schema.Unknown,
   }),

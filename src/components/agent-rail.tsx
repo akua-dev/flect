@@ -1,15 +1,50 @@
-import { useEffect } from "react";
+import { Effect, Schema } from "effect";
+import { type FormEvent, useEffect, useRef, useState } from "react";
+import type {
+  ControlStateSnapshot,
+  OperationRecord,
+  ToolActivity,
+  WorkspaceBuildSnapshot,
+  WorkspacePersistenceSnapshot,
+} from "../../shared/control";
+import { OperationFailed as OperationFailedSchema } from "../../shared/control";
+import type {
+  ExtensionCapability,
+  PortableExtensionCatalogSnapshot,
+} from "../../shared/extensions";
 import type { InterfaceDocument } from "../../shared/interface-document";
+import {
+  ProductCapabilityAllowChoice,
+  type ProductCapabilityConfirmationPolicy,
+  type ProductCapabilityDecisionChoice,
+  ProductCapabilityDenyChoice,
+} from "../../shared/product-capability";
+import type { RevisionId } from "../../shared/revisions";
 import type {
   AgentWorkspaceController,
   ConversationMessage,
 } from "../hooks/use-agent-session";
 import { isAgentSessionActive } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
+import { useStickyFollow } from "../hooks/use-sticky-follow";
+import { loadBrowserCapsuleArchiveFromUrl } from "../lib/browser-capsule-loader";
+import {
+  importWebProject,
+  shouldAvoidReadingWebProjectFile,
+  WebProjectImportFailure,
+} from "../lib/web-project-import";
+import type { CapsuleReview } from "../lib/workspace-controller";
+import { ActivityCard } from "./activity-card";
 import { Composer } from "./composer";
+import {
+  DiagnosticsPanel,
+  type NativeSetupView,
+  type NativeUpdateView,
+} from "./diagnostics-panel";
+import { ExtensionReview, type ExtensionReviewKey } from "./extension-review";
 import { PanelCloseIcon, RefreshIcon } from "./icons";
 import { MessageContent } from "./message-content";
-import type { ShellMode } from "./role-switcher";
+import type { ConversationTarget, ShellMode } from "./role-switcher";
 
 export interface ShapingController {
   readonly status: "idle" | "shaping" | "preview" | "error";
@@ -18,21 +53,69 @@ export interface ShapingController {
   readonly isolation: "unchecked" | "checking" | "ready" | "unavailable";
   readonly verifyIsolation: () => Promise<void>;
   readonly request: (instruction: string) => Promise<void>;
+  readonly fixFailure: (activity: ToolActivity) => Promise<void>;
   readonly accept: () => Promise<void>;
   readonly reject: () => Promise<void>;
   readonly rollback: () => Promise<void>;
 }
 
 export interface AgentRailProps {
+  readonly build?: WorkspaceBuildSnapshot;
   readonly mode: ShellMode;
+  readonly target?: ConversationTarget;
+  readonly preview?: boolean;
+  readonly candidateRevisionId?: RevisionId;
+  readonly capsuleReview?: CapsuleReview;
+  readonly acceptedCapsuleReview?: CapsuleReview;
+  readonly extensions?: PortableExtensionCatalogSnapshot;
+  readonly useDisabled?: boolean;
   readonly document: InterfaceDocument;
   readonly workspace: AgentWorkspaceController;
   readonly shaping: ShapingController;
   readonly preferences: ShellPreferencesController;
   readonly onModeChange: (mode: Exclude<ShellMode, "safe">) => void;
+  readonly onTargetChange?: (target: ConversationTarget) => void;
   readonly onCollapse: () => void;
   readonly onOpenSafeMode: () => void;
+  readonly onOpenShareSource?: () => void;
+  readonly onOpenShareFile?: () => void;
+  readonly onManageSharedSources?: () => void;
   readonly onRestoreSafeMode: () => Promise<void>;
+  readonly onDecideProductCapability?: (
+    capsuleId: string,
+    capabilityId: string,
+    choice: ProductCapabilityDecisionChoice,
+  ) => Promise<void>;
+  readonly onRevokeProductCapability?: (decisionId: string) => Promise<void>;
+  readonly onSetPortableExtensionEnabled?: (
+    key: ExtensionReviewKey,
+    enabled: boolean,
+    grants: ReadonlyArray<ExtensionCapability>,
+  ) => Promise<void>;
+  readonly onTestPortableExtension?: (key: ExtensionReviewKey) => Promise<void>;
+  readonly onSetPortableExtensionPinned?: (
+    key: ExtensionReviewKey,
+    pinned: boolean,
+  ) => Promise<void>;
+  readonly onForkPortableExtension?: (
+    key: ExtensionReviewKey,
+    revision: string,
+  ) => Promise<void>;
+  readonly onResolvePortableExtensionUpdate?: (
+    key: ExtensionReviewKey,
+    choice: "upstream" | "fork",
+  ) => Promise<void>;
+  readonly onRemovePortableExtension?: (
+    key: ExtensionReviewKey,
+  ) => Promise<void>;
+  readonly diagnostics?: {
+    readonly control: ControlStateSnapshot;
+    readonly operations: ReadonlyArray<OperationRecord>;
+    readonly onToggleControl: () => Promise<void>;
+    readonly setup?: NativeSetupView;
+    readonly update?: NativeUpdateView;
+    readonly persistence?: WorkspacePersistenceSnapshot;
+  };
 }
 
 function RuntimeState({
@@ -62,23 +145,259 @@ function RuntimeState({
   );
 }
 
+export function ProductCapabilities({
+  scopeId,
+  capabilities,
+  onDecide,
+  onRevoke,
+}: {
+  readonly scopeId: string;
+  readonly capabilities: CapsuleReview["capabilities"];
+  readonly onDecide?: (
+    capsuleId: string,
+    capabilityId: string,
+    choice: ProductCapabilityDecisionChoice,
+  ) => Promise<void>;
+  readonly onRevoke?: (decisionId: string) => Promise<void>;
+}) {
+  const [pendingCapabilityId, setPendingCapabilityId] = useState<string>();
+  const [grantError, setGrantError] = useState(false);
+  const decide = async (
+    capabilityId: string,
+    choice: ProductCapabilityDecisionChoice,
+  ) => {
+    if (onDecide === undefined || pendingCapabilityId !== undefined) return;
+    setPendingCapabilityId(capabilityId);
+    setGrantError(false);
+    try {
+      await onDecide(scopeId, capabilityId, choice);
+    } catch {
+      setGrantError(true);
+    } finally {
+      setPendingCapabilityId(undefined);
+    }
+  };
+  const revoke = async (capabilityId: string, decisionId: string) => {
+    if (onRevoke === undefined || pendingCapabilityId !== undefined) return;
+    setPendingCapabilityId(capabilityId);
+    setGrantError(false);
+    try {
+      await onRevoke(decisionId);
+    } catch {
+      setGrantError(true);
+    } finally {
+      setPendingCapabilityId(undefined);
+    }
+  };
+  const revokeCapability = (
+    capability: CapsuleReview["capabilities"][number],
+  ) =>
+    capability.decisionId === undefined
+      ? Promise.resolve()
+      : revoke(capability.capabilityId, capability.decisionId);
+  const policyLabel = (policy: ProductCapabilityConfirmationPolicy) => {
+    switch (policy) {
+      case "once":
+        return "Allow once";
+      case "session":
+        return "This session";
+      case "workspace":
+        return "This workspace";
+      case "persistent":
+        return "Always allow";
+    }
+  };
+  const lifecycleLabel = (
+    state: CapsuleReview["capabilities"][number]["state"],
+  ) => {
+    switch (state) {
+      case "available":
+        return "Available";
+      case "requested":
+        return "Awaiting decision";
+      case "granted":
+        return "Granted";
+      case "denied":
+        return "Denied";
+      case "expired":
+        return "Expired";
+      case "revoked":
+        return "Revoked";
+    }
+  };
+
+  return (
+    <div className="capsule-review__capabilities">
+      <strong>Capabilities</strong>
+      {capabilities.length === 0 ? (
+        <p>No product or host capabilities requested.</p>
+      ) : (
+        <ul>
+          {capabilities.map((capability) => (
+            <li key={capability.capabilityId}>
+              <span className="capsule-review__capability-copy">
+                <span>{capability.capabilityId}</span>
+                <small>
+                  {capability.required ? "Required" : "Optional"}
+                  {" · "}
+                  {capability.availability === "unavailable"
+                    ? "Unavailable on this host"
+                    : lifecycleLabel(capability.state)}
+                  {capability.confirmationPolicy === undefined
+                    ? ""
+                    : ` · ${policyLabel(capability.confirmationPolicy)}`}
+                </small>
+                <details className="capsule-review__capability-scope">
+                  <summary>Scope details</summary>
+                  <small>
+                    {capability.operationIds.length} operation
+                    {capability.operationIds.length === 1 ? "" : "s"}
+                    {" · "}
+                    {capability.resourceIds.length} resource
+                    {capability.resourceIds.length === 1 ? "" : "s"}
+                    {" · "}
+                    {capability.dataClassIds.length} data class
+                    {capability.dataClassIds.length === 1 ? "" : "es"}
+                  </small>
+                  {capability.expiresAtMillis !== undefined && (
+                    <small>
+                      Expires{" "}
+                      {new Date(capability.expiresAtMillis).toISOString()}
+                    </small>
+                  )}
+                  {capability.rateLimit !== undefined && (
+                    <small>
+                      Up to {capability.rateLimit.maxInvocations} calls per{" "}
+                      {capability.rateLimit.intervalMs} ms
+                    </small>
+                  )}
+                  {capability.decisionId !== undefined && (
+                    <small>Decision {capability.decisionId}</small>
+                  )}
+                </details>
+              </span>
+              {capability.availability === "available" && (
+                <fieldset className="capsule-review__capability-actions">
+                  <legend className="sr-only">
+                    Decide {capability.capabilityId}
+                  </legend>
+                  {capability.state === "granted" &&
+                  capability.decisionId !== undefined &&
+                  onRevoke !== undefined ? (
+                    <button
+                      aria-label={`Revoke ${capability.capabilityId}`}
+                      className="decision-button"
+                      disabled={pendingCapabilityId !== undefined}
+                      onClick={() => void revokeCapability(capability)}
+                      type="button"
+                    >
+                      {pendingCapabilityId === capability.capabilityId
+                        ? "Saving…"
+                        : "Revoke"}
+                    </button>
+                  ) : (
+                    onDecide !== undefined && (
+                      <>
+                        {capability.confirmationPolicies.map((policy) => (
+                          <button
+                            aria-label={`${policyLabel(policy)} ${capability.capabilityId}`}
+                            className={`decision-button${policy === "session" ? " decision-button--primary" : ""}`}
+                            disabled={pendingCapabilityId !== undefined}
+                            key={policy}
+                            onClick={() =>
+                              void decide(
+                                capability.capabilityId,
+                                ProductCapabilityAllowChoice.make({
+                                  type: "allow",
+                                  confirmationPolicy: policy,
+                                }),
+                              )
+                            }
+                            type="button"
+                          >
+                            {pendingCapabilityId === capability.capabilityId
+                              ? "Saving…"
+                              : policyLabel(policy)}
+                          </button>
+                        ))}
+                        <button
+                          aria-label={`Deny ${capability.capabilityId}`}
+                          className="decision-button"
+                          disabled={pendingCapabilityId !== undefined}
+                          onClick={() =>
+                            void decide(
+                              capability.capabilityId,
+                              ProductCapabilityDenyChoice.make({
+                                type: "deny",
+                              }),
+                            )
+                          }
+                          type="button"
+                        >
+                          Deny
+                        </button>
+                      </>
+                    )
+                  )}
+                </fieldset>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {grantError && (
+        <p
+          aria-label="Product capability change failed"
+          className="capsule-review__grant-error"
+          role="alert"
+        >
+          The capability change could not be saved.
+        </p>
+      )}
+    </div>
+  );
+}
+
 function Conversation({
   messages,
+  activities,
   status,
   label,
+  onFixFailure,
 }: {
   readonly messages: ReadonlyArray<ConversationMessage>;
+  readonly activities: NonNullable<
+    AgentWorkspaceController["app"]["activities"]
+  >;
   readonly status: AgentWorkspaceController["app"]["status"];
   readonly label: string;
+  readonly onFixFailure?: (activity: ToolActivity) => void;
 }) {
+  const lastMessage = messages.at(-1);
+  const lastActivity = activities.at(-1);
+  const follow = useStickyFollow(
+    label,
+    [
+      lastMessage?.id ?? "no-message",
+      lastMessage?.content.length ?? 0,
+      lastActivity?.id ?? "no-activity",
+      lastActivity?.phase ?? "",
+      lastActivity?.updatedAt ?? 0,
+    ].join(":"),
+  );
+
   return (
     <div
       aria-label={`${label} conversation`}
       aria-live="polite"
       className="conversation"
+      onScroll={follow.onScroll}
+      ref={follow.containerRef}
       role="log"
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the overflowing transcript must be keyboard-focusable so users can scroll it without a pointer.
+      tabIndex={0}
     >
-      {messages.length === 0 && (
+      {messages.length === 0 && activities.length === 0 && (
         <div className="conversation__empty">
           <strong>
             {label === "Shaper"
@@ -107,7 +426,15 @@ function Conversation({
                   : label}
             </span>
             {message.content ? (
-              <MessageContent content={message.content} />
+              <MessageContent
+                content={message.content}
+                messageRole={message.role}
+                streaming={
+                  message.role === "assistant" &&
+                  isLatest &&
+                  status === "streaming"
+                }
+              />
             ) : (
               isLatest &&
               (status === "submitting" || status === "streaming") && (
@@ -122,35 +449,277 @@ function Conversation({
           </article>
         );
       })}
+      {activities.map((activity) => (
+        <ActivityCard
+          activity={activity}
+          key={activity.id}
+          {...(onFixFailure === undefined
+            ? {}
+            : { onFixInShape: onFixFailure })}
+        />
+      ))}
+      {!follow.following && (
+        <button
+          className="jump-to-latest"
+          onClick={follow.jumpToLatest}
+          type="button"
+        >
+          {follow.unreadCount > 0
+            ? `Jump to latest (${follow.unreadCount})`
+            : "Jump to latest"}
+        </button>
+      )}
     </div>
   );
 }
 
 export function AgentRail({
+  build,
   mode,
+  target: controlledTarget,
+  preview = false,
+  candidateRevisionId,
+  capsuleReview,
+  acceptedCapsuleReview,
+  extensions,
+  useDisabled = false,
   document,
   workspace,
   shaping,
   preferences,
   onModeChange,
+  onTargetChange,
   onCollapse,
   onOpenSafeMode,
+  onOpenShareSource,
+  onOpenShareFile,
+  onManageSharedSources,
   onRestoreSafeMode,
+  onDecideProductCapability,
+  onRevokeProductCapability,
+  onSetPortableExtensionEnabled,
+  onTestPortableExtension,
+  onSetPortableExtensionPinned,
+  onForkPortableExtension,
+  onResolvePortableExtensionUpdate,
+  onRemovePortableExtension,
+  diagnostics,
 }: AgentRailProps) {
-  const controller = mode === "run" ? workspace.app : workspace.shaper;
+  const target = controlledTarget ?? (mode === "run" ? "use" : "shape");
+  const controller =
+    target === "use"
+      ? preview
+        ? workspace.previewApp
+        : workspace.app
+      : workspace.shaper;
   const roleLabel =
-    mode === "run" ? "App Agent" : mode === "safe" ? "Recovery" : "Shaper";
+    mode === "safe"
+      ? "Recovery"
+      : target === "shape"
+        ? "Shaper"
+        : preview
+          ? "Preview App Agent"
+          : "App Agent";
   const operationActive =
     isAgentSessionActive(workspace.app.status) ||
+    isAgentSessionActive(workspace.previewApp.status) ||
     isAgentSessionActive(workspace.shaper.status) ||
     shaping.status === "shaping";
-  const previewBlocked = shaping.status === "preview";
+  const candidateExtensionBlocked =
+    capsuleReview !== undefined &&
+    extensions?.entries.some(
+      (entry) =>
+        entry.capsuleId === capsuleReview.id &&
+        entry.binding === "candidate" &&
+        (entry.state === "failed" ||
+          (entry.state === "enabled" && !entry.tested)),
+    ) === true;
+  const portableExtensionActions =
+    onSetPortableExtensionEnabled !== undefined &&
+    onTestPortableExtension !== undefined &&
+    onSetPortableExtensionPinned !== undefined &&
+    onForkPortableExtension !== undefined &&
+    onResolvePortableExtensionUpdate !== undefined &&
+    onRemovePortableExtension !== undefined
+      ? {
+          onSetEnabled: onSetPortableExtensionEnabled,
+          onTest: onTestPortableExtension,
+          onSetPinned: onSetPortableExtensionPinned,
+          onFork: onForkPortableExtension,
+          onResolveUpdate: onResolvePortableExtensionUpdate,
+          onRemove: onRemovePortableExtension,
+        }
+      : undefined;
+  const keepChangeRef = useRef<HTMLButtonElement>(null);
+  const rejectChangeRef = useRef<HTMLButtonElement>(null);
+  const [capsuleNotice, setCapsuleNotice] = useState<string>();
+  const [installOpen, setInstallOpen] = useState(false);
+  const [installUrl, setInstallUrl] = useState("");
+  const [installError, setInstallError] = useState<string>();
+  const [installing, setInstalling] = useState(false);
+  const installDialogRef = useRef<HTMLDialogElement>(null);
+  const exportContinuity = async () => {
+    const encoded = await workspace.exportContinuity?.();
+    if (encoded === undefined) {
+      return;
+    }
+    const url = URL.createObjectURL(
+      new Blob([encoded], { type: "application/json" }),
+    );
+    const anchor = globalThis.document.createElement("a");
+    anchor.href = url;
+    anchor.download = "flect-role-continuity.json";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  const exportRepository = async () => {
+    const archive = await workspace.exportRepository?.();
+    if (archive === undefined) {
+      return;
+    }
+    const url = URL.createObjectURL(
+      new Blob([archive.slice().buffer], { type: "application/x-tar" }),
+    );
+    const anchor = globalThis.document.createElement("a");
+    anchor.href = url;
+    anchor.download = "flect-repository.tar";
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+  const exportCapsule = async () => {
+    try {
+      const archive = await workspace.exportCapsule?.();
+      if (archive === undefined) return;
+      const url = URL.createObjectURL(
+        new Blob([archive.slice().buffer], { type: "application/vnd.flect" }),
+      );
+      const anchor = globalThis.document.createElement("a");
+      anchor.href = url;
+      anchor.download = "interface.flect";
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setCapsuleNotice("Flect app exported.");
+    } catch {
+      setCapsuleNotice("Flect app export failed safely.");
+    }
+  };
+  const importCapsule = () => {
+    const input = globalThis.document.createElement("input");
+    input.type = "file";
+    input.accept = ".flect,application/vnd.flect";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file === undefined) return;
+      setCapsuleNotice("Verifying Flect app…");
+      void file
+        .arrayBuffer()
+        .then((buffer) => workspace.importCapsule?.(new Uint8Array(buffer)))
+        .then(() => setCapsuleNotice("Flect app verified. Review the preview."))
+        .catch(() => setCapsuleNotice("Flect app import failed safely."));
+    });
+    input.click();
+  };
+  const importHtmlProject = () => {
+    const input = globalThis.document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
+    input.addEventListener("change", () => {
+      const files = [...(input.files ?? [])];
+      if (files.length === 0) return;
+      setCapsuleNotice("Checking app project…");
+      void Effect.runPromise(
+        Effect.tryPromise({
+          try: async () =>
+            Promise.all(
+              files.map(async (file) => {
+                const path = file.webkitRelativePath || file.name;
+                const ignored = shouldAvoidReadingWebProjectFile(path);
+                return {
+                  path,
+                  contents: ignored
+                    ? new Uint8Array()
+                    : new Uint8Array(await file.arrayBuffer()),
+                };
+              }),
+            ),
+          catch: () => new Error("project files could not be read"),
+        }).pipe(Effect.flatMap(importWebProject)),
+      )
+        .then(async ({ archive, report }) => {
+          setCapsuleNotice(
+            report.kind === "static-html"
+              ? "Packaging static HTML project…"
+              : `Building ${report.kind === "vite-react" ? "Vite React" : "Vite"} project locally…`,
+          );
+          await workspace.importCapsule?.(archive);
+          setCapsuleNotice(
+            `${report.kind === "static-html" ? "Static app packaged" : "Portable build verified"} · ${report.includedFiles} source files${report.ignoredFiles.length === 0 ? "" : ` · ${report.ignoredFiles.length} ignored`}. Review the preview.`,
+          );
+        })
+        .catch((error: unknown) => {
+          setCapsuleNotice(
+            Schema.is(WebProjectImportFailure)(error)
+              ? error.message
+              : Schema.is(OperationFailedSchema)(error)
+                ? error.message
+                : "App project import failed safely. Choose one folder with a root index.html.",
+          );
+        });
+    });
+    input.click();
+  };
+  const installCapsule = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setInstalling(true);
+    setInstallError(undefined);
+    setCapsuleNotice("Downloading and verifying Flect app…");
+    try {
+      const archive = await Effect.runPromise(
+        loadBrowserCapsuleArchiveFromUrl(installUrl),
+      );
+      await workspace.importCapsule?.(archive);
+      setCapsuleNotice("Flect app verified. Review the preview.");
+      setInstallOpen(false);
+      setInstallUrl("");
+    } catch {
+      setInstallError(
+        "Install failed safely. Check the URL, CORS access, and capsule integrity.",
+      );
+      setCapsuleNotice("Flect app install failed safely.");
+    } finally {
+      setInstalling(false);
+    }
+  };
+
+  useEffect(() => {
+    const dialog = installDialogRef.current;
+    if (!installOpen || dialog === null || dialog.open) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }, [installOpen]);
 
   useEffect(() => {
     if (shaping.status === "preview") {
       void shaping.verifyIsolation();
     }
   }, [shaping.status, shaping.verifyIsolation]);
+
+  useEffect(() => {
+    if (shaping.status !== "preview") {
+      return;
+    }
+    queueMicrotask(() =>
+      capsuleReview?.activationBlocked || candidateExtensionBlocked
+        ? rejectChangeRef.current?.focus()
+        : keepChangeRef.current?.focus(),
+    );
+  }, [
+    candidateExtensionBlocked,
+    capsuleReview?.activationBlocked,
+    shaping.status,
+  ]);
 
   return (
     <aside
@@ -163,8 +732,10 @@ export function AgentRail({
         <div className="agent-rail__identity">
           <strong>{roleLabel}</strong>
           <span>
-            {mode === "run"
-              ? "Use app"
+            {target === "use"
+              ? preview
+                ? "Test candidate"
+                : "Use app"
               : mode === "safe"
                 ? "Protected shell"
                 : "Edit interface"}
@@ -184,27 +755,114 @@ export function AgentRail({
       </header>
 
       <Conversation
+        activities={controller.activities ?? []}
         label={roleLabel}
-        messages={controller.messages}
+        messages={
+          (controller.activities?.length ?? 0) > 0
+            ? controller.messages.filter(
+                (message) => message.role !== "activity",
+              )
+            : controller.messages
+        }
         status={controller.status}
+        {...(roleLabel === "Shaper"
+          ? {}
+          : { onFixFailure: (activity) => void shaping.fixFailure(activity) })}
       />
 
       <div className="agent-rail__dock">
+        {build !== undefined && build.phase !== "succeeded" && (
+          <div
+            className={`build-progress build-progress--${build.phase}`}
+            role={build.phase === "failed" ? "alert" : "status"}
+          >
+            <span aria-hidden="true" />
+            <span className="sr-only">Browser build: </span>
+            <strong>{build.message}</strong>
+          </div>
+        )}
+        {capsuleNotice !== undefined && (
+          <p className="capsule-notice" role="status">
+            {capsuleNotice}
+          </p>
+        )}
         {mode === "safe" && (
           <section className="recovery-banner" role="status">
             <div>
               <strong>Custom interface state is bypassed.</strong>
               <p>Restore the last-known-good revision to return.</p>
+              <small>
+                {workspace.continuity?.recovery === undefined
+                  ? `Session continuity generation ${workspace.continuity?.generation ?? 0}, revision ${workspace.continuity?.revisionSequence ?? 0}.`
+                  : `Session continuity needs recovery: ${workspace.continuity.recovery}.`}
+              </small>
             </div>
-            <button
-              className="decision-button decision-button--primary"
-              onClick={() => void onRestoreSafeMode()}
-              type="button"
-            >
-              Restore interface
-            </button>
+            <div className="revision-banner__actions">
+              <button
+                className="decision-button decision-button--primary"
+                onClick={() => void onRestoreSafeMode()}
+                type="button"
+              >
+                Restore interface
+              </button>
+              <button
+                className="decision-button"
+                disabled={workspace.continuity?.recovery !== undefined}
+                onClick={() => void exportContinuity()}
+                type="button"
+              >
+                Export session continuity
+              </button>
+              <button
+                className="decision-button"
+                onClick={() => void workspace.discardContinuity?.()}
+                type="button"
+              >
+                Discard session continuity
+              </button>
+              {workspace.continuity?.recovery !== undefined && (
+                <button
+                  className="decision-button"
+                  onClick={() => void workspace.retryContinuity?.()}
+                  type="button"
+                >
+                  Retry session continuity
+                </button>
+              )}
+            </div>
           </section>
         )}
+
+        {shaping.status !== "preview" &&
+          acceptedCapsuleReview !== undefined &&
+          acceptedCapsuleReview.capabilities.length > 0 && (
+            <details className="capsule-review">
+              <summary>Product capabilities</summary>
+              <ProductCapabilities
+                capabilities={acceptedCapsuleReview.capabilities}
+                onDecide={onDecideProductCapability}
+                onRevoke={onRevokeProductCapability}
+                scopeId={acceptedCapsuleReview.id}
+              />
+            </details>
+          )}
+
+        {shaping.status !== "preview" &&
+          acceptedCapsuleReview !== undefined &&
+          acceptedCapsuleReview.extensions.length > 0 &&
+          extensions !== undefined &&
+          portableExtensionActions !== undefined && (
+            <details className="capsule-review">
+              <summary>Portable extensions</summary>
+              <ExtensionReview
+                binding="accepted"
+                capsuleId={acceptedCapsuleReview.id}
+                entries={extensions.entries}
+                packages={acceptedCapsuleReview.extensions}
+                {...portableExtensionActions}
+              />
+            </details>
+          )}
 
         {shaping.status === "preview" && (
           <section aria-label="Revision decision" className="revision-banner">
@@ -219,11 +877,187 @@ export function AgentRail({
                     : "Checking extension isolation"}
               </small>
             </div>
+            {capsuleReview !== undefined && (
+              <details className="capsule-review" open>
+                <summary>
+                  {acceptedCapsuleReview?.id === capsuleReview.id
+                    ? `Review update ${acceptedCapsuleReview.version} → ${capsuleReview.version}`
+                    : acceptedCapsuleReview === undefined
+                      ? "Imported app details"
+                      : `Review replacement for ${acceptedCapsuleReview.name}`}
+                </summary>
+                {acceptedCapsuleReview !== undefined && (
+                  <p className="capsule-review__comparison">
+                    {acceptedCapsuleReview.id === capsuleReview.id
+                      ? "The installed app stays active until you explicitly keep this version."
+                      : "The current installed app stays active until you explicitly keep this replacement."}
+                  </p>
+                )}
+                <dl>
+                  <div>
+                    <dt>Publisher</dt>
+                    <dd>
+                      {capsuleReview.publisher} · {capsuleReview.version}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Source</dt>
+                    <dd>{capsuleReview.source}</dd>
+                  </div>
+                  <div>
+                    <dt>Revision</dt>
+                    <dd>{capsuleReview.revision}</dd>
+                  </div>
+                  <div>
+                    <dt>Trust</dt>
+                    <dd>
+                      {capsuleReview.signatureCount === 0
+                        ? "Unsigned"
+                        : `${capsuleReview.signatureCount} signature${capsuleReview.signatureCount === 1 ? "" : "s"}`}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Contents</dt>
+                    <dd>
+                      {capsuleReview.fileCount} file
+                      {capsuleReview.fileCount === 1 ? "" : "s"} ·{" "}
+                      {capsuleReview.totalBytes.toLocaleString()} bytes
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Platforms</dt>
+                    <dd>{capsuleReview.platforms.join(", ")}</dd>
+                  </div>
+                  <div>
+                    <dt>Flect</dt>
+                    <dd>
+                      {capsuleReview.flectRange} ·{" "}
+                      {capsuleReview.flectCompatible
+                        ? "compatible"
+                        : "incompatible"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>This host</dt>
+                    <dd>
+                      {capsuleReview.currentPlatform} ·{" "}
+                      {capsuleReview.platformCompatible
+                        ? "supported"
+                        : "unsupported"}
+                    </dd>
+                  </div>
+                  {capsuleReview.build !== undefined && (
+                    <>
+                      <div>
+                        <dt>Verified build</dt>
+                        <dd>
+                          artifact{" "}
+                          {capsuleReview.build.artifactDigest.slice(0, 7)}
+                          {" · source "}
+                          {capsuleReview.build.sourceRevision.slice(0, 7)}
+                        </dd>
+                      </div>
+                      {capsuleReview.build.dependencyGraphDigest !==
+                        undefined && (
+                        <div>
+                          <dt>Dependencies</dt>
+                          <dd>
+                            Locked in source Git · graph{" "}
+                            {capsuleReview.build.dependencyGraphDigest.slice(
+                              0,
+                              7,
+                            )}
+                          </dd>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </dl>
+                {capsuleReview.importReport !== undefined && (
+                  <div className="capsule-review__capabilities">
+                    <strong>Import compatibility</strong>
+                    <p>
+                      {capsuleReview.importReport.kind === "vite-react"
+                        ? "Vite React"
+                        : capsuleReview.importReport.kind === "vite"
+                          ? "Vite"
+                          : "Static HTML"}
+                      {" · "}
+                      {capsuleReview.importReport.entrypoint}
+                    </p>
+                    {capsuleReview.importReport.adaptations.length > 0 && (
+                      <ul>
+                        {capsuleReview.importReport.adaptations.map(
+                          (adaptation) => (
+                            <li key={adaptation}>
+                              <span>{adaptation}</span>
+                              <small>Adapted</small>
+                            </li>
+                          ),
+                        )}
+                      </ul>
+                    )}
+                    {capsuleReview.importReport.warnings.map((warning) => (
+                      <p className="capsule-review__warning" key={warning}>
+                        {warning}
+                      </p>
+                    ))}
+                    {capsuleReview.importReport.ignoredFiles.length > 0 && (
+                      <small>
+                        {capsuleReview.importReport.ignoredFiles.length} ignored
+                        secret or generated file
+                        {capsuleReview.importReport.ignoredFiles.length === 1
+                          ? ""
+                          : "s"}
+                      </small>
+                    )}
+                  </div>
+                )}
+                <ProductCapabilities
+                  capabilities={capsuleReview.capabilities}
+                  onDecide={onDecideProductCapability}
+                  onRevoke={onRevokeProductCapability}
+                  scopeId={capsuleReview.id}
+                />
+                {capsuleReview.extensions.length > 0 &&
+                  extensions !== undefined &&
+                  portableExtensionActions !== undefined && (
+                    <ExtensionReview
+                      binding="candidate"
+                      capsuleId={capsuleReview.id}
+                      disabled={operationActive}
+                      entries={extensions.entries}
+                      packages={capsuleReview.extensions}
+                      {...portableExtensionActions}
+                    />
+                  )}
+                {capsuleReview.activationBlocked && (
+                  <p className="capsule-review__warning" role="alert">
+                    {!capsuleReview.flectCompatible ||
+                    !capsuleReview.platformCompatible
+                      ? "This app is incompatible with this Flect version or host. You can inspect the preview, but it cannot be kept."
+                      : "This app requires capabilities that are not granted. You can inspect the preview, but it cannot be kept."}
+                  </p>
+                )}
+                {candidateExtensionBlocked && (
+                  <p className="capsule-review__warning" role="alert">
+                    Every enabled candidate extension must pass its bounded test
+                    before this app can be kept. Disable failed extensions or
+                    fix them in Shape.
+                  </p>
+                )}
+              </details>
+            )}
             <div className="revision-banner__actions">
               <button
                 className="decision-button decision-button--primary"
-                disabled={operationActive}
+                disabled={
+                  operationActive ||
+                  capsuleReview?.activationBlocked === true ||
+                  candidateExtensionBlocked
+                }
                 onClick={() => void shaping.accept()}
+                ref={keepChangeRef}
                 type="button"
               >
                 Keep change
@@ -232,6 +1066,7 @@ export function AgentRail({
                 className="decision-button"
                 disabled={operationActive}
                 onClick={() => void shaping.reject()}
+                ref={rejectChangeRef}
                 type="button"
               >
                 Reject
@@ -279,49 +1114,152 @@ export function AgentRail({
           </div>
         )}
 
+        {diagnostics !== undefined && (
+          <DiagnosticsPanel
+            control={diagnostics.control}
+            onToggleControl={diagnostics.onToggleControl}
+            operations={diagnostics.operations}
+            persistence={diagnostics.persistence}
+            setup={diagnostics.setup}
+            update={diagnostics.update}
+          />
+        )}
+
         <Composer
-          disabled={previewBlocked || mode === "safe"}
-          disabledReason={
-            previewBlocked
-              ? "Keep or reject the preview before shaping again."
-              : undefined
+          agentLabel={roleLabel === "Recovery" ? "Shaper" : roleLabel}
+          conversationKey={
+            target === "shape"
+              ? "shape"
+              : preview
+                ? "candidate-use"
+                : "accepted-use"
           }
+          disabled={mode === "safe"}
+          drafts={workspace.drafts}
           externalExtensionsEnabled={
-            mode === "run"
+            target === "use"
               ? workspace.externalExtensions.app
               : workspace.externalExtensions.shaper
           }
           mode={mode}
           modelFavorites={preferences.value.modelFavorites}
           models={workspace.models}
+          reasoningLevel={workspace.reasoningLevel}
+          providers={workspace.providers}
+          authEvent={workspace.authEvent}
           onCancel={controller.cancel}
+          onDraftChange={workspace.setDraft}
           onModeChange={onModeChange}
+          onTargetChange={onTargetChange}
           onOpenSafeMode={onOpenSafeMode}
+          onExportRepository={exportRepository}
+          onExportCapsule={exportCapsule}
+          onImportCapsule={importCapsule}
+          onInstallCapsule={() => {
+            setInstallError(undefined);
+            setInstallOpen(true);
+          }}
+          onImportWebProject={importHtmlProject}
+          onOpenShareSource={onOpenShareSource}
+          onOpenShareFile={onOpenShareFile}
+          onManageSharedSources={onManageSharedSources}
+          repository={workspace.repository}
           onRollback={shaping.rollback}
           onSelectModel={workspace.selectModel}
+          onSelectReasoning={workspace.selectReasoning}
+          onLoginProvider={workspace.loginProvider}
+          onReplyProviderAuth={workspace.replyProviderAuth}
+          onCancelProviderAuth={workspace.cancelProviderAuth}
+          onRefreshProviderAuth={workspace.refreshProviderAuth}
+          onLogoutProvider={workspace.logoutProvider}
           onToggleExternalExtensions={() =>
             workspace.toggleExternalExtensions(
-              mode === "run" ? "app" : "shaper",
+              target === "use" ? "app" : "shaper",
             )
           }
           onSubmit={
-            mode === "run"
-              ? workspace.app.submit
-              : mode === "edit"
+            mode === "safe"
+              ? async () => undefined
+              : target === "shape"
                 ? shaping.request
-                : async () => undefined
+                : preview && candidateRevisionId !== undefined
+                  ? (text) =>
+                      workspace.previewApp.submit(
+                        text,
+                        document,
+                        candidateRevisionId,
+                      )
+                  : workspace.app.submit
           }
           onToggleModelFavorite={preferences.toggleModelFavorite}
           placeholder={
-            mode === "run"
-              ? "Ask about this app or take an action"
+            target === "use"
+              ? preview
+                ? "Test this candidate or ask what it can do"
+                : "Ask about this app or take an action"
               : "Build, change, or connect anything"
           }
           roleSwitchDisabled={operationActive || mode === "safe"}
           rollbackAvailable={shaping.rollbackAvailable}
           selectedModel={workspace.selectedModel}
           status={controller.status}
+          target={target}
+          useDisabled={useDisabled}
         />
+        {installOpen && (
+          <dialog
+            aria-labelledby="capsule-install-title"
+            className="capsule-install-dialog"
+            onCancel={(event) => {
+              event.preventDefault();
+              if (!installing) setInstallOpen(false);
+            }}
+            ref={installDialogRef}
+          >
+            <form onSubmit={(event) => void installCapsule(event)}>
+              <header>
+                <strong id="capsule-install-title">Install Flect app</strong>
+                <p>
+                  Flect downloads without credentials, verifies the manifest and
+                  every file, then opens a reviewable preview.
+                </p>
+              </header>
+              <label htmlFor="capsule-install-url">HTTPS capsule URL</label>
+              <input
+                autoFocus
+                disabled={installing}
+                id="capsule-install-url"
+                onChange={(event) => setInstallUrl(event.currentTarget.value)}
+                placeholder="https://example.com/app.flect"
+                required
+                type="url"
+                value={installUrl}
+              />
+              {installError !== undefined && (
+                <p className="capsule-install-dialog__error" role="alert">
+                  {installError}
+                </p>
+              )}
+              <div>
+                <button
+                  className="decision-button"
+                  disabled={installing}
+                  onClick={() => setInstallOpen(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="decision-button decision-button--primary"
+                  disabled={installing || installUrl.length === 0}
+                  type="submit"
+                >
+                  {installing ? "Verifying…" : "Download and review"}
+                </button>
+              </div>
+            </form>
+          </dialog>
+        )}
       </div>
     </aside>
   );

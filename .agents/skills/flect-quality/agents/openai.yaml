@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flect Quality"
+  short_description: "Prove and improve Flect user outcomes"
+  default_prompt: "Use $flect-quality to evaluate Flect against its canonical user-quality contract and produce evidence-backed gaps."

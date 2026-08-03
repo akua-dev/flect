@@ -50,6 +50,14 @@ export interface ShapingKernelShape {
   readonly preview: (
     id: RevisionId,
   ) => Effect.Effect<InterfaceRevision, TransitionError>;
+  readonly supersede: (
+    id: RevisionId,
+    document: unknown,
+    source: Exclude<RevisionSource, "built-in">,
+  ) => Effect.Effect<
+    InterfaceRevision,
+    InvalidInterfaceDocument | TransitionError
+  >;
   readonly accept: (
     id: RevisionId,
   ) => Effect.Effect<InterfaceRevision, TransitionError>;
@@ -292,6 +300,53 @@ const makeShapingKernel = (
           };
           const transition: readonly [InterfaceRevision, KernelState] = [
             previewed,
+            next,
+          ];
+          return persist(next).pipe(Effect.as(transition));
+        },
+      );
+    });
+
+    const supersede = Effect.fn("Flect.ShapingKernel.supersede")(function* (
+      id: RevisionId,
+      input: unknown,
+      source: Exclude<RevisionSource, "built-in">,
+    ) {
+      const document = yield* validateInterfaceDocument(input);
+      return yield* SubscriptionRef.modifyEffect(
+        stateRef,
+        (
+          state,
+        ): Effect.Effect<
+          readonly [InterfaceRevision, KernelState],
+          TransitionError
+        > => {
+          const proposal = state.proposal;
+          if (proposal === undefined || proposal.id !== id) {
+            return Effect.fail(missingRevision(id));
+          }
+          if (state.safeMode || proposal.status !== "previewed") {
+            return Effect.fail(invalidTransition(id));
+          }
+          const revision = InterfaceRevision.make({
+            version: 1,
+            id: RevisionId.make(nextId()),
+            parentId: state.active.id,
+            status: "previewed",
+            source,
+            document,
+            createdAt: now(),
+          });
+          const next: KernelState = {
+            ...state,
+            proposal: revision,
+            sequence: state.sequence + 1,
+            lastEvent: eventFor(state, "revision-previewed", {
+              revisionId: revision.id,
+            }),
+          };
+          const transition: readonly [InterfaceRevision, KernelState] = [
+            revision,
             next,
           ];
           return persist(next).pipe(Effect.as(transition));
@@ -550,6 +605,7 @@ const makeShapingKernel = (
       ),
       propose,
       preview,
+      supersede,
       accept,
       reject,
       rollback: rollback(),

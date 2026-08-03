@@ -695,9 +695,13 @@ capability-incompatible proposal cannot become active.
 
 ### Build integration
 
-`@rolldown/browser` builds React, TypeScript, JSX, JavaScript, CSS, and
-supported assets from a mirrored in-memory build filesystem. OPFS remains the
-source of truth; the Rolldown filesystem is disposable.
+`@rolldown/browser` builds React, TypeScript, JSX, JavaScript, and supported
+assets from a mirrored in-memory build filesystem. OPFS remains the source of
+truth; the Rolldown filesystem is disposable. The evaluated 1.2.1 release has
+removed its experimental CSS bundling, so Flect's restricted adapter resolves
+only mirrored local relative `.css` imports and emits their strict-UTF-8
+contents in deterministic path order. CSS modules, preprocessors, remote
+imports, and arbitrary Vite plugins remain outside this acceptance path.
 
 Rifty serves a different purpose in the authoring loop. Its Node-compatible
 runtime, package installer, process kernel, service-worker router, and Vite
@@ -1248,8 +1252,11 @@ the exact selected artifact before pinning it.
   `just-bash@3.2.0`: selected model-facing Bash parser and browser userland,
   subject to the production-bundle and `node:zlib` gate.
 - [Rolldown](https://github.com/rolldown/rolldown), evaluated through
-  `@rolldown/browser`: retained as the restricted acceptance compiler even
-  when Rifty supplies a faster Vite-compatible authoring preview.
+  `@rolldown/browser@1.2.1`, release tag `v1.2.1` at
+  `93c535d8875daacde3afa84c0d4e9d26e87453e9`: retained as the restricted
+  acceptance compiler even when Rifty supplies a faster Vite-compatible
+  authoring preview. Its removed CSS bundling is replaced only by Flect's
+  bounded local-CSS adapter.
 
 ### Adjacent implementations retained for patterns
 

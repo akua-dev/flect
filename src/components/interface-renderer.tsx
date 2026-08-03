@@ -1,21 +1,19 @@
 import type { ReactNode } from "react";
+import type { InterfaceActionProjection } from "../../shared/interface-actions";
 import type {
   AgentPanelNode,
+  InterfaceAction,
   InterfaceDocument,
   InterfaceNode,
   PromptNode,
 } from "../../shared/interface-document";
 
-export type InterfaceAction =
-  | "shape"
-  | "safe-mode"
-  | "accept-revision"
-  | "reject-revision"
-  | "rollback-revision";
+export type { InterfaceAction } from "../../shared/interface-document";
 
 export interface InterfaceRendererProps {
   readonly document: InterfaceDocument;
-  readonly onAction: (action: InterfaceAction) => void;
+  readonly actions?: ReadonlyArray<InterfaceActionProjection>;
+  readonly onAction: (action: InterfaceAction, nodeId: string) => void;
   readonly renderPrompt: (node: PromptNode) => ReactNode;
   readonly renderAgentPanel?: (node: AgentPanelNode) => ReactNode;
 }
@@ -27,6 +25,7 @@ interface NodeRendererProps extends Omit<InterfaceRendererProps, "document"> {
 function NodeRenderer({
   node,
   onAction,
+  actions,
   renderPrompt,
   renderAgentPanel,
 }: NodeRendererProps) {
@@ -39,6 +38,7 @@ function NodeRenderer({
         >
           {node.children.map((child) => (
             <NodeRenderer
+              actions={actions}
               key={child.id}
               node={child}
               onAction={onAction}
@@ -58,16 +58,20 @@ function NodeRenderer({
       );
     case "prompt":
       return <div className="interface-prompt">{renderPrompt(node)}</div>;
-    case "button":
+    case "button": {
+      const projection = actions?.find((action) => action.nodeId === node.id);
       return (
         <button
           className="interface-action"
-          onClick={() => onAction(node.action)}
+          disabled={projection?.available === false}
+          onClick={() => onAction(node.action, node.id)}
+          title={projection?.unavailableReason}
           type="button"
         >
           {node.label}
         </button>
       );
+    }
     case "divider":
       return <hr className="interface-divider" />;
     case "agent-panel":
@@ -83,6 +87,7 @@ function NodeRenderer({
 
 export function InterfaceRenderer({
   document,
+  actions,
   onAction,
   renderPrompt,
   renderAgentPanel,
@@ -90,6 +95,7 @@ export function InterfaceRenderer({
   return (
     <section aria-label={document.name} className="interface-canvas">
       <NodeRenderer
+        actions={actions}
         node={document.root}
         onAction={onAction}
         renderAgentPanel={renderAgentPanel}

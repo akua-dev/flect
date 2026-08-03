@@ -1,29 +1,44 @@
-import { Effect, Fiber, Option, Stream } from "effect";
+import { Effect, Fiber, type ManagedRuntime, Stream } from "effect";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BunCommandResult } from "../../shared/bun-command";
 import {
-  ExternalPiExtensionSelection,
-  type FlectEvent,
+  type AuthLoginEvent,
+  type AuthLoginReference,
+  type AuthLoginRequest,
+  type AuthSelectionReply,
   type InteractiveAgentRole,
   ModelSelection,
   type ModelSummary,
+  type ReasoningLevel,
   type RecoveryReason,
-  SessionSelection,
 } from "../../shared/contracts";
+import {
+  type AgentWorkspaceSnapshot,
+  type RoleConversationSnapshot,
+  type ToolActivity,
+  UserCommandSource,
+} from "../../shared/control";
+import type { GitRepositoryStatus } from "../../shared/git-workspace";
 import type { InterfaceDocument } from "../../shared/interface-document";
-import { FlectClient, FlectUnavailableError } from "../lib/api";
-import { browserRuntime, type FlectBrowserRuntime } from "../lib/runtime";
-import { SandboxedShell } from "../shell/sandboxed-shell-service";
+import type { RevisionId } from "../../shared/revisions";
+import type {
+  ContinuityDrafts,
+  ContinuityRecoveryReason,
+} from "../../shared/role-continuity";
+import {
+  AgentWorkspace,
+  type AgentWorkspaceShape,
+  OperationContext,
+  type ProviderAuthUiState,
+} from "../lib/agent-workspace";
+import { FlectUnavailableError } from "../lib/api";
+import { browserRuntime } from "../lib/runtime";
 
-export type AgentSessionStatus =
-  | "booting"
-  | "ready"
-  | "submitting"
-  | "streaming"
-  | "cancelling"
-  | "error"
-  | "setup-required"
-  | "unavailable";
+export type AgentWorkspaceRuntime = ManagedRuntime.ManagedRuntime<
+  AgentWorkspace,
+  unknown
+>;
+
+export type AgentSessionStatus = RoleConversationSnapshot["status"];
 
 export const isAgentSessionActive = (status: AgentSessionStatus) =>
   status === "submitting" || status === "streaming" || status === "cancelling";
@@ -38,6 +53,7 @@ export interface RoleConversationState {
   readonly role: InteractiveAgentRole;
   readonly status: AgentSessionStatus;
   readonly messages: ReadonlyArray<ConversationMessage>;
+  readonly activities?: ReadonlyArray<ToolActivity>;
   readonly lastPrompt: string;
   readonly error: string | undefined;
   readonly cancel: () => Promise<void>;
@@ -46,6 +62,16 @@ export interface RoleConversationState {
 export interface AppConversationController extends RoleConversationState {
   readonly role: "app";
   readonly submit: (text: string) => Promise<void>;
+}
+
+export interface PreviewAppConversationController
+  extends RoleConversationState {
+  readonly role: "app";
+  readonly submit: (
+    text: string,
+    document: InterfaceDocument,
+    revisionId: RevisionId,
+  ) => Promise<void>;
 }
 
 export interface ShaperConversationController extends RoleConversationState {
@@ -57,112 +83,100 @@ export interface ShaperConversationController extends RoleConversationState {
 }
 
 export interface AgentWorkspaceController {
+  readonly drafts?: ContinuityDrafts;
+  readonly setDraft?: (
+    key: keyof ContinuityDrafts,
+    value: string,
+  ) => Promise<void>;
+  readonly continuity?: {
+    readonly generation: number;
+    readonly revisionSequence: number;
+    readonly recovery?: ContinuityRecoveryReason;
+  };
+  readonly exportContinuity?: () => Promise<string>;
+  readonly exportRepository?: () => Promise<Uint8Array>;
+  readonly exportCapsule?: () => Promise<Uint8Array>;
+  readonly importCapsule?: (archive: Uint8Array) => Promise<unknown>;
+  readonly repository?: GitRepositoryStatus;
+  readonly discardContinuity?: () => Promise<void>;
+  readonly retryContinuity?: () => Promise<void>;
   readonly models: ReadonlyArray<ModelSummary>;
   readonly selectedModel: ModelSummary | undefined;
+  readonly reasoningLevel: ReasoningLevel | undefined;
+  readonly providers: ProviderAuthUiState["providers"];
+  readonly authEvent: AuthLoginEvent | undefined;
   readonly selectModel: (model: ModelSummary | undefined) => void;
+  readonly selectReasoning: (
+    reasoningLevel: ReasoningLevel | undefined,
+  ) => void;
+  readonly loginProvider: (request: AuthLoginRequest) => void;
+  readonly replyProviderAuth: (reply: AuthSelectionReply) => Promise<void>;
+  readonly cancelProviderAuth: (reference: AuthLoginReference) => Promise<void>;
+  readonly refreshProviderAuth: () => Promise<void>;
+  readonly logoutProvider: (providerId: string) => Promise<void>;
   readonly refresh: () => Promise<void>;
-  readonly externalExtensions: ExternalPiExtensionSelection;
+  readonly externalExtensions: AgentWorkspaceSnapshot["externalExtensions"];
   readonly toggleExternalExtensions: (
     role: InteractiveAgentRole,
   ) => Promise<void>;
   readonly app: AppConversationController;
+  readonly previewApp: PreviewAppConversationController;
   readonly shaper: ShaperConversationController;
   readonly diagnoseRecovery: (
     reason: RecoveryReason,
   ) => Promise<{ readonly version: 1; readonly message: string }>;
 }
 
-interface ConversationSnapshot {
-  readonly status: AgentSessionStatus;
-  readonly messages: ReadonlyArray<ConversationMessage>;
-  readonly lastPrompt: string;
-  readonly error: string | undefined;
-}
-
-interface SessionHandle {
-  readonly id: string;
-  readonly selectionKey: string;
-}
-
-type RoleFiber = Fiber.Fiber<unknown, unknown>;
-
-const initialConversation = (): ConversationSnapshot => ({
-  status: "booting",
-  messages: [],
-  lastPrompt: "",
-  error: undefined,
-});
-
-const messageId = () => crypto.randomUUID();
-
-const sessionSelection = (
-  selectedModel: ModelSummary | undefined,
-  externalExtensions: ExternalPiExtensionSelection,
-): SessionSelection =>
-  new SessionSelection({
-    ...(selectedModel === undefined
-      ? {}
-      : {
-          model: new ModelSelection({
-            provider: selectedModel.provider,
-            id: selectedModel.id,
-          }),
-        }),
-    ...(externalExtensions.app || externalExtensions.shaper
-      ? { externalExtensions }
-      : {}),
+const unavailable = () =>
+  FlectUnavailableError.make({
+    message: "The local Flect runtime is unavailable.",
   });
 
-const modelSelectionKey = (
-  selectedModel: ModelSummary | undefined,
-  externalExtensions: ExternalPiExtensionSelection,
-) =>
-  JSON.stringify([
-    selectedModel?.provider ?? "auto",
-    selectedModel?.id ?? "auto",
-    externalExtensions.app,
-    externalExtensions.shaper,
-  ]);
+const operation = () =>
+  OperationContext.make({
+    operationId: `operation-${crypto.randomUUID()}`,
+    commandId: `cmd-${crypto.randomUUID()}`,
+    workspaceId: "workspace-local-default",
+    source: UserCommandSource.make({ kind: "user" }),
+  });
 
-const ensurePiSession = Effect.fn("Flect.AgentWorkspace.ensureSession")(
-  function* (
-    selection: SessionSelection,
-    selectionKey: string,
-    readCurrent: () => SessionHandle | undefined,
-    storeCurrent: (handle: SessionHandle | undefined) => void,
-  ) {
-    const client = yield* FlectClient;
-    const existing = readCurrent();
-    if (existing?.selectionKey === selectionKey) {
-      return existing.id;
-    }
-    if (existing !== undefined) {
-      storeCurrent(undefined);
-      yield* client
-        .closeSession(existing.id)
-        .pipe(Effect.catch(() => Effect.void));
-    }
-    const sessionId = yield* client.createSession(selection);
-    storeCurrent({ id: sessionId, selectionKey });
-    return sessionId;
-  },
-);
+const activityMessage = (
+  role: InteractiveAgentRole,
+  activity: RoleConversationSnapshot["activities"][number],
+): ConversationMessage => ({
+  id: activity.id,
+  role: "activity",
+  content:
+    activity.toolName === "bash"
+      ? `${role === "app" ? "App Agent" : "Shaper"} used its sandbox.`
+      : activity.validationIssues === undefined
+        ? `${activity.toolName} ${activity.phase}.`
+        : `Proposal validation found ${activity.validationIssues.length} issue${activity.validationIssues.length === 1 ? "" : "s"}.`,
+});
 
-const appendBoundedActivity = (
-  messages: ReadonlyArray<ConversationMessage>,
-  message: ConversationMessage,
-) => {
-  const next = [...messages, message];
-  const activity = next.filter((candidate) => candidate.role === "activity");
-  if (activity.length <= 20) {
-    return next;
-  }
-  const oldestActivity = activity[0];
-  return next.filter((candidate) => candidate.id !== oldestActivity?.id);
-};
+const conversationMessages = (
+  conversation: RoleConversationSnapshot,
+): ReadonlyArray<ConversationMessage> => [
+  ...conversation.messages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+  })),
+  ...conversation.activities.map((activity) =>
+    activityMessage(conversation.role, activity),
+  ),
+];
+
+const pendingRole = (role: InteractiveAgentRole): RoleConversationSnapshot => ({
+  role,
+  status: "booting",
+  messages: [],
+  activities: [],
+  lastPrompt: "",
+});
 
 export function useAgentSession(
-  runtime: FlectBrowserRuntime = browserRuntime,
+  runtime: AgentWorkspaceRuntime = browserRuntime,
 ): AgentWorkspaceController & {
   readonly status: AgentSessionStatus;
   readonly messages: ReadonlyArray<ConversationMessage>;
@@ -175,594 +189,317 @@ export function useAgentSession(
   ) => Promise<InterfaceDocument>;
   readonly cancel: () => Promise<void>;
 } {
-  const [models, setModels] = useState<ReadonlyArray<ModelSummary>>([]);
-  const [selectedModel, setSelectedModel] = useState<ModelSummary>();
-  const [externalExtensions, setExternalExtensions] = useState(
-    ExternalPiExtensionSelection.make({ app: false, shaper: false }),
-  );
-  const [appState, setAppState] = useState(initialConversation);
-  const [shaperState, setShaperState] = useState(initialConversation);
-  const sessionRef = useRef<SessionHandle | undefined>(undefined);
-  const requestRefs = useRef<
-    Record<InteractiveAgentRole, RoleFiber | undefined>
-  >({
-    app: undefined,
-    shaper: undefined,
+  const [snapshot, setSnapshot] = useState<AgentWorkspaceSnapshot>();
+  const [providerAuth, setProviderAuth] = useState<ProviderAuthUiState>({
+    providers: [],
   });
-  const cancellingRefs = useRef<Record<InteractiveAgentRole, boolean>>({
-    app: false,
-    shaper: false,
-  });
-
-  const updateRole = useCallback(
-    (
-      role: InteractiveAgentRole,
-      update: (current: ConversationSnapshot) => ConversationSnapshot,
-    ) => {
-      if (role === "app") {
-        setAppState(update);
-      } else {
-        setShaperState(update);
-      }
-    },
-    [],
-  );
-
-  const releaseSession = useCallback(
-    (expectedId: string) =>
-      Effect.gen(function* () {
-        const current = yield* Effect.sync(() => {
-          const handle = sessionRef.current;
-          if (handle === undefined || handle.id !== expectedId) {
-            return undefined;
-          }
-          sessionRef.current = undefined;
-          return handle;
-        });
-        if (current !== undefined) {
-          const client = yield* FlectClient;
-          yield* client
-            .closeSession(current.id)
-            .pipe(Effect.catch(() => Effect.void));
-        }
-      }),
-    [],
-  );
-
-  const interruptRoleFibers = useCallback(() => {
-    const fibers = [requestRefs.current.app, requestRefs.current.shaper].filter(
-      (fiber): fiber is RoleFiber => fiber !== undefined,
-    );
-    requestRefs.current.app = undefined;
-    requestRefs.current.shaper = undefined;
-    return Effect.forEach(fibers, Fiber.interrupt, {
-      concurrency: "unbounded",
-      discard: true,
-    });
-  }, []);
-
-  const refresh = useCallback(() => {
-    setAppState((current) => ({
-      ...current,
-      status: "booting",
-      error: undefined,
-    }));
-    setShaperState((current) => ({
-      ...current,
-      status: "booting",
-      error: undefined,
-    }));
-    const sessionId = sessionRef.current?.id;
-
-    const load = Effect.gen(function* () {
-      yield* interruptRoleFibers();
-      if (sessionId !== undefined) {
-        yield* releaseSession(sessionId);
-      }
-
-      const client = yield* FlectClient;
-      const [runtimeStatus, availableModels] = yield* Effect.all(
-        [client.status, client.models],
-        { concurrency: "unbounded" },
-      );
-      if (runtimeStatus.status !== "ready") {
-        return yield* Effect.fail(
-          FlectUnavailableError.make({
-            message: "The local Flect runtime is unavailable.",
-          }),
-        );
-      }
-
-      if (availableModels.length === 0) {
-        yield* Effect.sync(() => {
-          setModels(availableModels);
-          const setupRequired = (current: ConversationSnapshot) => ({
-            ...current,
-            status: "setup-required" as const,
-            error: "Sign in to a Pi provider, then try again.",
-          });
-          setAppState(setupRequired);
-          setShaperState(setupRequired);
-        });
-        return;
-      }
-
-      yield* Effect.sync(() => {
-        setModels(availableModels);
-        const ready = (current: ConversationSnapshot) => ({
-          ...current,
-          status: "ready" as const,
-          error: undefined,
-        });
-        setAppState(ready);
-        setShaperState(ready);
-      });
-    }).pipe(
-      Effect.catch(() =>
-        Effect.sync(() => {
-          setModels([]);
-          const unavailable = (current: ConversationSnapshot) => ({
-            ...current,
-            status: "unavailable" as const,
-            error: "Start the local Flect runtime to continue.",
-          });
-          setAppState(unavailable);
-          setShaperState(unavailable);
-        }),
-      ),
-    );
-
-    return runtime.runPromise(load);
-  }, [interruptRoleFibers, releaseSession, runtime]);
+  const workspaceRef = useRef<AgentWorkspaceShape | undefined>(undefined);
 
   useEffect(() => {
-    void refresh();
+    const subscription = Effect.gen(function* () {
+      const workspace = yield* AgentWorkspace;
+      yield* Effect.sync(() => {
+        workspaceRef.current = workspace;
+      });
+      yield* workspace.refresh;
+      const [initial, initialProviderAuth] = yield* Effect.all([
+        workspace.snapshot,
+        workspace.providerAuth,
+      ]);
+      yield* Effect.sync(() => {
+        setSnapshot(initial);
+        setProviderAuth(initialProviderAuth);
+      });
+      yield* Effect.all(
+        [
+          workspace.changes.pipe(
+            Stream.runForEach((next) => Effect.sync(() => setSnapshot(next))),
+          ),
+          workspace.providerAuthChanges.pipe(
+            Stream.runForEach((next) =>
+              Effect.sync(() => setProviderAuth(next)),
+            ),
+          ),
+        ],
+        { concurrency: "unbounded", discard: true },
+      ).pipe(Effect.ensuring(workspace.close));
+    });
+    const fiber = runtime.runFork(subscription);
     return () => {
-      const sessionId = sessionRef.current?.id;
-      runtime.runFork(
-        interruptRoleFibers().pipe(
-          Effect.andThen(
-            sessionId === undefined ? Effect.void : releaseSession(sessionId),
-          ),
-        ),
-      );
+      workspaceRef.current = undefined;
+      runtime.runFork(Fiber.interrupt(fiber));
     };
-  }, [interruptRoleFibers, refresh, releaseSession, runtime]);
+  }, [runtime]);
 
-  const selection = useMemo(
-    () => sessionSelection(selectedModel, externalExtensions),
-    [externalExtensions, selectedModel],
-  );
-  const selectionKey = useMemo(
-    () => modelSelectionKey(selectedModel, externalExtensions),
-    [externalExtensions, selectedModel],
-  );
-  const ensureSession = useCallback(
+  const workspaceEffect = useCallback(
     () =>
-      ensurePiSession(
-        selection,
-        selectionKey,
-        () => sessionRef.current,
-        (handle) => {
-          sessionRef.current = handle;
-        },
-      ),
-    [selection, selectionKey],
-  );
-
-  const executeShellRequest = useCallback(
-    (
-      sessionId: string,
-      role: InteractiveAgentRole,
-      event: { readonly requestId: string; readonly command: string },
-    ) =>
-      Effect.gen(function* () {
-        const client = yield* FlectClient;
-        const shell = yield* SandboxedShell;
-        yield* Effect.sync(() => {
-          updateRole(role, (current) => ({
-            ...current,
-            messages: appendBoundedActivity(current.messages, {
-              id: messageId(),
-              role: "activity",
-              content: `${role === "app" ? "App Agent" : "Shaper"} used its sandbox.`,
-            }),
-          }));
-        });
-        const result = yield* shell.execute(role, event.command).pipe(
-          Effect.catch(() =>
-            Effect.succeed(
-              BunCommandResult.make({
-                version: 1,
-                exitCode: 1,
-                stdout: "",
-                stderr: "bash: command failed safely\n",
-              }),
-            ),
-          ),
-        );
-        yield* client.completeShellRequest(
-          sessionId,
-          role,
-          event.requestId,
-          result,
-        );
+      Effect.suspend(() => {
+        const workspace = workspaceRef.current;
+        return workspace === undefined
+          ? Effect.fail(unavailable())
+          : Effect.succeed(workspace);
       }),
-    [updateRole],
+    [],
   );
 
-  const handleAppEvent = useCallback(
-    (
-      assistantId: string,
-      sessionId: string,
-      event: FlectEvent,
-    ): Effect.Effect<
-      void,
-      FlectUnavailableError,
-      FlectClient | SandboxedShell
-    > => {
-      if (event.type === "shell_request") {
-        return executeShellRequest(sessionId, "app", event);
-      }
-      return Effect.sync(() => {
-        setAppState((current) => {
-          switch (event.type) {
-            case "turn_started":
-              return { ...current, status: "streaming" };
-            case "text_delta":
-              return {
-                ...current,
-                messages: current.messages.map((message) =>
-                  message.id === assistantId
-                    ? { ...message, content: message.content + event.delta }
-                    : message,
-                ),
-              };
-            case "turn_completed":
-            case "cancelled":
-              return { ...current, status: "ready", error: undefined };
-            case "error":
-            case "busy":
-              return { ...current, status: "error", error: event.message };
-          }
-        });
-      });
-    },
-    [executeShellRequest],
-  );
-
-  const submit = useCallback(
-    (text: string): Promise<void> => {
-      const prompt = text.trim();
-      if (
-        !prompt ||
-        (appState.status !== "ready" && appState.status !== "error")
-      ) {
-        return Promise.resolve();
-      }
-
-      const assistantId = messageId();
-      setAppState((current) => ({
-        ...current,
-        lastPrompt: prompt,
-        error: undefined,
-        status: "submitting",
-        messages: [
-          ...current.messages,
-          { id: messageId(), role: "user", content: prompt },
-          { id: assistantId, role: "assistant", content: "" },
-        ],
-      }));
-
-      const request = Effect.gen(function* () {
-        const client = yield* FlectClient;
-        const sessionId = yield* ensureSession();
-        yield* client.prompt(sessionId, prompt).pipe(
-          Stream.runForEach((event) => {
-            const update = handleAppEvent(assistantId, sessionId, event);
-            return event.type === "error"
-              ? update.pipe(Effect.andThen(releaseSession(sessionId)))
-              : update;
-          }),
-          Effect.tapError((failure) =>
-            failure._tag === "SessionBusy"
-              ? Effect.void
-              : releaseSession(sessionId),
-          ),
-        );
-      }).pipe(
-        Effect.catch((failure) =>
-          Effect.sync(() => {
-            setAppState((current) => ({
-              ...current,
-              status: "error",
-              error: failure.message,
-            }));
-          }),
+  const refresh = useCallback(
+    () =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) => workspace.refresh),
         ),
-      );
-
-      const fiber = runtime.runFork(request);
-      requestRefs.current.app = fiber;
-      return runtime
-        .runPromise(Fiber.await(fiber))
-        .then(() => undefined)
-        .finally(() => {
-          if (requestRefs.current.app === fiber) {
-            requestRefs.current.app = undefined;
-          }
-        });
-    },
-    [appState.status, ensureSession, handleAppEvent, releaseSession, runtime],
-  );
-
-  const shape = useCallback(
-    (
-      instruction: string,
-      document: InterfaceDocument,
-    ): Promise<InterfaceDocument> => {
-      const prompt = instruction.trim();
-      if (
-        !prompt ||
-        (shaperState.status !== "ready" && shaperState.status !== "error")
-      ) {
-        return Promise.reject(
-          FlectUnavailableError.make({
-            message: "The local Flect runtime is unavailable.",
-          }),
-        );
-      }
-
-      setShaperState((current) => ({
-        ...current,
-        lastPrompt: prompt,
-        error: undefined,
-        status: "submitting",
-        messages: [
-          ...current.messages,
-          { id: messageId(), role: "user", content: prompt },
-        ],
-      }));
-
-      const request = Effect.gen(function* () {
-        const client = yield* FlectClient;
-        const sessionId = yield* ensureSession();
-        const shaped = yield* client.shape(sessionId, prompt, document).pipe(
-          Stream.tap((event) =>
-            event.type === "shell_request"
-              ? executeShellRequest(sessionId, "shaper", event)
-              : Effect.void,
-          ),
-          Stream.runFold(
-            () => Option.none<InterfaceDocument>(),
-            (current, event) =>
-              event.type === "shape_completed"
-                ? Option.some(event.document)
-                : current,
-          ),
-          Effect.tapError((failure) =>
-            failure._tag === "SessionBusy"
-              ? Effect.void
-              : releaseSession(sessionId),
-          ),
-        );
-        const candidate = yield* Option.match(shaped, {
-          onNone: () =>
-            Effect.fail(
-              FlectUnavailableError.make({
-                message: "The local Flect runtime is unavailable.",
-              }),
-            ),
-          onSome: Effect.succeed,
-        });
-        yield* Effect.sync(() => {
-          setShaperState((current) => ({
-            ...current,
-            status: "ready",
-            error: undefined,
-            messages: [
-              ...current.messages,
-              {
-                id: messageId(),
-                role: "assistant",
-                content: `Preview ready: ${candidate.name}`,
-              },
-            ],
-          }));
-        });
-        return candidate;
-      }).pipe(
-        Effect.tapError((failure) =>
-          Effect.sync(() => {
-            setShaperState((current) => ({
-              ...current,
-              status: "error",
-              error: failure.message,
-            }));
-          }),
-        ),
-      );
-
-      const fiber = runtime.runFork(request);
-      requestRefs.current.shaper = fiber;
-      return runtime.runPromise(Fiber.join(fiber)).finally(() => {
-        if (requestRefs.current.shaper === fiber) {
-          requestRefs.current.shaper = undefined;
-        }
-      });
-    },
-    [
-      ensureSession,
-      executeShellRequest,
-      releaseSession,
-      runtime,
-      shaperState.status,
-    ],
-  );
-
-  const cancelRole = useCallback(
-    (role: InteractiveAgentRole): Promise<void> => {
-      if (cancellingRefs.current[role]) {
-        return Promise.resolve();
-      }
-      const request = requestRefs.current[role];
-      const sessionId = sessionRef.current?.id;
-      cancellingRefs.current[role] = true;
-      updateRole(role, (current) => ({ ...current, status: "cancelling" }));
-
-      const cancelRequest = Effect.gen(function* () {
-        if (sessionId !== undefined) {
-          const client = yield* FlectClient;
-          yield* client.cancel(sessionId, role);
-        }
-        if (request !== undefined) {
-          yield* Fiber.interrupt(request);
-        }
-      }).pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            requestRefs.current[role] = undefined;
-            updateRole(role, (current) => ({
-              ...current,
-              status: "ready",
-              error: undefined,
-            }));
-          }),
-        ),
-        Effect.catch(() =>
-          Effect.sync(() => {
-            updateRole(role, (current) => ({
-              ...current,
-              status: "cancelling",
-              error: "The response could not be stopped. Try again.",
-            }));
-          }),
-        ),
-        Effect.ensuring(
-          Effect.sync(() => {
-            cancellingRefs.current[role] = false;
-          }),
-        ),
-      );
-      return runtime.runPromise(cancelRequest);
-    },
-    [runtime, updateRole],
-  );
-
-  const cancelApp = useCallback(() => cancelRole("app"), [cancelRole]);
-  const cancelShaper = useCallback(() => cancelRole("shaper"), [cancelRole]);
-
-  const toggleExternalExtensions = useCallback(
-    (role: InteractiveAgentRole) => {
-      const sessionId = sessionRef.current?.id;
-      setExternalExtensions((current) =>
-        ExternalPiExtensionSelection.make({
-          ...current,
-          [role]: !current[role],
-        }),
-      );
-      const reset = (current: ConversationSnapshot) => ({
-        ...current,
-        status:
-          current.status === "unavailable" ||
-          current.status === "setup-required"
-            ? current.status
-            : ("ready" as const),
-        error: undefined,
-      });
-
-      return runtime
-        .runPromise(
-          interruptRoleFibers().pipe(
-            Effect.andThen(
-              sessionId === undefined ? Effect.void : releaseSession(sessionId),
-            ),
-          ),
-        )
-        .then(() => {
-          setAppState(reset);
-          setShaperState(reset);
-        });
-    },
-    [interruptRoleFibers, releaseSession, runtime],
+      ),
+    [runtime, workspaceEffect],
   );
 
   const selectModel = useCallback(
     (model: ModelSummary | undefined) => {
-      const sessionId = sessionRef.current?.id;
       runtime.runFork(
-        interruptRoleFibers().pipe(
-          Effect.andThen(
-            sessionId === undefined ? Effect.void : releaseSession(sessionId),
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) =>
+            workspace.selectModel(
+              model === undefined
+                ? undefined
+                : ModelSelection.make({
+                    provider: model.provider,
+                    id: model.id,
+                  }),
+            ),
           ),
         ),
       );
-      setSelectedModel(model);
-      const reset = (current: ConversationSnapshot) => ({
-        ...current,
-        status:
-          current.status === "booting" ||
-          current.status === "unavailable" ||
-          current.status === "setup-required"
-            ? current.status
-            : ("ready" as const),
-        error: undefined,
-      });
-      setAppState(reset);
-      setShaperState(reset);
     },
-    [interruptRoleFibers, releaseSession, runtime],
+    [runtime, workspaceEffect],
+  );
+
+  const toggleExternalExtensions = useCallback(
+    (role: InteractiveAgentRole) =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) =>
+            workspace.setExternalExtensions(
+              role,
+              !(snapshot?.externalExtensions[role] ?? false),
+            ),
+          ),
+        ),
+      ),
+    [runtime, snapshot, workspaceEffect],
+  );
+
+  const selectReasoning = useCallback(
+    (reasoningLevel: ReasoningLevel | undefined) => {
+      runtime.runFork(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) =>
+            workspace.selectReasoning(reasoningLevel),
+          ),
+        ),
+      );
+    },
+    [runtime, workspaceEffect],
+  );
+
+  const loginProvider = useCallback(
+    (request: AuthLoginRequest) => {
+      void runtime
+        .runPromise(
+          workspaceEffect().pipe(
+            Effect.flatMap((workspace) => workspace.loginProvider(request)),
+          ),
+        )
+        .catch(() => undefined);
+    },
+    [runtime, workspaceEffect],
+  );
+
+  const replyProviderAuth = useCallback(
+    (reply: AuthSelectionReply) =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) => workspace.replyProviderAuth(reply)),
+        ),
+      ),
+    [runtime, workspaceEffect],
+  );
+  const cancelProviderAuth = useCallback(
+    (reference: AuthLoginReference) =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) =>
+            workspace.cancelProviderAuth(reference),
+          ),
+        ),
+      ),
+    [runtime, workspaceEffect],
+  );
+  const refreshProviderAuth = useCallback(
+    () =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) => workspace.refreshProviderAuth),
+        ),
+      ),
+    [runtime, workspaceEffect],
+  );
+  const logoutProvider = useCallback(
+    (providerId: string) =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) => workspace.logoutProvider(providerId)),
+        ),
+      ),
+    [runtime, workspaceEffect],
+  );
+
+  const submit = useCallback(
+    (text: string) =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) =>
+            workspace.submitAppPrompt(operation(), text),
+          ),
+          Effect.exit,
+          Effect.asVoid,
+        ),
+      ),
+    [runtime, workspaceEffect],
+  );
+
+  const submitPreview = useCallback(
+    (text: string, document: InterfaceDocument, revisionId: RevisionId) =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) =>
+            workspace.submitPreviewPrompt(
+              operation(),
+              text,
+              document,
+              revisionId,
+            ),
+          ),
+          Effect.exit,
+          Effect.asVoid,
+        ),
+      ),
+    [runtime, workspaceEffect],
+  );
+
+  const shape = useCallback(
+    (instruction: string, document: InterfaceDocument) =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) =>
+            workspace.submitShaperInstruction(
+              operation(),
+              instruction,
+              document,
+            ),
+          ),
+        ),
+      ),
+    [runtime, workspaceEffect],
+  );
+
+  const cancel = useCallback(
+    (role: InteractiveAgentRole) =>
+      runtime.runPromise(
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) => workspace.cancel(role)),
+          Effect.catch(() => Effect.void),
+        ),
+      ),
+    [runtime, workspaceEffect],
   );
 
   const diagnoseRecovery = useCallback(
     (reason: RecoveryReason) =>
       runtime.runPromise(
-        Effect.gen(function* () {
-          const client = yield* FlectClient;
-          const sessionId = yield* ensureSession();
-          return yield* client
-            .diagnoseRecovery(sessionId, reason)
-            .pipe(
-              Effect.tapError((failure) =>
-                failure._tag === "SessionBusy"
-                  ? Effect.void
-                  : releaseSession(sessionId),
-              ),
-            );
-        }),
+        workspaceEffect().pipe(
+          Effect.flatMap((workspace) => workspace.diagnoseRecovery(reason)),
+        ),
       ),
-    [ensureSession, releaseSession, runtime],
+    [runtime, workspaceEffect],
   );
 
-  const app: AppConversationController = {
-    role: "app",
-    ...appState,
-    submit,
-    cancel: cancelApp,
-  };
-  const shaper: ShaperConversationController = {
-    role: "shaper",
-    ...shaperState,
-    shape,
-    cancel: cancelShaper,
-  };
+  const appSnapshot = snapshot?.app ?? pendingRole("app");
+  const previewAppSnapshot = snapshot?.previewApp ?? pendingRole("app");
+  const shaperSnapshot = snapshot?.shaper ?? pendingRole("shaper");
+  const app = useMemo<AppConversationController>(
+    () => ({
+      role: "app",
+      status: appSnapshot.status,
+      messages: conversationMessages(appSnapshot),
+      activities: appSnapshot.activities,
+      lastPrompt: appSnapshot.lastPrompt,
+      error: appSnapshot.error,
+      submit,
+      cancel: () => cancel("app"),
+    }),
+    [appSnapshot, cancel, submit],
+  );
+  const shaper = useMemo<ShaperConversationController>(
+    () => ({
+      role: "shaper",
+      status: shaperSnapshot.status,
+      messages: conversationMessages(shaperSnapshot),
+      activities: shaperSnapshot.activities,
+      lastPrompt: shaperSnapshot.lastPrompt,
+      error: shaperSnapshot.error,
+      shape,
+      cancel: () => cancel("shaper"),
+    }),
+    [cancel, shape, shaperSnapshot],
+  );
+  const previewApp = useMemo<PreviewAppConversationController>(
+    () => ({
+      role: "app",
+      status: previewAppSnapshot.status,
+      messages: conversationMessages(previewAppSnapshot),
+      activities: previewAppSnapshot.activities,
+      lastPrompt: previewAppSnapshot.lastPrompt,
+      error: previewAppSnapshot.error,
+      submit: submitPreview,
+      cancel: () =>
+        runtime.runPromise(
+          workspaceEffect().pipe(
+            Effect.flatMap((workspace) => workspace.cancelPreview),
+            Effect.catch(() => Effect.void),
+          ),
+        ),
+    }),
+    [previewAppSnapshot, runtime, submitPreview, workspaceEffect],
+  );
 
   return {
-    models,
-    selectedModel,
+    models: snapshot?.models ?? [],
+    selectedModel: snapshot?.selectedModel,
+    reasoningLevel: snapshot?.reasoningLevel,
+    providers: providerAuth.providers,
+    authEvent: providerAuth.event,
     selectModel,
+    selectReasoning,
+    loginProvider,
+    replyProviderAuth,
+    cancelProviderAuth,
+    refreshProviderAuth,
+    logoutProvider,
     refresh,
-    externalExtensions,
+    externalExtensions: snapshot?.externalExtensions ?? {
+      app: false,
+      shaper: false,
+    },
     toggleExternalExtensions,
     app,
+    previewApp,
     shaper,
     diagnoseRecovery,
     status: app.status,
     messages: app.messages,
     lastPrompt: app.lastPrompt,
     error: app.error,
-    submit: app.submit,
-    shape: shaper.shape,
+    submit,
+    shape,
     cancel: app.cancel,
   };
 }

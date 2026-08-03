@@ -8,27 +8,99 @@ import {
   useRef,
   useState,
 } from "react";
+import type { PrivateShareSourceSummary } from "../../packages/product/src/host/share-source";
+import type {
+  CapsuleIntent,
+  CapsuleIntentOutcome,
+} from "../../shared/capsule-protocol";
+import type { InterfaceActionProjection } from "../../shared/interface-actions";
 import type { InterfaceDocument } from "../../shared/interface-document";
+import type { ProductCapabilityDecisionChoice } from "../../shared/product-capability";
+import type { ShareInstallationRecord } from "../../shared/share-installation";
+import type { ShareReview as ShareReviewContract } from "../../shared/share-review";
 import type { AgentWorkspaceController } from "../hooks/use-agent-session";
 import { isAgentSessionActive } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
+import type { CapsulePresentationState } from "../lib/workspace-controller";
 import type { WorkspacePhase } from "../lib/workspace-phase";
-import { AgentRail, type ShapingController } from "./agent-rail";
+import {
+  AgentRail,
+  type AgentRailProps,
+  type ShapingController,
+} from "./agent-rail";
+import { CapsuleFrame } from "./capsule-frame";
 import { PanelOpenIcon } from "./icons";
 import { type InterfaceAction, InterfaceRenderer } from "./interface-renderer";
-import type { ShellMode } from "./role-switcher";
+import type { ConversationTarget, ShellMode } from "./role-switcher";
+import { ShareLibrary } from "./share-library";
+import { ShareReview } from "./share-review";
+import { ShareSourceDialog } from "./share-source-dialog";
 
 export type { ShellMode } from "./role-switcher";
 
 export interface RoleAwareShellProps {
+  readonly build?: AgentRailProps["build"];
   readonly phase: WorkspacePhase;
   readonly document: InterfaceDocument;
+  readonly capsulePresentation?: CapsulePresentationState;
+  readonly extensions?: AgentRailProps["extensions"];
+  readonly actions?: ReadonlyArray<InterfaceActionProjection>;
   readonly preview: boolean;
   readonly workspace: AgentWorkspaceController;
   readonly shaping: ShapingController;
   readonly preferences: ShellPreferencesController;
   readonly onOpenSafeMode: () => void;
   readonly onRestoreSafeMode: () => Promise<void>;
+  readonly diagnostics?: AgentRailProps["diagnostics"];
+  readonly controlledMode?: Exclude<ShellMode, "safe">;
+  readonly onModeChange?: (mode: Exclude<ShellMode, "safe">) => Promise<void>;
+  readonly controlledTarget?: ConversationTarget;
+  readonly onTargetChange?: (target: ConversationTarget) => Promise<void>;
+  readonly useDisabled?: boolean;
+  readonly candidateRevisionId?: import("../../shared/revisions").RevisionId;
+  readonly onInterfaceAction?: (nodeId: string) => Promise<void>;
+  readonly onCapsuleIntent?: (
+    intent: CapsuleIntent,
+  ) => Promise<CapsuleIntentOutcome>;
+  readonly onDecideProductCapability?: (
+    capsuleId: string,
+    capabilityId: string,
+    choice: ProductCapabilityDecisionChoice,
+  ) => Promise<void>;
+  readonly onRevokeProductCapability?: (decisionId: string) => Promise<void>;
+  readonly onSetPortableExtensionEnabled?: AgentRailProps["onSetPortableExtensionEnabled"];
+  readonly onTestPortableExtension?: AgentRailProps["onTestPortableExtension"];
+  readonly onSetPortableExtensionPinned?: AgentRailProps["onSetPortableExtensionPinned"];
+  readonly onForkPortableExtension?: AgentRailProps["onForkPortableExtension"];
+  readonly onResolvePortableExtensionUpdate?: AgentRailProps["onResolvePortableExtensionUpdate"];
+  readonly onRemovePortableExtension?: AgentRailProps["onRemovePortableExtension"];
+  readonly shareReview?: ShareReviewContract;
+  readonly shareInstallation?: ShareInstallationRecord;
+  readonly shareInstallations?: ReadonlyArray<ShareInstallationRecord>;
+  readonly privateShareSources?: ReadonlyArray<PrivateShareSourceSummary>;
+  readonly onRetainShare?: (
+    artifactIds: ReadonlyArray<string>,
+  ) => Promise<void>;
+  readonly onPrepareShareUpdate?: () => Promise<void>;
+  readonly onContinueShareFork?: () => Promise<void>;
+  readonly onOpenShareConflictInShape?: () => Promise<void>;
+  readonly onActivateShare?: (
+    artifactIds: ReadonlyArray<string>,
+  ) => Promise<void>;
+  readonly onRejectShare?: () => Promise<void>;
+  readonly onOpenShareUrl?: (url: string) => Promise<void>;
+  readonly onOpenShareGit?: (url: string, commit: string) => Promise<void>;
+  readonly onOpenSharePrivate?: (
+    adapterId: string,
+    reference: string,
+  ) => Promise<void>;
+  readonly onOpenShareFile?: (name: string, bytes: Uint8Array) => Promise<void>;
+  readonly onExportShare?: (shareId: string) => Promise<void>;
+  readonly onRemoveShare?: (shareId: string) => Promise<void>;
+  readonly onDeleteShare?: (
+    shareId: string,
+    expectedForkCommit: string,
+  ) => Promise<void>;
 }
 
 const focusableSelector = [
@@ -43,16 +115,66 @@ const initialMode = (phase: WorkspacePhase): ShellMode =>
   phase === "accepted" ? "run" : phase === "safe" ? "safe" : "edit";
 
 export function RoleAwareShell({
+  build,
   phase,
   document,
+  capsulePresentation,
+  extensions,
+  actions,
   preview,
   workspace,
   shaping,
   preferences,
   onOpenSafeMode,
   onRestoreSafeMode,
+  diagnostics,
+  controlledMode,
+  onModeChange,
+  controlledTarget,
+  onTargetChange,
+  useDisabled = false,
+  candidateRevisionId,
+  onInterfaceAction,
+  onCapsuleIntent,
+  onDecideProductCapability,
+  onRevokeProductCapability,
+  onSetPortableExtensionEnabled,
+  onTestPortableExtension,
+  onSetPortableExtensionPinned,
+  onForkPortableExtension,
+  onResolvePortableExtensionUpdate,
+  onRemovePortableExtension,
+  shareReview,
+  shareInstallation,
+  shareInstallations = [],
+  privateShareSources = [],
+  onRetainShare,
+  onPrepareShareUpdate,
+  onContinueShareFork,
+  onOpenShareConflictInShape,
+  onActivateShare,
+  onRejectShare,
+  onOpenShareUrl,
+  onOpenShareGit,
+  onOpenSharePrivate,
+  onOpenShareFile,
+  onExportShare,
+  onRemoveShare,
+  onDeleteShare,
 }: RoleAwareShellProps) {
-  const [mode, setMode] = useState<ShellMode>(() => initialMode(phase));
+  const [localMode, setLocalMode] = useState<ShellMode>(() =>
+    initialMode(phase),
+  );
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareLibraryOpen, setShareLibraryOpen] = useState(false);
+  const [shareFileError, setShareFileError] = useState<string>();
+  const shareFileRef = useRef<HTMLInputElement>(null);
+  const mode: ShellMode =
+    phase === "safe" ? "safe" : (controlledMode ?? localMode);
+  const target: ConversationTarget =
+    phase === "safe"
+      ? "shape"
+      : (controlledTarget ?? (mode === "run" ? "use" : "shape"));
   const [compactViewport, setCompactViewport] = useState(
     () => globalThis.matchMedia?.("(max-width: 980px)").matches ?? false,
   );
@@ -76,22 +198,46 @@ export function RoleAwareShell({
     workspace.shaper.messages.length > 0 || shaping.status !== "idle";
   const docked =
     phase === "accepted" || phase === "preview" || hasShaperActivity;
+  const compiledCapsule =
+    phase === "safe"
+      ? undefined
+      : preview
+        ? capsulePresentation?.candidate
+        : capsulePresentation?.accepted;
   const collapsed =
     docked && phase !== "safe" && preferences.value.railCollapsed;
   const operationActive =
     isAgentSessionActive(workspace.app.status) ||
+    isAgentSessionActive(workspace.previewApp.status) ||
     isAgentSessionActive(workspace.shaper.status) ||
     shaping.status === "shaping";
+  const shareReviewObscuresRail =
+    shareReview !== undefined &&
+    !preview &&
+    !(shareReview.lineage === "conflict" && target === "shape");
+  const workbenchStatus =
+    phase === "safe"
+      ? "Safe mode. Customized interface state is bypassed. Restore, export, discard, or retry continuity from the protected shell."
+      : shaping.status === "preview"
+        ? `Candidate ${document.name} validated. Test it with Preview App Agent, then keep or reject the change.`
+        : operationActive
+          ? `${target === "use" ? (preview ? "Preview App Agent" : "App Agent") : "Shaper"} is responding. Cancel is available.`
+          : target === "use"
+            ? `${preview ? "Preview App Agent" : "App Agent"} ready. Use the accepted interface.`
+            : "Shaper ready. Describe the interface change you want.";
 
   useEffect(() => {
-    if (phase === "safe") {
-      setMode("safe");
-    } else if (phase === "preview" || phase === "blank") {
-      setMode("edit");
-    } else if (mode === "safe") {
-      setMode("run");
+    if (controlledMode !== undefined) {
+      return;
     }
-  }, [mode, phase]);
+    if (phase === "safe") {
+      setLocalMode("safe");
+    } else if (phase === "preview" || phase === "blank") {
+      setLocalMode("edit");
+    } else if (localMode === "safe") {
+      setLocalMode("run");
+    }
+  }, [controlledMode, localMode, phase]);
 
   useEffect(() => {
     const media = globalThis.matchMedia?.("(max-width: 980px)");
@@ -163,13 +309,35 @@ export function RoleAwareShell({
       if (operationActive || phase === "safe") {
         return;
       }
-      setMode(next);
+      if (onModeChange === undefined) {
+        setLocalMode(next);
+      } else {
+        void onModeChange(next);
+      }
       if (preferences.value.railCollapsed) {
         shouldFocusRailRef.current = true;
         void preferences.setRailCollapsed(false);
       }
     },
-    [operationActive, phase, preferences],
+    [onModeChange, operationActive, phase, preferences],
+  );
+
+  const selectTarget = useCallback(
+    (next: ConversationTarget) => {
+      if (operationActive || phase === "safe") {
+        return;
+      }
+      if (onTargetChange !== undefined) {
+        void onTargetChange(next);
+      } else {
+        selectMode(next === "use" ? "run" : "edit");
+      }
+      if (preferences.value.railCollapsed) {
+        shouldFocusRailRef.current = true;
+        void preferences.setRailCollapsed(false);
+      }
+    },
+    [onTargetChange, operationActive, phase, preferences, selectMode],
   );
 
   const collapse = useCallback(() => {
@@ -204,10 +372,14 @@ export function RoleAwareShell({
   }, [collapse, collapsed, compactViewport, docked]);
 
   const handleInterfaceAction = useCallback(
-    (action: InterfaceAction) => {
+    (action: InterfaceAction, nodeId: string) => {
+      if (onInterfaceAction !== undefined) {
+        void onInterfaceAction(nodeId);
+        return;
+      }
       switch (action) {
         case "shape":
-          selectMode("edit");
+          selectTarget("shape");
           break;
         case "safe-mode":
           onOpenSafeMode();
@@ -223,7 +395,7 @@ export function RoleAwareShell({
           break;
       }
     },
-    [onOpenSafeMode, selectMode, shaping],
+    [onInterfaceAction, onOpenSafeMode, selectTarget, shaping],
   );
 
   const resizeBy = useCallback(
@@ -313,6 +485,14 @@ export function RoleAwareShell({
       ref={shellRef}
       style={shellStyle}
     >
+      <div
+        aria-atomic="true"
+        aria-label="Workbench status"
+        className="sr-only"
+        role="status"
+      >
+        {workbenchStatus}
+      </div>
       <header className="topbar">
         <a aria-label="Flect home" className="wordmark" href="/">
           Flect
@@ -332,13 +512,114 @@ export function RoleAwareShell({
         </div>
       </header>
 
+      {onOpenShareUrl !== undefined && onOpenShareGit !== undefined && (
+        <ShareSourceDialog
+          candidateOpen={shareReview !== undefined}
+          onClose={() => setShareDialogOpen(false)}
+          onOpenGit={onOpenShareGit}
+          {...(onOpenSharePrivate === undefined
+            ? {}
+            : { onOpenPrivate: onOpenSharePrivate })}
+          onOpenUrl={onOpenShareUrl}
+          open={shareDialogOpen}
+          privateSources={privateShareSources}
+        />
+      )}
+      {onOpenShareFile !== undefined && (
+        <input
+          accept=".flect-share,application/octet-stream"
+          aria-label="Open shared file"
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0];
+            setShareFileError(undefined);
+            if (file !== undefined) {
+              void file
+                .arrayBuffer()
+                .then((buffer) =>
+                  onOpenShareFile(file.name, new Uint8Array(buffer)),
+                )
+                .catch(() =>
+                  setShareFileError(
+                    "The shared file could not be reviewed safely.",
+                  ),
+                );
+            }
+            event.currentTarget.value = "";
+          }}
+          ref={shareFileRef}
+          type="file"
+        />
+      )}
+      {shareFileError !== undefined && (
+        <div className="share-file-error" role="alert">
+          <span>{shareFileError}</span>
+          <button
+            aria-label="Dismiss shared file error"
+            onClick={() => setShareFileError(undefined)}
+            type="button"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+      {onExportShare !== undefined &&
+        onRemoveShare !== undefined &&
+        onDeleteShare !== undefined && (
+          <ShareLibrary
+            entries={shareInstallations}
+            onClose={() => setShareLibraryOpen(false)}
+            onDelete={onDeleteShare}
+            onExport={onExportShare}
+            onRemove={onRemoveShare}
+            open={shareLibraryOpen}
+          />
+        )}
+
       <main className="workspace-canvas">
+        {!preview &&
+          shareReview !== undefined &&
+          onRetainShare !== undefined &&
+          onPrepareShareUpdate !== undefined &&
+          onActivateShare !== undefined &&
+          onRejectShare !== undefined && (
+            <ShareReview
+              busy={operationActive}
+              {...(shareInstallation === undefined
+                ? {}
+                : { installedVersion: shareInstallation.version })}
+              onActivate={onActivateShare}
+              onContinueFork={onContinueShareFork}
+              onOpenConflictInShape={onOpenShareConflictInShape}
+              {...(onOpenShareUrl === undefined || onOpenShareGit === undefined
+                ? {}
+                : { onOpenSource: () => setShareDialogOpen(true) })}
+              {...(onOpenShareFile === undefined
+                ? {}
+                : { onOpenFile: () => shareFileRef.current?.click() })}
+              onPrepareUpdate={onPrepareShareUpdate}
+              onReject={onRejectShare}
+              onRetain={onRetainShare}
+              pending={shareInstallation?.pending !== undefined}
+              retained={shareInstallation !== undefined}
+              review={shareReview}
+            />
+          )}
         {!docked ? (
           <section className="blank-invitation">
             <h1>What should we shape?</h1>
           </section>
+        ) : compiledCapsule !== undefined ? (
+          <CapsuleFrame
+            assets={compiledCapsule.assets}
+            entrypointPath={compiledCapsule.entrypointPath}
+            html={compiledCapsule.html}
+            onIntent={onCapsuleIntent}
+            title={compiledCapsule.name}
+          />
         ) : (
           <InterfaceRenderer
+            actions={actions}
             document={document}
             onAction={handleInterfaceAction}
             renderPrompt={() => (
@@ -347,7 +628,7 @@ export function RoleAwareShell({
                 onClick={expand}
                 type="button"
               >
-                Open {mode === "run" ? "App Agent" : "Shaper"}
+                Open {target === "use" ? "App Agent" : "Shaper"}
               </button>
             )}
           />
@@ -355,10 +636,10 @@ export function RoleAwareShell({
       </main>
 
       <div
-        aria-hidden={collapsed}
+        aria-hidden={collapsed || shareReviewObscuresRail}
         className="agent-rail-container"
         data-layout={docked ? "rail" : "center"}
-        inert={collapsed}
+        inert={collapsed || shareReviewObscuresRail}
         onKeyDown={handleRailKeyDown}
         ref={railContainerRef}
       >
@@ -379,12 +660,41 @@ export function RoleAwareShell({
           />
         )}
         <AgentRail
+          acceptedCapsuleReview={capsulePresentation?.acceptedReview}
+          build={build}
+          capsuleReview={capsulePresentation?.candidateReview}
+          diagnostics={diagnostics}
           document={document}
+          extensions={extensions}
           mode={mode}
+          target={target}
+          preview={preview}
+          candidateRevisionId={candidateRevisionId}
+          useDisabled={useDisabled}
           onCollapse={collapse}
           onModeChange={selectMode}
+          onTargetChange={selectTarget}
           onOpenSafeMode={onOpenSafeMode}
+          {...(onOpenShareUrl === undefined || onOpenShareGit === undefined
+            ? {}
+            : { onOpenShareSource: () => setShareDialogOpen(true) })}
+          {...(onOpenShareFile === undefined
+            ? {}
+            : { onOpenShareFile: () => shareFileRef.current?.click() })}
+          {...(onExportShare === undefined ||
+          onRemoveShare === undefined ||
+          onDeleteShare === undefined
+            ? {}
+            : { onManageSharedSources: () => setShareLibraryOpen(true) })}
           onRestoreSafeMode={onRestoreSafeMode}
+          onDecideProductCapability={onDecideProductCapability}
+          onRevokeProductCapability={onRevokeProductCapability}
+          onSetPortableExtensionEnabled={onSetPortableExtensionEnabled}
+          onTestPortableExtension={onTestPortableExtension}
+          onSetPortableExtensionPinned={onSetPortableExtensionPinned}
+          onForkPortableExtension={onForkPortableExtension}
+          onResolvePortableExtensionUpdate={onResolvePortableExtensionUpdate}
+          onRemovePortableExtension={onRemovePortableExtension}
           preferences={preferences}
           shaping={shaping}
           workspace={workspace}
@@ -400,7 +710,7 @@ export function RoleAwareShell({
           type="button"
         >
           <PanelOpenIcon />
-          <span>{mode === "run" ? "App Agent" : "Shaper"}</span>
+          <span>{target === "use" ? "App Agent" : "Shaper"}</span>
         </button>
       )}
       {compactViewport && docked && !collapsed && (
