@@ -150,6 +150,7 @@ const makeHarness = () => {
   let awaitPromptStarted = Effect.void;
   let releasePrompt = Effect.void;
   const enable = vi.fn<WorkspaceControlTransportShape["enable"]>();
+  const status = vi.fn<WorkspaceControlTransportShape["status"]>();
   const disable = vi.fn<() => void>();
   const publishSnapshot =
     vi.fn<WorkspaceControlTransportShape["publishSnapshot"]>();
@@ -264,6 +265,19 @@ const makeHarness = () => {
           }),
         ),
       );
+      status.mockImplementation(() =>
+        Effect.succeed(
+          ControlBrokerStatus.make({
+            version: 1,
+            enabled: true,
+            connected: true,
+            port: 43126,
+            instanceId: "instance-control-bridge",
+            workspaceId: initial.workspaceId,
+            url: "http://127.0.0.1:43126",
+          }),
+        ),
+      );
       publishSnapshot.mockImplementation(() => Effect.void);
       complete.mockImplementation(() =>
         Effect.sync(() => {
@@ -272,6 +286,7 @@ const makeHarness = () => {
       );
       return {
         enable,
+        status,
         disable: Effect.sync(() => {
           order.push("disable");
           disable();

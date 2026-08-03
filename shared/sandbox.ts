@@ -9,6 +9,15 @@ const IdentifierText = Schema.String.check(
   Schema.isPattern(/^[a-z][a-z0-9-]*$/),
 );
 
+export class ExtensionIntentContext extends Schema.Class<ExtensionIntentContext>(
+  "ExtensionIntentContext",
+)({
+  extensionId: IdentifierText,
+  role: Schema.Literals(["app", "shaper"]),
+  binding: Schema.Literals(["accepted", "candidate"]),
+  operationId: IdentifierText,
+}) {}
+
 export class SetTextIntent extends Schema.Class<SetTextIntent>("SetTextIntent")(
   {
     type: Schema.Literal("set-text"),

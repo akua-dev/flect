@@ -6,6 +6,7 @@ import {
   Fiber,
   Layer,
   Ref,
+  Result,
   Semaphore,
   Stream,
 } from "effect";
@@ -60,8 +61,8 @@ export const WorkspaceControlBridgeLive = Layer.effect(
       yield* Ref.set(activeCommandFibers, new Set());
     });
 
-    const reconcileTransportRevocation = Effect.fn(
-      "Flect.ControlBridge.reconcileTransportRevocation",
+    const confirmTransportRevocation = Effect.fn(
+      "Flect.ControlBridge.confirmTransportRevocation",
     )(function* () {
       yield* commandLaunchPermit.withPermits(1)(
         Effect.gen(function* () {
@@ -79,13 +80,28 @@ export const WorkspaceControlBridgeLive = Layer.effect(
                     source: UserCommandSource.make({ kind: "user" }),
                     command: DisableControl.make({ type: "disable-control" }),
                   }),
-                )
-                .pipe(Effect.catch(() => Effect.void));
+                );
             }
-            yield* transport.disable.pipe(Effect.catch(() => Effect.void));
+            yield* transport.disable;
             yield* Ref.set(enabled, false);
           }).pipe(Effect.ensuring(Ref.set(revocationInFlight, false)));
         }),
+      );
+    });
+
+    const reconcileTransportFailure = Effect.fn(
+      "Flect.ControlBridge.reconcileTransportFailure",
+    )(function* () {
+      const status = yield* transport.status.pipe(Effect.result);
+      if (Result.isFailure(status) || status.success.enabled) {
+        return;
+      }
+      yield* confirmTransportRevocation().pipe(
+        Effect.catch(() =>
+          Effect.logWarning(
+            "Flect control revocation cleanup is still pending.",
+          ),
+        ),
       );
     });
 
@@ -102,7 +118,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
           if (snapshot.control.enabled && active) {
             yield* transport
               .publishSnapshot(snapshot)
-              .pipe(Effect.catch(() => reconcileTransportRevocation()));
+              .pipe(Effect.catch(() => reconcileTransportFailure()));
             return;
           }
           if (!snapshot.control.enabled && active) {
@@ -256,7 +272,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
     yield* Effect.forever(
       runNext().pipe(
         Effect.catch(() =>
-          reconcileTransportRevocation().pipe(
+          reconcileTransportFailure().pipe(
             Effect.andThen(Effect.sleep("200 millis")),
           ),
         ),

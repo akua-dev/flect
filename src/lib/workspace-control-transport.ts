@@ -30,6 +30,7 @@ export interface WorkspaceControlTransportShape {
   readonly enable: (
     snapshot: FlectWorkspaceSnapshot,
   ) => Effect.Effect<ControlBrokerStatus, FlectUnavailableError>;
+  readonly status: Effect.Effect<ControlBrokerStatus, FlectUnavailableError>;
   readonly disable: Effect.Effect<void, FlectUnavailableError>;
   readonly publishSnapshot: (
     snapshot: FlectWorkspaceSnapshot,
@@ -75,6 +76,12 @@ export const makeBrowserWorkspaceControlTransportLayer = (
             ),
             Effect.mapError(unavailable),
           ),
+      );
+
+      const status = HttpClientRequest.get("/status").pipe(
+        transport.execute,
+        Effect.flatMap(HttpClientResponse.schemaBodyJson(ControlBrokerStatus)),
+        Effect.mapError(unavailable),
       );
 
       const disable = HttpClientRequest.post("/disable").pipe(
@@ -145,6 +152,7 @@ export const makeBrowserWorkspaceControlTransportLayer = (
 
       return {
         enable,
+        status,
         disable,
         publishSnapshot,
         publishEvent,

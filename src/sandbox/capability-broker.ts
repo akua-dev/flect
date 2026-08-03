@@ -5,8 +5,8 @@ import {
 } from "../../shared/extensions";
 import type {
   CapabilityIntent,
+  ExtensionIntentContext,
   SandboxResult,
-  SetTextIntent,
 } from "../../shared/sandbox";
 
 export class CapabilityDenied extends Schema.TaggedErrorClass<CapabilityDenied>()(
@@ -28,8 +28,9 @@ export class CapabilityAdapterFailure extends Schema.TaggedErrorClass<Capability
 ) {}
 
 export interface CapabilityAdapterShape {
-  readonly setText: (
-    intent: SetTextIntent,
+  readonly apply: (
+    context: ExtensionIntentContext,
+    intents: ReadonlyArray<CapabilityIntent>,
   ) => Effect.Effect<void, CapabilityAdapterFailure>;
 }
 
@@ -40,6 +41,7 @@ export class CapabilityAdapter extends Context.Service<
 
 export interface SandboxCapabilityBrokerShape {
   readonly apply: (
+    context: ExtensionIntentContext,
     manifest: ExtensionManifest,
     result: SandboxResult,
     grants: ReadonlyArray<ExtensionCapability>,
@@ -77,10 +79,19 @@ export const SandboxCapabilityBrokerLive = Layer.effect(
 
     return {
       apply: Effect.fn("Flect.SandboxCapabilityBroker.apply")(function* (
+        context: ExtensionIntentContext,
         manifest: ExtensionManifest,
         result: SandboxResult,
         grants: ReadonlyArray<ExtensionCapability>,
       ) {
+        if (context.extensionId !== manifest.id) {
+          return yield* Effect.fail(
+            CapabilityAdapterFailure.make({
+              reason: "unsupported",
+              message: "The extension interface intent is unsupported.",
+            }),
+          );
+        }
         const intents = result.intents.map((intent) => ({
           intent,
           capability: capabilityForIntent(intent),
@@ -99,15 +110,9 @@ export const SandboxCapabilityBrokerLive = Layer.effect(
           }
         }
 
-        yield* Effect.forEach(
-          intents,
-          ({ intent }) => {
-            switch (intent.type) {
-              case "set-text":
-                return adapter.setText(intent);
-            }
-          },
-          { discard: true },
+        yield* adapter.apply(
+          context,
+          intents.map(({ intent }) => intent),
         );
       }),
     };

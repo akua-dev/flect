@@ -112,7 +112,7 @@ const makeHarness = (options?: {
   const broker = SandboxCapabilityBrokerLive.pipe(
     Layer.provide(
       Layer.succeed(CapabilityAdapter)({
-        setText: () => Ref.update(adapterCalls, (count) => count + 1),
+        apply: () => Ref.update(adapterCalls, (count) => count + 1),
       }),
     ),
   );
@@ -188,13 +188,37 @@ describe("PortableExtensionHost", () => {
         yield* stage;
         const host = yield* PortableExtensionHost;
         const inactive = yield* host
-          .call({ role: "app", binding: "candidate" }, "app-weather", {})
+          .call(
+            {
+              role: "app",
+              binding: "candidate",
+              operationId: "operation-extension-test",
+            },
+            "app-weather",
+            {},
+          )
           .pipe(Effect.flip);
         const wrongRole = yield* host
-          .call({ role: "shaper", binding: "candidate" }, "app-weather", {})
+          .call(
+            {
+              role: "shaper",
+              binding: "candidate",
+              operationId: "operation-extension-test",
+            },
+            "app-weather",
+            {},
+          )
           .pipe(Effect.flip);
         const wrongBinding = yield* host
-          .call({ role: "app", binding: "accepted" }, "app-weather", {})
+          .call(
+            {
+              role: "app",
+              binding: "accepted",
+              operationId: "operation-extension-test",
+            },
+            "app-weather",
+            {},
+          )
           .pipe(Effect.flip);
 
         assert.strictEqual(inactive._tag, "PortableExtensionUnavailable");
@@ -232,7 +256,11 @@ describe("PortableExtensionHost", () => {
         );
         const host = yield* PortableExtensionHost;
         const result = yield* host.call(
-          { role: "app", binding: "candidate" },
+          {
+            role: "app",
+            binding: "candidate",
+            operationId: "operation-extension-test",
+          },
           "app-weather",
           { city: "Berlin" },
         );
@@ -274,9 +302,15 @@ describe("PortableExtensionHost", () => {
         );
         const host = yield* PortableExtensionHost;
         const denied = yield* host
-          .call({ role: "app", binding: "candidate" }, "app-weather", {
-            credential: "must-not-escape",
-          })
+          .call(
+            {
+              role: "app",
+              binding: "candidate",
+              operationId: "operation-extension-test",
+            },
+            "app-weather",
+            { credential: "must-not-escape" },
+          )
           .pipe(Effect.flip);
 
         assert.strictEqual(denied._tag, "CapabilityDenied");
@@ -307,7 +341,15 @@ describe("PortableExtensionHost", () => {
       );
       const host = yield* PortableExtensionHost;
       const timeout = yield* host
-        .call({ role: "app", binding: "candidate" }, "app-weather", {})
+        .call(
+          {
+            role: "app",
+            binding: "candidate",
+            operationId: "operation-extension-test",
+          },
+          "app-weather",
+          {},
+        )
         .pipe(Effect.flip);
 
       assert.strictEqual(timeout._tag, "SandboxExecutionFailed");

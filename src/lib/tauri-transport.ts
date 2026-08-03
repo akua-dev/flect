@@ -430,6 +430,7 @@ export const makeTauriWorkspaceControlTransportLayer = () =>
       return {
         enable: (snapshot: FlectWorkspaceSnapshot) =>
           mapError(rpc.ControlEnable({ snapshot })),
+        status: mapError(rpc.ControlStatus()),
         disable: mapError(rpc.ControlDisable()).pipe(Effect.asVoid),
         publishSnapshot: (snapshot: FlectWorkspaceSnapshot) =>
           mapError(rpc.ControlPublishSnapshot({ snapshot })).pipe(

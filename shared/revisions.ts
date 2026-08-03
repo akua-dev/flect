@@ -59,6 +59,7 @@ export class ShapingEvent extends Schema.Class<ShapingEvent>("ShapingEvent")({
   ]),
   revisionId: Schema.optionalKey(RevisionId),
   extensionId: Schema.optionalKey(IdentifierText),
+  operationId: Schema.optionalKey(IdentifierText),
 }) {}
 
 export class ShapingSnapshot extends Schema.Class<ShapingSnapshot>(

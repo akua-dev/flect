@@ -43,6 +43,7 @@ export const makeFlectRpcHandlers = () =>
         DiagnoseRecovery: ({ sessionId, reason }) =>
           runtime.diagnoseRecovery(sessionId, reason),
         ControlEnable: ({ snapshot }) => mapControl(control.enable(snapshot)),
+        ControlStatus: () => mapControl(control.status),
         ControlDisable: () =>
           control.disable.pipe(Effect.asVoid, Effect.mapError(controlFailure)),
         ControlPublishSnapshot: ({ snapshot }) =>

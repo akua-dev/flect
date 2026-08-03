@@ -691,68 +691,71 @@ export const makeProductCapabilityBrokerLayer = (options: {
         ) =>
           Effect.gen(function* () {
             const fiber = yield* Effect.fiber;
-            const now = yield* Clock.currentTimeMillis;
-            yield* SynchronizedRef.modifyEffect(state, (current) => {
-              const decision = current.decisions.find(
-                (candidate) => candidate.decisionId === reservation.decisionId,
-              );
-              if (
-                decision === undefined ||
-                decision.capabilityId !== reservation.capabilityId ||
-                reservation.operationId !== operation.operationId ||
-                reservation.capabilityId !== operation.capabilityId ||
-                !decision.operationIds.includes(reservation.operationId) ||
-                !isSubset(
-                  reservation.approvedResourceIds,
-                  decision.resourceIds,
-                ) ||
-                !isSubset(
-                  reservation.approvedDataClassIds,
-                  decision.dataClassIds,
-                ) ||
-                !isSubset(
-                  operation.resourceIds,
-                  reservation.approvedResourceIds,
-                ) ||
-                !isSubset(
-                  operation.dataClassIds,
-                  reservation.approvedDataClassIds,
-                )
-              ) {
-                return Effect.fail(
-                  brokerFailure("denied", reservation.capabilityId),
+            yield* SynchronizedRef.modifyEffect(state, (current) =>
+              Effect.gen(function* () {
+                const now = yield* Clock.currentTimeMillis;
+                const decision = current.decisions.find(
+                  (candidate) =>
+                    candidate.decisionId === reservation.decisionId,
                 );
-              }
-              if (decision.status === "revoked") {
-                return Effect.fail(
-                  brokerFailure("revoked", reservation.capabilityId),
+                if (
+                  decision === undefined ||
+                  decision.capabilityId !== reservation.capabilityId ||
+                  reservation.operationId !== operation.operationId ||
+                  reservation.capabilityId !== operation.capabilityId ||
+                  !decision.operationIds.includes(reservation.operationId) ||
+                  !isSubset(
+                    reservation.approvedResourceIds,
+                    decision.resourceIds,
+                  ) ||
+                  !isSubset(
+                    reservation.approvedDataClassIds,
+                    decision.dataClassIds,
+                  ) ||
+                  !isSubset(
+                    operation.resourceIds,
+                    reservation.approvedResourceIds,
+                  ) ||
+                  !isSubset(
+                    operation.dataClassIds,
+                    reservation.approvedDataClassIds,
+                  )
+                ) {
+                  return yield* Effect.fail(
+                    brokerFailure("denied", reservation.capabilityId),
+                  );
+                }
+                if (decision.status === "revoked") {
+                  return yield* Effect.fail(
+                    brokerFailure("revoked", reservation.capabilityId),
+                  );
+                }
+                if (decision.status !== "granted") {
+                  return yield* Effect.fail(
+                    brokerFailure("denied", reservation.capabilityId),
+                  );
+                }
+                if (
+                  decision.expiresAtMillis !== undefined &&
+                  decision.expiresAtMillis <= now
+                ) {
+                  return yield* Effect.fail(
+                    brokerFailure("expired", reservation.capabilityId),
+                  );
+                }
+                const activeLeases = new Map(current.activeLeases);
+                activeLeases.set(
+                  reservation.decisionId,
+                  new Set(
+                    activeLeases.get(reservation.decisionId) ?? [],
+                  ).add(fiber),
                 );
-              }
-              if (decision.status !== "granted") {
-                return Effect.fail(
-                  brokerFailure("denied", reservation.capabilityId),
-                );
-              }
-              if (
-                decision.expiresAtMillis !== undefined &&
-                decision.expiresAtMillis <= now
-              ) {
-                return Effect.fail(
-                  brokerFailure("expired", reservation.capabilityId),
-                );
-              }
-              const activeLeases = new Map(current.activeLeases);
-              activeLeases.set(
-                reservation.decisionId,
-                new Set(
-                  activeLeases.get(reservation.decisionId) ?? [],
-                ).add(fiber),
-              );
-              return Effect.succeed([
-                undefined,
-                { ...current, activeLeases },
-              ] as const);
-            });
+                return [
+                  undefined,
+                  { ...current, activeLeases },
+                ] as const;
+              }),
+            );
             return yield* effect.pipe(
               Effect.ensuring(
                 SynchronizedRef.update(state, (current) => {

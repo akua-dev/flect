@@ -10,6 +10,7 @@ import type {
   SandboxExecutionFailed,
   SandboxResult,
 } from "../../shared/sandbox";
+import { ExtensionIntentContext } from "../../shared/sandbox";
 import { CapsuleStore } from "../capsule/capsule-store";
 import {
   type CapabilityAdapterFailure,
@@ -124,6 +125,7 @@ const unavailable = (
 export interface PortableExtensionCallSource {
   readonly role: PortableExtensionRole;
   readonly binding: "accepted" | "candidate";
+  readonly operationId: string;
 }
 
 export interface PortableExtensionHostShape {
@@ -344,6 +346,12 @@ export const PortableExtensionHostLive = Layer.effect(
         .pipe(
           Effect.tap((result) =>
             broker.apply(
+              ExtensionIntentContext.make({
+                extensionId,
+                role: callSource.role,
+                binding: callSource.binding,
+                operationId: callSource.operationId,
+              }),
               runtimeManifest,
               result,
               selected.entry.grantedCapabilities,
@@ -357,7 +365,9 @@ export const PortableExtensionHostLive = Layer.effect(
                   .pipe(Effect.ignore)
               : error._tag === "SandboxExecutionFailed"
                 ? catalog.recordFailure(key, error.reason).pipe(Effect.ignore)
-                : Effect.void,
+                : error._tag === "CapabilityAdapterFailure"
+                  ? catalog.recordFailure(key, "execution").pipe(Effect.ignore)
+                  : Effect.void,
           ),
         );
     });

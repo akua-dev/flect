@@ -3,6 +3,7 @@ import type {
   ExtensionCapability,
   ExtensionManifest,
 } from "../../shared/extensions";
+import { ExtensionIntentContext } from "../../shared/sandbox";
 import type {
   SandboxExecutionFailed,
   SandboxResult,
@@ -76,7 +77,17 @@ export const ExtensionExecutionLive = Layer.effect(
             source: manifest.source,
             input,
           });
-          yield* broker.apply(manifest, result, grants);
+          yield* broker.apply(
+            ExtensionIntentContext.make({
+              extensionId: manifest.id,
+              role: "app",
+              binding: "accepted",
+              operationId: `extension-execution-${manifest.id}`,
+            }),
+            manifest,
+            result,
+            grants,
+          );
           yield* kernel.recordExtensionSuccess(manifest.id);
           return result;
         },

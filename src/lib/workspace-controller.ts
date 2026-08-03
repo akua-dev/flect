@@ -226,6 +226,12 @@ interface FinalizedShareActivation {
   readonly beforeRefs?: ShareInstallationRefs & { readonly candidate: string };
   readonly afterRefs: Omit<ShareInstallationRefs, "candidate">;
   readonly candidateArchive: Uint8Array;
+  readonly candidateArchiveSha256: string;
+}
+
+interface DiscardedShareActivation {
+  readonly before: ShareInstallationRecord;
+  readonly after: ShareInstallationRecord;
 }
 
 interface PreparedShareExport {
@@ -1489,7 +1495,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       "Flect.Workspace.finalizeShareActivation",
     )(function* () {
       const activation = yield* Ref.get(shareActivation);
-      if (activation === undefined) return;
+      if (activation === undefined) return undefined;
       if (
         shareInstallationStore === undefined ||
         shareRepository === undefined ||
@@ -1647,7 +1653,31 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         ...(beforeRefs === undefined ? {} : { beforeRefs }),
         afterRefs: refs,
         candidateArchive: stored.slice(),
+        candidateArchiveSha256: pending.archiveSha256,
       };
+    });
+
+    const removeUnreferencedShareArchive = Effect.fn(
+      "Flect.Workspace.removeUnreferencedShareArchive",
+    )(function* (digest: string | undefined) {
+      if (
+        digest === undefined ||
+        shareCandidateStore === undefined ||
+        shareInstallationStore === undefined
+      ) {
+        return;
+      }
+      const shares = yield* shareInstallationStore.snapshot;
+      if (
+        shares.entries.some(
+          (entry) =>
+            entry.source.archiveSha256 === digest ||
+            entry.pending?.archiveSha256 === digest,
+        )
+      ) {
+        return;
+      }
+      yield* shareCandidateStore.remove(digest).pipe(Effect.ignore);
     });
 
     const discardShareActivation = Effect.fn(
@@ -1655,14 +1685,14 @@ export const FlectWorkspaceControllerLive = Layer.effect(
     )(function* () {
       const activation = yield* Ref.get(shareActivation);
       if (activation === undefined || shareInstallationStore === undefined) {
-        return;
+        return undefined;
       }
       const installation = yield* shareInstallationStore.get(
         activation.shareId,
       );
       if (installation?.pending === undefined) {
         yield* Ref.set(shareActivation, undefined);
-        return;
+        return undefined;
       }
       if (installation.refs.candidate !== undefined) {
         if (shareRepository === undefined) {
@@ -1729,6 +1759,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         const { shareReview: _shareReview, ...rest } = current;
         return FlectWorkspaceSnapshot.make({ ...rest, shares });
       });
+      return { before: installation, after: restored };
     });
 
     const acceptProposal = Effect.fn("Flect.Workspace.acceptProposal")(
@@ -1830,6 +1861,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             yield* Ref.set(shareActivation, beforeActivation);
             yield* SubscriptionRef.set(state, beforeWorkspace);
           });
+        let finalizedShare: FinalizedShareActivation | undefined;
         const acceptedResult = yield* Effect.gen(function* () {
           if (extensionCatalog !== undefined) {
             yield* extensionCatalog.promoteCandidate.pipe(
@@ -1837,7 +1869,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             );
             yield* syncExtensionSnapshot();
           }
-          const finalizedShare = yield* finalizeShareActivation();
+          finalizedShare = yield* finalizeShareActivation();
           yield* updateCapsulePresentation((current) => ({
             ...(current.candidate === undefined
               ? {}
@@ -1852,22 +1884,24 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               ? {}
               : { lastKnownGoodReview: current.acceptedReview }),
           }));
-          const accepted = yield* kernel.accept(proposal.id).pipe(
-            Effect.catch((error) =>
-              restoreAcceptance(finalizedShare).pipe(
-                Effect.andThen(Effect.fail(error)),
-              ),
-            ),
-          );
+          const accepted = yield* kernel.accept(proposal.id);
           return { accepted, finalizedShare };
         }).pipe(
           Effect.catch((error) =>
-            restoreAcceptance(undefined).pipe(
+            restoreAcceptance(finalizedShare).pipe(
               Effect.andThen(Effect.fail(error)),
             ),
           ),
         );
         const accepted = acceptedResult.accepted;
+        const committedShare = acceptedResult.finalizedShare;
+        yield* removeUnreferencedShareArchive(
+          committedShare !== undefined &&
+            committedShare.before.source.archiveSha256 !==
+              committedShare.candidateArchiveSha256
+            ? committedShare.before.source.archiveSha256
+            : undefined,
+        );
         yield* agent.releasePreview;
         const next = yield* kernel.snapshot;
         yield* transitionShaping(
@@ -1889,36 +1923,109 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             commandRejected("There is no proposal to reject."),
           );
         }
-        if (extensionCatalog !== undefined) {
-          yield* extensionCatalog.rejectCandidate.pipe(
-            Effect.mapError((error) => commandRejected(error.message)),
-          );
-          yield* syncExtensionSnapshot();
-        }
+        const beforeWorkspace = yield* SubscriptionRef.get(state);
         const beforeCapsulePresentation =
           yield* SubscriptionRef.get(capsulePresentation);
-        yield* updateCapsulePresentation((current) => ({
-          ...(current.accepted === undefined
-            ? {}
-            : { accepted: current.accepted }),
-          ...(current.lastKnownGood === undefined
-            ? {}
-            : { lastKnownGood: current.lastKnownGood }),
-          ...(current.acceptedReview === undefined
-            ? {}
-            : { acceptedReview: current.acceptedReview }),
-          ...(current.lastKnownGoodReview === undefined
-            ? {}
-            : { lastKnownGoodReview: current.lastKnownGoodReview }),
-        }));
-        const rejected = yield* kernel.reject(proposal.id).pipe(
+        const beforeCandidate = yield* Ref.get(shareCandidate);
+        const beforeActivation = yield* Ref.get(shareActivation);
+        const beforeExtensions =
+          extensionCatalog === undefined
+            ? undefined
+            : yield* extensionCatalog.snapshot;
+        const restoreRejection = (
+          discarded: DiscardedShareActivation | undefined,
+        ) =>
+          Effect.gen(function* () {
+            yield* restoreCapsulePresentation(beforeCapsulePresentation);
+            if (
+              extensionCatalog !== undefined &&
+              beforeExtensions !== undefined
+            ) {
+              yield* extensionCatalog.restore(beforeExtensions).pipe(
+                Effect.mapError(() =>
+                  commandRejected(
+                    "The rejected extension state could not be restored.",
+                  ),
+                ),
+              );
+            }
+            if (discarded !== undefined) {
+              if (discarded.before.refs.candidate !== undefined) {
+                if (shareRepository === undefined) {
+                  return yield* Effect.fail(
+                    commandRejected(
+                      "The shared candidate state could not be restored.",
+                    ),
+                  );
+                }
+                yield* shareRepository
+                  .restoreCandidateRef({
+                    shareId: discarded.before.shareId,
+                    candidate: discarded.before.refs.candidate,
+                    refs: {
+                      base: discarded.after.refs.base,
+                      upstream: discarded.after.refs.upstream,
+                      fork: discarded.after.refs.fork,
+                    },
+                  })
+                  .pipe(
+                    Effect.mapError(() =>
+                      commandRejected(
+                        "The shared candidate state could not be restored.",
+                      ),
+                    ),
+                  );
+              }
+              if (shareInstallationStore !== undefined) {
+                yield* shareInstallationStore.save(discarded.before).pipe(
+                  Effect.mapError(() =>
+                    commandRejected(
+                      "The shared installation state could not be restored.",
+                    ),
+                  ),
+                );
+              }
+            }
+            yield* Ref.set(shareCandidate, beforeCandidate);
+            yield* Ref.set(shareActivation, beforeActivation);
+            yield* SubscriptionRef.set(state, beforeWorkspace);
+          });
+        let discarded: DiscardedShareActivation | undefined;
+        const rejectedResult = yield* Effect.gen(function* () {
+          if (extensionCatalog !== undefined) {
+            yield* extensionCatalog.rejectCandidate.pipe(
+              Effect.mapError((error) => commandRejected(error.message)),
+            );
+            yield* syncExtensionSnapshot();
+          }
+          yield* updateCapsulePresentation((current) => ({
+            ...(current.accepted === undefined
+              ? {}
+              : { accepted: current.accepted }),
+            ...(current.lastKnownGood === undefined
+              ? {}
+              : { lastKnownGood: current.lastKnownGood }),
+            ...(current.acceptedReview === undefined
+              ? {}
+              : { acceptedReview: current.acceptedReview }),
+            ...(current.lastKnownGoodReview === undefined
+              ? {}
+              : { lastKnownGoodReview: current.lastKnownGoodReview }),
+          }));
+          discarded = yield* discardShareActivation();
+          const rejected = yield* kernel.reject(proposal.id);
+          return { rejected, discarded };
+        }).pipe(
           Effect.catch((error) =>
-            restoreCapsulePresentation(beforeCapsulePresentation).pipe(
+            restoreRejection(discarded).pipe(
               Effect.andThen(Effect.fail(error)),
             ),
           ),
         );
-        yield* discardShareActivation();
+        const rejected = rejectedResult.rejected;
+        yield* removeUnreferencedShareArchive(
+          rejectedResult.discarded?.before.pending?.archiveSha256,
+        );
         yield* agent.releasePreview;
         const next = yield* kernel.snapshot;
         yield* transitionShaping(
@@ -2676,11 +2783,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
                     ),
                   ),
                 );
-              if (shareCandidateStore !== undefined) {
-                yield* shareCandidateStore
-                  .remove(pending.archiveSha256)
-                  .pipe(Effect.ignore);
-              }
+              yield* removeUnreferencedShareArchive(pending.archiveSha256);
               shares = yield* shareInstallationStore.snapshot;
             }
           }
@@ -3763,11 +3866,6 @@ export const FlectWorkspaceControllerLive = Layer.effect(
                 commandRejected("The shared local data could not be deleted."),
               ),
             );
-          if (shareCandidateStore !== undefined) {
-            yield* shareCandidateStore
-              .remove(retained.source.archiveSha256)
-              .pipe(Effect.ignore);
-          }
           yield* shareInstallationStore
             .remove(retained.shareId)
             .pipe(
@@ -3775,6 +3873,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
                 commandRejected("The shared local data could not be deleted."),
               ),
             );
+          yield* removeUnreferencedShareArchive(retained.source.archiveSha256);
           const shares = yield* shareInstallationStore.snapshot;
           yield* transition(
             envelope.source,
@@ -3981,7 +4080,11 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           }
           const result = yield* portableExtensionHost
             .call(
-              { role: command.role, binding: command.binding },
+              {
+                role: command.role,
+                binding: command.binding,
+                operationId,
+              },
               command.extensionId,
               command.input,
             )
@@ -4076,7 +4179,11 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           }
           const result = yield* portableExtensionHost
             .call(
-              { role: command.role, binding: command.binding },
+              {
+                role: command.role,
+                binding: command.binding,
+                operationId,
+              },
               command.extensionId,
               command.input,
             )

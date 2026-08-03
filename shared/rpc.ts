@@ -166,6 +166,11 @@ export class ControlEnable extends Rpc.make("ControlEnable", {
   error: ControlTransportFailed,
 }) {}
 
+export class ControlStatus extends Rpc.make("ControlStatus", {
+  success: ControlBrokerStatus,
+  error: ControlTransportFailed,
+}) {}
+
 export class ControlDisable extends Rpc.make("ControlDisable", {
   success: Schema.Void,
   error: ControlTransportFailed,
@@ -237,6 +242,7 @@ export const FlectRpcs = RpcGroup.make(
   CompleteShellRequest,
   DiagnoseRecovery,
   ControlEnable,
+  ControlStatus,
   ControlDisable,
   ControlPublishSnapshot,
   ControlPublishEvent,

@@ -1,6 +1,7 @@
-import { Context, Effect, Layer, Stream, SubscriptionRef } from "effect";
+import { Context, Effect, Layer, Schema, Stream, SubscriptionRef } from "effect";
 import {
   defaultInterfaceDocument,
+  type InterfaceNode,
   type InterfaceDocument,
   type InvalidInterfaceDocument,
   validateInterfaceDocument,
@@ -14,6 +15,10 @@ import {
   ShapingEvent,
   ShapingSnapshot,
 } from "../../shared/revisions";
+import type {
+  CapabilityIntent,
+  ExtensionIntentContext,
+} from "../../shared/sandbox";
 import {
   InterfaceRepository,
   type InterfaceRepositoryShape,
@@ -30,6 +35,20 @@ type TransitionError =
   | RevisionNotFound
   | InvalidRevisionTransition
   | InterfaceStorageError;
+
+export class ExtensionIntentRejected extends Schema.TaggedErrorClass<ExtensionIntentRejected>()(
+  "ExtensionIntentRejected",
+  {
+    reason: Schema.Literals([
+      "empty",
+      "safe-mode",
+      "proposal-required",
+      "proposal-active",
+      "target-not-found",
+    ]),
+    message: Schema.Literal("The extension interface intent was rejected."),
+  },
+) {}
 
 interface KernelState {
   readonly active: InterfaceRevision;
@@ -51,6 +70,16 @@ export interface ShapingKernelShape {
   ) => Effect.Effect<
     InterfaceRevision,
     InvalidInterfaceDocument | InvalidRevisionTransition | InterfaceStorageError
+  >;
+  readonly applyExtensionIntents: (
+    context: ExtensionIntentContext,
+    intents: ReadonlyArray<CapabilityIntent>,
+  ) => Effect.Effect<
+    InterfaceRevision,
+    | InvalidInterfaceDocument
+    | InvalidRevisionTransition
+    | InterfaceStorageError
+    | ExtensionIntentRejected
   >;
   readonly preview: (
     id: RevisionId,
@@ -119,6 +148,33 @@ const invalidTransition = (id: RevisionId) =>
     id,
     message: "The interface revision cannot make that transition.",
   });
+
+const extensionIntentRejected = (
+  reason: ExtensionIntentRejected["reason"],
+) =>
+  ExtensionIntentRejected.make({
+    reason,
+    message: "The extension interface intent was rejected.",
+  });
+
+const replaceTextNode = (
+  node: InterfaceNode,
+  target: string,
+  text: string,
+): readonly [InterfaceNode, boolean] => {
+  if (node.type === "stack") {
+    let changed = false;
+    const children = node.children.map((child) => {
+      const [next, replaced] = replaceTextNode(child, target, text);
+      changed = changed || replaced;
+      return next;
+    });
+    return [changed ? { ...node, children } : node, changed];
+  }
+  return node.type === "text" && node.id === target
+    ? [{ ...node, text }, true]
+    : [node, false];
+};
 
 const makeShapingKernel = (
   options: ShapingKernelOptions,
@@ -221,6 +277,7 @@ const makeShapingKernel = (
       fields: {
         readonly revisionId?: RevisionId;
         readonly extensionId?: string;
+        readonly operationId?: string;
       } = {},
     ) =>
       ShapingEvent.make({
@@ -269,6 +326,102 @@ const makeShapingKernel = (
             next,
           ];
           return persist(next).pipe(Effect.as(transition));
+        },
+      );
+    });
+
+    const applyExtensionIntents = Effect.fn(
+      "Flect.ShapingKernel.applyExtensionIntents",
+    )(function* (
+      context: ExtensionIntentContext,
+      intents: ReadonlyArray<CapabilityIntent>,
+    ) {
+      return yield* SubscriptionRef.modifyEffect(
+        stateRef,
+        (state): Effect.Effect<
+          readonly [InterfaceRevision, KernelState],
+          | InvalidInterfaceDocument
+          | InvalidRevisionTransition
+          | InterfaceStorageError
+          | ExtensionIntentRejected
+        > => {
+          if (intents.length === 0) {
+            return Effect.fail(extensionIntentRejected("empty"));
+          }
+          if (state.safeMode) {
+            return Effect.fail(extensionIntentRejected("safe-mode"));
+          }
+          if (context.binding === "candidate") {
+            if (
+              state.proposal === undefined ||
+              state.proposal.status !== "previewed"
+            ) {
+              return Effect.fail(extensionIntentRejected("proposal-required"));
+            }
+          } else if (state.proposal !== undefined) {
+            return Effect.fail(extensionIntentRejected("proposal-active"));
+          }
+
+          const base =
+            context.binding === "candidate"
+              ? state.proposal
+              : state.active;
+          if (base === undefined) {
+            return Effect.fail(extensionIntentRejected("proposal-required"));
+          }
+          return Effect.gen(function* () {
+            let root = base.document.root;
+            for (const intent of intents) {
+              switch (intent.type) {
+                case "set-text": {
+                  const [next, replaced] = replaceTextNode(
+                    root,
+                    intent.target,
+                    intent.text,
+                  );
+                  if (!replaced) {
+                    return yield* Effect.fail(
+                      extensionIntentRejected("target-not-found"),
+                    );
+                  }
+                  root = next;
+                  break;
+                }
+              }
+            }
+            const document = yield* validateInterfaceDocument({
+              ...base.document,
+              root,
+            });
+            const id = RevisionId.make(nextId());
+            const previewed = context.binding === "candidate";
+            const revision = InterfaceRevision.make({
+              version: 1,
+              id,
+              parentId: state.active.id,
+              status: previewed ? "previewed" : "proposed",
+              source: "extension",
+              document,
+              createdAt: now(),
+            });
+            const next: KernelState = {
+              ...state,
+              proposal: revision,
+              sequence: state.sequence + 1,
+              lastEvent: eventFor(
+                state,
+                previewed ? "revision-previewed" : "revision-proposed",
+                {
+                  revisionId: id,
+                  extensionId: context.extensionId,
+                  operationId: context.operationId,
+                },
+              ),
+            };
+            return yield* persist(next).pipe(
+              Effect.as([revision, next] as const),
+            );
+          });
         },
       );
     });
@@ -609,6 +762,7 @@ const makeShapingKernel = (
         Stream.map(snapshotFromState),
       ),
       propose,
+      applyExtensionIntents,
       preview,
       supersede,
       accept,

@@ -45,7 +45,7 @@ describe("ExtensionExecution", () => {
   });
   const adapterCalls = Ref.makeUnsafe(0);
   const adapter = Layer.succeed(CapabilityAdapter)({
-    setText: () => Ref.update(adapterCalls, (count) => count + 1),
+    apply: () => Ref.update(adapterCalls, (count) => count + 1),
   });
   const broker = SandboxCapabilityBrokerLive.pipe(Layer.provide(adapter));
   const dependencies = Layer.mergeAll(
