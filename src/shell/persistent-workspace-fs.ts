@@ -12,6 +12,14 @@ type MkdirOptions = Parameters<IFileSystem["mkdir"]>[1];
 type RmOptions = Parameters<IFileSystem["rm"]>[1];
 type CpOptions = Parameters<IFileSystem["cp"]>[2];
 
+type PersistentTreeEntry =
+  | { readonly type: "directory"; readonly path: string }
+  | {
+      readonly type: "file";
+      readonly path: string;
+      readonly contents: Uint8Array;
+    };
+
 export interface PersistentWorkspaceOptions {
   readonly vfs: Vfs;
   readonly namespace: string;
@@ -99,6 +107,51 @@ const walkVfs = async (
 const ensurePersistentParent = (vfs: Vfs, path: string) =>
   vfs.mkdir(parentPath(path), { recursive: true });
 
+const writePersistentTree = async (
+  vfs: Vfs,
+  namespace: string,
+  entries: ReadonlyArray<PersistentTreeEntry>,
+) => {
+  await vfs.mkdir(namespace, { recursive: true });
+  for (const entry of entries) {
+    const target = persistentPath(namespace, entry.path);
+    if (entry.type === "directory") {
+      await vfs.mkdir(target, { recursive: true });
+    } else {
+      await ensurePersistentParent(vfs, target);
+      await vfs.writeFile(target, entry.contents);
+    }
+  }
+};
+
+const snapshotWorkspaceTree = async (
+  fs: IFileSystem,
+): Promise<ReadonlyArray<PersistentTreeEntry>> => {
+  const entries: Array<PersistentTreeEntry> = [];
+  let bytes = 0;
+  for (const path of fs.getAllPaths().toSorted()) {
+    if (path === "/workspace/.flect-root") {
+      continue;
+    }
+    const relative = workspaceRelative(path);
+    if (relative === undefined || relative.length === 0) {
+      continue;
+    }
+    const stat = await fs.stat(path);
+    if (stat.isDirectory) {
+      entries.push({ type: "directory", path: relative });
+    } else if (stat.isFile) {
+      const contents = await fs.readFileBuffer(path);
+      bytes += contents.byteLength;
+      entries.push({ type: "file", path: relative, contents });
+    }
+    if (entries.length > FILE_LIMIT || bytes > BYTE_LIMIT) {
+      throw new Error("The role workspace exceeds its portable source limit.");
+    }
+  }
+  return entries;
+};
+
 export class PersistentWorkspaceFs implements IFileSystem {
   readonly #memory: InMemoryFs;
   readonly #vfs: Vfs;
@@ -136,13 +189,22 @@ export class PersistentWorkspaceFs implements IFileSystem {
   }
 
   async #replacePersistentTree() {
-    await this.#vfs.rm(this.#namespace, { recursive: true, force: true });
-    await this.#vfs.mkdir(this.#namespace, { recursive: true });
-    const files = await snapshotWorkspaceFiles(this);
-    for (const file of files) {
-      const target = persistentPath(this.#namespace, file.path);
-      await ensurePersistentParent(this.#vfs, target);
-      await this.#vfs.writeFile(target, file.contents);
+    const nextTree = await snapshotWorkspaceTree(this.#memory);
+    const previousTree = await walkVfs(this.#vfs, this.#namespace);
+    try {
+      await this.#vfs.rm(this.#namespace, { recursive: true, force: true });
+      await writePersistentTree(this.#vfs, this.#namespace, nextTree);
+    } catch (error) {
+      try {
+        await this.#vfs.rm(this.#namespace, { recursive: true, force: true });
+        await writePersistentTree(this.#vfs, this.#namespace, previousTree);
+      } catch (rollbackError) {
+        throw new Error(
+          "The persistent role workspace could not be restored after a failed replacement.",
+          { cause: rollbackError },
+        );
+      }
+      throw error;
     }
   }
 
@@ -300,28 +362,12 @@ export class PersistentWorkspaceFs implements IFileSystem {
 export const snapshotWorkspaceFiles = async (
   fs: IFileSystem,
 ): Promise<ReadonlyArray<WorkspaceSourceFile>> => {
-  const files: Array<WorkspaceSourceFile> = [];
-  let bytes = 0;
-  for (const path of fs.getAllPaths().toSorted()) {
-    if (path === "/workspace/.flect-root") {
-      continue;
-    }
-    const relative = workspaceRelative(path);
-    if (relative === undefined || relative.length === 0) {
-      continue;
-    }
-    const stat = await fs.stat(path);
-    if (!stat.isFile) {
-      continue;
-    }
-    const contents = await fs.readFileBuffer(path);
-    bytes += contents.byteLength;
-    files.push({ path: relative, contents });
-    if (files.length > FILE_LIMIT || bytes > BYTE_LIMIT) {
-      throw new Error("The role workspace exceeds its portable source limit.");
-    }
-  }
-  return files;
+  const entries = await snapshotWorkspaceTree(fs);
+  return entries.flatMap((entry) =>
+    entry.type === "file"
+      ? [{ path: entry.path, contents: entry.contents }]
+      : [],
+  );
 };
 
 export const makePersistentWorkspaceFs = async (
