@@ -1,6 +1,7 @@
 import {
   Clock,
   Context,
+  Deferred,
   Effect,
   Fiber,
   Layer,
@@ -10,7 +11,10 @@ import {
 } from "effect";
 import {
   ControlClientSummary,
+  DisableControl,
+  FlectCommandEnvelope,
   type FlectCommandError,
+  UserCommandSource,
   WorkspaceUnavailable,
 } from "../../shared/control";
 import {
@@ -46,6 +50,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
       ReadonlySet<Fiber.Fiber<unknown, unknown>>
     >(new Set());
     const reconcilePermit = yield* Semaphore.make(1);
+    const commandLaunchPermit = yield* Semaphore.make(1);
 
     const interruptActiveCommands = Effect.fn(
       "Flect.ControlBridge.interruptActiveCommands",
@@ -53,6 +58,35 @@ export const WorkspaceControlBridgeLive = Layer.effect(
       const fibers = yield* Ref.get(activeCommandFibers);
       yield* Fiber.interruptAll(fibers);
       yield* Ref.set(activeCommandFibers, new Set());
+    });
+
+    const reconcileTransportRevocation = Effect.fn(
+      "Flect.ControlBridge.reconcileTransportRevocation",
+    )(function* () {
+      yield* commandLaunchPermit.withPermits(1)(
+        Effect.gen(function* () {
+          yield* Ref.set(revocationInFlight, true);
+          yield* Effect.gen(function* () {
+            yield* interruptActiveCommands();
+            const snapshot = yield* controller.snapshot;
+            if (snapshot.control.enabled) {
+              yield* controller
+                .dispatch(
+                  FlectCommandEnvelope.make({
+                    version: 1,
+                    commandId: `cmd-control-revoked-${crypto.randomUUID()}`,
+                    workspaceId: snapshot.workspaceId,
+                    source: UserCommandSource.make({ kind: "user" }),
+                    command: DisableControl.make({ type: "disable-control" }),
+                  }),
+                )
+                .pipe(Effect.catch(() => Effect.void));
+            }
+            yield* transport.disable.pipe(Effect.catch(() => Effect.void));
+            yield* Ref.set(enabled, false);
+          }).pipe(Effect.ensuring(Ref.set(revocationInFlight, false)));
+        }),
+      );
     });
 
     const reconcile = Effect.fn("Flect.ControlBridge.reconcile")(() =>
@@ -66,7 +100,9 @@ export const WorkspaceControlBridgeLive = Layer.effect(
             return;
           }
           if (snapshot.control.enabled && active) {
-            yield* transport.publishSnapshot(snapshot);
+            yield* transport
+              .publishSnapshot(snapshot)
+              .pipe(Effect.catch(() => reconcileTransportRevocation()));
             return;
           }
           if (!snapshot.control.enabled && active) {
@@ -138,21 +174,31 @@ export const WorkspaceControlBridgeLive = Layer.effect(
       },
     );
 
-    const runTrackedEnvelope = Effect.fn(
-      "Flect.ControlBridge.runTrackedEnvelope",
+    const startTrackedEnvelope = Effect.fn(
+      "Flect.ControlBridge.startTrackedEnvelope",
     )(function* (envelope) {
-      const fiber = yield* Effect.fiber;
-      yield* Ref.update(activeCommandFibers, (current) =>
-        new Set(current).add(fiber),
-      );
-      yield* runEnvelope(envelope).pipe(
-        Effect.ensuring(
-          Ref.update(activeCommandFibers, (current) => {
-            const next = new Set(current);
-            next.delete(fiber);
-            return next;
-          }),
-        ),
+      const start = yield* Deferred.make<void>();
+      let trackedFiber: Fiber.Fiber<unknown, unknown> | undefined;
+      yield* commandLaunchPermit.withPermits(1)(
+        Effect.gen(function* () {
+          const fiber = yield* Effect.forkScoped(
+            Deferred.await(start).pipe(
+              Effect.andThen(runEnvelope(envelope)),
+              Effect.ensuring(
+                Ref.update(activeCommandFibers, (current) => {
+                  const next = new Set(current);
+                  if (trackedFiber !== undefined) next.delete(trackedFiber);
+                  return next;
+                }),
+              ),
+            ),
+          );
+          trackedFiber = fiber;
+          yield* Ref.update(activeCommandFibers, (current) =>
+            new Set(current).add(fiber),
+          );
+          yield* Deferred.succeed(start, undefined);
+        }),
       );
     });
 
@@ -164,12 +210,16 @@ export const WorkspaceControlBridgeLive = Layer.effect(
       const snapshot = yield* controller.snapshot;
       const envelope = yield* transport.nextCommand(snapshot.workspaceId);
       if (envelope.command.type === "disable-control") {
-        yield* Ref.set(revocationInFlight, true);
-        yield* interruptActiveCommands();
-        yield* runEnvelope(envelope);
+        yield* commandLaunchPermit.withPermits(1)(
+          Effect.gen(function* () {
+            yield* Ref.set(revocationInFlight, true);
+            yield* interruptActiveCommands();
+            yield* runEnvelope(envelope);
+          }),
+        );
         return;
       }
-      yield* runTrackedEnvelope(envelope).pipe(Effect.forkScoped);
+      yield* startTrackedEnvelope(envelope);
     });
 
     const reconcileObserved = reconcile().pipe(
@@ -204,7 +254,13 @@ export const WorkspaceControlBridgeLive = Layer.effect(
       Effect.forkScoped,
     );
     yield* Effect.forever(
-      runNext().pipe(Effect.catch(() => Effect.sleep("200 millis"))),
+      runNext().pipe(
+        Effect.catch(() =>
+          reconcileTransportRevocation().pipe(
+            Effect.andThen(Effect.sleep("200 millis")),
+          ),
+        ),
+      ),
     ).pipe(Effect.forkScoped);
     yield* Effect.addFinalizer(() =>
       Ref.get(enabled).pipe(

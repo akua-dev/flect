@@ -5,6 +5,7 @@ import {
   Option,
   PubSub,
   Ref,
+  Result,
   Schema,
   Semaphore,
   Stream,
@@ -733,12 +734,25 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         FlectWorkspaceSnapshot.make({ ...current, extensions }),
       );
     });
-    const restoredCapsuleArchives =
+    const capsuleLoad =
       capsuleStore === undefined
+        ? undefined
+        : yield* capsuleStore.load.pipe(Effect.result);
+    if (capsuleLoad !== undefined && Result.isFailure(capsuleLoad)) {
+      yield* SubscriptionRef.update(state, (current) =>
+        FlectWorkspaceSnapshot.make({
+          ...current,
+          persistence: WorkspacePersistenceSnapshot.make({
+            ...current.persistence,
+            capsule: "unavailable",
+          }),
+        }),
+      );
+    }
+    const restoredCapsuleArchives: CapsuleArchiveBindings =
+      capsuleLoad === undefined || Result.isFailure(capsuleLoad)
         ? {}
-        : yield* capsuleStore.load.pipe(
-            Effect.catch(() => Effect.succeed<CapsuleArchiveBindings>({})),
-          );
+        : capsuleLoad.success;
     const [
       restoredAccepted,
       restoredCandidate,
@@ -860,6 +874,24 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         }),
       );
     });
+    const restoreCapsulePresentation = Effect.fn(
+      "Flect.Workspace.restoreCapsulePresentation",
+    )((presentation: CapsulePresentationState) =>
+      persistCapsulePresentation(presentation).pipe(
+        Effect.mapError(() =>
+          commandRejected("The capsule presentation could not be restored."),
+        ),
+        Effect.andThen(SubscriptionRef.set(capsulePresentation, presentation)),
+        Effect.andThen(
+          SubscriptionRef.update(state, (snapshot) =>
+            FlectWorkspaceSnapshot.make({
+              ...snapshot,
+              permissions: permissionsFromPresentation(presentation),
+            }),
+          ),
+        ),
+      ),
+    );
     const refreshCapabilityReviews = Effect.fn(
       "Flect.Workspace.refreshCapabilityReviews",
     )(function* () {
@@ -1565,44 +1597,44 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         ]),
       ];
       const { pending, ...retained } = installation;
-      yield* shareInstallationStore
-        .save(
-          ShareInstallationRecord.make({
-            ...retained,
-            version: candidate.material.manifest.version,
-            source: shareOriginWithArchive(
-              candidate.origin,
-              pending.archiveSha256,
-            ),
-            manifest: candidate.material.manifest,
-            manifestSha256,
-            repositorySha256,
-            artifacts: candidate.material.manifest.artifacts.map((artifact) =>
-              ShareInstalledArtifact.make({
-                id: artifact.id,
-                kind: artifact.kind,
-                version: artifact.version,
-                contentSha256: artifact.contentSha256,
-                ...(artifact.capsule === undefined
-                  ? {}
-                  : { capsuleSha256: artifact.capsule.sha256 }),
-              }),
-            ),
-            installedArtifactIds,
-            refs,
-            updatedAt: timestamp,
+      const acceptedInstallation = ShareInstallationRecord.make({
+        ...retained,
+        version: candidate.material.manifest.version,
+        source: shareOriginWithArchive(candidate.origin, pending.archiveSha256),
+        manifest: candidate.material.manifest,
+        manifestSha256,
+        repositorySha256,
+        artifacts: candidate.material.manifest.artifacts.map((artifact) =>
+          ShareInstalledArtifact.make({
+            id: artifact.id,
+            kind: artifact.kind,
+            version: artifact.version,
+            contentSha256: artifact.contentSha256,
+            ...(artifact.capsule === undefined
+              ? {}
+              : { capsuleSha256: artifact.capsule.sha256 }),
           }),
-        )
-        .pipe(
-          Effect.mapError(() =>
-            commandRejected("The shared Keep state could not be saved."),
-          ),
-        );
-      if (installation.source.archiveSha256 !== pending.archiveSha256) {
-        yield* shareCandidateStore
-          .remove(installation.source.archiveSha256)
-          .pipe(Effect.ignore);
-      }
+        ),
+        installedArtifactIds,
+        refs,
+        updatedAt: timestamp,
+      });
+      const restoreGit =
+        beforeRefs === undefined
+          ? Effect.void
+          : shareRepository.restoreCandidate({
+              shareId: installation.shareId,
+              before: beforeRefs,
+              after: refs,
+            });
+      yield* shareInstallationStore.save(acceptedInstallation).pipe(
+        Effect.mapError(() =>
+          commandRejected("The shared Keep state could not be saved."),
+        ),
+        Effect.catch((error) =>
+          restoreGit.pipe(Effect.andThen(Effect.fail(error))),
+        ),
+      );
       yield* Ref.set(shareCandidate, undefined);
       yield* Ref.set(shareActivation, undefined);
       const shares = yield* shareInstallationStore.snapshot;
@@ -1654,29 +1686,42 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             ),
           );
       }
-      const { pending, ...retained } = installation;
-      yield* shareInstallationStore
-        .save(
-          ShareInstallationRecord.make({
-            ...retained,
-            refs: ShareInstallationRefs.make({
-              base: installation.refs.base,
-              upstream: installation.refs.upstream,
-              fork: installation.refs.fork,
-            }),
-            updatedAt: Date.now(),
-          }),
-        )
-        .pipe(
-          Effect.mapError(() =>
-            commandRejected("The shared candidate state could not be saved."),
-          ),
-        );
-      if (shareCandidateStore !== undefined) {
-        yield* shareCandidateStore
-          .remove(pending.archiveSha256)
-          .pipe(Effect.ignore);
-      }
+      const { pending: _pending, ...retained } = installation;
+      const restored = ShareInstallationRecord.make({
+        ...retained,
+        refs: ShareInstallationRefs.make({
+          base: installation.refs.base,
+          upstream: installation.refs.upstream,
+          fork: installation.refs.fork,
+        }),
+        updatedAt: Date.now(),
+      });
+      const restoreRef =
+        installation.refs.candidate === undefined
+          ? Effect.void
+          : shareRepository === undefined
+            ? Effect.fail(
+                commandRejected(
+                  "The shared candidate could not be restored.",
+                ),
+              )
+            : shareRepository.restoreCandidateRef({
+                shareId: installation.shareId,
+                candidate: installation.refs.candidate,
+                refs: {
+                  base: installation.refs.base,
+                  upstream: installation.refs.upstream,
+                  fork: installation.refs.fork,
+                },
+              });
+      yield* shareInstallationStore.save(restored).pipe(
+        Effect.mapError(() =>
+          commandRejected("The shared candidate state could not be saved."),
+        ),
+        Effect.catch((error) =>
+          restoreRef.pipe(Effect.andThen(Effect.fail(error))),
+        ),
+      );
       yield* Ref.set(shareCandidate, undefined);
       yield* Ref.set(shareActivation, undefined);
       const shares = yield* shareInstallationStore.snapshot;
@@ -1710,6 +1755,8 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           );
         }
         const beforeWorkspace = yield* SubscriptionRef.get(state);
+        const beforeCapsulePresentation =
+          yield* SubscriptionRef.get(capsulePresentation);
         const beforeCandidate = yield* Ref.get(shareCandidate);
         const beforeActivation = yield* Ref.get(shareActivation);
         const beforeExtensions =
@@ -1720,7 +1767,11 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           finalizedShare: FinalizedShareActivation | undefined,
         ) =>
           Effect.gen(function* () {
-            if (extensionCatalog !== undefined && beforeExtensions !== undefined) {
+            yield* restoreCapsulePresentation(beforeCapsulePresentation);
+            if (
+              extensionCatalog !== undefined &&
+              beforeExtensions !== undefined
+            ) {
               yield* extensionCatalog.restore(beforeExtensions).pipe(
                 Effect.mapError(() =>
                   commandRejected(
@@ -1787,6 +1838,20 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             yield* syncExtensionSnapshot();
           }
           const finalizedShare = yield* finalizeShareActivation();
+          yield* updateCapsulePresentation((current) => ({
+            ...(current.candidate === undefined
+              ? {}
+              : { accepted: current.candidate }),
+            ...(current.accepted === undefined
+              ? {}
+              : { lastKnownGood: current.accepted }),
+            ...(current.candidateReview === undefined
+              ? {}
+              : { acceptedReview: current.candidateReview }),
+            ...(current.acceptedReview === undefined
+              ? {}
+              : { lastKnownGoodReview: current.acceptedReview }),
+          }));
           const accepted = yield* kernel.accept(proposal.id).pipe(
             Effect.catch((error) =>
               restoreAcceptance(finalizedShare).pipe(
@@ -1803,20 +1868,6 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           ),
         );
         const accepted = acceptedResult.accepted;
-        yield* updateCapsulePresentation((current) => ({
-          ...(current.candidate === undefined
-            ? {}
-            : { accepted: current.candidate }),
-          ...(current.accepted === undefined
-            ? {}
-            : { lastKnownGood: current.accepted }),
-          ...(current.candidateReview === undefined
-            ? {}
-            : { acceptedReview: current.candidateReview }),
-          ...(current.acceptedReview === undefined
-            ? {}
-            : { lastKnownGoodReview: current.acceptedReview }),
-        }));
         yield* agent.releasePreview;
         const next = yield* kernel.snapshot;
         yield* transitionShaping(
@@ -1844,8 +1895,8 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           );
           yield* syncExtensionSnapshot();
         }
-        const rejected = yield* kernel.reject(proposal.id);
-        yield* discardShareActivation();
+        const beforeCapsulePresentation =
+          yield* SubscriptionRef.get(capsulePresentation);
         yield* updateCapsulePresentation((current) => ({
           ...(current.accepted === undefined
             ? {}
@@ -1860,6 +1911,14 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             ? {}
             : { lastKnownGoodReview: current.lastKnownGoodReview }),
         }));
+        const rejected = yield* kernel.reject(proposal.id).pipe(
+          Effect.catch((error) =>
+            restoreCapsulePresentation(beforeCapsulePresentation).pipe(
+              Effect.andThen(Effect.fail(error)),
+            ),
+          ),
+        );
+        yield* discardShareActivation();
         yield* agent.releasePreview;
         const next = yield* kernel.snapshot;
         yield* transitionShaping(
@@ -1876,7 +1935,8 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       envelope: FlectCommandEnvelope,
       operationId: string,
     ) {
-      const revision = yield* kernel.rollback;
+      const beforeCapsulePresentation =
+        yield* SubscriptionRef.get(capsulePresentation);
       yield* updateCapsulePresentation((current) => ({
         ...(current.lastKnownGood === undefined
           ? {}
@@ -1891,6 +1951,13 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           ? {}
           : { lastKnownGoodReview: current.acceptedReview }),
       }));
+      const revision = yield* kernel.rollback.pipe(
+        Effect.catch((error) =>
+          restoreCapsulePresentation(beforeCapsulePresentation).pipe(
+            Effect.andThen(Effect.fail(error)),
+          ),
+        ),
+      );
       const next = yield* kernel.snapshot;
       yield* transitionShaping(
         envelope,

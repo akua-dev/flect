@@ -7,10 +7,15 @@ import {
 } from "../../packages/product/src/host/share-source";
 import type { NativeUpdateError } from "../../shared/native-update";
 import {
+  type InterfaceNode,
+  InterfaceDocument,
+} from "../../shared/interface-document";
+import {
   AuthorizedProductOperation,
   ProductCapabilityManifest,
   ProductOperationFailure,
 } from "../../shared/product-capability";
+import { SetTextIntent } from "../../shared/sandbox";
 import {
   type AgentCommandBridge,
   AgentCommandBridgeLive,
@@ -52,6 +57,7 @@ import {
 } from "../sandbox/capability-broker";
 import { ExtensionExecutionLive } from "../sandbox/extension-execution";
 import { ExtensionSandboxLive } from "../sandbox/extension-sandbox";
+import { ShapingKernel } from "./shaping-kernel";
 import {
   makePrivateShareSourceRegistryLayer,
   type PrivateShareSourceRegistry,
@@ -297,16 +303,6 @@ export type FlectBrowserRuntime = ManagedRuntime.ManagedRuntime<
   FlectUnavailableError | ShareSourceFailure
 >;
 
-const CapabilityAdapterLive = Layer.succeed(CapabilityAdapter)({
-  setText: () =>
-    Effect.fail(
-      CapabilityAdapterFailure.make({
-        reason: "unsupported",
-        message: "The extension interface intent is unsupported.",
-      }),
-    ),
-});
-
 const ProductCapabilityDecisionStoreLive =
   makeProductCapabilityDecisionStoreLayer.pipe(
     Layer.provide(InterfaceStorageLive),
@@ -365,10 +361,6 @@ const ProductCapabilityRegistryLive = makeProductCapabilityRegistryLayer({
     : [],
 }).pipe(Layer.provide(ProductCapabilityBrokerLive));
 
-const CapabilityBrokerLive = SandboxCapabilityBrokerLive.pipe(
-  Layer.provide(CapabilityAdapterLive),
-);
-
 const safeMode = runtimeQuery.get("safe") === "1";
 
 const InterfaceRepositoryLive = makeGitInterfaceRepositoryLayer({
@@ -380,6 +372,76 @@ const InterfaceRepositoryLive = makeGitInterfaceRepositoryLayer({
 
 const PersistentShapingKernelLive = makePersistentShapingKernelLayer().pipe(
   Layer.provide(InterfaceRepositoryLive),
+);
+
+const replaceTextNode = (
+  node: InterfaceNode,
+  intent: SetTextIntent,
+): readonly [InterfaceNode, boolean] => {
+  if (node.type === "stack") {
+    let changed = false;
+    const children = node.children.map((child) => {
+      const [next, replaced] = replaceTextNode(child, intent);
+      changed = changed || replaced;
+      return next;
+    });
+    return [changed ? { ...node, children } : node, changed];
+  }
+  return node.type === "text" && node.id === intent.target
+    ? [{ ...node, text: intent.text }, true]
+    : [node, false];
+};
+
+const CapabilityAdapterLive = Layer.effect(
+  CapabilityAdapter,
+  Effect.gen(function* () {
+    const kernel = yield* ShapingKernel;
+    return {
+      setText: Effect.fn("Flect.CapabilityAdapter.setText")(function* (
+        intent: SetTextIntent,
+      ) {
+        const snapshot = yield* kernel.snapshot;
+        if (snapshot.safeMode || snapshot.proposal !== undefined) {
+          return yield* Effect.fail(
+            CapabilityAdapterFailure.make({
+              reason: "unsupported",
+              message: "The extension interface intent is unsupported.",
+            }),
+          );
+        }
+        const [root, replaced] = replaceTextNode(
+          snapshot.active.document.root,
+          intent,
+        );
+        if (!replaced) {
+          return yield* Effect.fail(
+            CapabilityAdapterFailure.make({
+              reason: "unsupported",
+              message: "The extension interface intent is unsupported.",
+            }),
+          );
+        }
+        yield* kernel.propose(
+          InterfaceDocument.make({
+            ...snapshot.active.document,
+            root,
+          }),
+          "extension",
+        ).pipe(
+          Effect.mapError(() =>
+            CapabilityAdapterFailure.make({
+              reason: "unsupported",
+              message: "The extension interface intent is unsupported.",
+            }),
+          ),
+        );
+      }),
+    };
+  }),
+).pipe(Layer.provide(PersistentShapingKernelLive));
+
+const CapabilityBrokerLive = SandboxCapabilityBrokerLive.pipe(
+  Layer.provide(CapabilityAdapterLive),
 );
 
 const ExtensionDependencies = Layer.mergeAll(

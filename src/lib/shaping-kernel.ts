@@ -20,7 +20,12 @@ import {
 } from "./interface-repository";
 import type { InterfaceStorageError } from "./interface-store";
 
-type RevisionSource = "built-in" | "user" | "shaper" | "recovery";
+type RevisionSource =
+  | "built-in"
+  | "user"
+  | "shaper"
+  | "extension"
+  | "recovery";
 type TransitionError =
   | RevisionNotFound
   | InvalidRevisionTransition

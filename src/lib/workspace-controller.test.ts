@@ -663,6 +663,11 @@ const makeSharingServices = () => {
       ]),
     rejectCandidate: (input) =>
       Ref.update(calls, (entries) => [...entries, `reject:${input.shareId}`]),
+    restoreCandidateRef: (input) =>
+      Ref.update(calls, (entries) => [
+        ...entries,
+        `restore-candidate-ref:${input.shareId}`,
+      ]),
     acceptCandidate: (input) =>
       Ref.update(calls, (entries) => [
         ...entries,

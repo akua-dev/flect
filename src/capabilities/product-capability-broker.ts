@@ -1,4 +1,11 @@
-import { Clock, Context, Effect, Layer, SynchronizedRef } from "effect";
+import {
+  Clock,
+  Context,
+  Effect,
+  Fiber,
+  Layer,
+  SynchronizedRef,
+} from "effect";
 import {
   type AuthorizedProductOperation,
   ProductCapabilityBrokerFailure,
@@ -21,6 +28,10 @@ interface BrokerState {
   readonly decisions: ReadonlyArray<ProductCapabilityDecision>;
   readonly loadedContexts: ReadonlySet<string>;
   readonly warnings: ReadonlyArray<ProductCapabilityDecisionStoreFailure>;
+  readonly activeLeases: ReadonlyMap<
+    string,
+    ReadonlySet<Fiber.Fiber<unknown, unknown>>
+  >;
 }
 
 export interface ProductCapabilityBrokerShape {
@@ -217,6 +228,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
         loadedContexts: new Set(),
         warnings:
           initial.warning === undefined ? [] : [initial.warning],
+        activeLeases: new Map(),
       });
       const manifests = new Map(
         options.manifests.map((manifest) => [manifest.id, manifest]),
@@ -263,6 +275,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
                     loaded.warning === undefined
                       ? current.warnings
                       : addWarning(current.warnings, loaded.warning),
+                  activeLeases: current.activeLeases,
                 };
               }),
             );
@@ -439,33 +452,48 @@ export const makeProductCapabilityBrokerLayer = (options: {
       const revoke = Effect.fn("Flect.ProductCapabilityBroker.revoke")(
         function* (decisionId: string) {
           const now = yield* Clock.currentTimeMillis;
-          yield* SynchronizedRef.updateEffect(state, (current) => {
-            const existing = current.decisions.find(
-              (decision) => decision.decisionId === decisionId,
-            );
-            if (existing === undefined) {
-              return Effect.fail(brokerFailure("unknown-capability"));
-            }
-            const revoked = ProductCapabilityDecision.make({
-              ...existing,
-              status: "revoked",
-              updatedAtMillis: now,
-            });
-            const next: BrokerState = {
-              ...current,
-              decisions: current.decisions.map((decision) =>
-                decision.decisionId === decisionId ? revoked : decision,
-              ),
-            };
-            return isDurable(existing)
-              ? store.save(durableDecisions(next)).pipe(
-                  Effect.as(next),
-                  Effect.mapError(() =>
-                    brokerFailure("persistence-failed", existing.capabilityId),
+          const fibers = yield* SynchronizedRef.modifyEffect(
+            state,
+            (current) => {
+              const existing = current.decisions.find(
+                (decision) => decision.decisionId === decisionId,
+              );
+              if (existing === undefined) {
+                return Effect.fail(brokerFailure("unknown-capability"));
+              }
+              const revoked = ProductCapabilityDecision.make({
+                ...existing,
+                status: "revoked",
+                updatedAtMillis: now,
+              });
+              const next: BrokerState = {
+                ...current,
+                decisions: current.decisions.map((decision) =>
+                  decision.decisionId === decisionId ? revoked : decision,
+                ),
+                activeLeases: new Map(
+                  [...current.activeLeases].filter(
+                    ([activeDecisionId]) => activeDecisionId !== decisionId,
                   ),
-                )
-              : Effect.succeed(next);
-          });
+                ),
+              };
+              const active = current.activeLeases.get(decisionId) ?? new Set();
+              return (isDurable(existing)
+                ? store.save(durableDecisions(next)).pipe(
+                    Effect.as(next),
+                    Effect.mapError(() =>
+                      brokerFailure(
+                        "persistence-failed",
+                        existing.capabilityId,
+                      ),
+                    ),
+                  )
+                : Effect.succeed(next)).pipe(
+                Effect.map((saved) => [active, saved] as const),
+              );
+            },
+          );
+          yield* Fiber.interruptAll(fibers);
         },
       );
 
@@ -661,8 +689,10 @@ export const makeProductCapabilityBrokerLayer = (options: {
           operation: AuthorizedProductOperation,
           effect: Effect.Effect<A, E>,
         ) =>
-          SynchronizedRef.modifyEffect(state, (current) =>
-            Effect.gen(function* () {
+          Effect.gen(function* () {
+            const fiber = yield* Effect.fiber;
+            const now = yield* Clock.currentTimeMillis;
+            yield* SynchronizedRef.modifyEffect(state, (current) => {
               const decision = current.decisions.find(
                 (candidate) => candidate.decisionId === reservation.decisionId,
               );
@@ -680,39 +710,69 @@ export const makeProductCapabilityBrokerLayer = (options: {
                   reservation.approvedDataClassIds,
                   decision.dataClassIds,
                 ) ||
-                !isSubset(operation.resourceIds, reservation.approvedResourceIds) ||
+                !isSubset(
+                  operation.resourceIds,
+                  reservation.approvedResourceIds,
+                ) ||
                 !isSubset(
                   operation.dataClassIds,
                   reservation.approvedDataClassIds,
                 )
               ) {
-                return yield* Effect.fail(
+                return Effect.fail(
                   brokerFailure("denied", reservation.capabilityId),
                 );
               }
               if (decision.status === "revoked") {
-                return yield* Effect.fail(
+                return Effect.fail(
                   brokerFailure("revoked", reservation.capabilityId),
                 );
               }
               if (decision.status !== "granted") {
-                return yield* Effect.fail(
+                return Effect.fail(
                   brokerFailure("denied", reservation.capabilityId),
                 );
               }
-              const now = yield* Clock.currentTimeMillis;
               if (
                 decision.expiresAtMillis !== undefined &&
                 decision.expiresAtMillis <= now
               ) {
-                return yield* Effect.fail(
+                return Effect.fail(
                   brokerFailure("expired", reservation.capabilityId),
                 );
               }
-              const result = yield* effect;
-              return [result, current] as const;
-            }),
-          ),
+              const activeLeases = new Map(current.activeLeases);
+              activeLeases.set(
+                reservation.decisionId,
+                new Set(
+                  activeLeases.get(reservation.decisionId) ?? [],
+                ).add(fiber),
+              );
+              return Effect.succeed([
+                undefined,
+                { ...current, activeLeases },
+              ] as const);
+            });
+            return yield* effect.pipe(
+              Effect.ensuring(
+                SynchronizedRef.update(state, (current) => {
+                  const currentLeases = current.activeLeases.get(
+                    reservation.decisionId,
+                  );
+                  if (currentLeases === undefined) return current;
+                  const nextLeases = new Set(currentLeases);
+                  nextLeases.delete(fiber);
+                  const activeLeases = new Map(current.activeLeases);
+                  if (nextLeases.size === 0) {
+                    activeLeases.delete(reservation.decisionId);
+                  } else {
+                    activeLeases.set(reservation.decisionId, nextLeases);
+                  }
+                  return { ...current, activeLeases };
+                }),
+              ),
+            );
+          }),
       );
 
       return {

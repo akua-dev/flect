@@ -26,7 +26,13 @@ export class InterfaceRevision extends Schema.Class<InterfaceRevision>(
   id: RevisionId,
   parentId: Schema.optionalKey(RevisionId),
   status: Schema.Literals(["proposed", "previewed", "accepted", "rejected"]),
-  source: Schema.Literals(["built-in", "user", "shaper", "recovery"]),
+  source: Schema.Literals([
+    "built-in",
+    "user",
+    "shaper",
+    "extension",
+    "recovery",
+  ]),
   document: InterfaceDocument,
   createdAt: Schema.Number.check(
     Schema.isInt(),

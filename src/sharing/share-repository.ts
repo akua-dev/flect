@@ -236,6 +236,11 @@ export interface ShareRepositoryShape {
     readonly candidate: string;
     readonly refs: Omit<ShareInstallationRefs, "candidate">;
   }) => Effect.Effect<void, ShareRepositoryFailure>;
+  readonly restoreCandidateRef: (input: {
+    readonly shareId: string;
+    readonly candidate: string;
+    readonly refs: Omit<ShareInstallationRefs, "candidate">;
+  }) => Effect.Effect<void, ShareRepositoryFailure>;
   readonly acceptCandidate: (input: {
     readonly shareId: string;
     readonly refs: ShareInstallationRefs & { readonly candidate: string };
@@ -379,6 +384,28 @@ export const makeShareRepositoryLayer = (options?: {
         },
       );
 
+      const restoreCandidateRef = Effect.fn(
+        "Flect.ShareRepository.restoreCandidateRef",
+      )(
+        function* (input: {
+          readonly shareId: string;
+          readonly candidate: string;
+          readonly refs: Omit<ShareInstallationRefs, "candidate">;
+        }) {
+          yield* open;
+          const names = yield* deriveShareRefs(input.shareId);
+          yield* move({
+            branch: names.candidate,
+            targetCommit: input.candidate,
+            guards: [
+              { branch: names.base, commit: input.refs.base },
+              { branch: names.upstream, commit: input.refs.upstream },
+              { branch: names.fork, commit: input.refs.fork },
+            ],
+          });
+        },
+      );
+
       const restoreCandidate = Effect.fn("Flect.ShareRepository.restore")(
         function* (input: {
           readonly shareId: string;
@@ -387,35 +414,88 @@ export const makeShareRepositoryLayer = (options?: {
         }) {
           yield* open;
           const names = yield* deriveShareRefs(input.shareId);
-          yield* move({
-            branch: names.candidate,
-            targetCommit: input.before.candidate,
-            guards: [
-              { branch: names.base, commit: input.after.base },
-              { branch: names.upstream, commit: input.after.upstream },
-              { branch: names.fork, commit: input.after.fork },
-            ],
+          let candidateCreated = false;
+          let forkRestored = false;
+          let baseRestored = false;
+          const rollback = Effect.gen(function* () {
+            if (baseRestored) {
+              yield* move({
+                branch: names.base,
+                expectedCommit: input.before.base,
+                targetCommit: input.after.base,
+                guards: [
+                  { branch: names.upstream, commit: input.after.upstream },
+                  { branch: names.fork, commit: input.before.fork },
+                  { branch: names.candidate, commit: input.before.candidate },
+                ],
+              });
+            }
+            if (forkRestored) {
+              yield* move({
+                branch: names.fork,
+                expectedCommit: input.before.fork,
+                targetCommit: input.after.fork,
+                guards: [
+                  { branch: names.base, commit: input.after.base },
+                  { branch: names.upstream, commit: input.after.upstream },
+                  { branch: names.candidate, commit: input.before.candidate },
+                ],
+              });
+            }
+            if (candidateCreated) {
+              yield* removeRef({
+                branch: names.candidate,
+                expectedCommit: input.before.candidate,
+                guards: [
+                  { branch: names.base, commit: input.after.base },
+                  { branch: names.upstream, commit: input.after.upstream },
+                  { branch: names.fork, commit: input.after.fork },
+                ],
+              });
+            }
           });
-          yield* move({
-            branch: names.fork,
-            expectedCommit: input.after.fork,
-            targetCommit: input.before.fork,
-            guards: [
-              { branch: names.base, commit: input.after.base },
-              { branch: names.upstream, commit: input.after.upstream },
-              { branch: names.candidate, commit: input.before.candidate },
-            ],
+          const restored = Effect.gen(function* () {
+            yield* move({
+              branch: names.candidate,
+              targetCommit: input.before.candidate,
+              guards: [
+                { branch: names.base, commit: input.after.base },
+                { branch: names.upstream, commit: input.after.upstream },
+                { branch: names.fork, commit: input.after.fork },
+              ],
+            }).pipe(
+              Effect.tap(() => Effect.sync(() => (candidateCreated = true))),
+            );
+            yield* move({
+              branch: names.fork,
+              expectedCommit: input.after.fork,
+              targetCommit: input.before.fork,
+              guards: [
+                { branch: names.base, commit: input.after.base },
+                { branch: names.upstream, commit: input.after.upstream },
+                { branch: names.candidate, commit: input.before.candidate },
+              ],
+            }).pipe(
+              Effect.tap(() => Effect.sync(() => (forkRestored = true))),
+            );
+            yield* move({
+              branch: names.base,
+              expectedCommit: input.after.base,
+              targetCommit: input.before.base,
+              guards: [
+                { branch: names.upstream, commit: input.before.upstream },
+                { branch: names.fork, commit: input.before.fork },
+                { branch: names.candidate, commit: input.before.candidate },
+              ],
+            }).pipe(
+              Effect.tap(() => Effect.sync(() => (baseRestored = true))),
+            );
           });
-          yield* move({
-            branch: names.base,
-            expectedCommit: input.after.base,
-            targetCommit: input.before.base,
-            guards: [
-              { branch: names.upstream, commit: input.before.upstream },
-              { branch: names.fork, commit: input.before.fork },
-              { branch: names.candidate, commit: input.before.candidate },
-            ],
-          });
+          yield* restored.pipe(
+            Effect.catch((error) =>
+              rollback.pipe(Effect.andThen(Effect.fail(error))),
+            ),
+          );
         },
       );
 
@@ -1004,6 +1084,7 @@ export const makeShareRepositoryLayer = (options?: {
         prepareUpdate,
         resolveConflict,
         rejectCandidate,
+        restoreCandidateRef,
         acceptCandidate,
         restoreCandidate,
         snapshotArtifact,
