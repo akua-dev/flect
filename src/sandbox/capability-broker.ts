@@ -128,6 +128,10 @@ export const SandboxCapabilityBrokerLive = Layer.effect(
           }
         }
 
+        if (intents.length === 0) {
+          return;
+        }
+
         yield* adapter.apply(
           context,
           intents.map(({ intent }) => intent),

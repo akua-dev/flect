@@ -74,6 +74,31 @@ describe("SandboxCapabilityBroker", () => {
     );
   });
 
+  const empty = makeHarness();
+
+  it.layer(empty.layer)((it) => {
+    it.effect(
+      "accepts a no-op result without creating an interface revision",
+      () =>
+        Effect.gen(function* () {
+          const broker = yield* SandboxCapabilityBroker;
+          yield* broker.apply(
+            ExtensionIntentContext.make({
+              extensionId: "weather-card",
+              role: "app",
+              binding: "accepted",
+              operationId: "operation-test",
+            }),
+            manifest(["interface:read"]),
+            SandboxResult.make({ version: 1, intents: [] }),
+            ["interface:read"],
+          );
+
+          assert.deepStrictEqual(yield* Ref.get(empty.calls), []);
+        }),
+    );
+  });
+
   const undeclared = makeHarness();
 
   it.layer(undeclared.layer)((it) => {
