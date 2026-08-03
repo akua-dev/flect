@@ -175,10 +175,10 @@ subscriptions, exit codes, and the security model.
   grant command; bounded JSON results; least-privilege HTTPS and fixed-document
   GraphQL adapters; and bounded cancellable, sequence-resumable event streams
   that never expose raw `fetch`, sockets, documents, or host credentials to the
-  app. The packable [`@flect/product`](packages/product/) SDK and three
-  [reference products](examples/product-sdk/) prove offline, browser-direct,
-  authenticated-broker, inference, extension, update, fork, detach, and event
-  behavior without importing application internals;
+  app. The packable [`@flect/product`](packages/product/) SDK and four
+  [reference integrations](examples/product-sdk/) prove offline, browser-direct,
+  authenticated-broker, private-sharing, inference, extension, update, fork,
+  detach, and event behavior without importing application internals;
 - bounded credential-free HTTPS (plus loopback development) capsule install
   through the same integrity and review boundary;
 - explicit same-ID version comparison with Keep/Reject rather than silent
@@ -256,8 +256,9 @@ byte-preservingly re-exports compiled HTML capsules with verified local CSS,
 classic scripts, images, fonts, and media in supported browsers.
 Arbitrary Vite plugins/config transforms, CSS modules/preprocessors and asset
 URL rewriting, multi-entry routing, Vue/Svelte adapters, archive/Git import,
-updates/forks, a component registry, custom duration/rate editing in the
-protected permission UI, database adapters, privileged native
+general capsule personal-fork lineage and compatible merge, a component
+registry, custom duration/rate editing in the protected permission UI,
+database adapters, privileged native
 product transport, remote
 runtimes, a published signed updater, notarization, a
 macOS App Sandbox entitlement, and Intel, Windows, and Linux packages are not

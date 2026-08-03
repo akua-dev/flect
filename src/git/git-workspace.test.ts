@@ -2,9 +2,9 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Fiber } from "effect";
 import { TestClock } from "effect/testing";
 import {
-  makeGitWorkspace,
   type GitWorkspaceLockManager,
   type GitWorkspaceWorker,
+  makeGitWorkspace,
 } from "./git-workspace";
 
 class HangingWorker implements GitWorkspaceWorker {
@@ -51,9 +51,9 @@ describe("GitWorkspace worker lifecycle", () => {
         },
       });
 
-      const first = yield* git.open({ workspaceId: "default" }).pipe(
-        Effect.forkChild,
-      );
+      const first = yield* git
+        .open({ workspaceId: "default" })
+        .pipe(Effect.forkChild);
       yield* TestClock.adjust("1 second");
       const firstError = yield* Fiber.join(first).pipe(Effect.flip);
 
@@ -62,9 +62,9 @@ describe("GitWorkspace worker lifecycle", () => {
       assert.isTrue(workers[0]?.terminated === true);
       assert.isTrue(lockReleasedAfterTermination);
 
-      const second = yield* git.open({ workspaceId: "default" }).pipe(
-        Effect.forkChild,
-      );
+      const second = yield* git
+        .open({ workspaceId: "default" })
+        .pipe(Effect.forkChild);
       yield* TestClock.adjust("1 second");
       yield* Fiber.join(second).pipe(Effect.flip);
 

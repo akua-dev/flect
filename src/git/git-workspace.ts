@@ -338,16 +338,14 @@ export const makeGitWorkspace = (options?: {
         }));
     const liveWorkers = new Set<GitWorkspaceWorker>();
     let activeWorker: GitWorkspaceWorker | undefined;
-    yield* Effect.acquireRelease(
-      Effect.void,
-      () =>
-        Effect.sync(() => {
-          for (const worker of liveWorkers) {
-            worker.terminate();
-          }
-          liveWorkers.clear();
-          activeWorker = undefined;
-        }),
+    yield* Effect.acquireRelease(Effect.void, () =>
+      Effect.sync(() => {
+        for (const worker of liveWorkers) {
+          worker.terminate();
+        }
+        liveWorkers.clear();
+        activeWorker = undefined;
+      }),
     );
     const createWorker = (operation: GitWorkspaceOperation) =>
       Effect.try({
@@ -365,11 +363,13 @@ export const makeGitWorkspace = (options?: {
           ),
       });
     activeWorker = Option.getOrUndefined(
-      yield* createWorker(GitOpenRequest.make({
-        type: "open",
-        workspaceId: options?.defaultWorkspaceId ?? "default",
-        reset: false,
-      })).pipe(Effect.option),
+      yield* createWorker(
+        GitOpenRequest.make({
+          type: "open",
+          workspaceId: options?.defaultWorkspaceId ?? "default",
+          reset: false,
+        }),
+      ).pipe(Effect.option),
     );
     const semaphore = yield* Semaphore.make(1);
     let activeWorkspaceId: string | undefined;
@@ -388,8 +388,7 @@ export const makeGitWorkspace = (options?: {
     const request = Effect.fn("Flect.GitWorkspace.request")(
       (operation: GitWorkspaceOperation) =>
         Effect.gen(function* () {
-          const worker =
-            activeWorker ?? (yield* createWorker(operation));
+          const worker = activeWorker ?? (yield* createWorker(operation));
           const lockName = `flect-git-${
             operation.type === "open"
               ? operation.workspaceId
@@ -416,10 +415,8 @@ export const makeGitWorkspace = (options?: {
               }
               workerWorkspaceId = workspaceId;
             }
-            const result = yield* makeWorkerRequest(
-              worker,
-              operation,
-              () => invalidateWorkerSync(worker),
+            const result = yield* makeWorkerRequest(worker, operation, () =>
+              invalidateWorkerSync(worker),
             );
             if (operation.type === "open" && result.type === "opened") {
               workerWorkspaceId = operation.workspaceId;

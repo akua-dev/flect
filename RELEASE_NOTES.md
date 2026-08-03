@@ -12,8 +12,9 @@ the packable `@flect/product` SDK with reference products.
 - A blank workspace starts with one centered, T3Code-inspired Shaper composer.
   The same mounted composer moves into an adaptive conversation rail when the
   interface appears.
-- Edit/Shaper and Run/App Agent have visibly separate authority, Pi sessions,
-  histories, drafts, cancellation, and browser-shell workspaces.
+- Shape/Shaper, candidate Use/Preview App Agent, and accepted Use/App Agent
+  have visibly separate authority, Pi sessions, histories, drafts,
+  cancellation, and browser-shell workspaces.
 - The rail is resizable inline on wide screens, a right sheet at medium widths,
   and a full-width accessible sheet on compact screens.
 - Searchable, provider-grouped Pi model selection includes favorites, keyboard
@@ -23,9 +24,10 @@ the packable `@flect/product` SDK with reference products.
 
 ## Runtime and sandbox
 
-- Guardian, App Agent, and Shaper now run as three independent Pi sessions.
-- App and Shaper shell requests are explicitly role-tagged through browser HTTP
-  and private native RPC.
+- Guardian, App Agent, and Shaper run as three independent primary Pi sessions;
+  candidate Use acquires a separate Preview App Agent session set.
+- App, Preview App, and Shaper shell requests are explicitly role-tagged through
+  browser HTTP and private native RPC.
 - Each interactive role receives its own just-bash/Rifty browser workspace;
   neither receives ambient host Bash, filesystem, process, or network access.
 - The Effect shaping kernel and schema-validated renderer remain authoritative
@@ -57,11 +59,10 @@ The same shell works in a browser:
 git clone https://github.com/akua-dev/flect.git
 cd flect
 bun install
-bunx pi
 ```
 
-Use `/login` inside Pi, quit Pi, then run `bun run dev` and open
-`http://127.0.0.1:5173`.
+Run `bun run dev`, open `http://127.0.0.1:5173`, and connect a provider from
+the model chooser under **Pi providers**.
 
 Release assets:
 
@@ -73,8 +74,9 @@ Release assets:
 
 This release does not yet ship Vue/Svelte adapters, general multi-entry
 routing, arbitrary Vite plugins or transforms, CSS modules or preprocessors,
-archive/Git project import, a public component registry, updates or forks,
-database adapters, privileged native product transport, remote runtimes,
+archive/Git project import, a public component registry, general capsule
+personal-fork lineage and compatible merge, database adapters, privileged
+native product transport, remote runtimes,
 notarization, the macOS App Sandbox entitlement, or Intel, Windows, and Linux
 packages. The documented release artifact remains an ad-hoc signed,
 Apple-Silicon macOS preview.

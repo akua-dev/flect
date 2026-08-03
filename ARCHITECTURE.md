@@ -492,13 +492,15 @@ expiry, and rate enforcement are implemented in the broker. Custom duration or
 rate editing in the protected UI and a privileged native credential/transport
 adapter are not yet shipped.
 
-Three public-boundary reference products exercise offline state,
-browser-direct fixed GraphQL/events, and a named authenticated broker. Each
-ships a recommended capsule with public App Agent guidance and an optional
-Shaper role, while the Flect-owned harness supplies grants and protected state.
+The public-boundary reference set exercises offline state, browser-direct fixed
+GraphQL/events, a named authenticated broker, and a closure-private sharing
+source. The three product integrations ship recommended capsules with public
+App Agent guidance and an optional Shaper role; the private-sharing reference
+composes only the trusted source adapter. The Flect-owned harness supplies
+grants and protected state.
 
-Signature verification, update/fork lineage, uninstall,
-and framework source builds remain later layers over the format and frame
+Capsule publisher-signature verification, capsule update/fork lineage, and
+framework source builds remain later layers over the format and frame
 contracts. Verified archive-local stylesheets, classic scripts, images,
 fonts/media, and CSS URLs are projected into the generated `srcdoc`: text is
 strict UTF-8, binary assets become `data:` URLs, and unresolved or remote
@@ -515,8 +517,9 @@ integrity failure leaves accepted state untouched.
 If an installed and candidate capsule share an ID, the protected shell labels
 the transition with both versions. A different ID is labeled as a replacement.
 In both cases the accepted archive remains bound until Keep, so Reject is a
-lossless return to the installed version. Personal-fork lineage and compatible
-merge policy remain future layers rather than implicit overwrite behavior.
+lossless return to the installed version. Capsule personal-fork lineage and
+compatible merge policy remain future layers rather than implicit overwrite
+behavior.
 
 Plain static-site import is a protected pre-capsule adapter. It validates all
 directory-relative paths, ignores VCS/dependency/cache and common
@@ -548,12 +551,12 @@ public workspace snapshot. Diagnostics keeps a session-only warning visible
 even while collapsed and states exactly which compiled state will be lost;
 the fallback is never presented as durable persistence.
 
-This persistence contract currently supports a compiled HTML entrypoint plus
-the bounded local asset classes above. Framework source builds and module
-graphs, additional capability adapters,
-signing, installation/update lineage, and uninstall remain open. Accepting an
-already-restored candidate is also held open until the pinned Wasm-Git adapter
-reliably advances the accepted snapshot commit after worker restart.
+This capsule persistence contract currently supports a compiled HTML entrypoint
+plus the bounded local asset classes above. Framework source builds and module
+graphs, additional capability adapters, capsule signing, and compatible
+capsule update/fork lineage remain open. Accepting an already-restored
+candidate is also held open until the pinned Wasm-Git adapter reliably advances
+the accepted snapshot commit after worker restart.
 
 ## Restricted browser build boundary
 
