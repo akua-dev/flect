@@ -8,7 +8,7 @@ import {
   type InterfaceStorageError,
 } from "./interface-store";
 
-const REVISION_JOURNAL_KEY = "flect.revisions.v1";
+export const REVISION_JOURNAL_KEY = "flect.revisions.v1";
 
 class InvalidRevisionJournal extends Schema.TaggedErrorClass<InvalidRevisionJournal>()(
   "InvalidRevisionJournal",
@@ -49,7 +49,7 @@ export const makeInterfaceRepositoryLayer = ({
       const load = Effect.fn("Flect.InterfaceRepository.load")(function* () {
         if (safeMode) {
           return InterfaceRepositoryLoad.make({
-            recovered: false,
+            recovered: true,
           });
         }
 

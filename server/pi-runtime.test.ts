@@ -24,6 +24,7 @@ import {
   type PiSession,
   type PiSessionPolicy,
 } from "./pi-runtime";
+import { ProviderAuthentication } from "./provider-authentication";
 import { FlectRuntime } from "./runtime";
 
 type FakeOptions = {
@@ -41,6 +42,7 @@ type FakeOptions = {
   readonly abortStarted?: Deferred.Deferred<void>;
   readonly abortGate?: Deferred.Deferred<void>;
   readonly pairObserved?: Deferred.Deferred<void>;
+  readonly appEvent?: PiEvent;
   readonly shellRequest?: {
     readonly requestId: string;
     readonly command: string;
@@ -48,6 +50,20 @@ type FakeOptions = {
     readonly completed: Deferred.Deferred<BunCommandResult>;
   };
 };
+
+const authenticationLayer = Layer.succeed(ProviderAuthentication)({
+  providers: Effect.succeed([]),
+  login: () => Stream.empty,
+  reply: () => Effect.void,
+  cancel: () => Effect.void,
+  refresh: Effect.succeed([]),
+  logout: () => Effect.succeed([]),
+});
+
+const runtimeLayer = (piLayer: Layer.Layer<PiSdk>) =>
+  FlectRuntimeLive.pipe(
+    Layer.provide(Layer.merge(piLayer, authenticationLayer)),
+  );
 
 function createFakePi(options: FakeOptions = {}) {
   let guardianListener: ((delta: string) => void) | undefined;
@@ -136,6 +152,9 @@ function createFakePi(options: FakeOptions = {}) {
         if (promptGate !== undefined) {
           yield* Deferred.await(promptGate);
         }
+        if (role === "app" && options.appEvent !== undefined) {
+          listener?.(options.appEvent);
+        }
         if (
           role === "shaper" &&
           options.shellRequest !== undefined &&
@@ -149,9 +168,10 @@ function createFakePi(options: FakeOptions = {}) {
           });
           yield* Deferred.await(options.shellRequest.completed);
         }
+        const response = options.promptResponse ?? "A shaped response";
         listener?.({
           type: "text_delta",
-          delta: options.promptResponse ?? "A shaped response",
+          delta: response,
         });
       });
     });
@@ -190,7 +210,12 @@ function createFakePi(options: FakeOptions = {}) {
     };
   };
 
-  const app = makeInteractiveSession("app", "session-1");
+  // Pi owns this identifier and does not promise Flect's public capability
+  // handle format. The runtime must never expose it directly.
+  const app = makeInteractiveSession(
+    "app",
+    "019fb8d3-f9b4-7d22-9db2-6bc97c32106a",
+  );
   const shaper = makeInteractiveSession("shaper", "shaper-1");
 
   const guardian: PiSession = {
@@ -209,6 +234,7 @@ function createFakePi(options: FakeOptions = {}) {
   const createAgentSet = vi.fn(
     (
       _model: ModelSummary,
+      _reasoningLevel: string | undefined,
       _policies: {
         readonly guardian: PiSessionPolicy;
         readonly app: PiSessionPolicy;
@@ -228,6 +254,7 @@ function createFakePi(options: FakeOptions = {}) {
         provider: "openai-codex",
         id: "gpt-5.6",
         name: "GPT-5.6",
+        reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
       }),
     ]),
     createAgentSet,
@@ -244,7 +271,7 @@ function createFakePi(options: FakeOptions = {}) {
     guardianDispose,
     guardianPrompt,
     guardianUnsubscribe,
-    layer: FlectRuntimeLive.pipe(Layer.provide(layer)),
+    layer: runtimeLayer(layer),
     releasePendingPrompt: () => releasePendingPrompt?.(),
     shaperAbort: shaper.abort,
     shaperCompleteShellRequest: shaper.completeShellRequest,
@@ -368,11 +395,11 @@ describe("FlectRuntimeLive", () => {
   it.effect(
     "routes each operation to its independent protected Pi role",
     () => {
-      const makeSession = (sessionId: string, response: string) => {
+      const makeSession = (sessionId: string, response: PiEvent) => {
         let listener: ((event: PiEvent) => void) | undefined;
         const prompt = vi.fn(() =>
           Effect.sync(() => {
-            listener?.({ type: "text_delta", delta: response });
+            listener?.(response);
           }),
         );
         const session: PiSession = {
@@ -391,18 +418,22 @@ describe("FlectRuntimeLive", () => {
         };
         return { prompt, session };
       };
-      const app = makeSession("app-1", "The product action completed.");
-      const shaper = makeSession(
-        "shaper-1",
-        JSON.stringify(defaultInterfaceDocument),
-      );
-      const guardian = makeSession(
-        "guardian-1",
-        "The protected launcher remains available.",
-      );
+      const app = makeSession("app-1", {
+        type: "text_delta",
+        delta: "The product action completed.",
+      });
+      const shaper = makeSession("shaper-1", {
+        type: "text_delta",
+        delta: "The browser sandbox submitted the interface proposal.",
+      });
+      const guardian = makeSession("guardian-1", {
+        type: "text_delta",
+        delta: "The protected launcher remains available.",
+      });
       const createAgentSet = vi.fn(
         (
           _model: ModelSummary,
+          _reasoningLevel: string | undefined,
           _policies: {
             readonly guardian: PiSessionPolicy;
             readonly app: PiSessionPolicy;
@@ -421,6 +452,7 @@ describe("FlectRuntimeLive", () => {
             provider: "openai-codex",
             id: "gpt-5.6",
             name: "GPT-5.6",
+            reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
           }),
         ]),
         createAgentSet,
@@ -443,30 +475,34 @@ describe("FlectRuntimeLive", () => {
         expect(app.prompt).toHaveBeenCalledWith("Use the product");
         expect(shaper.prompt).toHaveBeenCalledOnce();
         expect(guardian.prompt).toHaveBeenCalledOnce();
-        expect(createAgentSet).toHaveBeenCalledWith(expect.any(ModelSummary), {
-          guardian: {
-            role: "guardian",
-            tools: "none",
-            storage: "memory",
-            extensions: "disabled",
-            userResources: "disabled",
+        expect(createAgentSet).toHaveBeenCalledWith(
+          expect.any(ModelSummary),
+          undefined,
+          {
+            guardian: {
+              role: "guardian",
+              tools: "none",
+              storage: "memory",
+              extensions: "disabled",
+              userResources: "disabled",
+            },
+            app: {
+              role: "app",
+              tools: "sandbox-bash",
+              storage: "memory",
+              extensions: "disabled",
+              userResources: "disabled",
+            },
+            shaper: {
+              role: "shaper",
+              tools: "sandbox-bash",
+              storage: "memory",
+              extensions: "disabled",
+              userResources: "disabled",
+            },
           },
-          app: {
-            role: "app",
-            tools: "sandbox-bash",
-            storage: "memory",
-            extensions: "disabled",
-            userResources: "disabled",
-          },
-          shaper: {
-            role: "shaper",
-            tools: "sandbox-bash",
-            storage: "memory",
-            extensions: "disabled",
-            userResources: "disabled",
-          },
-        });
-      }).pipe(Effect.provide(FlectRuntimeLive.pipe(Layer.provide(piLayer))));
+        );
+      }).pipe(Effect.provide(runtimeLayer(piLayer)));
     },
   );
 
@@ -478,12 +514,14 @@ describe("FlectRuntimeLive", () => {
       return Effect.gen(function* () {
         const runtime = yield* FlectRuntime;
         const selection = yield* Schema.decodeUnknownEffect(SessionSelection)({
+          reasoningLevel: "high",
           externalExtensions: { app: true, shaper: false },
         });
         yield* runtime.createSession(selection);
 
         expect(fake.createAgentSet).toHaveBeenCalledWith(
           expect.any(ModelSummary),
+          "high",
           {
             guardian: expect.objectContaining({
               role: "guardian",
@@ -499,6 +537,44 @@ describe("FlectRuntimeLive", () => {
             }),
           },
         );
+      }).pipe(Effect.provide(fake.layer));
+    },
+  );
+
+  it.effect(
+    "projects external Pi extension failures without private details",
+    () => {
+      const fake = createFakePi({
+        appEvent: {
+          type: "external_extension_failed",
+          role: "app",
+          failureId: "extension-failure-1",
+          stage: "turn",
+          message: "A trusted Pi extension failed.",
+          recovery: "Disable trusted Pi extensions for this agent and retry.",
+        },
+      });
+
+      return Effect.gen(function* () {
+        const runtime = yield* FlectRuntime;
+        const sessionId = yield* runtime.createSession(
+          SessionSelection.make({
+            externalExtensions: { app: true, shaper: false },
+          }),
+        );
+        const events = yield* runtime
+          .prompt(sessionId, "Exercise the trusted extension")
+          .pipe(Stream.runCollect);
+
+        expect(Array.from(events)).toContainEqual({
+          type: "external_extension_failed",
+          role: "app",
+          failureId: "extension-failure-1",
+          stage: "turn",
+          message: "A trusted Pi extension failed.",
+          recovery: "Disable trusted Pi extensions for this agent and retry.",
+        });
+        expect(JSON.stringify(events)).not.toContain("/Users/");
       }).pipe(Effect.provide(fake.layer));
     },
   );
@@ -582,6 +658,7 @@ describe("FlectRuntimeLive", () => {
           provider: "openai-codex",
           id: "gpt-5.6",
           name: "GPT-5.6",
+          reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
         }),
       ]);
     }).pipe(Effect.provide(fake.layer));
@@ -597,13 +674,16 @@ describe("FlectRuntimeLive", () => {
           new SessionSelection({}),
         );
 
-        expect(sessionId).toBe("session-1");
+        expect(sessionId).toMatch(/^session-[a-z0-9][a-z0-9-]+$/);
+        expect(sessionId).not.toBe("019fb8d3-f9b4-7d22-9db2-6bc97c32106a");
         expect(fake.createAgentSet).toHaveBeenCalledWith(
           new ModelSummary({
             provider: "openai-codex",
             id: "gpt-5.6",
             name: "GPT-5.6",
+            reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
           }),
+          undefined,
           {
             guardian: {
               role: "guardian",
@@ -722,14 +802,13 @@ describe("FlectRuntimeLive", () => {
         expect(shaped).toEqual([
           ShapeCompleted.make({
             type: "shape_completed",
-            document: defaultInterfaceDocument,
           }),
         ]);
       }).pipe(Effect.provide(fake.layer));
     },
   );
 
-  it.effect("validates a Shaper proposal before returning it", () => {
+  it.effect("leaves Shaper proposal validation to the browser sandbox", () => {
     const shaped = InterfaceDocument.make({
       ...defaultInterfaceDocument,
       name: "Focused Flect",
@@ -746,7 +825,7 @@ describe("FlectRuntimeLive", () => {
         .pipe(Stream.runCollect);
 
       expect(result).toEqual([
-        ShapeCompleted.make({ type: "shape_completed", document: shaped }),
+        ShapeCompleted.make({ type: "shape_completed" }),
       ]);
       expect(fake.shaperPrompt).toHaveBeenCalledOnce();
     }).pipe(Effect.provide(fake.layer));
@@ -797,7 +876,7 @@ describe("FlectRuntimeLive", () => {
           requestId: shellRequest.requestId,
           command: shellRequest.command,
         },
-        ShapeCompleted.make({ type: "shape_completed", document: shaped }),
+        ShapeCompleted.make({ type: "shape_completed" }),
       ]);
       expect(fake.shaperCompleteShellRequest).toHaveBeenCalledWith(
         shellRequest.requestId,
@@ -872,7 +951,6 @@ describe("FlectRuntimeLive", () => {
       expect(shaped).toEqual([
         ShapeCompleted.make({
           type: "shape_completed",
-          document: defaultInterfaceDocument,
         }),
       ]);
       expect(fake.appPrompt).toHaveBeenCalledOnce();
@@ -908,7 +986,7 @@ describe("FlectRuntimeLive", () => {
         .pipe(Effect.forkChild({ startImmediately: true }));
       yield* Effect.yieldNow;
       expect(fake.shaperAbort).toHaveBeenCalledOnce();
-      expect(cancelFiber.pollUnsafe()).toBeUndefined();
+      yield* Fiber.join(cancelFiber);
 
       yield* Deferred.succeed(
         shellRequest.completed,
@@ -920,12 +998,11 @@ describe("FlectRuntimeLive", () => {
         }),
       );
       yield* Fiber.join(shapeFiber);
-      yield* Fiber.join(cancelFiber);
     }).pipe(Effect.provide(fake.layer));
   });
 
   it.effect(
-    "waits for an interrupted prompt before acknowledging cancel",
+    "acknowledges cancellation while the interrupted prompt drains",
     () => {
       const promptStarted = Deferred.makeUnsafe<void>();
       const promptGate = Deferred.makeUnsafe<void>();
@@ -953,13 +1030,11 @@ describe("FlectRuntimeLive", () => {
           .cancel(sessionId, "app")
           .pipe(Effect.forkChild({ startImmediately: true }));
         yield* Deferred.await(abortStarted);
-        yield* Effect.yieldNow;
-        expect(cancelFiber.pollUnsafe()).toBeUndefined();
+        yield* Fiber.join(cancelFiber);
 
         yield* Deferred.succeed(promptGate, undefined);
         const events = yield* Fiber.join(promptFiber);
         expect(events.at(-1)).toEqual({ type: "cancelled" });
-        yield* Fiber.join(cancelFiber);
       }).pipe(Effect.provide(fake.layer));
     },
   );
@@ -1228,7 +1303,7 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
-  it.effect("fails closed when Shaper returns an invalid document", () => {
+  it.effect("does not treat Shaper prose as an interface document", () => {
     const fake = createFakePi({
       promptResponse: '{"version":2,"name":"Unsafe","root":{"type":"script"}}',
     });
@@ -1236,16 +1311,13 @@ describe("FlectRuntimeLive", () => {
     return Effect.gen(function* () {
       const runtime = yield* FlectRuntime;
       const sessionId = yield* runtime.createSession(new SessionSelection({}));
-      const error = yield* runtime
+      const events = yield* runtime
         .shape(sessionId, "Run a script", defaultInterfaceDocument)
-        .pipe(Stream.runDrain, Effect.flip);
+        .pipe(Stream.runCollect);
 
-      expect(error).toEqual(
-        new PiOperationFailed({
-          operation: "shape",
-          message: "The model runtime could not complete the request.",
-        }),
-      );
+      expect(events).toEqual([
+        ShapeCompleted.make({ type: "shape_completed" }),
+      ]);
     }).pipe(Effect.provide(fake.layer));
   });
 
@@ -1375,6 +1447,7 @@ describe("FlectRuntimeLive", () => {
             provider: "openai-codex",
             id: "gpt-5.6",
             name: "GPT-5.6",
+            reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
           }),
         ]),
         createAgentSet: () => {
@@ -1399,7 +1472,7 @@ describe("FlectRuntimeLive", () => {
           });
         },
       });
-      const layer = FlectRuntimeLive.pipe(Layer.provide(piLayer));
+      const layer = runtimeLayer(piLayer);
 
       return Effect.gen(function* () {
         const runtime = yield* FlectRuntime;

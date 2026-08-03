@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "@effect/vitest";
 import { Effect, Fiber, Layer, Stream } from "effect";
 import { BunCommandResult } from "../../shared/bun-command";
 import {
+  AuthLoginReference,
+  AuthLoginRequest,
+  AuthSelectionReply,
   ModelSummary,
   RuntimeStatus,
   SessionBusy,
@@ -70,6 +73,7 @@ describe("FlectClient", () => {
               provider: "openai-codex",
               id: "gpt-5.6",
               name: "GPT-5.6",
+              reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
             },
           ],
         }),
@@ -90,11 +94,90 @@ describe("FlectClient", () => {
             provider: "openai-codex",
             id: "gpt-5.6",
             name: "GPT-5.6",
+            reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
           }),
         ]);
       }),
     );
   });
+
+  it.effect(
+    "drives provider authentication without exposing credential fields",
+    () => {
+      const loginId = "login-018f8f4f-76d1-7f4d-8f35-71eebc5931d2";
+      const promptId = "prompt-018f8f4f-76d1-7f4d-8f35-71eebc5931d2";
+      const providerResponse = {
+        version: 1,
+        providers: [
+          {
+            version: 1,
+            id: "openai-codex",
+            name: "OpenAI Codex",
+            status: "connected",
+            sourceLabel: "Pi credential store",
+            credentialType: "oauth",
+            methods: [{ type: "oauth", label: "Sign in" }],
+          },
+        ],
+      };
+      const fetcher = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(jsonResponse(providerResponse))
+        .mockResolvedValueOnce(
+          chunkedSse([
+            `data: {"type":"auth_started","loginId":"${loginId}","providerId":"openai-codex"}\n\n`,
+            `data: {"type":"auth_connected","loginId":"${loginId}","providerId":"openai-codex"}\n\n`,
+          ]),
+        )
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(new Response(null, { status: 204 }))
+        .mockResolvedValueOnce(jsonResponse(providerResponse))
+        .mockResolvedValueOnce(jsonResponse({ version: 1, providers: [] }));
+
+      return withClient(
+        fetcher,
+        Effect.gen(function* () {
+          const client = yield* FlectClient;
+          const providers = yield* client.providerAuth;
+          const events = yield* client
+            .loginProvider(
+              AuthLoginRequest.make({
+                providerId: "openai-codex",
+                method: "oauth",
+              }),
+            )
+            .pipe(Stream.runCollect);
+          yield* client.replyProviderAuth(
+            AuthSelectionReply.make({
+              loginId,
+              promptId,
+              optionId: "account-1",
+            }),
+          );
+          yield* client.cancelProviderAuth(
+            AuthLoginReference.make({ loginId }),
+          );
+          const refreshed = yield* client.refreshProviderAuth;
+          const loggedOut = yield* client.logoutProvider("openai-codex");
+
+          expect(providers[0]?.sourceLabel).toBe("Pi credential store");
+          expect(events.map((event) => event.type)).toEqual([
+            "auth_started",
+            "auth_connected",
+          ]);
+          expect(refreshed[0]?.status).toBe("connected");
+          expect(loggedOut).toEqual([]);
+          const requestBodies = fetcher.mock.calls.map(([, init]) =>
+            init?.body instanceof Uint8Array
+              ? new TextDecoder().decode(init.body)
+              : String(init?.body ?? ""),
+          );
+          expect(requestBodies.join("\n")).not.toContain("credential");
+          expect(requestBodies.join("\n")).not.toContain("apiKey");
+        }),
+      );
+    },
+  );
 
   it.effect(
     "creates an automatically selected session with a schema body",

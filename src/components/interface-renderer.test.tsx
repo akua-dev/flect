@@ -4,6 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { InterfaceActionProjection } from "../../shared/interface-actions";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
 import { InterfaceRenderer } from "./interface-renderer";
 
@@ -36,6 +37,33 @@ describe("InterfaceRenderer", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Shape interface" }));
-    expect(onAction).toHaveBeenCalledWith("shape");
+    expect(onAction).toHaveBeenCalledWith("shape", "shape-interface");
+  });
+
+  it("disables unavailable actions using the shared projection", async () => {
+    const onAction = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <InterfaceRenderer
+        actions={[
+          InterfaceActionProjection.make({
+            nodeId: "shape-interface",
+            label: "Shape interface",
+            action: "shape",
+            available: false,
+            unavailableReason: "Leave safe mode first.",
+          }),
+        ]}
+        document={defaultInterfaceDocument}
+        onAction={onAction}
+        renderPrompt={() => null}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: "Shape interface" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Leave safe mode first.");
+    await user.click(button);
+    expect(onAction).not.toHaveBeenCalled();
   });
 });

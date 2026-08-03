@@ -186,17 +186,19 @@ describe("InterfaceRepository", () => {
   );
 
   it.layer(safeLayer)((it) => {
-    it.effect("bypasses journal storage entirely in safe mode", () =>
-      Effect.gen(function* () {
-        const repository = yield* InterfaceRepository;
-        const loaded = yield* repository.load;
-        yield* repository.save(snapshot);
+    it.effect(
+      "bypasses journal storage and requests recovery in safe mode",
+      () =>
+        Effect.gen(function* () {
+          const repository = yield* InterfaceRepository;
+          const loaded = yield* repository.load;
+          yield* repository.save(snapshot);
 
-        assert.strictEqual(loaded.snapshot, undefined);
-        assert.strictEqual(loaded.recovered, false);
-        assert.strictEqual(yield* Ref.get(safeStorage.reads), 0);
-        assert.strictEqual(yield* Ref.get(safeStorage.writes), 0);
-      }),
+          assert.strictEqual(loaded.snapshot, undefined);
+          assert.strictEqual(loaded.recovered, true);
+          assert.strictEqual(yield* Ref.get(safeStorage.reads), 0);
+          assert.strictEqual(yield* Ref.get(safeStorage.writes), 0);
+        }),
     );
   });
 

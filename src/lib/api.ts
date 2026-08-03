@@ -9,6 +9,10 @@ import type { BunCommandResult } from "../../shared/bun-command";
 import {
   AgentShellResultAccepted,
   AgentShellResultRequest,
+  AuthLoginEvent,
+  AuthLoginReference,
+  AuthLoginRequest,
+  AuthSelectionReply,
   CancelRequest,
   CancelResponse,
   CloseSessionResponse,
@@ -19,6 +23,8 @@ import {
   type ModelSummary,
   ModelsResponse,
   PromptRequest,
+  ProviderAuthResponse,
+  type ProviderAuthSummary,
   type RecoveryReason,
   RecoveryRequest,
   RuntimeStatus,
@@ -37,6 +43,12 @@ const strictOptions: SchemaAST.ParseOptions = {
   errors: "all",
   onExcessProperty: "error",
 };
+const ProviderLogoutRequest = Schema.Struct({
+  providerId: Schema.String.check(
+    Schema.isMinLength(1),
+    Schema.isMaxLength(100),
+  ),
+});
 
 export class FlectUnavailableError extends Schema.TaggedErrorClass<FlectUnavailableError>()(
   "FlectUnavailableError",
@@ -50,8 +62,14 @@ const unavailable = () =>
     message: "The local Flect runtime is unavailable.",
   });
 
+const isSessionBusy = (error: unknown): error is SessionBusy =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  error._tag === "SessionBusy";
+
 const shapeFailure = (sessionId: string) => (error: unknown) =>
-  error instanceof SessionBusy
+  isSessionBusy(error)
     ? error
     : HttpClientError.isHttpClientError(error) && error.response?.status === 409
       ? new SessionBusy({
@@ -74,6 +92,26 @@ export interface FlectClientShape {
     ReadonlyArray<ModelSummary>,
     FlectUnavailableError
   >;
+  readonly providerAuth: Effect.Effect<
+    ReadonlyArray<ProviderAuthSummary>,
+    FlectUnavailableError
+  >;
+  readonly loginProvider: (
+    request: AuthLoginRequest,
+  ) => Stream.Stream<AuthLoginEvent, FlectUnavailableError>;
+  readonly replyProviderAuth: (
+    reply: AuthSelectionReply,
+  ) => Effect.Effect<void, FlectUnavailableError>;
+  readonly cancelProviderAuth: (
+    reference: AuthLoginReference,
+  ) => Effect.Effect<void, FlectUnavailableError>;
+  readonly refreshProviderAuth: Effect.Effect<
+    ReadonlyArray<ProviderAuthSummary>,
+    FlectUnavailableError
+  >;
+  readonly logoutProvider: (
+    providerId: string,
+  ) => Effect.Effect<ReadonlyArray<ProviderAuthSummary>, FlectUnavailableError>;
   readonly createSession: (
     selection: SessionSelection,
   ) => Effect.Effect<string, FlectUnavailableError>;
@@ -120,6 +158,11 @@ const decodeShapeEventJson = Schema.decodeUnknownEffect(
   strictOptions,
 );
 
+const decodeAuthEventJson = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(AuthLoginEvent),
+  strictOptions,
+);
+
 export const makeFlectClientLayer = (baseUrl = "/api") =>
   Layer.effect(
     FlectClient,
@@ -146,6 +189,77 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
         ),
         Effect.map((response) => response.models),
         Effect.mapError(unavailable),
+      );
+
+      const decodeProviders = HttpClientResponse.schemaBodyJson(
+        ProviderAuthResponse,
+        strictOptions,
+      );
+      const providerAuth = transport.get("/auth/providers").pipe(
+        Effect.flatMap(decodeProviders),
+        Effect.map((response) => response.providers),
+        Effect.mapError(unavailable),
+      );
+
+      const loginProvider = (
+        request: AuthLoginRequest,
+      ): Stream.Stream<AuthLoginEvent, FlectUnavailableError> =>
+        Stream.unwrap(
+          HttpClientRequest.post("/auth/login").pipe(
+            HttpClientRequest.schemaBodyJson(AuthLoginRequest)(request),
+            Effect.flatMap(transport.execute),
+            Effect.map((response) => response.stream),
+            Effect.mapError(unavailable),
+          ),
+        ).pipe(
+          Stream.decodeText(),
+          Stream.splitLines,
+          Stream.filter((line) => line.startsWith("data:")),
+          Stream.map((line) => line.slice(5).trimStart()),
+          Stream.mapEffect((json) =>
+            decodeAuthEventJson(json).pipe(Effect.mapError(unavailable)),
+          ),
+          Stream.mapError(unavailable),
+        );
+
+      const replyProviderAuth = Effect.fn("Flect.Client.replyProviderAuth")(
+        (reply: AuthSelectionReply) =>
+          HttpClientRequest.post("/auth/reply").pipe(
+            HttpClientRequest.schemaBodyJson(AuthSelectionReply)(reply),
+            Effect.flatMap(transport.execute),
+            Effect.asVoid,
+            Effect.mapError(unavailable),
+          ),
+      );
+
+      const cancelProviderAuth = Effect.fn("Flect.Client.cancelProviderAuth")(
+        (reference: AuthLoginReference) =>
+          HttpClientRequest.post("/auth/cancel").pipe(
+            HttpClientRequest.schemaBodyJson(AuthLoginReference)(reference),
+            Effect.flatMap(transport.execute),
+            Effect.asVoid,
+            Effect.mapError(unavailable),
+          ),
+      );
+
+      const refreshProviderAuth = HttpClientRequest.post("/auth/refresh").pipe(
+        transport.execute,
+        Effect.flatMap(decodeProviders),
+        Effect.map((response) => response.providers),
+        Effect.mapError(unavailable),
+      );
+
+      const logoutProvider = Effect.fn("Flect.Client.logoutProvider")(
+        (providerId: string) =>
+          HttpClientRequest.post("/auth/logout").pipe(
+            HttpClientRequest.schemaBodyJson(ProviderLogoutRequest)({
+              providerId,
+            }),
+            Effect.flatMap(transport.execute),
+            Effect.flatMap(decodeProviders),
+            Effect.map((response) => response.providers),
+            Effect.mapError(unavailable),
+          ),
       );
 
       const createSession = Effect.fn("Flect.Client.createSession")(
@@ -330,6 +444,12 @@ export const makeFlectClientLayer = (baseUrl = "/api") =>
       return {
         status,
         models,
+        providerAuth,
+        loginProvider,
+        replyProviderAuth,
+        cancelProviderAuth,
+        refreshProviderAuth,
+        logoutProvider,
         createSession,
         closeSession,
         prompt,

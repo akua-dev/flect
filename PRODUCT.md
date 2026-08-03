@@ -59,6 +59,13 @@ harder to recognize.
 - Changes should be inspectable, reversible, and attributable before they
   become more powerful.
 
+## Product Quality
+
+[`docs/product-quality.md`](docs/product-quality.md) is the canonical contract
+for Flect's stable user outcomes, release gates, and required proof. Current
+maturity belongs in dated verification evidence and the Flect delivery
+project, not in this product context.
+
 ## Accessibility & Inclusion
 
 The shell targets WCAG 2.2 AA for text, controls, focus visibility, keyboard

@@ -54,7 +54,7 @@ components:
     size: "40px"
   button-primary-hover:
     backgroundColor: "{colors.flect-rose-hover}"
-    textColor: "{colors.ink}"
+    textColor: "{colors.void}"
     rounded: "{rounded.pill}"
     size: "40px"
   prompt-surface:
@@ -221,24 +221,26 @@ Its input, model source, attachment entry, voice entry, and submit/cancel state
 share one visual grammar. The prompt itself is customizable; safe mode always
 restores the compiled default.
 
-The active role is explicit inside the composer before send:
-**Edit · Shaper** changes the interface and **Run · App Agent** uses the
-accepted product. Each role keeps its own draft and conversation. Switching
-roles changes context; it never submits text or relabels history.
+The active target is explicit inside the composer before send: **Shape** changes
+the interface and **Use** operates either the candidate or accepted product.
+The adjacent identity names Shaper, Preview App Agent, or App Agent. Each target
+keeps its own draft and conversation. Switching changes context; it never
+submits text or relabels history.
 
 ### Adaptive Agent Rail
 
 Flect does not bolt a second chat onto the product. The signature composer is
 one mounted instrument whose position reflects the workspace phase:
 
-- a blank workspace centers the Edit/Shaper composer beneath “What should we
+- a blank workspace centers the Shape/Shaper composer beneath “What should we
   shape?”;
 - the first message reveals the canvas and moves that same composer into the
   right conversation rail;
 - a validated proposal adds a compact Keep/Reject decision immediately above
   the composer;
-- an accepted product defaults to Run/App Agent while Edit remains one explicit
-  switch away.
+- a validated proposal defaults to candidate Use while Shape remains one
+  explicit switch away;
+- an accepted product defaults to Use/App Agent.
 
 Above 980px, the rail is inline and resizable from 340–520px, with 400px as the
 default. From 761–980px it becomes a full-height right sheet. At 760px and
@@ -250,6 +252,45 @@ The transition uses measured layout motion for at most 220ms. Under
 `prefers-reduced-motion: reduce`, layout changes are immediate. A role change,
 resized rail, collapse, or breakpoint must never create a second composer,
 horizontal page overflow, or hidden recovery control.
+
+### Chat Markdown
+
+Agent output uses the same SF/system family as the shell at `1rem` with a
+`1.55` dark-surface line height and a maximum assistant measure of `70ch`.
+Blocks follow a `0.65rem` rhythm. Headings use a compact fixed-rem hierarchy:
+`1.25rem`, `1.125rem`, `1rem`, then `0.875rem` for levels four through six.
+The final three levels retain their semantic rank while sharing one quiet
+visual band to suit the narrow rail.
+
+Code and tables are contained instruments, not new cards. They use the
+existing Surface, Raised Surface, Line, Ink, and Muted tokens; code is
+`0.875rem` mono and table content is `0.8125rem`. Their own viewports own
+horizontal overflow, while copy, wrap, and expand actions stay dense on
+desktop and reach `44px` at compact widths. Details remain native disclosures,
+links use Flect Rose only as an interaction cue, and footnotes remain subdued.
+The complete rendering and trust contract lives in
+[`docs/superpowers/specs/2026-07-31-flect-chat-markdown-design.md`](docs/superpowers/specs/2026-07-31-flect-chat-markdown-design.md).
+
+### Activity, Follow, and Diagnostics
+
+Tool use is a compact instrument in the role timeline, not a generic assistant
+sentence and not a developer-console dump. A card always names the tool and
+shows queued, running, completed, or failed state. Duration stays visible;
+bounded commands, output, exit status, preview links, validation paths, and
+operation identifiers live in a native disclosure. Ready Mint and Failure Red
+support the label but never carry meaning alone.
+
+Conversation follow respects the reader. Content follows while the viewport is
+within 48px of its bottom. Once the person scrolls away, streaming and tool
+updates preserve that position and surface a quiet, keyboard-operable **Jump
+to latest** control with an unread count. Switching roles restores each role's
+own position. Following never focuses the timeline or composer.
+
+Diagnostics is a protected disclosure above the composer. At rest it shows
+only local-control state and connected-client count. When opened, it exposes
+the explicit enable/revoke action and the latest correlated, redacted
+operation evidence. It must remain legible and useful without turning the
+ordinary product surface into infrastructure chrome.
 
 ## 6. Do's and Don'ts
 
