@@ -243,6 +243,11 @@ export interface ShareRepositoryShape {
     { readonly refs: Omit<ShareInstallationRefs, "candidate"> },
     ShareRepositoryFailure
   >;
+  readonly restoreCandidate: (input: {
+    readonly shareId: string;
+    readonly before: ShareInstallationRefs & { readonly candidate: string };
+    readonly after: Omit<ShareInstallationRefs, "candidate">;
+  }) => Effect.Effect<void, ShareRepositoryFailure>;
   readonly snapshotArtifact: (input: {
     readonly shareId: string;
     readonly role: "base" | "upstream" | "fork" | "candidate";
@@ -374,6 +379,46 @@ export const makeShareRepositoryLayer = (options?: {
         },
       );
 
+      const restoreCandidate = Effect.fn("Flect.ShareRepository.restore")(
+        function* (input: {
+          readonly shareId: string;
+          readonly before: ShareInstallationRefs & { readonly candidate: string };
+          readonly after: Omit<ShareInstallationRefs, "candidate">;
+        }) {
+          yield* open;
+          const names = yield* deriveShareRefs(input.shareId);
+          yield* move({
+            branch: names.candidate,
+            targetCommit: input.before.candidate,
+            guards: [
+              { branch: names.base, commit: input.after.base },
+              { branch: names.upstream, commit: input.after.upstream },
+              { branch: names.fork, commit: input.after.fork },
+            ],
+          });
+          yield* move({
+            branch: names.fork,
+            expectedCommit: input.after.fork,
+            targetCommit: input.before.fork,
+            guards: [
+              { branch: names.base, commit: input.after.base },
+              { branch: names.upstream, commit: input.after.upstream },
+              { branch: names.candidate, commit: input.before.candidate },
+            ],
+          });
+          yield* move({
+            branch: names.base,
+            expectedCommit: input.after.base,
+            targetCommit: input.before.base,
+            guards: [
+              { branch: names.upstream, commit: input.before.upstream },
+              { branch: names.fork, commit: input.before.fork },
+              { branch: names.candidate, commit: input.before.candidate },
+            ],
+          });
+        },
+      );
+
       const acceptCandidate = Effect.fn("Flect.ShareRepository.accept")(
         function* (input: {
           readonly shareId: string;
@@ -383,42 +428,95 @@ export const makeShareRepositoryLayer = (options?: {
         }) {
           yield* open;
           const names = yield* deriveShareRefs(input.shareId);
-          yield* move({
-            branch: names.base,
-            expectedCommit: input.refs.base,
-            targetCommit: input.refs.upstream,
-            guards: [
-              { branch: names.upstream, commit: input.refs.upstream },
-              { branch: names.fork, commit: input.refs.fork },
-              { branch: names.candidate, commit: input.refs.candidate },
-            ],
+          let baseMoved = false;
+          let forkMoved = false;
+          let candidateRemoved = false;
+          const rollback = Effect.gen(function* () {
+            if (candidateRemoved) {
+              yield* move({
+                branch: names.candidate,
+                targetCommit: input.refs.candidate,
+                guards: [
+                  { branch: names.base, commit: input.refs.upstream },
+                  { branch: names.upstream, commit: input.refs.upstream },
+                  { branch: names.fork, commit: input.refs.candidate },
+                ],
+              });
+            }
+            if (forkMoved) {
+              yield* move({
+                branch: names.fork,
+                expectedCommit: input.refs.candidate,
+                targetCommit: input.refs.fork,
+                guards: [
+                  { branch: names.base, commit: input.refs.upstream },
+                  { branch: names.upstream, commit: input.refs.upstream },
+                  { branch: names.candidate, commit: input.refs.candidate },
+                ],
+              });
+            }
+            if (baseMoved) {
+              yield* move({
+                branch: names.base,
+                expectedCommit: input.refs.upstream,
+                targetCommit: input.refs.base,
+                guards: [
+                  { branch: names.upstream, commit: input.refs.upstream },
+                  { branch: names.fork, commit: input.refs.fork },
+                  { branch: names.candidate, commit: input.refs.candidate },
+                ],
+              });
+            }
           });
-          yield* move({
-            branch: names.fork,
-            expectedCommit: input.refs.fork,
-            targetCommit: input.refs.candidate,
-            guards: [
-              { branch: names.base, commit: input.refs.upstream },
-              { branch: names.upstream, commit: input.refs.upstream },
-              { branch: names.candidate, commit: input.refs.candidate },
-            ],
+          const accepted = Effect.gen(function* () {
+            yield* move({
+              branch: names.base,
+              expectedCommit: input.refs.base,
+              targetCommit: input.refs.upstream,
+              guards: [
+                { branch: names.upstream, commit: input.refs.upstream },
+                { branch: names.fork, commit: input.refs.fork },
+                { branch: names.candidate, commit: input.refs.candidate },
+              ],
+            }).pipe(
+              Effect.tap(() => Effect.sync(() => (baseMoved = true))),
+            );
+            yield* move({
+              branch: names.fork,
+              expectedCommit: input.refs.fork,
+              targetCommit: input.refs.candidate,
+              guards: [
+                { branch: names.base, commit: input.refs.upstream },
+                { branch: names.upstream, commit: input.refs.upstream },
+                { branch: names.candidate, commit: input.refs.candidate },
+              ],
+            }).pipe(
+              Effect.tap(() => Effect.sync(() => (forkMoved = true))),
+            );
+            yield* removeRef({
+              branch: names.candidate,
+              expectedCommit: input.refs.candidate,
+              guards: [
+                { branch: names.base, commit: input.refs.upstream },
+                { branch: names.upstream, commit: input.refs.upstream },
+                { branch: names.fork, commit: input.refs.candidate },
+              ],
+            }).pipe(
+              Effect.tap(() => Effect.sync(() => (candidateRemoved = true))),
+            );
+            return {
+              refs: {
+                base: input.refs.upstream,
+                upstream: input.refs.upstream,
+                fork: input.refs.candidate,
+              },
+            };
           });
-          yield* removeRef({
-            branch: names.candidate,
-            expectedCommit: input.refs.candidate,
-            guards: [
-              { branch: names.base, commit: input.refs.upstream },
-              { branch: names.upstream, commit: input.refs.upstream },
-              { branch: names.fork, commit: input.refs.candidate },
-            ],
-          });
-          return {
-            refs: {
-              base: input.refs.upstream,
-              upstream: input.refs.upstream,
-              fork: input.refs.candidate,
-            },
-          };
+          return yield* accepted.pipe(
+            Effect.catch((error) =>
+              rollback.pipe(Effect.andThen(Effect.fail(error))),
+            ),
+          );
         },
       );
 
@@ -907,6 +1005,7 @@ export const makeShareRepositoryLayer = (options?: {
         resolveConflict,
         rejectCandidate,
         acceptCandidate,
+        restoreCandidate,
         snapshotArtifact,
         exportFork,
         exportCandidate,

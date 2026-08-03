@@ -136,6 +136,9 @@ const decodeStored = Effect.fn("Flect.ExtensionCatalog.decodeStored")(
 
 export interface ExtensionCatalogShape {
   readonly snapshot: Effect.Effect<PortableExtensionCatalogSnapshot>;
+  readonly restore: (
+    snapshot: PortableExtensionCatalogSnapshot,
+  ) => Effect.Effect<void, ExtensionCatalogFailure>;
   readonly changes: Stream.Stream<PortableExtensionCatalogSnapshot>;
   readonly stageCandidate: (
     input: StagePortableExtensions,
@@ -555,8 +558,14 @@ export const makeExtensionCatalogLayer = () =>
         ] as const),
       );
 
+      const restore = Effect.fn("Flect.ExtensionCatalog.restore")(
+        (snapshot: PortableExtensionCatalogSnapshot) =>
+          mutate(() => Effect.succeed([undefined, snapshot] as const)),
+      );
+
       return {
         snapshot: SubscriptionRef.get(state),
+        restore,
         changes: SubscriptionRef.changes(state),
         stageCandidate,
         promoteCandidate,

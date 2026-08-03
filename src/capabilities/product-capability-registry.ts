@@ -2,7 +2,7 @@ import type { ProductOperationDefinition } from "@flect/product";
 import { Context, Effect, Layer, Schema } from "effect";
 import {
   AuthorizedProductOperation,
-  type ProductCapabilityBrokerFailure,
+  ProductCapabilityBrokerFailure,
   type ProductCapabilityDecisionChoice,
   type ProductCapabilityProjection,
   type ProductCapabilityRequestContext,
@@ -13,6 +13,7 @@ import {
   ProductOperationSummary,
 } from "../../shared/product-capability";
 import { ProductCapabilityBroker } from "./product-capability-broker";
+import type { ProductCapabilityDecisionStoreFailure } from "./product-capability-decision-store";
 import {
   productOperationFailure,
   productOperationFailureFromBroker,
@@ -46,6 +47,9 @@ export interface ProductCapabilityRegistryShape {
     context: ProductCapabilityRequestContext,
     invocation: ProductOperationInvocation,
   ) => Effect.Effect<ProductOperationExecution, ProductOperationFailure>;
+  readonly warnings?: Effect.Effect<
+    ReadonlyArray<ProductCapabilityDecisionStoreFailure>
+  >;
 }
 
 export class ProductCapabilityRegistry extends Context.Service<
@@ -141,14 +145,32 @@ export const makeProductCapabilityRegistryLayer = (options: {
               productOperationFailureFromBroker(invocation.operationId, error),
             ),
           );
-        const output = yield* definition.execute(invocation.input).pipe(
-          Effect.flatMap((candidate) =>
-            Schema.decodeUnknownEffect(Schema.Json)(candidate),
-          ),
-          Effect.mapError(() =>
-            productOperationFailure(invocation.operationId, "invalid-output"),
-          ),
-        );
+        const output = yield* broker
+          .withReservation(
+            reservation,
+            authorizedOperation,
+            definition.execute(invocation.input).pipe(
+              Effect.flatMap((candidate) =>
+                Schema.decodeUnknownEffect(Schema.Json)(candidate),
+              ),
+              Effect.mapError(() =>
+                productOperationFailure(
+                  invocation.operationId,
+                  "invalid-output",
+                ),
+              ),
+            ),
+          )
+          .pipe(
+            Effect.mapError((error) =>
+              Schema.is(ProductCapabilityBrokerFailure)(error)
+                ? productOperationFailureFromBroker(
+                    invocation.operationId,
+                    error,
+                  )
+                : error,
+            ),
+          );
         return ProductOperationExecution.make({
           version: 1,
           output,
@@ -166,6 +188,14 @@ export const makeProductCapabilityRegistryLayer = (options: {
           ),
       );
 
-      return { catalog, decide, invoke, invokeDetailed, permissions, revoke };
+      return {
+        catalog,
+        decide,
+        invoke,
+        invokeDetailed,
+        permissions,
+        revoke,
+        warnings: broker.warnings,
+      };
     }),
   );

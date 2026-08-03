@@ -904,6 +904,14 @@ export class FlectWorkspaceEvent extends Schema.Class<FlectWorkspaceEvent>(
   message: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(1_000))),
 }) {}
 
+export class OperationFailed extends Schema.TaggedErrorClass<OperationFailed>()(
+  "OperationFailed",
+  {
+    operationId: OperationId,
+    message: BoundedText(1, 500),
+  },
+) {}
+
 export class FlectCommandReceipt extends Schema.Class<FlectCommandReceipt>(
   "FlectCommandReceipt",
 )({
@@ -912,8 +920,9 @@ export class FlectCommandReceipt extends Schema.Class<FlectCommandReceipt>(
   workspaceId: WorkspaceId,
   operationId: OperationId,
   sequence: Sequence,
-  status: Schema.Literals(["accepted", "completed", "duplicate"]),
+  status: Schema.Literals(["accepted", "completed", "duplicate", "failed"]),
   result: Schema.optionalKey(Schema.Json),
+  failure: Schema.optionalKey(OperationFailed),
 }) {}
 
 export class InvalidControlCommand extends Schema.TaggedErrorClass<InvalidControlCommand>()(
@@ -948,14 +957,6 @@ export class CommandConflict extends Schema.TaggedErrorClass<CommandConflict>()(
 export class CommandRejected extends Schema.TaggedErrorClass<CommandRejected>()(
   "CommandRejected",
   {
-    message: BoundedText(1, 500),
-  },
-) {}
-
-export class OperationFailed extends Schema.TaggedErrorClass<OperationFailed>()(
-  "OperationFailed",
-  {
-    operationId: OperationId,
     message: BoundedText(1, 500),
   },
 ) {}

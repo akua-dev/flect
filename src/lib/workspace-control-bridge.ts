@@ -1,4 +1,13 @@
-import { Clock, Context, Effect, Layer, Ref, Semaphore, Stream } from "effect";
+import {
+  Clock,
+  Context,
+  Effect,
+  Fiber,
+  Layer,
+  Ref,
+  Semaphore,
+  Stream,
+} from "effect";
 import {
   ControlClientSummary,
   type FlectCommandError,
@@ -33,7 +42,18 @@ export const WorkspaceControlBridgeLive = Layer.effect(
     const transport = yield* WorkspaceControlTransport;
     const enabled = yield* Ref.make(false);
     const revocationInFlight = yield* Ref.make(false);
+    const activeCommandFibers = yield* Ref.make<
+      ReadonlySet<Fiber.Fiber<unknown, unknown>>
+    >(new Set());
     const reconcilePermit = yield* Semaphore.make(1);
+
+    const interruptActiveCommands = Effect.fn(
+      "Flect.ControlBridge.interruptActiveCommands",
+    )(function* () {
+      const fibers = yield* Ref.get(activeCommandFibers);
+      yield* Fiber.interruptAll(fibers);
+      yield* Ref.set(activeCommandFibers, new Set());
+    });
 
     const reconcile = Effect.fn("Flect.ControlBridge.reconcile")(() =>
       reconcilePermit.withPermits(1)(
@@ -53,6 +73,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
             if (yield* Ref.get(revocationInFlight)) {
               return;
             }
+            yield* interruptActiveCommands();
             yield* transport.disable;
             yield* Ref.set(enabled, false);
           }
@@ -117,6 +138,24 @@ export const WorkspaceControlBridgeLive = Layer.effect(
       },
     );
 
+    const runTrackedEnvelope = Effect.fn(
+      "Flect.ControlBridge.runTrackedEnvelope",
+    )(function* (envelope) {
+      const fiber = yield* Effect.fiber;
+      yield* Ref.update(activeCommandFibers, (current) =>
+        new Set(current).add(fiber),
+      );
+      yield* runEnvelope(envelope).pipe(
+        Effect.ensuring(
+          Ref.update(activeCommandFibers, (current) => {
+            const next = new Set(current);
+            next.delete(fiber);
+            return next;
+          }),
+        ),
+      );
+    });
+
     const runNext = Effect.fn("Flect.ControlBridge.runNext")(function* () {
       if (!(yield* Ref.get(enabled))) {
         yield* Effect.sleep("100 millis");
@@ -126,19 +165,27 @@ export const WorkspaceControlBridgeLive = Layer.effect(
       const envelope = yield* transport.nextCommand(snapshot.workspaceId);
       if (envelope.command.type === "disable-control") {
         yield* Ref.set(revocationInFlight, true);
+        yield* interruptActiveCommands();
         yield* runEnvelope(envelope);
         return;
       }
-      yield* runEnvelope(envelope).pipe(Effect.forkScoped);
+      yield* runTrackedEnvelope(envelope).pipe(Effect.forkScoped);
     });
 
-    yield* reconcile().pipe(Effect.catch(() => Effect.void));
-    yield* controller.changes.pipe(
-      Stream.runForEach(() =>
-        reconcile().pipe(Effect.catch(() => Effect.void)),
+    const reconcileObserved = reconcile().pipe(
+      Effect.catch(() =>
+        Effect.logWarning("Flect control transport reconciliation failed."),
       ),
+    );
+
+    yield* reconcileObserved;
+    yield* controller.changes.pipe(
+      Stream.runForEach(() => reconcileObserved),
       Effect.forkScoped,
     );
+    yield* Effect.forever(
+      Effect.sleep("1 second").pipe(Effect.andThen(reconcileObserved)),
+    ).pipe(Effect.forkScoped);
     yield* controller.events.pipe(
       Stream.runForEach((event) =>
         Ref.get(enabled).pipe(

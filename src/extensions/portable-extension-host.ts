@@ -12,6 +12,7 @@ import type {
 } from "../../shared/sandbox";
 import { CapsuleStore } from "../capsule/capsule-store";
 import {
+  type CapabilityAdapterFailure,
   type CapabilityDenied,
   SandboxCapabilityBroker,
 } from "../sandbox/capability-broker";
@@ -147,6 +148,7 @@ export interface PortableExtensionHostShape {
     input: unknown,
   ) => Effect.Effect<
     SandboxResult,
+    | CapabilityAdapterFailure
     | CapabilityDenied
     | ExtensionCatalogFailure
     | PortableExtensionSourceFailure

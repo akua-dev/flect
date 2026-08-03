@@ -19,8 +19,18 @@ export class CapabilityDenied extends Schema.TaggedErrorClass<CapabilityDenied>(
   },
 ) {}
 
+export class CapabilityAdapterFailure extends Schema.TaggedErrorClass<CapabilityAdapterFailure>()(
+  "CapabilityAdapterFailure",
+  {
+    reason: Schema.Literal("unsupported"),
+    message: Schema.Literal("The extension interface intent is unsupported."),
+  },
+) {}
+
 export interface CapabilityAdapterShape {
-  readonly setText: (intent: SetTextIntent) => Effect.Effect<void>;
+  readonly setText: (
+    intent: SetTextIntent,
+  ) => Effect.Effect<void, CapabilityAdapterFailure>;
 }
 
 export class CapabilityAdapter extends Context.Service<
@@ -33,7 +43,7 @@ export interface SandboxCapabilityBrokerShape {
     manifest: ExtensionManifest,
     result: SandboxResult,
     grants: ReadonlyArray<ExtensionCapability>,
-  ) => Effect.Effect<void, CapabilityDenied>;
+  ) => Effect.Effect<void, CapabilityDenied | CapabilityAdapterFailure>;
 }
 
 export class SandboxCapabilityBroker extends Context.Service<

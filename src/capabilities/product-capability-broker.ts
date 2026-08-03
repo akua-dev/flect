@@ -13,12 +13,14 @@ import {
 } from "../../shared/product-capability";
 import {
   ProductCapabilityDecisionStore,
+  type ProductCapabilityDecisionStoreFailure,
   type ProductCapabilityMigrationContext,
 } from "./product-capability-decision-store";
 
 interface BrokerState {
   readonly decisions: ReadonlyArray<ProductCapabilityDecision>;
   readonly loadedContexts: ReadonlySet<string>;
+  readonly warnings: ReadonlyArray<ProductCapabilityDecisionStoreFailure>;
 }
 
 export interface ProductCapabilityBrokerShape {
@@ -50,6 +52,14 @@ export interface ProductCapabilityBrokerShape {
     reservation: ProductCapabilityReservation,
     operation: AuthorizedProductOperation,
   ) => Effect.Effect<void, ProductCapabilityBrokerFailure>;
+  readonly withReservation: <A, E>(
+    reservation: ProductCapabilityReservation,
+    operation: AuthorizedProductOperation,
+    effect: Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | ProductCapabilityBrokerFailure>;
+  readonly warnings: Effect.Effect<
+    ReadonlyArray<ProductCapabilityDecisionStoreFailure>
+  >;
 }
 
 export class ProductCapabilityBroker extends Context.Service<
@@ -101,6 +111,14 @@ const isDurable = (decision: ProductCapabilityDecision) =>
 
 const durableDecisions = (state: BrokerState) =>
   state.decisions.filter(isDurable);
+
+const addWarning = (
+  warnings: ReadonlyArray<ProductCapabilityDecisionStoreFailure>,
+  warning: ProductCapabilityDecisionStoreFailure,
+) =>
+  warnings.some((current) => current.reason === warning.reason)
+    ? warnings
+    : [...warnings, warning];
 
 const isSubset = (
   selected: ReadonlyArray<string>,
@@ -197,6 +215,8 @@ export const makeProductCapabilityBrokerLayer = (options: {
       const state = yield* SynchronizedRef.make<BrokerState>({
         decisions: initial.decisions,
         loadedContexts: new Set(),
+        warnings:
+          initial.warning === undefined ? [] : [initial.warning],
       });
       const manifests = new Map(
         options.manifests.map((manifest) => [manifest.id, manifest]),
@@ -239,6 +259,10 @@ export const makeProductCapabilityBrokerLayer = (options: {
                     ...current.loadedContexts,
                     contextKey,
                   ]),
+                  warnings:
+                    loaded.warning === undefined
+                      ? current.warnings
+                      : addWarning(current.warnings, loaded.warning),
                 };
               }),
             );
@@ -629,6 +653,68 @@ export const makeProductCapabilityBrokerLayer = (options: {
         }
       });
 
+      const withReservation = Effect.fn(
+        "Flect.ProductCapabilityBroker.withReservation",
+      )(
+        <A, E>(
+          reservation: ProductCapabilityReservation,
+          operation: AuthorizedProductOperation,
+          effect: Effect.Effect<A, E>,
+        ) =>
+          SynchronizedRef.modifyEffect(state, (current) =>
+            Effect.gen(function* () {
+              const decision = current.decisions.find(
+                (candidate) => candidate.decisionId === reservation.decisionId,
+              );
+              if (
+                decision === undefined ||
+                decision.capabilityId !== reservation.capabilityId ||
+                reservation.operationId !== operation.operationId ||
+                reservation.capabilityId !== operation.capabilityId ||
+                !decision.operationIds.includes(reservation.operationId) ||
+                !isSubset(
+                  reservation.approvedResourceIds,
+                  decision.resourceIds,
+                ) ||
+                !isSubset(
+                  reservation.approvedDataClassIds,
+                  decision.dataClassIds,
+                ) ||
+                !isSubset(operation.resourceIds, reservation.approvedResourceIds) ||
+                !isSubset(
+                  operation.dataClassIds,
+                  reservation.approvedDataClassIds,
+                )
+              ) {
+                return yield* Effect.fail(
+                  brokerFailure("denied", reservation.capabilityId),
+                );
+              }
+              if (decision.status === "revoked") {
+                return yield* Effect.fail(
+                  brokerFailure("revoked", reservation.capabilityId),
+                );
+              }
+              if (decision.status !== "granted") {
+                return yield* Effect.fail(
+                  brokerFailure("denied", reservation.capabilityId),
+                );
+              }
+              const now = yield* Clock.currentTimeMillis;
+              if (
+                decision.expiresAtMillis !== undefined &&
+                decision.expiresAtMillis <= now
+              ) {
+                return yield* Effect.fail(
+                  brokerFailure("expired", reservation.capabilityId),
+                );
+              }
+              const result = yield* effect;
+              return [result, current] as const;
+            }),
+          ),
+      );
+
       return {
         catalog,
         decide,
@@ -636,6 +722,10 @@ export const makeProductCapabilityBrokerLayer = (options: {
         reserve,
         revoke,
         validate,
+        withReservation,
+        warnings: SynchronizedRef.get(state).pipe(
+          Effect.map((current) => current.warnings),
+        ),
       };
     }),
   );

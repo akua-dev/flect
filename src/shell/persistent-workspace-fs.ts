@@ -178,16 +178,6 @@ export class PersistentWorkspaceFs implements IFileSystem {
     }
   }
 
-  async #persistFile(path: string) {
-    const relative = workspaceRelative(path);
-    if (relative === undefined || relative.length === 0) {
-      return;
-    }
-    const target = persistentPath(this.#namespace, relative);
-    await ensurePersistentParent(this.#vfs, target);
-    await this.#vfs.writeFile(target, await this.#memory.readFileBuffer(path));
-  }
-
   async #restoreMemoryTree(entries: ReadonlyArray<PersistentTreeEntry>) {
     this.#memory = new InMemoryFs({ "/workspace/.flect-root": "" });
     for (const entry of entries) {
@@ -201,25 +191,29 @@ export class PersistentWorkspaceFs implements IFileSystem {
     }
   }
 
-  async #replacePersistentTree(
-    previousMemoryTree: ReadonlyArray<PersistentTreeEntry>,
-  ) {
-    const nextTree = await snapshotWorkspaceTree(this.#memory);
-    const previousTree = await walkVfs(this.#vfs, this.#namespace);
+  async #mutate<T>(mutation: () => Promise<T>) {
+    const previousMemoryTree = await snapshotWorkspaceTree(this.#memory);
+    let previousTree: ReadonlyArray<PersistentTreeEntry> | undefined;
     try {
+      previousTree = await walkVfs(this.#vfs, this.#namespace);
+      const result = await mutation();
+      const nextTree = await snapshotWorkspaceTree(this.#memory);
       await this.#vfs.rm(this.#namespace, { recursive: true, force: true });
       await writePersistentTree(this.#vfs, this.#namespace, nextTree);
+      return result;
     } catch (error) {
       try {
-        await this.#vfs.rm(this.#namespace, { recursive: true, force: true });
-        await writePersistentTree(this.#vfs, this.#namespace, previousTree);
+        if (previousTree !== undefined) {
+          await this.#vfs.rm(this.#namespace, { recursive: true, force: true });
+          await writePersistentTree(this.#vfs, this.#namespace, previousTree);
+        }
+        await this.#restoreMemoryTree(previousMemoryTree);
       } catch (rollbackError) {
         throw new Error(
           "The persistent role workspace could not be restored after a failed replacement.",
           { cause: rollbackError },
         );
       }
-      await this.#restoreMemoryTree(previousMemoryTree);
       throw error;
     }
   }
@@ -237,8 +231,11 @@ export class PersistentWorkspaceFs implements IFileSystem {
   async writeFile(path: string, content: WriteContent, options?: WriteOptions) {
     const relative = workspaceRelative(path);
     this.#assertWritable(relative);
-    await this.#memory.writeFile(path, content, options);
-    await this.#persistFile(path);
+    if (relative === undefined) {
+      await this.#memory.writeFile(path, content, options);
+      return;
+    }
+    await this.#mutate(() => this.#memory.writeFile(path, content, options));
   }
 
   async appendFile(
@@ -248,8 +245,11 @@ export class PersistentWorkspaceFs implements IFileSystem {
   ) {
     const relative = workspaceRelative(path);
     this.#assertWritable(relative);
-    await this.#memory.appendFile(path, content, options);
-    await this.#persistFile(path);
+    if (relative === undefined) {
+      await this.#memory.appendFile(path, content, options);
+      return;
+    }
+    await this.#mutate(() => this.#memory.appendFile(path, content, options));
   }
 
   exists(path: string) {
@@ -270,10 +270,11 @@ export class PersistentWorkspaceFs implements IFileSystem {
   async mkdir(path: string, options?: MkdirOptions) {
     const relative = workspaceRelative(path);
     this.#assertWritable(relative);
-    await this.#memory.mkdir(path, options);
-    if (relative !== undefined) {
-      await this.#vfs.mkdir(persistentPath(this.#namespace, relative), options);
+    if (relative === undefined) {
+      await this.#memory.mkdir(path, options);
+      return;
     }
+    await this.#mutate(() => this.#memory.mkdir(path, options));
   }
 
   readdir(path: string) {
@@ -299,10 +300,11 @@ export class PersistentWorkspaceFs implements IFileSystem {
     if (relative === "") {
       throw new Error("The role workspace root is protected by Flect.");
     }
-    await this.#memory.rm(path, options);
-    if (relative !== undefined) {
-      await this.#vfs.rm(persistentPath(this.#namespace, relative), options);
+    if (relative === undefined) {
+      await this.#memory.rm(path, options);
+      return;
     }
+    await this.#mutate(() => this.#memory.rm(path, options));
   }
 
   async cp(src: string, dest: string, options?: CpOptions) {
@@ -310,11 +312,11 @@ export class PersistentWorkspaceFs implements IFileSystem {
     const destination = workspaceRelative(dest);
     this.#assertWritable(source);
     this.#assertWritable(destination);
-    const previousMemoryTree = await snapshotWorkspaceTree(this.#memory);
-    await this.#memory.cp(src, dest, options);
     if (source !== undefined || destination !== undefined) {
-      await this.#replacePersistentTree(previousMemoryTree);
+      await this.#mutate(() => this.#memory.cp(src, dest, options));
+      return;
     }
+    await this.#memory.cp(src, dest, options);
   }
 
   async mv(src: string, dest: string) {
@@ -322,11 +324,11 @@ export class PersistentWorkspaceFs implements IFileSystem {
     const destination = workspaceRelative(dest);
     this.#assertWritable(source);
     this.#assertWritable(destination);
-    const previousMemoryTree = await snapshotWorkspaceTree(this.#memory);
-    await this.#memory.mv(src, dest);
     if (source !== undefined || destination !== undefined) {
-      await this.#replacePersistentTree(previousMemoryTree);
+      await this.#mutate(() => this.#memory.mv(src, dest));
+      return;
     }
+    await this.#memory.mv(src, dest);
   }
 
   resolvePath(base: string, path: string) {
@@ -366,14 +368,11 @@ export class PersistentWorkspaceFs implements IFileSystem {
   async utimes(path: string, atime: Date, mtime: Date) {
     const relative = workspaceRelative(path);
     this.#assertWritable(relative);
-    await this.#memory.utimes(path, atime, mtime);
-    if (relative !== undefined) {
-      await this.#vfs.utimes(
-        persistentPath(this.#namespace, relative),
-        atime.getTime(),
-        mtime.getTime(),
-      );
+    if (relative === undefined) {
+      await this.#memory.utimes(path, atime, mtime);
+      return;
     }
+    await this.#mutate(() => this.#memory.utimes(path, atime, mtime));
   }
 }
 

@@ -676,6 +676,11 @@ const makeSharingServices = () => {
           },
         }),
       ),
+    restoreCandidate: (input) =>
+      Ref.update(calls, (entries) => [
+        ...entries,
+        `restore-candidate:${input.shareId}`,
+      ]),
     snapshotArtifact: (input) =>
       Ref.update(calls, (entries) => [
         ...entries,

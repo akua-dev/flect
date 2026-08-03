@@ -67,13 +67,10 @@ interface ActiveGrant {
 }
 
 type ControlQueueItem =
-  | {
-      readonly _tag: "command";
-      readonly command: FlectCommandEnvelope;
-    }
-  | {
-      readonly _tag: "revoked";
-    };
+  {
+    readonly _tag: "command";
+    readonly command: FlectCommandEnvelope;
+  };
 
 export interface FlectControlBrokerShape {
   readonly status: Effect.Effect<ControlBrokerStatus>;
@@ -289,7 +286,7 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
       const disableUnlocked = Effect.gen(function* () {
         const active = yield* Ref.getAndSet(state, undefined);
         if (active !== undefined) {
-          yield* Queue.offer(active.queue, { _tag: "revoked" });
+          yield* Queue.shutdown(active.queue);
           yield* failPending(active);
         }
         yield* removeControlDescriptor(options.stateDirectory);
@@ -317,7 +314,6 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
               snapshot,
               events: [],
             };
-            yield* Ref.set(state, active);
             yield* writeControlDescriptor(
               ControlDescriptor.make({
                 version: 1,
@@ -334,6 +330,7 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
                 brokerError("The control grant could not be persisted."),
               ),
             );
+            yield* Ref.set(state, active);
             return yield* status;
           }),
         );
@@ -443,6 +440,11 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
                   if (active.pending.size >= MAX_PENDING) {
                     return yield* Effect.fail(
                       brokerError("The control command queue is full."),
+                    );
+                  }
+                  if (active.pending.has(command.commandId)) {
+                    return yield* Effect.fail(
+                      brokerError("The control command is already pending."),
                     );
                   }
                   const deferred = yield* Deferred.make<

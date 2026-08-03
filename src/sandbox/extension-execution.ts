@@ -10,6 +10,7 @@ import type {
 import type { InterfaceStorageError } from "../lib/interface-store";
 import { ShapingKernel } from "../lib/shaping-kernel";
 import {
+  type CapabilityAdapterFailure,
   type CapabilityDenied,
   SandboxCapabilityBroker,
 } from "./capability-broker";
@@ -31,6 +32,7 @@ export interface ExtensionExecutionShape {
   ) => Effect.Effect<
     SandboxResult,
     | SandboxExecutionFailed
+    | CapabilityAdapterFailure
     | CapabilityDenied
     | ExtensionDisabled
     | InterfaceStorageError

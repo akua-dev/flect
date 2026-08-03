@@ -47,6 +47,7 @@ import {
 import { type GitWorkspace, makeGitWorkspaceLayer } from "../git/git-workspace";
 import {
   CapabilityAdapter,
+  CapabilityAdapterFailure,
   SandboxCapabilityBrokerLive,
 } from "../sandbox/capability-broker";
 import { ExtensionExecutionLive } from "../sandbox/extension-execution";
@@ -297,7 +298,13 @@ export type FlectBrowserRuntime = ManagedRuntime.ManagedRuntime<
 >;
 
 const CapabilityAdapterLive = Layer.succeed(CapabilityAdapter)({
-  setText: () => Effect.void,
+  setText: () =>
+    Effect.fail(
+      CapabilityAdapterFailure.make({
+        reason: "unsupported",
+        message: "The extension interface intent is unsupported.",
+      }),
+    ),
 });
 
 const ProductCapabilityDecisionStoreLive =
