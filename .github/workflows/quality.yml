@@ -65,7 +65,9 @@ jobs:
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: flect-browser-failure-${{ github.run_id }}
-          path: test-results/**
+          path: |
+            test-results/**
+            !test-results/control-state/**
           if-no-files-found: ignore
           retention-days: 7
           compression-level: 9

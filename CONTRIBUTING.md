@@ -5,7 +5,7 @@ the browser/native trust boundaries.
 
 ## Requirements
 
-- Bun 1.4 or newer
+- Bun 1.3.14 exactly
 - Rust and Cargo
 - macOS command-line developer tools for native builds
 - a Playwright-supported Chromium installation

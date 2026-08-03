@@ -119,7 +119,10 @@ describe("GitHub quality workflow", () => {
     const artifactInputs = record(artifact.with, "artifact inputs");
     assert.strictEqual(artifactInputs["retention-days"], 7);
     assert.strictEqual(artifactInputs["include-hidden-files"], false);
-    assert.strictEqual(artifactInputs.path, "test-results/**");
+    assert.strictEqual(
+      artifactInputs.path,
+      "test-results/**\n!test-results/control-state/**\n",
+    );
   });
 
   it("pins the local toolchains and includes Rust formatting in check:all", async () => {
