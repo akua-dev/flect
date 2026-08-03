@@ -281,6 +281,7 @@ const makeShapingKernel = (
                 ),
               ),
     );
+    const markRecovery = repository?.markRecovery ?? Effect.void;
     if (pendingProposal !== undefined) {
       yield* persist(reconciledState).pipe(
         Effect.catchTag("InterfaceStorageError", () => Effect.void),
@@ -690,6 +691,7 @@ const makeShapingKernel = (
 
     const enterSafeMode = Effect.fn("Flect.ShapingKernel.enterSafeMode")(
       function* () {
+        yield* markRecovery;
         const persisted = yield* SubscriptionRef.modifyEffect(
           stateRef,
           (state) => {
@@ -710,9 +712,6 @@ const makeShapingKernel = (
           },
         );
         if (persisted._tag === "Failure") {
-          yield* (repository?.markRecovery ?? Effect.void).pipe(
-            Effect.catch(() => Effect.void),
-          );
           return yield* Effect.fail(persisted.failure);
         }
       },
@@ -756,6 +755,12 @@ const makeShapingKernel = (
           ),
         };
         const transition: readonly [undefined, KernelState] = [undefined, next];
+        if (shouldRecover) {
+          return markRecovery.pipe(
+            Effect.andThen(persist(next).pipe(Effect.result)),
+            Effect.map((result) => [result, next] as const),
+          );
+        }
         return persist(next).pipe(Effect.as(transition));
       });
     });

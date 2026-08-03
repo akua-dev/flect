@@ -1568,6 +1568,24 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               fork: installation.refs.fork,
               candidate: installation.refs.candidate,
             });
+      const expectedAfterRefs =
+        installation.refs.candidate === undefined
+          ? refs
+          : ShareInstallationRefs.make({
+              base: installation.refs.upstream,
+              upstream: installation.refs.upstream,
+              fork: installation.refs.candidate,
+            });
+      const transaction = {
+        before: installation,
+        ...(beforeRefs === undefined ? {} : { beforeRefs }),
+        afterRefs: expectedAfterRefs,
+        candidateArchive: stored.slice(),
+        candidateArchiveSha256: installation.pending.archiveSha256,
+      } satisfies FinalizedShareActivation;
+      if (metadata !== undefined) {
+        yield* Ref.set(metadata, transaction);
+      }
       if (installation.refs.candidate !== undefined) {
         const accepted = yield* shareRepository
           .acceptCandidate({
@@ -1633,16 +1651,11 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               before: beforeRefs,
               after: refs,
             });
-      const transaction = {
-        before: installation,
-        ...(beforeRefs === undefined ? {} : { beforeRefs }),
+      const finalizedTransaction = {
+        ...transaction,
         afterRefs: refs,
-        candidateArchive: stored.slice(),
         candidateArchiveSha256: pending.archiveSha256,
       } satisfies FinalizedShareActivation;
-      if (metadata !== undefined) {
-        yield* Ref.set(metadata, transaction);
-      }
       yield* shareInstallationStore.save(acceptedInstallation).pipe(
         Effect.mapError(() =>
           commandRejected("The shared Keep state could not be saved."),
@@ -1658,7 +1671,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         const { shareReview: _shareReview, ...rest } = current;
         return FlectWorkspaceSnapshot.make({ ...rest, shares });
       });
-      return transaction;
+      return finalizedTransaction;
     });
 
     const removeUnreferencedShareArchive = Effect.fn(
