@@ -2,6 +2,7 @@
   "name": "flect",
   "version": "0.2.0",
   "private": true,
+  "packageManager": "bun@1.3.14",
   "type": "module",
   "workspaces": [
     "packages/*"
@@ -39,7 +40,8 @@
     "check:effect": "./scripts/prepare-effect.sh --check",
     "check:rifty": "bun scripts/verify-rifty-dependencies.ts",
     "check": "bun run check:effect && bun run check:rifty && bun run check:flect-skill && bun run check:quality && bun run lint && bun run typecheck && bun run test",
-    "check:all": "bun run check && bun run test:e2e && cargo test --manifest-path src-tauri/Cargo.toml && bun run build:desktop -- --bundles app"
+    "check:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo test --manifest-path src-tauri/Cargo.toml",
+    "check:all": "bun run check && bun run test:e2e && bun run check:rust && bun run build:desktop -- --bundles app"
   },
   "dependencies": {
     "@flect/product": "workspace:*",
@@ -95,6 +97,7 @@
     "jsdom": "30.0.1",
     "typescript": "7.0.2",
     "vite": "8.1.5",
-    "vitest": "4.1.10"
+    "vitest": "4.1.10",
+    "yaml": "2.9.0"
   }
 }

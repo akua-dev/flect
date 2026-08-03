@@ -2,6 +2,8 @@
 
 > The interface that takes your shape.
 
+[![Flect quality](https://github.com/akua-dev/flect/actions/workflows/quality.yml/badge.svg)](https://github.com/akua-dev/flect/actions/workflows/quality.yml)
+
 ![Flect adapting across product interfaces](assets/flect-hero.png)
 
 Flect is an open-source, agent-native interface shell whose running UI can be
@@ -317,9 +319,12 @@ bun run check:all
 ```
 
 `check:all` runs Effect preparation, lint, type checking, unit and contract
-tests, production Chromium workflows, Rust tests, and the native application
-build. `bun run test:pi-smoke` is separate because it makes one real private
-turn with the developer’s existing Pi provider login.
+tests, production Chromium workflows, Rust formatting and tests, and the native
+application build. The credential-free GitHub quality workflow runs this same
+command on every pull request and every change to `main`; it uploads only
+bounded Playwright failure evidence. `bun run test:pi-smoke` is separate
+because it makes one real private turn with the developer’s existing Pi
+provider login.
 
 Release maintainers can reproduce the screenshots, demo, and hero with
 `bun run media:release`, then produce the DMG, checksum, MP4, and a

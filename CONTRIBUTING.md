@@ -66,8 +66,13 @@ This runs:
 2. TypeScript project checking;
 3. Vitest unit and integration tests;
 4. Playwright against a production Vite build in real Chromium;
-5. Rust host tests; and
+5. Rust formatting and host tests; and
 6. a release-mode macOS application bundle build.
+
+The pinned, least-privilege GitHub workflow runs this canonical command for
+every pull request and every change to `main`. Live Pi, Apple signing,
+notarization, and other credentialed release proof remain separate authorized
+gates; the public workflow must never silently represent them as completed.
 
 Playwright uses `FLECT_TEST_MODE=1`, a deterministic in-memory runtime, and no
 provider credentials. It covers streamed turns, schema-driven Shaper tool
