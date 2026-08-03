@@ -135,8 +135,8 @@ Define `ProductCapabilityManifest` and operation definitions through
 `@flect/product`, then select only the host adapters the product needs. Flect
 composes the private decision store, broker, and registry at the protected
 runtime root. The executable [`examples/product-sdk/`](../examples/product-sdk/)
-directory contains independent offline, browser-direct, and authenticated
-brokered integrations; the older combined
+directory contains independent offline, browser-direct, authenticated-brokered,
+and private-sharing integrations; the older combined
 [`examples/product-adapter/`](../examples/product-adapter/) remains an
 end-to-end adapter exercise.
 

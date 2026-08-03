@@ -5,6 +5,22 @@ import {
   snapshotWorkspaceFiles,
 } from "./persistent-workspace-fs";
 
+class FailOnceVfs extends MemoryVfs {
+  #failNextWrite = false;
+
+  failNextWrite() {
+    this.#failNextWrite = true;
+  }
+
+  override async writeFile(path: string, data: Uint8Array | string) {
+    if (this.#failNextWrite) {
+      this.#failNextWrite = false;
+      throw new Error(`write failed for ${path}`);
+    }
+    await super.writeFile(path, data);
+  }
+}
+
 describe("persistent role workspace filesystem", () => {
   it("persists a namespaced workspace and restores its synchronous index", async () => {
     const vfs = new MemoryVfs();
@@ -64,6 +80,29 @@ describe("persistent role workspace filesystem", () => {
     await shaper.writeFile("/workspace/role.txt", "changed\n");
     expect(await app.readFile("/workspace/role.txt")).toBe("app\n");
     expect(await shaper.readFile("/workspace/role.txt")).toBe("changed\n");
+  });
+
+  it("restores the durable tree when a copy replacement fails", async () => {
+    const vfs = new FailOnceVfs();
+    const workspace = await makePersistentWorkspaceFs({
+      vfs,
+      namespace: "/flect-role-workspaces/default/shaper",
+      files: { "/workspace/source.txt": "source\n" },
+    });
+
+    vfs.failNextWrite();
+    await expect(
+      workspace.cp("/workspace/source.txt", "/workspace/copy.txt"),
+    ).rejects.toThrow(/write failed/);
+    expect(await workspace.exists("/workspace/copy.txt")).toBe(false);
+
+    const reopened = await makePersistentWorkspaceFs({
+      vfs,
+      namespace: "/flect-role-workspaces/default/shaper",
+      files: {},
+    });
+    expect(await reopened.readFile("/workspace/source.txt")).toBe("source\n");
+    expect(await reopened.exists("/workspace/copy.txt")).toBe(false);
   });
 
   it("denies canonical metadata, traversal, links, and read-only writes", async () => {

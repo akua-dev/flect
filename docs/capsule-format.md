@@ -211,7 +211,8 @@ the exact installed-to-candidate version transition. The installed archive and
 accepted revision remain authoritative until explicit Keep; Reject restores the
 installed presentation without mutation. A different capsule ID is presented
 as an explicit replacement rather than an update. Compatible three-way merging
-of a personalized fork is not yet implemented.
+of a personalized capsule fork is not yet implemented; the separate sharing
+fork lifecycle is documented in [`docs/sharing.md`](sharing.md).
 
 ## Project directory import
 

@@ -152,14 +152,17 @@ endpoint, document, capability, credential source, or authorization result.
 
 ## Reference products
 
-The repository contains three executable public-boundary examples:
+The repository contains four executable public-boundary examples:
 
 - [`offline-board.ts`](../../examples/product-sdk/offline-board.ts) — mutable
   local state, App Agent guidance, and an optional Shaper extension;
 - [`browser-projects.ts`](../../examples/product-sdk/browser-projects.ts) — one
   fixed GraphQL query and a bounded ordered event subscription; and
 - [`brokered-incidents.ts`](../../examples/product-sdk/brokered-incidents.ts) —
-  fixed read/acknowledge operations through an authenticated named callback.
+  fixed read/acknowledge operations through an authenticated named callback;
+- [`private-sharing.ts`](../../examples/product-sdk/private-sharing.ts) — a
+  closure-private source adapter whose archive still enters ordinary quarantine
+  and inactive review.
 
 Their adopter files import the SDK, Effect, and local example utilities—never
 Flect application internals. The Flect-owned test harness attaches them to the
