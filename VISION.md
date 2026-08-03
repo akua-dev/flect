@@ -76,6 +76,9 @@ Flect will let people:
   SQL capability;
 - ask the built-in agent to use approved product capabilities as well as shape
   their presentation;
+- explicitly pair a local outside agent that can inspect, operate, debug, and
+  subscribe to the same live workspace through the same user-visible command
+  and recovery boundaries;
 - use model access they control through Pi or another approved runtime instead
   of requiring every product to operate an inference service;
 - begin without an existing product backend and create local, offline-capable
@@ -238,16 +241,29 @@ interface, preview the validated result, keep or reject it, then use the
 accepted experience through its separate App Agent. Recovery remains available
 through last-known-good rollback or the compiled recovery shell.
 
-Guardian, App Agent, and Shaper use separate in-memory Pi sessions behind one
-private runtime boundary. The same protected composer routes a blank workspace
-to Edit/Shaper and an accepted experience to Run/App Agent. The desktop app
-carries that runtime as a compiled sidecar over stdio instead of exposing it on
-localhost. Optional pure extension logic can run in a disposable,
+Guardian, accepted App Agent, Shaper, and candidate Preview App Agent use
+separate in-memory Pi sessions behind one private runtime boundary. The same
+protected composer exposes explicit Use and Shape targets: a blank workspace
+starts in Shape, a candidate can be tested immediately in Use, and the accepted
+experience uses its own App Agent. The desktop app
+carries Pi traffic through a compiled sidecar over private stdio. Optional pure
+extension logic can run in a disposable,
 resource-limited QuickJS WebAssembly worker and return only inert typed intents.
+The same Effect workspace controller accepts visible UI actions and explicitly
+authorized local commands, JSON/SSE, and MCP requests, publishes their changes
+reactively, and retains bounded redacted diagnostic evidence. The native app
+ships one public `flect` executable, while App Agent and Shaper receive the
+same AXI language as a role-bound reserved command in their browser shell.
+Shaper now proposes its workspace file through that command; accepting remains
+a protected user decision. Outside control remains off by default and cannot
+grant itself authority.
 
-This slice intentionally does not run generated React, native extensions, or
-product API capabilities. Interactive roles may use the bounded
-browser-portable shell described in
+The stock interface remains on the closed renderer, while supported static and
+single-entry Vite JavaScript/TypeScript/React projects can be imported into
+isolated compiled capsule candidates. The stock distribution does not register
+product operations or ship native extensions; adopting products can compose
+named operations at a trusted runtime root. Interactive roles may use the
+bounded browser-portable shell described in
 [`docs/bun-compatibility.md`](docs/bun-compatibility.md), but it does not grant
 host-shell, native-process, system-Bun, or ambient-network authority. The slice
 proves the model, credential, shaping, preview, transport, logic-sandbox, and

@@ -15,13 +15,40 @@ export default defineConfig({
     format: "es",
   },
   resolve: {
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-      "@shared": fileURLToPath(new URL("./shared", import.meta.url)),
-      "node:zlib": fileURLToPath(
-        new URL("./src/shell/disabled-node-zlib.ts", import.meta.url),
-      ),
-    },
+    alias: [
+      {
+        find: "@flect/product/contracts",
+        replacement: fileURLToPath(
+          new URL("./packages/product/src/contracts.ts", import.meta.url),
+        ),
+      },
+      {
+        find: "@flect/product/host",
+        replacement: fileURLToPath(
+          new URL("./packages/product/src/host.ts", import.meta.url),
+        ),
+      },
+      {
+        find: "@flect/product",
+        replacement: fileURLToPath(
+          new URL("./packages/product/src/index.ts", import.meta.url),
+        ),
+      },
+      {
+        find: "@",
+        replacement: fileURLToPath(new URL("./src", import.meta.url)),
+      },
+      {
+        find: "@shared",
+        replacement: fileURLToPath(new URL("./shared", import.meta.url)),
+      },
+      {
+        find: "node:zlib",
+        replacement: fileURLToPath(
+          new URL("./src/shell/disabled-node-zlib.ts", import.meta.url),
+        ),
+      },
+    ],
   },
   server: {
     host: "127.0.0.1",

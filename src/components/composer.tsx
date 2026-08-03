@@ -1,5 +1,15 @@
-import { useId, useLayoutEffect, useRef, useState } from "react";
-import type { ModelSummary } from "../../shared/contracts";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import type {
+  AuthLoginEvent,
+  AuthLoginReference,
+  AuthLoginRequest,
+  AuthSelectionReply,
+  ModelSummary,
+  ProviderAuthSummary,
+  ReasoningLevel,
+} from "../../shared/contracts";
+import type { GitRepositoryStatus } from "../../shared/git-workspace";
+import type { ContinuityDrafts } from "../../shared/role-continuity";
 import {
   type AgentSessionStatus,
   isAgentSessionActive,
@@ -7,28 +17,64 @@ import {
 import { ComposerActionsMenu } from "./composer-actions-menu";
 import { ArrowUpIcon, StopIcon } from "./icons";
 import { ModelMenu } from "./model-menu";
-import { RoleSwitcher, type ShellMode } from "./role-switcher";
+import {
+  type ConversationTarget,
+  RoleSwitcher,
+  type ShellMode,
+} from "./role-switcher";
 
 const MAX_COMPOSER_HEIGHT = 168;
 const MIN_COMPOSER_HEIGHT = 48;
 
 export interface ComposerProps {
   readonly mode: ShellMode;
+  readonly target?: ConversationTarget;
+  readonly conversationKey?: "accepted-use" | "candidate-use" | "shape";
+  readonly agentLabel?: "App Agent" | "Preview App Agent" | "Shaper";
+  readonly useDisabled?: boolean;
   readonly placeholder: string;
   readonly disabled?: boolean;
   readonly disabledReason?: string;
+  readonly drafts?: ContinuityDrafts;
   readonly roleSwitchDisabled: boolean;
   readonly status: AgentSessionStatus;
   readonly models: ReadonlyArray<ModelSummary>;
   readonly selectedModel: ModelSummary | undefined;
+  readonly reasoningLevel?: ReasoningLevel;
+  readonly providers?: ReadonlyArray<ProviderAuthSummary>;
+  readonly authEvent?: AuthLoginEvent;
   readonly modelFavorites: ReadonlyArray<string>;
   readonly rollbackAvailable: boolean;
-  readonly onModeChange: (mode: Exclude<ShellMode, "safe">) => void;
+  readonly onModeChange?: (mode: Exclude<ShellMode, "safe">) => void;
+  readonly onTargetChange?: (target: ConversationTarget) => void;
   readonly onSelectModel: (model: ModelSummary | undefined) => void;
+  readonly onSelectReasoning?: (
+    reasoningLevel: ReasoningLevel | undefined,
+  ) => void;
+  readonly onLoginProvider?: (request: AuthLoginRequest) => void;
+  readonly onReplyProviderAuth?: (reply: AuthSelectionReply) => Promise<void>;
+  readonly onCancelProviderAuth?: (
+    reference: AuthLoginReference,
+  ) => Promise<void>;
+  readonly onRefreshProviderAuth?: () => Promise<void>;
+  readonly onLogoutProvider?: (providerId: string) => Promise<void>;
   readonly onToggleModelFavorite: (modelKey: string) => Promise<void>;
   readonly onSubmit: (prompt: string) => Promise<void>;
   readonly onCancel: () => Promise<void>;
+  readonly onDraftChange?: (
+    key: keyof ContinuityDrafts,
+    value: string,
+  ) => Promise<void>;
   readonly onRollback: () => Promise<void>;
+  readonly onExportRepository: () => Promise<void>;
+  readonly onExportCapsule?: () => Promise<void>;
+  readonly onImportCapsule?: () => void;
+  readonly onInstallCapsule?: () => void;
+  readonly onImportWebProject?: () => void;
+  readonly onOpenShareSource?: () => void;
+  readonly onOpenShareFile?: () => void;
+  readonly onManageSharedSources?: () => void;
+  readonly repository?: GitRepositoryStatus;
   readonly onOpenSafeMode: () => void;
   readonly externalExtensionsEnabled: boolean;
   readonly onToggleExternalExtensions: () => Promise<void>;
@@ -36,31 +82,66 @@ export interface ComposerProps {
 
 export function Composer({
   mode,
+  target,
+  conversationKey,
+  agentLabel,
+  useDisabled = false,
   placeholder,
   disabled = false,
   disabledReason,
+  drafts: persistedDrafts,
   roleSwitchDisabled,
   status,
   models,
   selectedModel,
+  reasoningLevel,
+  providers = [],
+  authEvent,
   modelFavorites,
   rollbackAvailable,
   onModeChange,
+  onTargetChange,
   onSelectModel,
+  onSelectReasoning = () => undefined,
+  onLoginProvider = () => undefined,
+  onReplyProviderAuth = async () => undefined,
+  onCancelProviderAuth = async () => undefined,
+  onRefreshProviderAuth = async () => undefined,
+  onLogoutProvider = async () => undefined,
   onToggleModelFavorite,
   onSubmit,
   onCancel,
+  onDraftChange,
   onRollback,
+  onExportRepository,
+  onExportCapsule,
+  onImportCapsule,
+  onInstallCapsule,
+  onImportWebProject,
+  onOpenShareSource,
+  onOpenShareFile,
+  onManageSharedSources,
+  repository,
   onOpenSafeMode,
   externalExtensionsEnabled,
   onToggleExternalExtensions,
 }: ComposerProps) {
-  const [drafts, setDrafts] = useState({ edit: "", run: "" });
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const composingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const helpId = useId();
-  const roleMode = mode === "safe" ? "edit" : mode;
-  const prompt = mode === "safe" ? "" : drafts[roleMode];
+  const conversationTarget =
+    target ?? (mode === "run" ? "use" : ("shape" as const));
+  const draftKey =
+    conversationKey ??
+    (conversationTarget === "use" ? "accepted-use" : "shape");
+  const continuityKey: keyof ContinuityDrafts =
+    draftKey === "accepted-use"
+      ? "acceptedUse"
+      : draftKey === "candidate-use"
+        ? "candidateUse"
+        : "shape";
+  const prompt = mode === "safe" ? "" : (drafts[draftKey] ?? "");
   const isActive = isAgentSessionActive(status);
   const isUnavailable =
     disabled ||
@@ -68,8 +149,15 @@ export function Composer({
     status === "booting" ||
     status === "unavailable" ||
     status === "setup-required";
+  const modelMenuDisabled =
+    disabled ||
+    mode === "safe" ||
+    status === "booting" ||
+    status === "unavailable" ||
+    isActive;
   const canSubmit = prompt.trim().length > 0 && !isUnavailable && !isActive;
-  const roleName = mode === "run" ? "App Agent" : "Shaper";
+  const roleName =
+    agentLabel ?? (conversationTarget === "use" ? "App Agent" : "Shaper");
   const help =
     disabledReason ??
     (mode === "safe"
@@ -87,6 +175,18 @@ export function Composer({
                 : prompt.trim().length === 0
                   ? "Enter a message to enable Send."
                   : "Press Enter to send. Press Shift Enter for a new line.");
+
+  useEffect(() => {
+    if (persistedDrafts === undefined) {
+      return;
+    }
+    setDrafts((current) => ({
+      ...current,
+      "accepted-use": persistedDrafts.acceptedUse,
+      "candidate-use": persistedDrafts.candidateUse,
+      shape: persistedDrafts.shape,
+    }));
+  }, [persistedDrafts]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -111,7 +211,8 @@ export function Composer({
     }
 
     const operation = onSubmit(nextPrompt);
-    setDrafts((current) => ({ ...current, [roleMode]: "" }));
+    setDrafts((current) => ({ ...current, [draftKey]: "" }));
+    void onDraftChange?.(continuityKey, "");
     await operation;
   };
 
@@ -119,7 +220,7 @@ export function Composer({
     <form
       aria-busy={isActive}
       className={`composer${isActive ? " composer--active" : ""}`}
-      data-composer-role={mode}
+      data-composer-role={conversationTarget}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -130,12 +231,14 @@ export function Composer({
         aria-label={`Message ${roleName}`}
         disabled={isUnavailable}
         name="prompt"
-        onChange={(event) =>
+        onChange={(event) => {
+          const value = event.target.value;
           setDrafts((current) => ({
             ...current,
-            [roleMode]: event.target.value,
-          }))
-        }
+            [draftKey]: value,
+          }));
+          void onDraftChange?.(continuityKey, value);
+        }}
         onCompositionEnd={() => {
           composingRef.current = false;
         }}
@@ -161,29 +264,54 @@ export function Composer({
       <div className="composer__rail">
         <div className="composer__tools">
           <ComposerActionsMenu
-            disabled={isUnavailable || isActive}
+            disabled={isActive}
             externalExtensionsEnabled={externalExtensionsEnabled}
+            onExportRepository={onExportRepository}
+            onExportCapsule={onExportCapsule}
+            onImportCapsule={onImportCapsule}
+            onInstallCapsule={onInstallCapsule}
+            onImportWebProject={onImportWebProject}
+            onOpenShareSource={onOpenShareSource}
+            onOpenShareFile={onOpenShareFile}
+            onManageSharedSources={onManageSharedSources}
+            repository={repository}
             onOpenSafeMode={onOpenSafeMode}
             onRollback={onRollback}
             onToggleExternalExtensions={onToggleExternalExtensions}
             rollbackAvailable={rollbackAvailable}
-            rollbackDisabled={isUnavailable || isActive}
+            rollbackDisabled={isActive}
           />
           {mode === "safe" ? (
             <span className="composer__safe-label">Safe mode</span>
           ) : (
             <RoleSwitcher
               disabled={roleSwitchDisabled}
-              mode={mode}
-              onChange={onModeChange}
+              onChange={(next) => {
+                if (onTargetChange !== undefined) {
+                  onTargetChange(next);
+                } else {
+                  onModeChange?.(next === "use" ? "run" : "edit");
+                }
+              }}
+              target={conversationTarget}
+              useDisabled={useDisabled}
             />
           )}
           <ModelMenu
-            disabled={isUnavailable || isActive}
+            authEvent={authEvent}
+            disabled={modelMenuDisabled}
             favoriteKeys={modelFavorites}
             models={models}
+            onCancelProviderAuth={onCancelProviderAuth}
+            onLoginProvider={onLoginProvider}
+            onLogoutProvider={onLogoutProvider}
+            onRefreshProviderAuth={onRefreshProviderAuth}
+            onReplyProviderAuth={onReplyProviderAuth}
             onSelect={onSelectModel}
+            onSelectReasoning={onSelectReasoning}
             onToggleFavorite={onToggleModelFavorite}
+            providers={providers}
+            reasoningLevel={reasoningLevel}
             selectedModel={selectedModel}
           />
         </div>

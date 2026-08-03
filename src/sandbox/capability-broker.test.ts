@@ -1,7 +1,11 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer, Ref } from "effect";
 import { ExtensionManifest } from "../../shared/extensions";
-import { SandboxResult, SetTextIntent } from "../../shared/sandbox";
+import {
+  ExtensionIntentContext,
+  SandboxResult,
+  SetTextIntent,
+} from "../../shared/sandbox";
 import {
   CapabilityAdapter,
   SandboxCapabilityBroker,
@@ -31,8 +35,13 @@ const result = SandboxResult.make({
 const makeHarness = () => {
   const calls = Ref.makeUnsafe<ReadonlyArray<string>>([]);
   const adapter = Layer.succeed(CapabilityAdapter)({
-    setText: (intent) =>
-      Ref.update(calls, (current) => [...current, intent.target]),
+    apply: (_context, intents) =>
+      Ref.update(calls, (current) => [
+        ...current,
+        ...intents.flatMap((intent) =>
+          intent.type === "set-text" ? [intent.target] : [],
+        ),
+      ]),
   });
 
   return {
@@ -48,12 +57,45 @@ describe("SandboxCapabilityBroker", () => {
     it.effect("applies only declared and granted capability intents", () =>
       Effect.gen(function* () {
         const broker = yield* SandboxCapabilityBroker;
-        yield* broker.apply(manifest(["interface:propose"]), result, [
-          "interface:propose",
-        ]);
+        yield* broker.apply(
+          ExtensionIntentContext.make({
+            extensionId: "weather-card",
+            role: "app",
+            binding: "accepted",
+            operationId: "operation-test",
+          }),
+          manifest(["interface:propose"]),
+          result,
+          ["interface:propose"],
+        );
 
         assert.deepStrictEqual(yield* Ref.get(allowed.calls), ["weather"]);
       }),
+    );
+  });
+
+  const empty = makeHarness();
+
+  it.layer(empty.layer)((it) => {
+    it.effect(
+      "accepts a no-op result without creating an interface revision",
+      () =>
+        Effect.gen(function* () {
+          const broker = yield* SandboxCapabilityBroker;
+          yield* broker.apply(
+            ExtensionIntentContext.make({
+              extensionId: "weather-card",
+              role: "app",
+              binding: "accepted",
+              operationId: "operation-test",
+            }),
+            manifest(["interface:read"]),
+            SandboxResult.make({ version: 1, intents: [] }),
+            ["interface:read"],
+          );
+
+          assert.deepStrictEqual(yield* Ref.get(empty.calls), []);
+        }),
     );
   });
 
@@ -64,11 +106,24 @@ describe("SandboxCapabilityBroker", () => {
       Effect.gen(function* () {
         const broker = yield* SandboxCapabilityBroker;
         const error = yield* broker
-          .apply(manifest(["interface:read"]), result, ["interface:propose"])
+          .apply(
+            ExtensionIntentContext.make({
+              extensionId: "weather-card",
+              role: "app",
+              binding: "accepted",
+              operationId: "operation-test",
+            }),
+            manifest(["interface:read"]),
+            result,
+            ["interface:propose"],
+          )
           .pipe(Effect.flip);
 
-        assert.strictEqual(error._tag, "CapabilityDenied");
-        assert.strictEqual(error.reason, "undeclared");
+        if (error._tag === "CapabilityDenied") {
+          assert.strictEqual(error.reason, "undeclared");
+        } else {
+          assert.fail(`Expected CapabilityDenied, received ${error._tag}`);
+        }
         assert.deepStrictEqual(yield* Ref.get(undeclared.calls), []);
       }),
     );
@@ -81,11 +136,24 @@ describe("SandboxCapabilityBroker", () => {
       Effect.gen(function* () {
         const broker = yield* SandboxCapabilityBroker;
         const error = yield* broker
-          .apply(manifest(["interface:propose"]), result, [])
+          .apply(
+            ExtensionIntentContext.make({
+              extensionId: "weather-card",
+              role: "app",
+              binding: "accepted",
+              operationId: "operation-test",
+            }),
+            manifest(["interface:propose"]),
+            result,
+            [],
+          )
           .pipe(Effect.flip);
 
-        assert.strictEqual(error._tag, "CapabilityDenied");
-        assert.strictEqual(error.reason, "not-granted");
+        if (error._tag === "CapabilityDenied") {
+          assert.strictEqual(error.reason, "not-granted");
+        } else {
+          assert.fail(`Expected CapabilityDenied, received ${error._tag}`);
+        }
         assert.deepStrictEqual(yield* Ref.get(ungranted.calls), []);
       }),
     );

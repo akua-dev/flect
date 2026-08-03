@@ -1,35 +1,42 @@
 export type ShellMode = "run" | "edit" | "safe";
+export type ConversationTarget = "use" | "shape";
 
 export interface RoleSwitcherProps {
-  readonly mode: Exclude<ShellMode, "safe">;
+  readonly target: ConversationTarget;
   readonly disabled: boolean;
-  readonly onChange: (mode: Exclude<ShellMode, "safe">) => void;
+  readonly useDisabled: boolean;
+  readonly onChange: (target: ConversationTarget) => void;
 }
 
-export function RoleSwitcher({ mode, disabled, onChange }: RoleSwitcherProps) {
+export function RoleSwitcher({
+  target,
+  disabled,
+  useDisabled,
+  onChange,
+}: RoleSwitcherProps) {
   return (
     <fieldset className="role-switcher">
-      <legend className="sr-only">Agent role</legend>
+      <legend className="sr-only">Conversation target</legend>
       <button
-        aria-label="Edit · Shaper"
-        aria-pressed={mode === "edit"}
+        aria-label="Shape · Shaper"
+        aria-pressed={target === "shape"}
         className="role-switcher__option"
         disabled={disabled}
-        onClick={() => onChange("edit")}
+        onClick={() => onChange("shape")}
         type="button"
       >
-        <span className="role-switcher__mode">Edit</span>
+        <span className="role-switcher__mode">Shape</span>
         <span className="role-switcher__agent">Shaper</span>
       </button>
       <button
-        aria-label="Run · App Agent"
-        aria-pressed={mode === "run"}
+        aria-label="Use · App Agent"
+        aria-pressed={target === "use"}
         className="role-switcher__option"
-        disabled={disabled}
-        onClick={() => onChange("run")}
+        disabled={disabled || useDisabled}
+        onClick={() => onChange("use")}
         type="button"
       >
-        <span className="role-switcher__mode">Run</span>
+        <span className="role-switcher__mode">Use</span>
         <span className="role-switcher__agent">App Agent</span>
       </button>
     </fieldset>

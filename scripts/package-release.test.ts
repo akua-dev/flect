@@ -5,7 +5,10 @@ import { join, resolve } from "node:path";
 import { Effect } from "effect";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  desktopBuildCommand,
+  type ReleaseTrustEvidence,
   validateReleaseLayout,
+  validateReleaseTrustEvidence,
   validateVersionManifest,
 } from "./package-release";
 
@@ -44,10 +47,43 @@ afterEach(async () => {
 });
 
 describe("release packaging", () => {
+  const trustEvidence = (
+    overrides: Partial<ReleaseTrustEvidence> = {},
+  ): ReleaseTrustEvidence => ({
+    mode: "development",
+    reproducibilityVerified: false,
+    source: { dirty: true, tag: undefined },
+    architectures: {
+      privateRuntime: "arm64",
+      publicExecutable: "arm64",
+    },
+    signing: {
+      gatekeeperAccepted: false,
+      hardenedRuntime: true,
+      kind: "adhoc",
+      stapled: false,
+      teamIdentifier: undefined,
+    },
+    ...overrides,
+  });
+
   it("keeps every public version on 0.2.0", () => {
     expect(packageVersion).toBe("0.2.0");
     expect(cargoPackageVersion).toBe("0.2.0");
     expect(tauriVersion).toBe("0.2.0");
+  });
+
+  it("requests an explicit ad-hoc bundle signature only for development builds", () => {
+    expect(desktopBuildCommand("development")).toEqual([
+      process.execPath,
+      "run",
+      "build:desktop",
+    ]);
+    expect(desktopBuildCommand("public")).toEqual([
+      process.execPath,
+      "run",
+      "build:desktop:public",
+    ]);
   });
 
   it("rejects a public version mismatch", async () => {
@@ -90,6 +126,21 @@ describe("release packaging", () => {
     await expect(
       Effect.runPromise(validateReleaseLayout(layout)),
     ).rejects.toMatchObject({
+      message: "The Flect app does not contain its public executable.",
+    });
+
+    const appBinaries = resolve(layout.app, "Contents", "MacOS");
+    await mkdir(appBinaries, { recursive: true });
+    await writeFile(resolve(appBinaries, "flect"), "public executable");
+    await expect(
+      Effect.runPromise(validateReleaseLayout(layout)),
+    ).rejects.toMatchObject({
+      message: "The Flect app does not contain its private runtime.",
+    });
+    await writeFile(resolve(appBinaries, "flect-runtime"), "runtime");
+    await expect(
+      Effect.runPromise(validateReleaseLayout(layout)),
+    ).rejects.toMatchObject({
       message: "The Flect DMG is missing.",
     });
 
@@ -97,5 +148,126 @@ describe("release packaging", () => {
     await expect(
       Effect.runPromise(validateReleaseLayout(layout)),
     ).resolves.toBeUndefined();
+
+    for (const obsolete of ["flect" + "ctl", "flect-" + "mcp"]) {
+      await writeFile(resolve(appBinaries, obsolete), "obsolete");
+      await expect(
+        Effect.runPromise(validateReleaseLayout(layout)),
+      ).rejects.toMatchObject({
+        message:
+          "The Flect app still contains an obsolete companion executable.",
+      });
+      await rm(resolve(appBinaries, obsolete));
+    }
+  });
+
+  it("accepts honest hardened arm64 development evidence", async () => {
+    await expect(
+      Effect.runPromise(validateReleaseTrustEvidence(trustEvidence())),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects a wrong executable architecture in every trust mode", async () => {
+    await expect(
+      Effect.runPromise(
+        validateReleaseTrustEvidence(
+          trustEvidence({
+            architectures: {
+              privateRuntime: "arm64",
+              publicExecutable: "x86_64",
+            },
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      message: "Every shipped Flect executable must be arm64 only.",
+    });
+  });
+
+  it("fails public release evidence closed at every trust boundary", async () => {
+    const publicEvidence = trustEvidence({
+      mode: "public",
+      reproducibilityVerified: true,
+      source: { dirty: false, tag: "v0.2.0" },
+      signing: {
+        gatekeeperAccepted: true,
+        hardenedRuntime: true,
+        kind: "developer-id",
+        stapled: true,
+        teamIdentifier: "A5H2QPFWV9",
+      },
+    });
+
+    await expect(
+      Effect.runPromise(validateReleaseTrustEvidence(publicEvidence)),
+    ).resolves.toBeUndefined();
+
+    const failures: ReadonlyArray<readonly [ReleaseTrustEvidence, string]> = [
+      [
+        { ...publicEvidence, reproducibilityVerified: false },
+        "A public Flect release requires independently verified reproducible content.",
+      ],
+      [
+        { ...publicEvidence, source: { dirty: true, tag: "v0.2.0" } },
+        "A public Flect release requires a clean worktree at tag v0.2.0.",
+      ],
+      [
+        {
+          ...publicEvidence,
+          signing: { ...publicEvidence.signing, kind: "apple-development" },
+        },
+        "A public Flect release requires Developer ID Application signing.",
+      ],
+      [
+        {
+          ...publicEvidence,
+          signing: {
+            ...publicEvidence.signing,
+            teamIdentifier: undefined,
+          },
+        },
+        "A public Flect release requires a signing Team ID.",
+      ],
+      [
+        {
+          ...publicEvidence,
+          signing: {
+            ...publicEvidence.signing,
+            gatekeeperAccepted: false,
+          },
+        },
+        "Gatekeeper must accept a public Flect release.",
+      ],
+      [
+        {
+          ...publicEvidence,
+          signing: { ...publicEvidence.signing, stapled: false },
+        },
+        "A public Flect release requires a stapled notarization ticket.",
+      ],
+    ];
+
+    for (const [evidence, message] of failures) {
+      await expect(
+        Effect.runPromise(validateReleaseTrustEvidence(evidence)),
+      ).rejects.toMatchObject({ message });
+    }
+  });
+
+  it("requires hardened runtime in development and public artifacts", async () => {
+    await expect(
+      Effect.runPromise(
+        validateReleaseTrustEvidence(
+          trustEvidence({
+            signing: {
+              ...trustEvidence().signing,
+              hardenedRuntime: false,
+            },
+          }),
+        ),
+      ),
+    ).rejects.toMatchObject({
+      message: "Every Flect macOS artifact requires hardened runtime.",
+    });
   });
 });

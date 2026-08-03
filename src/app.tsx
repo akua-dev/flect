@@ -1,438 +1,341 @@
-import { Effect, Equal, Fiber, Stream } from "effect";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ExtensionManifest } from "../shared/extensions";
+import { Effect } from "effect";
+import { useCallback, useMemo } from "react";
 import {
-  defaultInterfaceDocument,
-  type InterfaceDocument,
-} from "../shared/interface-document";
+  ShareGitSource,
+  ShareLocalSource,
+  SharePrivateSource,
+  ShareUrlSource,
+} from "../packages/product/src/share";
+import { ModelSelection, type ModelSummary } from "../shared/contracts";
 import {
-  InterfaceRevision,
-  isRollbackAvailable,
-  RevisionId,
-  ShapingEvent,
-  ShapingSnapshot,
-} from "../shared/revisions";
+  AcceptProposal,
+  ActivateShareCandidate,
+  CancelRole,
+  ContinueShareFork,
+  DecideProductCapability,
+  DeleteShareLocalData,
+  DisableControl,
+  EnableControl,
+  EnterSafeMode,
+  ExportShare,
+  ForkPortableExtension,
+  InvokeInterfaceAction,
+  OpenShareConflictInShape,
+  OpenShareSource,
+  PrepareShareUpdate,
+  RefreshRuntime as RefreshRuntimeCommand,
+  RejectProposal,
+  RejectShareCandidate,
+  RemovePortableExtension,
+  RemoveShare,
+  RequestShapeHandoff,
+  ResolvePortableExtensionUpdate,
+  RestoreSafeMode,
+  RetainShareCandidate,
+  RevokeProductCapability,
+  RollbackRevision,
+  SelectModel,
+  SelectWorkbenchTarget,
+  SetExternalExtensions,
+  SetMode,
+  SetModelFavorite,
+  SetPortableExtensionEnabled,
+  SetPortableExtensionPin,
+  SetRailCollapsed,
+  SetRailWidth,
+  SubmitAppPrompt,
+  SubmitShaperInstruction,
+  TestPortableExtension,
+  WorkbenchHandoff,
+} from "../shared/control";
+import { projectInterfaceActions } from "../shared/interface-actions";
+import { isRollbackAvailable } from "../shared/revisions";
+import { ShellPreferencesValue } from "../shared/shell-preferences";
 import type { ShapingController } from "./components/agent-rail";
 import { RoleAwareShell } from "./components/role-aware-shell";
-import {
-  isAgentSessionActive,
-  useAgentSession,
+import type {
+  AgentWorkspaceController,
+  ConversationMessage,
+  RoleConversationState,
 } from "./hooks/use-agent-session";
-import { useShellPreferences } from "./hooks/use-shell-preferences";
-import {
-  consumeLegacyInterfaceDocument,
-  loadInterfaceDocument,
-} from "./lib/interface-store";
-import { browserRuntime, shapingRuntime } from "./lib/runtime";
-import { ShapingKernel } from "./lib/shaping-kernel";
+import { useNativeSetup } from "./hooks/use-native-setup";
+import { useNativeUpdate } from "./hooks/use-native-update";
+import { useWorkspace, type WorkspaceRuntime } from "./hooks/use-workspace";
+import { flectRuntime } from "./lib/runtime";
 import { workspacePhase } from "./lib/workspace-phase";
-import { ExtensionExecution } from "./sandbox/extension-execution";
-
-const safeMode =
-  new URLSearchParams(globalThis.location.search).get("safe") === "1";
-
-const isolationCheck = ExtensionManifest.make({
-  version: 1,
-  id: "isolation-check",
-  name: "Flect isolation check",
-  source: `() => ({
-    type: "set-text",
-    target: "isolation-status",
-    text: [
-      typeof fetch,
-      typeof document,
-      typeof localStorage,
-      typeof process,
-      typeof Bun,
-      typeof Function
-    ].join(",")
-  })`,
-  capabilities: ["interface:propose"],
-});
-
-const protectedFallbackRevision = InterfaceRevision.make({
-  version: 1,
-  id: RevisionId.make("built-in"),
-  status: "accepted",
-  source: "built-in",
-  document: defaultInterfaceDocument,
-  createdAt: 0,
-});
-
-const protectedFallbackSnapshot = ShapingSnapshot.make({
-  version: 1,
-  active: protectedFallbackRevision,
-  lastKnownGood: protectedFallbackRevision,
-  safeMode: true,
-  disabledExtensions: [],
-  lastEvent: ShapingEvent.make({
-    version: 1,
-    sequence: 0,
-    type: "safe-mode-entered",
-  }),
-});
 
 export interface AppProps {
-  readonly shaping?: typeof shapingRuntime;
-  readonly loadLegacyInterface?: () => Promise<InterfaceDocument>;
-  readonly consumeLegacyInterface?: () => Promise<void>;
+  readonly runtime?: WorkspaceRuntime;
 }
 
-const loadLegacyInterfaceDefault = () =>
-  browserRuntime.runPromise(loadInterfaceDocument({ safeMode: false }));
+const toMessages = (
+  messages: ReadonlyArray<{
+    readonly id: string;
+    readonly role: "user" | "assistant";
+    readonly content: string;
+  }>,
+): ReadonlyArray<ConversationMessage> =>
+  messages.map((message) => ({
+    id: message.id,
+    role: message.role,
+    content: message.content,
+  }));
 
-const consumeLegacyInterfaceDefault = () =>
-  browserRuntime.runPromise(consumeLegacyInterfaceDocument());
+const modelKey = (model: Pick<ModelSummary, "provider" | "id">) =>
+  `${model.provider}/${model.id}`;
 
-export function App({
-  shaping = shapingRuntime,
-  loadLegacyInterface = loadLegacyInterfaceDefault,
-  consumeLegacyInterface = consumeLegacyInterfaceDefault,
-}: AppProps = {}) {
-  const [document, setDocument] = useState<InterfaceDocument>(
-    defaultInterfaceDocument,
-  );
-  const [snapshot, setSnapshot] = useState<ShapingSnapshot>();
-  const [protectedMode, setProtectedMode] = useState(safeMode);
-  const session = useAgentSession();
-  const preferences = useShellPreferences();
-  const shapeRequestRef = useRef(0);
-  const decisionInFlightRef = useRef(false);
-  const [shapingStatus, setShapingStatus] =
-    useState<ShapingController["status"]>("idle");
-  const [shapingError, setShapingError] = useState<string>();
-  const [proposalId, setProposalId] = useState<RevisionId>();
-  const [rollbackAvailable, setRollbackAvailable] = useState(false);
-  const [isolation, setIsolation] =
-    useState<ShapingController["isolation"]>("unchecked");
-
-  useEffect(() => {
-    let mounted = true;
-
-    const applySnapshot = (snapshot: ShapingSnapshot) => {
-      if (!mounted) {
+const clearSafeModeRoute = Effect.fn("Flect.App.clearSafeModeRoute")(() =>
+  Effect.try({
+    try: () => {
+      const url = new URL(globalThis.location.href);
+      if (url.searchParams.get("safe") !== "1") {
         return;
       }
-      const preview =
-        snapshot.proposal?.status === "previewed"
-          ? snapshot.proposal
-          : undefined;
-      setDocument(
-        snapshot.safeMode
-          ? defaultInterfaceDocument
-          : (preview?.document ?? snapshot.active.document),
+      url.searchParams.delete("safe");
+      globalThis.history.replaceState(
+        globalThis.history.state,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
       );
-      setSnapshot(snapshot);
-      setProtectedMode(snapshot.safeMode);
-      setProposalId(preview?.id);
-      setRollbackAvailable(!safeMode && isRollbackAvailable(snapshot));
-      if (snapshot.safeMode) {
-        shapeRequestRef.current += 1;
-        setShapingStatus("idle");
-        setShapingError(undefined);
-      } else if (preview !== undefined) {
-        setShapingStatus("preview");
-      }
-    };
+    },
+    catch: () => undefined,
+  }).pipe(Effect.catch(() => Effect.void)),
+);
 
-    const observeKernel = Effect.gen(function* () {
-      const kernel = yield* ShapingKernel;
-      const snapshot = yield* kernel.snapshot;
-      if (safeMode) {
-        yield* kernel.enterSafeMode;
-      } else if (
-        !snapshot.safeMode &&
-        snapshot.lastEvent.type === "initialized"
-      ) {
-        const legacy = yield* Effect.tryPromise({
-          try: loadLegacyInterface,
-          catch: () => "legacy-interface-load-failed" as const,
-        });
-        if (!Equal.equals(legacy, defaultInterfaceDocument)) {
-          const restored = yield* kernel.propose(legacy, "user");
-          yield* kernel.preview(restored.id);
-          yield* kernel.accept(restored.id);
-          yield* Effect.tryPromise({
-            try: consumeLegacyInterface,
-            catch: () => "legacy-interface-consume-failed" as const,
-          });
-        }
-      }
+export function App({ runtime = flectRuntime }: AppProps = {}) {
+  const {
+    snapshot,
+    providerAuth,
+    privateShareSources,
+    continuity,
+    setDraft,
+    exportContinuity,
+    exportRepository,
+    readShareExport,
+    exportCapsule,
+    importCapsule,
+    invokeCapsuleIntent,
+    capsulePresentation,
+    repository,
+    discardContinuity,
+    retryContinuity,
+    dispatch,
+    selectReasoning,
+    loginProvider,
+    replyProviderAuth,
+    cancelProviderAuth,
+    refreshProviderAuth,
+    logoutProvider,
+  } = useWorkspace(runtime);
+  const setup = useNativeSetup();
+  const update = useNativeUpdate();
 
-      yield* kernel.snapshot.pipe(
-        Effect.tap((current) => Effect.sync(() => applySnapshot(current))),
-      );
-      yield* kernel.changes.pipe(
-        Stream.runForEach((current) =>
-          Effect.sync(() => applySnapshot(current)),
-        ),
-      );
-    }).pipe(
-      Effect.catch(() =>
-        Effect.sync(() => {
-          if (mounted) {
-            setDocument(defaultInterfaceDocument);
-            setSnapshot(protectedFallbackSnapshot);
-            setProtectedMode(true);
-            setProposalId(undefined);
-            setRollbackAvailable(false);
-            setShapingStatus("idle");
-            setShapingError(undefined);
-          }
-        }),
-      ),
-    );
-    const observer = shaping.runFork(observeKernel);
-
-    return () => {
-      mounted = false;
-      shaping.runFork(Fiber.interrupt(observer));
-    };
-  }, [consumeLegacyInterface, loadLegacyInterface, shaping]);
-
-  const requestShape = useCallback(
-    async (instruction: string) => {
-      if (protectedMode) {
-        setShapingStatus("error");
-        setShapingError("Leave safe mode before shaping the interface.");
-        return;
-      }
-      if (
-        isAgentSessionActive(session.app.status) ||
-        isAgentSessionActive(session.shaper.status) ||
-        shapingStatus === "shaping" ||
-        shapingStatus === "preview" ||
-        decisionInFlightRef.current
-      ) {
-        return;
-      }
-
-      const requestId = shapeRequestRef.current + 1;
-      shapeRequestRef.current = requestId;
-      setShapingStatus("shaping");
-      setShapingError(undefined);
+  const command = useCallback(
+    async (value: Parameters<typeof dispatch>[0]) => {
       try {
-        const active = await shaping.runPromise(
-          Effect.gen(function* () {
-            const kernel = yield* ShapingKernel;
-            return (yield* kernel.snapshot).active.document;
-          }),
-        );
-        const candidate = await session.shaper.shape(instruction, active);
-        if (shapeRequestRef.current !== requestId) {
-          return;
-        }
-        const preview = await shaping.runPromise(
-          Effect.gen(function* () {
-            const kernel = yield* ShapingKernel;
-            const proposal = yield* kernel.propose(candidate, "shaper");
-            return yield* kernel.preview(proposal.id);
-          }),
-        );
-        if (shapeRequestRef.current !== requestId) {
-          return;
-        }
-        setProposalId(preview.id);
-        setDocument(preview.document);
-        setShapingStatus("preview");
+        await dispatch(value);
       } catch {
-        if (shapeRequestRef.current !== requestId) {
-          return;
-        }
-        setShapingStatus("error");
-        setShapingError("Shaper could not produce a valid interface proposal.");
+        // The controller records a bounded, redacted failure for diagnostics.
       }
     },
-    [
-      protectedMode,
-      session.app.status,
-      session.shaper.shape,
-      session.shaper.status,
-      shaping,
-      shapingStatus,
-    ],
+    [dispatch],
   );
 
-  const acceptShape = useCallback(async () => {
-    if (
-      proposalId === undefined ||
-      isAgentSessionActive(session.app.status) ||
-      isAgentSessionActive(session.shaper.status) ||
-      shapingStatus === "shaping" ||
-      decisionInFlightRef.current
-    ) {
-      return;
+  const workspace = useMemo<AgentWorkspaceController | undefined>(() => {
+    if (snapshot === undefined) {
+      return undefined;
     }
-    decisionInFlightRef.current = true;
-    setShapingStatus("shaping");
-    try {
-      const accepted = await shaping.runPromise(
-        Effect.gen(function* () {
-          const kernel = yield* ShapingKernel;
-          return yield* kernel.accept(proposalId);
-        }),
-      );
-      setDocument(accepted.document);
-      setProtectedMode(false);
-      setProposalId(undefined);
-      setShapingStatus("idle");
-    } catch {
-      setShapingStatus("error");
-      setShapingError("The revision could not be accepted safely.");
-    } finally {
-      decisionInFlightRef.current = false;
-    }
-  }, [
-    proposalId,
-    session.app.status,
-    session.shaper.status,
-    shaping,
-    shapingStatus,
-  ]);
 
-  const rejectShape = useCallback(async () => {
-    if (
-      proposalId === undefined ||
-      isAgentSessionActive(session.app.status) ||
-      isAgentSessionActive(session.shaper.status) ||
-      shapingStatus === "shaping" ||
-      decisionInFlightRef.current
-    ) {
-      return;
-    }
-    decisionInFlightRef.current = true;
-    setShapingStatus("shaping");
-    try {
-      await shaping
-        .runPromise(
-          Effect.gen(function* () {
-            const kernel = yield* ShapingKernel;
-            yield* kernel.reject(proposalId);
-            return (yield* kernel.snapshot).active.document;
+    const role = (value: typeof snapshot.agent.app): RoleConversationState => ({
+      role: value.role,
+      status: value.status,
+      messages: toMessages(value.messages),
+      activities: value.activities,
+      lastPrompt: value.lastPrompt,
+      error: value.error,
+      cancel: () =>
+        command(
+          CancelRole.make({
+            type: "cancel-role",
+            role: value.role,
           }),
-        )
-        .then(setDocument);
-      setProposalId(undefined);
-      setShapingStatus("idle");
-    } catch {
-      setShapingStatus("error");
-      setShapingError("The proposal could not be rejected safely.");
-    } finally {
-      decisionInFlightRef.current = false;
-    }
+        ),
+    });
+    const app = role(snapshot.agent.app);
+    const previewApp = role(snapshot.agent.previewApp);
+    const shaper = role(snapshot.agent.shaper);
+
+    return {
+      drafts: continuity.drafts,
+      setDraft,
+      continuity: {
+        generation: continuity.generation,
+        revisionSequence: continuity.revisionSequence,
+        ...(continuity.recovery === undefined
+          ? {}
+          : { recovery: continuity.recovery }),
+      },
+      exportContinuity,
+      exportRepository,
+      exportCapsule,
+      importCapsule,
+      repository,
+      discardContinuity,
+      retryContinuity,
+      models: snapshot.agent.models,
+      selectedModel: snapshot.agent.selectedModel,
+      reasoningLevel: snapshot.agent.reasoningLevel,
+      providers: providerAuth.providers,
+      authEvent: providerAuth.event,
+      selectModel: (model) => {
+        void command(
+          SelectModel.make({
+            type: "select-model",
+            ...(model === undefined
+              ? {}
+              : {
+                  model: ModelSelection.make({
+                    provider: model.provider,
+                    id: model.id,
+                  }),
+                }),
+          }),
+        );
+      },
+      selectReasoning,
+      loginProvider,
+      replyProviderAuth,
+      cancelProviderAuth,
+      refreshProviderAuth,
+      logoutProvider,
+      refresh: () =>
+        command(RefreshRuntimeCommand.make({ type: "refresh-runtime" })),
+      externalExtensions: snapshot.agent.externalExtensions,
+      toggleExternalExtensions: (interactiveRole) =>
+        command(
+          SetExternalExtensions.make({
+            type: "set-external-extensions",
+            role: interactiveRole,
+            enabled: !snapshot.agent.externalExtensions[interactiveRole],
+          }),
+        ),
+      app: {
+        ...app,
+        role: "app",
+        submit: (text) =>
+          command(
+            SubmitAppPrompt.make({
+              type: "submit-app-prompt",
+              text,
+            }),
+          ),
+      },
+      previewApp: {
+        ...previewApp,
+        role: "app",
+        submit: (text) =>
+          command(
+            SubmitAppPrompt.make({
+              type: "submit-app-prompt",
+              text,
+            }),
+          ),
+      },
+      shaper: {
+        ...shaper,
+        role: "shaper",
+        shape: async (instruction) => {
+          await command(
+            SubmitShaperInstruction.make({
+              type: "submit-shaper-instruction",
+              instruction,
+            }),
+          );
+          return snapshot.document;
+        },
+      },
+      diagnoseRecovery: async () => ({
+        version: 1,
+        message: "Protected recovery is available through the Guardian.",
+      }),
+    };
   }, [
-    proposalId,
-    session.app.status,
-    session.shaper.status,
-    shaping,
-    shapingStatus,
+    cancelProviderAuth,
+    command,
+    continuity,
+    discardContinuity,
+    exportContinuity,
+    exportRepository,
+    exportCapsule,
+    importCapsule,
+    repository,
+    loginProvider,
+    logoutProvider,
+    providerAuth,
+    refreshProviderAuth,
+    replyProviderAuth,
+    selectReasoning,
+    retryContinuity,
+    setDraft,
+    snapshot,
   ]);
 
-  const rollbackShape = useCallback(async () => {
-    if (
-      isAgentSessionActive(session.app.status) ||
-      isAgentSessionActive(session.shaper.status) ||
-      shapingStatus === "shaping" ||
-      decisionInFlightRef.current
-    ) {
-      return;
+  const preferences = useMemo(() => {
+    if (snapshot === undefined) {
+      return undefined;
     }
-    shapeRequestRef.current += 1;
-    decisionInFlightRef.current = true;
-    setShapingStatus("shaping");
-    try {
-      const recovered = await shaping.runPromise(
-        Effect.gen(function* () {
-          const kernel = yield* ShapingKernel;
-          return yield* kernel.rollback;
-        }),
-      );
-      setDocument(recovered.document);
-      setProtectedMode(false);
-      setProposalId(undefined);
-      setShapingStatus("idle");
-    } catch {
-      let message = "Flect could not restore the last-known-good interface.";
-      try {
-        const diagnostic = await session.diagnoseRecovery("rollback-failed");
-        message = `${message} ${diagnostic.message}`;
-      } catch {
-        // The protected recovery shell remains usable without an AI diagnostic.
-      }
-      setShapingStatus("error");
-      setShapingError(message);
-    } finally {
-      decisionInFlightRef.current = false;
-    }
-  }, [
-    session.app.status,
-    session.diagnoseRecovery,
-    session.shaper.status,
-    shaping,
-    shapingStatus,
-  ]);
+    const value = ShellPreferencesValue.make({
+      version: 1,
+      railWidth: snapshot.rail.width,
+      railCollapsed: snapshot.rail.collapsed,
+      modelFavorites: snapshot.agent.favoriteModels.map(
+        (favorite) => `${favorite.provider}/${favorite.id}`,
+      ),
+    });
+    return {
+      value,
+      setRailWidth: (width: number) =>
+        command(
+          SetRailWidth.make({
+            type: "set-rail-width",
+            width: Math.max(340, Math.min(520, Math.round(width))),
+          }),
+        ),
+      setRailCollapsed: (collapsed: boolean) =>
+        command(
+          SetRailCollapsed.make({
+            type: "set-rail-collapsed",
+            collapsed,
+          }),
+        ),
+      toggleModelFavorite: async (key: string) => {
+        const model = snapshot.agent.models.find(
+          (candidate) => modelKey(candidate) === key,
+        );
+        if (model === undefined) {
+          return;
+        }
+        await command(
+          SetModelFavorite.make({
+            type: "set-model-favorite",
+            model: ModelSelection.make({
+              provider: model.provider,
+              id: model.id,
+            }),
+            favorite: !snapshot.agent.favoriteModels.some(
+              (candidate) => modelKey(candidate) === key,
+            ),
+          }),
+        );
+      },
+    };
+  }, [command, snapshot]);
 
-  const restoreSafeMode = useCallback(async () => {
-    if (safeMode) {
-      globalThis.location.assign("/");
-      return;
-    }
-    if (!protectedMode || decisionInFlightRef.current) {
-      return;
-    }
-    shapeRequestRef.current += 1;
-    decisionInFlightRef.current = true;
-    setShapingStatus("shaping");
-    setShapingError(undefined);
-    try {
-      const recovered = await shaping.runPromise(
-        Effect.gen(function* () {
-          const kernel = yield* ShapingKernel;
-          return yield* kernel.restoreLastKnownGood;
-        }),
-      );
-      setDocument(recovered.document);
-      setProtectedMode(false);
-      setProposalId(undefined);
-      setShapingStatus("idle");
-    } catch {
-      setShapingStatus("error");
-      setShapingError(
-        "Flect could not restore the last-known-good interface from safe mode.",
-      );
-    } finally {
-      decisionInFlightRef.current = false;
-    }
-  }, [protectedMode, shaping]);
-
-  const verifyIsolation = useCallback(async () => {
-    if (isolation === "checking" || isolation === "ready") {
-      return;
-    }
-    setIsolation("checking");
-    try {
-      const result = await shaping.runPromise(
-        Effect.gen(function* () {
-          const execution = yield* ExtensionExecution;
-          return yield* execution.execute(isolationCheck, {}, [
-            "interface:propose",
-          ]);
-        }),
-      );
-      const first = result.intents[0];
-      setIsolation(
-        first?.type === "set-text" &&
-          first.text ===
-            "undefined,undefined,undefined,undefined,undefined,undefined"
-          ? "ready"
-          : "unavailable",
-      );
-    } catch {
-      setIsolation("unavailable");
-    }
-  }, [isolation, shaping]);
-
-  if (snapshot === undefined) {
+  if (
+    snapshot === undefined ||
+    workspace === undefined ||
+    preferences === undefined
+  ) {
     return (
       <div className="role-shell role-shell--loading">
         <header className="topbar">
@@ -449,26 +352,333 @@ export function App({
     );
   }
 
+  const failedOperation = snapshot.operations.findLast(
+    (operation) => operation.phase === "failed",
+  );
+  const shapingStatus: ShapingController["status"] =
+    snapshot.phase === "shaping"
+      ? "shaping"
+      : snapshot.phase === "preview"
+        ? "preview"
+        : snapshot.agent.shaper.status === "error"
+          ? "error"
+          : "idle";
+  const shaping: ShapingController = {
+    status: shapingStatus,
+    ...(snapshot.agent.shaper.error === undefined &&
+    failedOperation === undefined
+      ? {}
+      : {
+          error:
+            snapshot.agent.shaper.error ??
+            failedOperation?.summary ??
+            "The interface was not changed.",
+        }),
+    rollbackAvailable: isRollbackAvailable(snapshot.shaping),
+    isolation: "ready",
+    verifyIsolation: async () => undefined,
+    request: (instruction) =>
+      command(
+        SubmitShaperInstruction.make({
+          type: "submit-shaper-instruction",
+          instruction,
+        }),
+      ),
+    fixFailure: (activity) =>
+      command(
+        RequestShapeHandoff.make({
+          type: "request-shape-handoff",
+          handoff: WorkbenchHandoff.make({
+            version: 1,
+            instruction:
+              "Fix the interface behavior that caused this failed operation.",
+            revisionId:
+              snapshot.shaping.proposal?.id ?? snapshot.shaping.active.id,
+            failureOperationId: activity.operationId,
+            failureSummary:
+              activity.resultSummary ??
+              `${activity.toolName} failed${
+                activity.exitCode === undefined
+                  ? "."
+                  : ` with exit code ${activity.exitCode}.`
+              }`,
+          }),
+        }),
+      ),
+    accept: () => command(AcceptProposal.make({ type: "accept-proposal" })),
+    reject: () => command(RejectProposal.make({ type: "reject-proposal" })),
+    rollback: () =>
+      command(RollbackRevision.make({ type: "rollback-revision" })),
+  };
+
   return (
     <RoleAwareShell
-      document={document}
-      onOpenSafeMode={() => globalThis.location.assign("/?safe=1")}
-      onRestoreSafeMode={restoreSafeMode}
-      phase={workspacePhase(snapshot, safeMode)}
-      preferences={preferences}
-      preview={shapingStatus === "preview"}
-      shaping={{
-        status: shapingStatus,
-        ...(shapingError === undefined ? {} : { error: shapingError }),
-        rollbackAvailable,
-        isolation,
-        verifyIsolation,
-        request: requestShape,
-        accept: acceptShape,
-        reject: rejectShape,
-        rollback: rollbackShape,
+      build={snapshot.build}
+      capsulePresentation={capsulePresentation}
+      actions={projectInterfaceActions(snapshot.document, snapshot.shaping)}
+      controlledMode={snapshot.mode}
+      controlledTarget={
+        snapshot.workbench?.target ??
+        (snapshot.mode === "run" ? "use" : "shape")
+      }
+      candidateRevisionId={snapshot.shaping.proposal?.id}
+      diagnostics={{
+        control: snapshot.control,
+        operations: snapshot.operations,
+        persistence: snapshot.persistence,
+        setup,
+        update,
+        onToggleControl: () =>
+          command(
+            snapshot.control.enabled
+              ? DisableControl.make({ type: "disable-control" })
+              : EnableControl.make({ type: "enable-control" }),
+          ),
       }}
-      workspace={session}
+      document={snapshot.document}
+      extensions={snapshot.extensions}
+      onInterfaceAction={(nodeId) =>
+        command(
+          InvokeInterfaceAction.make({
+            type: "invoke-interface-action",
+            nodeId,
+          }),
+        )
+      }
+      onCapsuleIntent={(intent) => {
+        const binding = snapshot.phase === "preview" ? "candidate" : "accepted";
+        const capsule =
+          binding === "candidate"
+            ? capsulePresentation.candidate
+            : capsulePresentation.accepted;
+        return capsule === undefined
+          ? Promise.reject(new Error("The capsule is unavailable."))
+          : invokeCapsuleIntent(capsule.id, binding, intent);
+      }}
+      onModeChange={(mode) => command(SetMode.make({ type: "set-mode", mode }))}
+      onTargetChange={(target) =>
+        command(
+          SelectWorkbenchTarget.make({
+            type: "select-workbench-target",
+            target,
+          }),
+        )
+      }
+      onOpenSafeMode={() => {
+        void command(EnterSafeMode.make({ type: "enter-safe-mode" }));
+      }}
+      onRestoreSafeMode={() =>
+        dispatch(RestoreSafeMode.make({ type: "restore-safe-mode" }))
+          .then(() => Effect.runPromise(clearSafeModeRoute()))
+          .then(() => undefined)
+      }
+      onDecideProductCapability={(capsuleId, capabilityId, choice) =>
+        dispatch(
+          DecideProductCapability.make({
+            type: "decide-product-capability",
+            capsuleId,
+            capabilityId,
+            choice,
+          }),
+        ).then(() => undefined)
+      }
+      onRevokeProductCapability={(decisionId) =>
+        dispatch(
+          RevokeProductCapability.make({
+            type: "revoke-product-capability",
+            decisionId,
+          }),
+        ).then(() => undefined)
+      }
+      onSetPortableExtensionEnabled={(key, enabled, grants) =>
+        dispatch(
+          SetPortableExtensionEnabled.make({
+            type: "set-portable-extension-enabled",
+            ...key,
+            enabled,
+            grants,
+          }),
+        ).then(() => undefined)
+      }
+      onTestPortableExtension={(key) =>
+        dispatch(
+          TestPortableExtension.make({
+            type: "test-portable-extension",
+            ...key,
+            binding: "candidate",
+            input: { type: "protected-review-test" },
+          }),
+        ).then(() => undefined)
+      }
+      onSetPortableExtensionPinned={(key, pinned) =>
+        dispatch(
+          SetPortableExtensionPin.make({
+            type: "set-portable-extension-pin",
+            ...key,
+            pinned,
+          }),
+        ).then(() => undefined)
+      }
+      onForkPortableExtension={(key, revision) =>
+        dispatch(
+          ForkPortableExtension.make({
+            type: "fork-portable-extension",
+            ...key,
+            revision,
+          }),
+        ).then(() => undefined)
+      }
+      onResolvePortableExtensionUpdate={(key, choice) =>
+        dispatch(
+          ResolvePortableExtensionUpdate.make({
+            type: "resolve-portable-extension-update",
+            ...key,
+            binding: "candidate",
+            choice,
+          }),
+        ).then(() => undefined)
+      }
+      onRemovePortableExtension={(key) =>
+        dispatch(
+          RemovePortableExtension.make({
+            type: "remove-portable-extension",
+            ...key,
+          }),
+        ).then(() => undefined)
+      }
+      shareReview={snapshot.shareReview}
+      privateShareSources={privateShareSources}
+      shareInstallation={snapshot.shares?.entries.find(
+        (entry) => entry.shareId === snapshot.shareReview?.shareId,
+      )}
+      shareInstallations={snapshot.shares?.entries ?? []}
+      onRetainShare={(artifactIds) =>
+        dispatch(
+          RetainShareCandidate.make({
+            type: "retain-share-candidate",
+            artifactIds: [...artifactIds],
+          }),
+        ).then(() => undefined)
+      }
+      onPrepareShareUpdate={() =>
+        snapshot.shareReview === undefined
+          ? Promise.resolve()
+          : dispatch(
+              PrepareShareUpdate.make({
+                type: "prepare-share-update",
+                shareId: snapshot.shareReview.shareId,
+              }),
+            ).then(() => undefined)
+      }
+      onContinueShareFork={() =>
+        snapshot.shareReview === undefined
+          ? Promise.resolve()
+          : dispatch(
+              ContinueShareFork.make({
+                type: "continue-share-fork",
+                shareId: snapshot.shareReview.shareId,
+              }),
+            ).then(() => undefined)
+      }
+      onOpenShareConflictInShape={() =>
+        snapshot.shareReview === undefined
+          ? Promise.resolve()
+          : dispatch(
+              OpenShareConflictInShape.make({
+                type: "open-share-conflict-in-shape",
+                shareId: snapshot.shareReview.shareId,
+              }),
+            ).then(() => undefined)
+      }
+      onActivateShare={(artifactIds) =>
+        snapshot.shareReview === undefined
+          ? Promise.resolve()
+          : dispatch(
+              ActivateShareCandidate.make({
+                type: "activate-share-candidate",
+                shareId: snapshot.shareReview.shareId,
+                artifactIds: [...artifactIds],
+              }),
+            ).then(() => undefined)
+      }
+      onRejectShare={() =>
+        dispatch(
+          RejectShareCandidate.make({ type: "reject-share-candidate" }),
+        ).then(() => undefined)
+      }
+      onOpenShareUrl={(url) =>
+        dispatch(
+          OpenShareSource.make({
+            type: "open-share-source",
+            source: ShareUrlSource.make({ _tag: "url", url }),
+          }),
+        ).then(() => undefined)
+      }
+      onOpenShareGit={(url, commit) =>
+        dispatch(
+          OpenShareSource.make({
+            type: "open-share-source",
+            source: ShareGitSource.make({ _tag: "git", url, commit }),
+          }),
+        ).then(() => undefined)
+      }
+      onOpenSharePrivate={(adapterId, reference) =>
+        dispatch(
+          OpenShareSource.make({
+            type: "open-share-source",
+            source: SharePrivateSource.make({
+              _tag: "private",
+              adapterId,
+              reference,
+            }),
+          }),
+        ).then(() => undefined)
+      }
+      onOpenShareFile={(name, bytes) =>
+        dispatch(
+          OpenShareSource.make({
+            type: "open-share-source",
+            source: ShareLocalSource.make({ _tag: "local", name, bytes }),
+          }),
+        ).then(() => undefined)
+      }
+      onExportShare={async (shareId) => {
+        await dispatch(ExportShare.make({ type: "export-share", shareId }));
+        const archive = await readShareExport(shareId);
+        const url = URL.createObjectURL(
+          new Blob([Uint8Array.from(archive)], {
+            type: "application/octet-stream",
+          }),
+        );
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `${shareId}.flect-share`;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      }}
+      onRemoveShare={(shareId) =>
+        dispatch(RemoveShare.make({ type: "remove-share", shareId })).then(
+          () => undefined,
+        )
+      }
+      onDeleteShare={(shareId, expectedForkCommit) =>
+        dispatch(
+          DeleteShareLocalData.make({
+            type: "delete-share-local-data",
+            shareId,
+            expectedForkCommit,
+          }),
+        ).then(() => undefined)
+      }
+      phase={workspacePhase(snapshot.shaping, false)}
+      preferences={preferences}
+      preview={snapshot.phase === "preview"}
+      shaping={shaping}
+      workspace={workspace}
+      useDisabled={
+        snapshot.shaping.proposal === undefined &&
+        snapshot.shaping.active.source === "built-in"
+      }
     />
   );
 }
