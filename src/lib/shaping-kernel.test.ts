@@ -52,13 +52,16 @@ const makePersistentHarness = (initial: string | null = null) => {
   if (initial !== null) values.set(REVISION_JOURNAL_KEY, initial);
   const stored = Ref.makeUnsafe(values);
   const storage = Layer.succeed(InterfaceStorage)({
-    read: (key) => Ref.get(stored).pipe(Effect.map((current) => current.get(key) ?? null)),
-    write: (key, value) => Ref.update(stored, (current) => new Map(current).set(key, value)),
-    remove: (key) => Ref.update(stored, (current) => {
-      const next = new Map(current);
-      next.delete(key);
-      return next;
-    }),
+    read: (key) =>
+      Ref.get(stored).pipe(Effect.map((current) => current.get(key) ?? null)),
+    write: (key, value) =>
+      Ref.update(stored, (current) => new Map(current).set(key, value)),
+    remove: (key) =>
+      Ref.update(stored, (current) => {
+        const next = new Map(current);
+        next.delete(key);
+        return next;
+      }),
   });
   const repository = makeInterfaceRepositoryLayer({
     safeMode: false,

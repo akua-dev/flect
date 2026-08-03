@@ -349,7 +349,7 @@ export const makeGitInterfaceRepositoryLayer = ({
         if (commit === undefined && baseCommit === undefined) {
           return yield* Effect.fail(storageFailure());
         }
-        const checkpoint = yield* git
+        yield* git
           .checkpoint({
             branch: RECOVERY_BRANCH,
             ...(commit === undefined
@@ -359,7 +359,9 @@ export const makeGitInterfaceRepositoryLayer = ({
               {
                 path: RECOVERY_PATH,
                 contents: new TextEncoder().encode(
-                  JSON.stringify(RecoveryMarker.make({ version: 1, status: "pending" })),
+                  JSON.stringify(
+                    RecoveryMarker.make({ version: 1, status: "pending" }),
+                  ),
                 ),
               },
             ],
@@ -378,7 +380,7 @@ export const makeGitInterfaceRepositoryLayer = ({
         if (commit === undefined) {
           return;
         }
-        const checkpoint = yield* git
+        yield* git
           .checkpoint({
             branch: RECOVERY_BRANCH,
             expectedCommit: commit,
@@ -386,7 +388,9 @@ export const makeGitInterfaceRepositoryLayer = ({
               {
                 path: RECOVERY_PATH,
                 contents: new TextEncoder().encode(
-                  JSON.stringify(RecoveryMarker.make({ version: 1, status: "clear" })),
+                  JSON.stringify(
+                    RecoveryMarker.make({ version: 1, status: "clear" }),
+                  ),
                 ),
               },
             ],
@@ -512,28 +516,34 @@ export const makeGitInterfaceRepositoryLayer = ({
               yield* storage
                 .remove(REVISION_JOURNAL_KEY)
                 .pipe(Effect.catch(() => Effect.void));
-              return withRecovery(InterfaceRepositoryLoad.make({
-                snapshot: safeMode
-                  ? safeRecoverySnapshot(legacy.value)
-                  : legacy.value,
-                recovered: safeMode,
-              }));
+              return withRecovery(
+                InterfaceRepositoryLoad.make({
+                  snapshot: safeMode
+                    ? safeRecoverySnapshot(legacy.value)
+                    : legacy.value,
+                  recovered: safeMode,
+                }),
+              );
             }
           }
           if (!existed) {
             const initial = initialBuiltInSnapshot();
             yield* initialize(initial);
-            return withRecovery(InterfaceRepositoryLoad.make({
-              snapshot: safeMode ? safeRecoverySnapshot(initial) : initial,
-              recovered: safeMode,
-            }));
+            return withRecovery(
+              InterfaceRepositoryLoad.make({
+                snapshot: safeMode ? safeRecoverySnapshot(initial) : initial,
+                recovered: safeMode,
+              }),
+            );
           }
           return yield* recoverActivation().pipe(
             Effect.map((snapshot) =>
-              withRecovery(InterfaceRepositoryLoad.make({
-                snapshot,
-                recovered: true,
-              })),
+              withRecovery(
+                InterfaceRepositoryLoad.make({
+                  snapshot,
+                  recovered: true,
+                }),
+              ),
             ),
             Effect.catch(() =>
               Effect.succeed(
@@ -609,20 +619,24 @@ export const makeGitInterfaceRepositoryLayer = ({
         }).pipe(Effect.option);
 
         if (loaded._tag === "Some") {
-          return withRecovery(InterfaceRepositoryLoad.make({
-            snapshot:
-              safeMode && !loaded.value.safeMode
-                ? safeRecoverySnapshot(loaded.value)
-                : loaded.value,
-            recovered: safeMode,
-          }));
+          return withRecovery(
+            InterfaceRepositoryLoad.make({
+              snapshot:
+                safeMode && !loaded.value.safeMode
+                  ? safeRecoverySnapshot(loaded.value)
+                  : loaded.value,
+              recovered: safeMode,
+            }),
+          );
         }
         return yield* recoverActivation().pipe(
           Effect.map((snapshot) =>
-            withRecovery(InterfaceRepositoryLoad.make({
-              snapshot,
-              recovered: true,
-            })),
+            withRecovery(
+              InterfaceRepositoryLoad.make({
+                snapshot,
+                recovered: true,
+              }),
+            ),
           ),
           Effect.catch(() =>
             Effect.succeed(

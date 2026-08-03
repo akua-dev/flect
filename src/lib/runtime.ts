@@ -11,8 +11,8 @@ import {
   ProductCapabilityManifest,
   ProductOperationFailure,
 } from "../../shared/product-capability";
-import {
-  type CapabilityIntent,
+import type {
+  CapabilityIntent,
   ExtensionIntentContext,
 } from "../../shared/sandbox";
 import {
@@ -59,7 +59,6 @@ import {
 } from "../sandbox/capability-broker";
 import { ExtensionExecutionLive } from "../sandbox/extension-execution";
 import { ExtensionSandboxLive } from "../sandbox/extension-sandbox";
-import { ShapingKernel } from "./shaping-kernel";
 import {
   makePrivateShareSourceRegistryLayer,
   type PrivateShareSourceRegistry,
@@ -116,7 +115,10 @@ import {
   makeRoleContinuityRepositoryLayer,
   type RoleContinuityRepository,
 } from "./role-continuity-repository";
-import { makePersistentShapingKernelLayer } from "./shaping-kernel";
+import {
+  makePersistentShapingKernelLayer,
+  ShapingKernel,
+} from "./shaping-kernel";
 import type { ShellLink } from "./shell-link";
 import {
   makeShellPreferencesLayer,

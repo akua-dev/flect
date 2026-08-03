@@ -128,7 +128,7 @@ identifier instead of silently reusing it for a different promise.
 **Gate:** Public beta
 **Primary proof:** Contract, Browser, Experience, Performance evidence
 
-- **FQ-04.1:** Edit provides a live candidate product preview.
+- **FQ-04.1:** Shape provides a live candidate product preview.
 - **FQ-04.2:** Preview App Agent and Shaper remain warm during an editing
   session.
 - **FQ-04.3:** Switching **Use ↔ Shape** is immediate and does not require

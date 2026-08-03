@@ -1,11 +1,4 @@
-import {
-  Clock,
-  Context,
-  Effect,
-  Fiber,
-  Layer,
-  SynchronizedRef,
-} from "effect";
+import { Clock, Context, Effect, Fiber, Layer, SynchronizedRef } from "effect";
 import {
   type AuthorizedProductOperation,
   ProductCapabilityBrokerFailure,
@@ -226,8 +219,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
       const state = yield* SynchronizedRef.make<BrokerState>({
         decisions: initial.decisions,
         loadedContexts: new Set(),
-        warnings:
-          initial.warning === undefined ? [] : [initial.warning],
+        warnings: initial.warning === undefined ? [] : [initial.warning],
         activeLeases: new Map(),
       });
       const manifests = new Map(
@@ -478,19 +470,19 @@ export const makeProductCapabilityBrokerLayer = (options: {
                 ),
               };
               const active = current.activeLeases.get(decisionId) ?? new Set();
-              return (isDurable(existing)
-                ? store.save(durableDecisions(next)).pipe(
-                    Effect.as(next),
-                    Effect.mapError(() =>
-                      brokerFailure(
-                        "persistence-failed",
-                        existing.capabilityId,
+              return (
+                isDurable(existing)
+                  ? store.save(durableDecisions(next)).pipe(
+                      Effect.as(next),
+                      Effect.mapError(() =>
+                        brokerFailure(
+                          "persistence-failed",
+                          existing.capabilityId,
+                        ),
                       ),
-                    ),
-                  )
-                : Effect.succeed(next)).pipe(
-                Effect.map((saved) => [active, saved] as const),
-              );
+                    )
+                  : Effect.succeed(next)
+              ).pipe(Effect.map((saved) => [active, saved] as const));
             },
           );
           yield* Fiber.interruptAll(fibers);
@@ -746,14 +738,11 @@ export const makeProductCapabilityBrokerLayer = (options: {
                 const activeLeases = new Map(current.activeLeases);
                 activeLeases.set(
                   reservation.decisionId,
-                  new Set(
-                    activeLeases.get(reservation.decisionId) ?? [],
-                  ).add(fiber),
+                  new Set(activeLeases.get(reservation.decisionId) ?? []).add(
+                    fiber,
+                  ),
                 );
-                return [
-                  undefined,
-                  { ...current, activeLeases },
-                ] as const;
+                return [undefined, { ...current, activeLeases }] as const;
               }),
             );
             return yield* effect.pipe(

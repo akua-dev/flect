@@ -387,30 +387,30 @@ export const makeShareRepositoryLayer = (options?: {
 
       const restoreCandidateRef = Effect.fn(
         "Flect.ShareRepository.restoreCandidateRef",
-      )(
-        function* (input: {
-          readonly shareId: string;
-          readonly candidate: string;
-          readonly refs: Omit<ShareInstallationRefs, "candidate">;
-        }) {
-          yield* open;
-          const names = yield* deriveShareRefs(input.shareId);
-          yield* move({
-            branch: names.candidate,
-            targetCommit: input.candidate,
-            guards: [
-              { branch: names.base, commit: input.refs.base },
-              { branch: names.upstream, commit: input.refs.upstream },
-              { branch: names.fork, commit: input.refs.fork },
-            ],
-          });
-        },
-      );
+      )(function* (input: {
+        readonly shareId: string;
+        readonly candidate: string;
+        readonly refs: Omit<ShareInstallationRefs, "candidate">;
+      }) {
+        yield* open;
+        const names = yield* deriveShareRefs(input.shareId);
+        yield* move({
+          branch: names.candidate,
+          targetCommit: input.candidate,
+          guards: [
+            { branch: names.base, commit: input.refs.base },
+            { branch: names.upstream, commit: input.refs.upstream },
+            { branch: names.fork, commit: input.refs.fork },
+          ],
+        });
+      });
 
       const restoreCandidate = Effect.fn("Flect.ShareRepository.restore")(
         function* (input: {
           readonly shareId: string;
-          readonly before: ShareInstallationRefs & { readonly candidate: string };
+          readonly before: ShareInstallationRefs & {
+            readonly candidate: string;
+          };
           readonly after: Omit<ShareInstallationRefs, "candidate">;
         }) {
           yield* open;
@@ -476,9 +476,7 @@ export const makeShareRepositoryLayer = (options?: {
                 { branch: names.upstream, commit: input.after.upstream },
                 { branch: names.candidate, commit: input.before.candidate },
               ],
-            }).pipe(
-              Effect.tap(() => Effect.sync(() => (forkRestored = true))),
-            );
+            }).pipe(Effect.tap(() => Effect.sync(() => (forkRestored = true))));
             yield* move({
               branch: names.base,
               expectedCommit: input.after.base,
@@ -488,9 +486,7 @@ export const makeShareRepositoryLayer = (options?: {
                 { branch: names.fork, commit: input.before.fork },
                 { branch: names.candidate, commit: input.before.candidate },
               ],
-            }).pipe(
-              Effect.tap(() => Effect.sync(() => (baseRestored = true))),
-            );
+            }).pipe(Effect.tap(() => Effect.sync(() => (baseRestored = true))));
           });
           yield* restored.pipe(
             Effect.catch((error) =>
@@ -559,9 +555,7 @@ export const makeShareRepositoryLayer = (options?: {
                 { branch: names.fork, commit: input.refs.fork },
                 { branch: names.candidate, commit: input.refs.candidate },
               ],
-            }).pipe(
-              Effect.tap(() => Effect.sync(() => (baseMoved = true))),
-            );
+            }).pipe(Effect.tap(() => Effect.sync(() => (baseMoved = true))));
             yield* move({
               branch: names.fork,
               expectedCommit: input.refs.fork,
@@ -571,9 +565,7 @@ export const makeShareRepositoryLayer = (options?: {
                 { branch: names.upstream, commit: input.refs.upstream },
                 { branch: names.candidate, commit: input.refs.candidate },
               ],
-            }).pipe(
-              Effect.tap(() => Effect.sync(() => (forkMoved = true))),
-            );
+            }).pipe(Effect.tap(() => Effect.sync(() => (forkMoved = true))));
             yield* removeRef({
               branch: names.candidate,
               expectedCommit: input.refs.candidate,

@@ -3,11 +3,11 @@ import type {
   ExtensionCapability,
   ExtensionManifest,
 } from "../../shared/extensions";
-import { ExtensionIntentContext } from "../../shared/sandbox";
 import type {
   SandboxExecutionFailed,
   SandboxResult,
 } from "../../shared/sandbox";
+import { ExtensionIntentContext } from "../../shared/sandbox";
 import { ShapingKernel } from "../lib/shaping-kernel";
 import {
   type CapabilityAdapterError,
@@ -96,9 +96,9 @@ export const ExtensionExecutionLive = Layer.effect(
                 ? Effect.void
                 : error._tag === "CapabilityDenied" ||
                     error._tag === "SandboxExecutionFailed" ||
-                    (error._tag === "CapabilityAdapterFailure" ||
-                      (error._tag === "ExtensionIntentRejected" &&
-                        isExtensionIntentPackageFailure(error)))
+                    error._tag === "CapabilityAdapterFailure" ||
+                    (error._tag === "ExtensionIntentRejected" &&
+                      isExtensionIntentPackageFailure(error))
                   ? kernel.recordExtensionFailure(manifest.id)
                   : Effect.void,
             ),

@@ -141,6 +141,7 @@ ready, and Local control off. The screenshot records the same protected state.
 - Event connectors are trusted host code. Flect bounds and supervises their
   public stream boundary; it does not turn arbitrary connector code into an
   untrusted sandbox.
-- Database adapters, arbitrary transport plugins, and the separately versioned
-  public adoption SDK remain later work.
+- Database adapters and arbitrary transport plugins remain later work. The
+  separately versioned public adoption SDK and its reference products are
+  covered by the [SDK verification report](2026-08-03-product-sdk-verification.md).
 - Git delivery is not authorized in this task. No commit or push was performed.

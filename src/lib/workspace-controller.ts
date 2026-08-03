@@ -47,8 +47,8 @@ import {
   FlectWorkspaceEvent,
   FlectWorkspaceSnapshot,
   ImportCapsule,
-  OperationRecord,
   OperationFailed,
+  type OperationRecord,
   RailStateSnapshot,
   UserCommandSource,
   WorkbenchHandoff,
@@ -828,31 +828,29 @@ export const FlectWorkspaceControllerLive = Layer.effect(
     ): Effect.Effect<void, CapsuleStoreError> =>
       capsuleStore === undefined
         ? Effect.void
-        : capsuleStore
-            .save({
-              ...(next.acceptedReview === undefined &&
-              next.accepted === undefined
-                ? {}
-                : {
-                    accepted:
-                      next.acceptedReview?.archive ?? next.accepted?.archive,
-                  }),
-              ...(next.candidateReview === undefined &&
-              next.candidate === undefined
-                ? {}
-                : {
-                    candidate:
-                      next.candidateReview?.archive ?? next.candidate?.archive,
-                  }),
-              ...(next.lastKnownGoodReview === undefined &&
-              next.lastKnownGood === undefined
-                ? {}
-                : {
-                    lastKnownGood:
-                      next.lastKnownGoodReview?.archive ??
-                      next.lastKnownGood?.archive,
-                  }),
-            });
+        : capsuleStore.save({
+            ...(next.acceptedReview === undefined && next.accepted === undefined
+              ? {}
+              : {
+                  accepted:
+                    next.acceptedReview?.archive ?? next.accepted?.archive,
+                }),
+            ...(next.candidateReview === undefined &&
+            next.candidate === undefined
+              ? {}
+              : {
+                  candidate:
+                    next.candidateReview?.archive ?? next.candidate?.archive,
+                }),
+            ...(next.lastKnownGoodReview === undefined &&
+            next.lastKnownGood === undefined
+              ? {}
+              : {
+                  lastKnownGood:
+                    next.lastKnownGoodReview?.archive ??
+                    next.lastKnownGood?.archive,
+                }),
+          });
     const updateCapsulePresentation = Effect.fn(
       "Flect.Workspace.updateCapsulePresentation",
     )(function* (
@@ -1610,7 +1608,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               ).pipe(
                 Effect.andThen(
                   Effect.fail(
-                    commandRejected("The shared candidate changed before Keep."),
+                    commandRejected(
+                      "The shared candidate changed before Keep.",
+                    ),
                   ),
                 ),
               ),
@@ -1735,8 +1735,10 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         }),
         updatedAt: Date.now(),
       });
-      const transaction = { before: installation, after: restored } satisfies
-        DiscardedShareActivation;
+      const transaction = {
+        before: installation,
+        after: restored,
+      } satisfies DiscardedShareActivation;
       if (metadata !== undefined) {
         yield* Ref.set(metadata, transaction);
       }
@@ -1767,26 +1769,25 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           ? Effect.void
           : shareRepository === undefined
             ? Effect.fail(
-                commandRejected(
-                  "The shared candidate could not be restored.",
-                ),
+                commandRejected("The shared candidate could not be restored."),
               )
-            : shareRepository.restoreCandidateRef({
-                shareId: installation.shareId,
-                candidate: installation.refs.candidate,
-                refs: {
-                  base: installation.refs.base,
-                  upstream: installation.refs.upstream,
-                  fork: installation.refs.fork,
-                },
-              })
-              .pipe(
-                Effect.mapError(() =>
-                  commandRejected(
-                    "The shared candidate could not be restored.",
+            : shareRepository
+                .restoreCandidateRef({
+                  shareId: installation.shareId,
+                  candidate: installation.refs.candidate,
+                  refs: {
+                    base: installation.refs.base,
+                    upstream: installation.refs.upstream,
+                    fork: installation.refs.fork,
+                  },
+                })
+                .pipe(
+                  Effect.mapError(() =>
+                    commandRejected(
+                      "The shared candidate could not be restored.",
+                    ),
                   ),
-                ),
-              );
+                );
       yield* shareInstallationStore.save(restored).pipe(
         Effect.mapError(() =>
           commandRejected("The shared candidate state could not be saved."),
@@ -1805,17 +1806,17 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       return transaction;
     });
 
-    const runCompensations = Effect.fn(
-      "Flect.Workspace.runCompensations",
-    )(function* (
-      effects: ReadonlyArray<Effect.Effect<void, FlectCommandError>>,
-    ) {
-      const results = yield* Effect.all(
-        effects.map((effect) => effect.pipe(Effect.result)),
-        { concurrency: 1 },
-      );
-      return results.some((result) => result._tag === "Failure");
-    });
+    const runCompensations = Effect.fn("Flect.Workspace.runCompensations")(
+      function* (
+        effects: ReadonlyArray<Effect.Effect<void, FlectCommandError>>,
+      ) {
+        const results = yield* Effect.all(
+          effects.map((effect) => effect.pipe(Effect.result)),
+          { concurrency: 1 },
+        );
+        return results.some((result) => result._tag === "Failure");
+      },
+    );
 
     const enterDegradedRecovery = Effect.fn(
       "Flect.Workspace.enterDegradedRecovery",
@@ -1888,21 +1889,22 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           finalizedShare: FinalizedShareActivation | undefined,
         ) =>
           Effect.gen(function* () {
-            const compensations: Array<
-              Effect.Effect<void, FlectCommandError>
-            > = [restoreCapsulePresentation(beforeCapsulePresentation)];
+            const compensations: Array<Effect.Effect<void, FlectCommandError>> =
+              [restoreCapsulePresentation(beforeCapsulePresentation)];
             if (
               extensionCatalog !== undefined &&
               beforeExtensions !== undefined
             ) {
               compensations.push(
-                extensionCatalog.restore(beforeExtensions).pipe(
-                  Effect.mapError(() =>
-                    commandRejected(
-                      "The accepted extension state could not be restored.",
+                extensionCatalog
+                  .restore(beforeExtensions)
+                  .pipe(
+                    Effect.mapError(() =>
+                      commandRejected(
+                        "The accepted extension state could not be restored.",
+                      ),
                     ),
                   ),
-                ),
               );
             }
             if (finalizedShare !== undefined) {
@@ -1935,24 +1937,28 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               }
               if (shareInstallationStore !== undefined) {
                 compensations.push(
-                  shareInstallationStore.save(finalizedShare.before).pipe(
-                    Effect.mapError(() =>
-                      commandRejected(
-                        "The shared installation state could not be restored.",
+                  shareInstallationStore
+                    .save(finalizedShare.before)
+                    .pipe(
+                      Effect.mapError(() =>
+                        commandRejected(
+                          "The shared installation state could not be restored.",
+                        ),
                       ),
                     ),
-                  ),
                 );
               }
               if (shareCandidateStore !== undefined) {
                 compensations.push(
-                  shareCandidateStore.save(finalizedShare.candidateArchive).pipe(
-                    Effect.mapError(() =>
-                      commandRejected(
-                        "The shared candidate archive could not be restored.",
+                  shareCandidateStore
+                    .save(finalizedShare.candidateArchive)
+                    .pipe(
+                      Effect.mapError(() =>
+                        commandRejected(
+                          "The shared candidate archive could not be restored.",
+                        ),
                       ),
                     ),
-                  ),
                 );
               }
             }
@@ -1981,7 +1987,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             );
             yield* syncExtensionSnapshot();
           }
-          finalizedShare = yield* finalizeShareActivation(finalizedShareMetadata);
+          finalizedShare = yield* finalizeShareActivation(
+            finalizedShareMetadata,
+          );
           yield* updateCapsulePresentation((current) => ({
             ...(current.candidate === undefined
               ? {}
@@ -2052,21 +2060,22 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           discarded: DiscardedShareActivation | undefined,
         ) =>
           Effect.gen(function* () {
-            const compensations: Array<
-              Effect.Effect<void, FlectCommandError>
-            > = [restoreCapsulePresentation(beforeCapsulePresentation)];
+            const compensations: Array<Effect.Effect<void, FlectCommandError>> =
+              [restoreCapsulePresentation(beforeCapsulePresentation)];
             if (
               extensionCatalog !== undefined &&
               beforeExtensions !== undefined
             ) {
               compensations.push(
-                extensionCatalog.restore(beforeExtensions).pipe(
-                  Effect.mapError(() =>
-                    commandRejected(
-                      "The rejected extension state could not be restored.",
+                extensionCatalog
+                  .restore(beforeExtensions)
+                  .pipe(
+                    Effect.mapError(() =>
+                      commandRejected(
+                        "The rejected extension state could not be restored.",
+                      ),
                     ),
                   ),
-                ),
               );
             }
             if (discarded !== undefined) {
@@ -2103,13 +2112,15 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               }
               if (shareInstallationStore !== undefined) {
                 compensations.push(
-                  shareInstallationStore.save(discarded.before).pipe(
-                    Effect.mapError(() =>
-                      commandRejected(
-                        "The shared installation state could not be restored.",
+                  shareInstallationStore
+                    .save(discarded.before)
+                    .pipe(
+                      Effect.mapError(() =>
+                        commandRejected(
+                          "The shared installation state could not be restored.",
+                        ),
                       ),
                     ),
-                  ),
                 );
               }
             }

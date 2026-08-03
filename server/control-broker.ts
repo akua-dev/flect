@@ -66,11 +66,10 @@ interface ActiveGrant {
   readonly events: ReadonlyArray<FlectWorkspaceEvent>;
 }
 
-type ControlQueueItem =
-  {
-    readonly _tag: "command";
-    readonly command: FlectCommandEnvelope;
-  };
+type ControlQueueItem = {
+  readonly _tag: "command";
+  readonly command: FlectCommandEnvelope;
+};
 
 export interface FlectControlBrokerShape {
   readonly status: Effect.Effect<ControlBrokerStatus>;

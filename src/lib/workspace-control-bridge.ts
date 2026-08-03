@@ -71,16 +71,15 @@ export const WorkspaceControlBridgeLive = Layer.effect(
             yield* interruptActiveCommands();
             const snapshot = yield* controller.snapshot;
             if (snapshot.control.enabled) {
-              yield* controller
-                .dispatch(
-                  FlectCommandEnvelope.make({
-                    version: 1,
-                    commandId: `cmd-control-revoked-${crypto.randomUUID()}`,
-                    workspaceId: snapshot.workspaceId,
-                    source: UserCommandSource.make({ kind: "user" }),
-                    command: DisableControl.make({ type: "disable-control" }),
-                  }),
-                );
+              yield* controller.dispatch(
+                FlectCommandEnvelope.make({
+                  version: 1,
+                  commandId: `cmd-control-revoked-${crypto.randomUUID()}`,
+                  workspaceId: snapshot.workspaceId,
+                  source: UserCommandSource.make({ kind: "user" }),
+                  command: DisableControl.make({ type: "disable-control" }),
+                }),
+              );
             }
             yield* transport.disable;
             yield* Ref.set(enabled, false);

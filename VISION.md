@@ -258,9 +258,12 @@ Shaper now proposes its workspace file through that command; accepting remains
 a protected user decision. Outside control remains off by default and cannot
 grant itself authority.
 
-This slice intentionally does not run generated React, native extensions, or
-product API capabilities. Interactive roles may use the bounded
-browser-portable shell described in
+The stock interface remains on the closed renderer, while supported static and
+single-entry Vite JavaScript/TypeScript/React projects can be imported into
+isolated compiled capsule candidates. The stock distribution does not register
+product operations or ship native extensions; adopting products can compose
+named operations at a trusted runtime root. Interactive roles may use the
+bounded browser-portable shell described in
 [`docs/bun-compatibility.md`](docs/bun-compatibility.md), but it does not grant
 host-shell, native-process, system-Bun, or ambient-network authority. The slice
 proves the model, credential, shaping, preview, transport, logic-sandbox, and

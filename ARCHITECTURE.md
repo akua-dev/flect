@@ -521,18 +521,19 @@ lossless return to the installed version. Capsule personal-fork lineage and
 compatible merge policy remain future layers rather than implicit overwrite
 behavior.
 
-Plain static-site import is a protected pre-capsule adapter. It validates all
-directory-relative paths, ignores VCS/dependency/cache and common
-credential/private-key entries without reading their contents, requires one
-root `index.html`, applies the capsule bounds, and
+Static-site and supported single-entry Vite imports use a protected pre-capsule
+adapter. It validates all directory-relative paths, ignores VCS/dependency/cache
+and common credential/private-key entries without reading their contents,
+requires one root `index.html`, applies the capsule bounds, and
 encodes the unchanged supported files into a local capsule. Source is not
 executed during inspection. The ordinary manifest review and opaque compiled
 frame remain the only path to preview. The current adapter does not yet commit
 source to accepted state directly: it checkpoints recognizable files under
 `project/` on isolated `flect/authoring`; the existing proposal-source delta
 promotes them to `flect/accepted` only on Keep. It does not yet analyze
-multi-page routes, archives, repositories, or content-dependent secrets. Its bounded text inspection does report forms,
-module graphs, remote URLs, storage, and workers as visible manifest requests;
+multi-page routes, archives, repositories, or content-dependent secrets. Its
+bounded text inspection does report forms, module graphs, remote URLs, storage,
+and workers as visible manifest requests;
 unsupported required assumptions block Keep.
 
 Compiled capsule bytes persist through `CapsuleStore`, independently from the
@@ -551,9 +552,10 @@ public workspace snapshot. Diagnostics keeps a session-only warning visible
 even while collapsed and states exactly which compiled state will be lost;
 the fallback is never presented as durable persistence.
 
-This capsule persistence contract currently supports a compiled HTML entrypoint
+This capsule persistence contract currently supports compiled HTML entrypoints
 plus the bounded local asset classes above. Framework source builds and module
-graphs, additional capability adapters, capsule signing, and compatible
+graphs are compiled before capsule persistence and are not part of the runtime
+capsule format. Additional capability adapters, capsule signing, and compatible
 capsule update/fork lineage remain open. Accepting an already-restored
 candidate is also held open until the pinned Wasm-Git adapter reliably advances
 the accepted snapshot commit after worker restart.

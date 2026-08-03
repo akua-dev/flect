@@ -3,13 +3,13 @@ import {
   ExtensionCapability,
   type ExtensionManifest,
 } from "../../shared/extensions";
+import type { InvalidInterfaceDocument } from "../../shared/interface-document";
+import type { InvalidRevisionTransition } from "../../shared/revisions";
 import type {
   CapabilityIntent,
   ExtensionIntentContext,
   SandboxResult,
 } from "../../shared/sandbox";
-import type { InvalidInterfaceDocument } from "../../shared/interface-document";
-import type { InvalidRevisionTransition } from "../../shared/revisions";
 import type { InterfaceStorageError } from "../lib/interface-store";
 import type { ExtensionIntentRejected } from "../lib/shaping-kernel";
 
