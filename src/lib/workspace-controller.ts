@@ -104,6 +104,7 @@ import { ProductCapabilityRegistry } from "../capabilities/product-capability-re
 import {
   type CapsuleArchiveBindings,
   CapsuleStore,
+  type CapsuleStoreError,
 } from "../capsule/capsule-store";
 import {
   ExtensionCatalog,
@@ -749,7 +750,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         FlectWorkspaceSnapshot.make({
           ...current,
           persistence: WorkspacePersistenceSnapshot.make({
-            ...current.persistence,
+            source: current.persistence?.source ?? "unavailable",
             capsule: "unavailable",
           }),
         }),
@@ -824,7 +825,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
     );
     const persistCapsulePresentation = (
       next: CapsulePresentationState,
-    ): Effect.Effect<void> =>
+    ): Effect.Effect<void, CapsuleStoreError> =>
       capsuleStore === undefined
         ? Effect.void
         : capsuleStore
@@ -865,7 +866,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             FlectWorkspaceSnapshot.make({
               ...snapshot,
               persistence: WorkspacePersistenceSnapshot.make({
-                ...snapshot.persistence,
+                source: snapshot.persistence?.source ?? "unavailable",
                 capsule: "unavailable",
               }),
             }),
@@ -1559,15 +1560,19 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         upstream: installation.refs.upstream,
         fork: installation.refs.fork,
       });
-      const beforeRefs =
+      const beforeRefs:
+        | (Omit<ShareInstallationRefs, "candidate"> & {
+            readonly candidate: string;
+          })
+        | undefined =
         installation.refs.candidate === undefined
           ? undefined
-          : ShareInstallationRefs.make({
+          : {
               base: installation.refs.base,
               upstream: installation.refs.upstream,
               fork: installation.refs.fork,
               candidate: installation.refs.candidate,
-            });
+            };
       const expectedAfterRefs =
         installation.refs.candidate === undefined
           ? refs
@@ -1757,7 +1762,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             ),
           );
       }
-      const restoreRef =
+      const restoreRef: Effect.Effect<void, CommandRejected> =
         installation.refs.candidate === undefined
           ? Effect.void
           : shareRepository === undefined
@@ -1774,7 +1779,14 @@ export const FlectWorkspaceControllerLive = Layer.effect(
                   upstream: installation.refs.upstream,
                   fork: installation.refs.fork,
                 },
-              });
+              })
+              .pipe(
+                Effect.mapError(() =>
+                  commandRejected(
+                    "The shared candidate could not be restored.",
+                  ),
+                ),
+              );
       yield* shareInstallationStore.save(restored).pipe(
         Effect.mapError(() =>
           commandRejected("The shared candidate state could not be saved."),

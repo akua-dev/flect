@@ -94,8 +94,11 @@ describe("SandboxCapabilityBroker", () => {
           )
           .pipe(Effect.flip);
 
-        assert.strictEqual(error._tag, "CapabilityDenied");
-        assert.strictEqual(error.reason, "undeclared");
+        if (error._tag === "CapabilityDenied") {
+          assert.strictEqual(error.reason, "undeclared");
+        } else {
+          assert.fail(`Expected CapabilityDenied, received ${error._tag}`);
+        }
         assert.deepStrictEqual(yield* Ref.get(undeclared.calls), []);
       }),
     );
@@ -121,8 +124,11 @@ describe("SandboxCapabilityBroker", () => {
           )
           .pipe(Effect.flip);
 
-        assert.strictEqual(error._tag, "CapabilityDenied");
-        assert.strictEqual(error.reason, "not-granted");
+        if (error._tag === "CapabilityDenied") {
+          assert.strictEqual(error.reason, "not-granted");
+        } else {
+          assert.fail(`Expected CapabilityDenied, received ${error._tag}`);
+        }
         assert.deepStrictEqual(yield* Ref.get(ungranted.calls), []);
       }),
     );

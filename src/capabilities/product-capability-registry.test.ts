@@ -53,6 +53,8 @@ const makeLayer = () => {
     revoke,
     reserve: () => Effect.die("not used"),
     validate: () => Effect.die("not used"),
+    withReservation: (_reservation, _operation, effect) => effect,
+    warnings: Effect.succeed([]),
   });
   const registry = makeProductCapabilityRegistryLayer({
     operations: [

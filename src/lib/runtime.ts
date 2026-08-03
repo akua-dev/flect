@@ -33,7 +33,11 @@ import {
   makeProductCapabilityRegistryLayer,
   type ProductCapabilityRegistry,
 } from "../capabilities/product-capability-registry";
-import { type CapsuleStore, CapsuleStoreLive } from "../capsule/capsule-store";
+import {
+  type CapsuleStore,
+  type CapsuleStoreError,
+  CapsuleStoreLive,
+} from "../capsule/capsule-store";
 import { makeBunPackageMutationLayer } from "../execution/bun-package-mutation";
 import {
   NPM_REGISTRY_ORIGIN,
@@ -298,7 +302,7 @@ export type FlectBrowserServices =
   | WorkspaceControlTransport;
 export type FlectBrowserRuntime = ManagedRuntime.ManagedRuntime<
   FlectBrowserServices,
-  FlectUnavailableError | ShareSourceFailure
+  CapsuleStoreError | FlectUnavailableError | ShareSourceFailure
 >;
 
 const ProductCapabilityDecisionStoreLive =
