@@ -94,6 +94,7 @@ describe("persistent role workspace filesystem", () => {
     await expect(
       workspace.cp("/workspace/source.txt", "/workspace/copy.txt"),
     ).rejects.toThrow(/write failed/);
+    expect(await workspace.exists("/workspace/copy.txt")).toBe(false);
 
     const reopened = await makePersistentWorkspaceFs({
       vfs,

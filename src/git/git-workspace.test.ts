@@ -33,7 +33,7 @@ describe("GitWorkspace worker lifecycle", () => {
       const workers: Array<HangingWorker> = [];
       let lockReleasedAfterTermination = false;
       const lockManager: GitWorkspaceLockManager = {
-        request: async (_name, _options, callback) => {
+        request: async <A>(_name, _options, callback): Promise<Awaited<A>> => {
           try {
             return await callback(null);
           } finally {

@@ -153,7 +153,7 @@ const snapshotWorkspaceTree = async (
 };
 
 export class PersistentWorkspaceFs implements IFileSystem {
-  readonly #memory: InMemoryFs;
+  #memory: InMemoryFs;
   readonly #vfs: Vfs;
   readonly #namespace: string;
   readonly #readOnly: boolean;
@@ -188,7 +188,22 @@ export class PersistentWorkspaceFs implements IFileSystem {
     await this.#vfs.writeFile(target, await this.#memory.readFileBuffer(path));
   }
 
-  async #replacePersistentTree() {
+  async #restoreMemoryTree(entries: ReadonlyArray<PersistentTreeEntry>) {
+    this.#memory = new InMemoryFs({ "/workspace/.flect-root": "" });
+    for (const entry of entries) {
+      const path = `${WORKSPACE_ROOT}/${entry.path}`;
+      if (entry.type === "directory") {
+        await this.#memory.mkdir(path, { recursive: true });
+      } else {
+        await this.#memory.mkdir(parentPath(path), { recursive: true });
+        await this.#memory.writeFile(path, entry.contents);
+      }
+    }
+  }
+
+  async #replacePersistentTree(
+    previousMemoryTree: ReadonlyArray<PersistentTreeEntry>,
+  ) {
     const nextTree = await snapshotWorkspaceTree(this.#memory);
     const previousTree = await walkVfs(this.#vfs, this.#namespace);
     try {
@@ -204,6 +219,7 @@ export class PersistentWorkspaceFs implements IFileSystem {
           { cause: rollbackError },
         );
       }
+      await this.#restoreMemoryTree(previousMemoryTree);
       throw error;
     }
   }
@@ -294,9 +310,10 @@ export class PersistentWorkspaceFs implements IFileSystem {
     const destination = workspaceRelative(dest);
     this.#assertWritable(source);
     this.#assertWritable(destination);
+    const previousMemoryTree = await snapshotWorkspaceTree(this.#memory);
     await this.#memory.cp(src, dest, options);
     if (source !== undefined || destination !== undefined) {
-      await this.#replacePersistentTree();
+      await this.#replacePersistentTree(previousMemoryTree);
     }
   }
 
@@ -305,9 +322,10 @@ export class PersistentWorkspaceFs implements IFileSystem {
     const destination = workspaceRelative(dest);
     this.#assertWritable(source);
     this.#assertWritable(destination);
+    const previousMemoryTree = await snapshotWorkspaceTree(this.#memory);
     await this.#memory.mv(src, dest);
     if (source !== undefined || destination !== undefined) {
-      await this.#replacePersistentTree();
+      await this.#replacePersistentTree(previousMemoryTree);
     }
   }
 
