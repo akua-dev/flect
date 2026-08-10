@@ -93,9 +93,12 @@ as:
 The activation control acknowledges intent in the same frame. A reviewed
 custom `client:flect` directive then asks Astro to load and hydrate the island;
 the host does not imperatively mount the component or append its stylesheet.
-Astro's built-in `client:load`, `client:idle`, and `client:visible` policies are
-useful for ordinary islands, but none represents "load only after this product
-action" exactly.
+The island renders the Vite-emitted stylesheet as a declarative resource and
+signals readiness only after its load event, so the Effect coordinator can keep
+the static shell visible until the styled workspace is committed. Astro's
+built-in `client:load`, `client:idle`, and `client:visible` policies are useful
+for ordinary islands, but none represents "load only after this product action"
+exactly.
 
 Loading the Flect client runtime still does not load every capability. Agent
 tools acquire compiler, shell, sandbox, package, Worker, and Wasm Layers only
@@ -238,14 +241,15 @@ implemented Astro path includes:
 8. static output compatible with the existing Tauri bundle and CSP boundary.
 
 The accepted build requests four view-only resources. Its activation bootstrap
-is 2,363 bytes gzip / 5,216 bytes decoded and its initial CSS is 1,094 bytes
+is 2,199 bytes gzip / 4,646 bytes decoded and its initial CSS is 1,094 bytes
 gzip / 2,976 bytes decoded. The view-only route requests no Flect workspace,
 Effect runtime, Git, compiler, shell, package, Worker, or Wasm code. The first
-workspace activation is 190,320 bytes gzip / 611,856 bytes decoded across 40
-modules; shell, compiler, package, Worker, and Wasm boundaries remain
-independently on demand. Local production measurements record 212 ms cold
-activation, 226 ms warm activation, 507 ms warmed activation on Fast 4G with
-4× CPU throttling, and 4 ms p95 composer acknowledgement. The full evidence is
+protected JavaScript graph is 184,607 bytes gzip / 594,425 bytes decoded across
+41 modules; its separately gated deferred CSS is 12,018 bytes gzip / 64,796
+bytes decoded. Shell, compiler, package, Worker, and Wasm boundaries remain
+independently on demand. Local production measurements record 227 ms cold
+activation, 220 ms warm activation, 501 ms warmed activation on Fast 4G with
+4× CPU throttling, and 5 ms p95 composer acknowledgement. The full evidence is
 recorded in
 [`2026-08-10-astro-live-canvas-verification.md`](../verification/2026-08-10-astro-live-canvas-verification.md).
 

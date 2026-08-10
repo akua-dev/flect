@@ -85,10 +85,20 @@ Effect is the application architecture, not a utility wrapper:
   refs own cancellation, worker lifetime, transport lifetime, and serialized
   state.
 - `Effect.all` and `Effect.forEach` own concurrent fan-out. A checked-in source
-  gate rejects native promise fan-out so interruption and failures remain in
-  the Effect runtime.
+  gate rejects native promise fan-out everywhere and ad hoc Promise
+  constructors outside tests. Callback hosts enter through `Effect.callback`
+  with interruption cleanup; Promise-returning platform APIs enter through
+  `Effect.tryPromise`; `runPromise` or `runCallback` appears only where a host
+  framework requires Effect to leave its runtime.
 - React owns rendering and ephemeral form state only. Event handlers are thin
   adapters into the managed Effect runtimes.
+
+The custom Astro directive is one such host edge: it accepts Astro's
+Promise-returning island loader but contains no orchestration or resource
+ownership. The deferred activation module enters `Effect` before it coordinates
+island readiness, stylesheet readiness, cancellation, success, or failure. This
+keeps Effect and workspace CSS out of the static document without recreating
+Astro's hydration lifecycle by hand.
 
 `FlectWorkspaceController` is the single semantic command and observable state
 authority. Visible controls and authorized outside clients submit the same

@@ -190,6 +190,8 @@ describe("ComposerActionsMenu", () => {
 
   it("dismisses with Escape and restores focus to the trigger", async () => {
     const user = userEvent.setup();
+    const onDocumentKeyDown = vi.fn();
+    document.addEventListener("keydown", onDocumentKeyDown);
     render(<ComposerActionsMenu {...props()} />);
 
     const trigger = screen.getByRole("button", { name: "Actions" });
@@ -202,6 +204,8 @@ describe("ComposerActionsMenu", () => {
       screen.queryByRole("menu", { name: "Flect actions" }),
     ).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+    expect(onDocumentKeyDown).not.toHaveBeenCalled();
+    document.removeEventListener("keydown", onDocumentKeyDown);
   });
 
   it("dismisses from the modal backdrop and restores the trigger", async () => {

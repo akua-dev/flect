@@ -7,6 +7,12 @@ const sourceFiles = new Bun.Glob(
   "{cli,packages,scripts,server,src,tests}/**/*.{ts,tsx}",
 );
 const forbiddenCall = ["Promise", "all"].join(".");
+const forbiddenPromiseWrapper = /new\s+Promise\s*(?:<|\()/u;
+const isTestOnlySource = (path: string) =>
+  path.startsWith("tests/") ||
+  path.includes(".test.") ||
+  path.includes(".spec.") ||
+  path.includes("/__tests__/");
 
 const listSourceFiles = Effect.tryPromise({
   try: async () => {
@@ -21,25 +27,43 @@ const listSourceFiles = Effect.tryPromise({
 
 const verifyEffectConcurrency = Effect.gen(function* () {
   const paths = yield* listSourceFiles;
-  const violations = yield* Effect.forEach(
+  const inspections = yield* Effect.forEach(
     paths,
     (path) =>
       Effect.tryPromise({
         try: async () => {
           const source = await Bun.file(`${repository}/${path}`).text();
-          return source.includes(forbiddenCall) ? path : undefined;
+          return {
+            path,
+            nativeFanOut: source.includes(forbiddenCall),
+            adHocPromiseWrapper:
+              !isTestOnlySource(path) && forbiddenPromiseWrapper.test(source),
+          };
         },
         catch: () => new Error(`Flect source could not be read: ${path}`),
       }),
     { concurrency: 16 },
   );
-  const pathsWithNativeFanOut = violations.filter(
-    (path): path is string => path !== undefined,
-  );
-  if (pathsWithNativeFanOut.length > 0) {
+  const pathsWithNativeFanOut = inspections
+    .filter((inspection) => inspection.nativeFanOut)
+    .map((inspection) => inspection.path);
+  const pathsWithAdHocPromiseWrappers = inspections
+    .filter((inspection) => inspection.adHocPromiseWrapper)
+    .map((inspection) => inspection.path);
+  const violations = [
+    ...(pathsWithNativeFanOut.length === 0
+      ? []
+      : [`native promise fan-out: ${pathsWithNativeFanOut.join(", ")}`]),
+    ...(pathsWithAdHocPromiseWrappers.length === 0
+      ? []
+      : [
+          `ad hoc promise wrappers outside tests: ${pathsWithAdHocPromiseWrappers.join(", ")}`,
+        ]),
+  ];
+  if (violations.length > 0) {
     return yield* Effect.fail(
       new Error(
-        `Use Effect concurrency combinators in: ${pathsWithNativeFanOut.join(", ")}`,
+        `Use Effect concurrency and callback combinators instead of ${violations.join("; ")}`,
       ),
     );
   }

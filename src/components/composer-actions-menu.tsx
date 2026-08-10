@@ -114,6 +114,7 @@ export function ComposerActionsMenu({
   const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
+      event.stopPropagation();
       dismissAndRestoreFocus();
       return;
     }

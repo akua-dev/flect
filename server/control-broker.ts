@@ -135,99 +135,196 @@ const readBody = (request: Request) =>
 
 interface LoopbackServer {
   readonly port: number;
-  readonly close: () => Promise<void>;
+  readonly close: Effect.Effect<void>;
 }
 
 const requestBody = (request: IncomingMessage) =>
-  new Promise<Uint8Array>((resolve, reject) => {
+  Effect.callback<Uint8Array, ControlBrokerError>((resume) => {
     const chunks: Array<Uint8Array> = [];
     let size = 0;
-    request.on("data", (chunk: Uint8Array) => {
+    let completed = false;
+    const cleanup = () => {
+      request.off("data", onData);
+      request.off("end", onEnd);
+      request.off("error", onError);
+    };
+    const complete = (
+      result: Effect.Effect<Uint8Array, ControlBrokerError>,
+    ) => {
+      if (completed) {
+        return;
+      }
+      completed = true;
+      cleanup();
+      resume(result);
+    };
+    const onData = (chunk: Uint8Array) => {
       size += chunk.byteLength;
       if (size > MAX_BODY_BYTES) {
-        reject(new Error("oversized"));
+        complete(Effect.fail(brokerError("The control request is invalid.")));
         request.destroy();
         return;
       }
       chunks.push(chunk);
+    };
+    const onEnd = () => complete(Effect.succeed(Buffer.concat(chunks)));
+    const onError = () =>
+      complete(Effect.fail(brokerError("The control request is invalid.")));
+    request.on("data", onData);
+    request.on("end", onEnd);
+    request.on("error", onError);
+    return Effect.sync(() => {
+      cleanup();
+      if (!completed) {
+        completed = true;
+        request.destroy();
+      }
     });
-    request.on("end", () => resolve(Buffer.concat(chunks)));
-    request.on("error", reject);
   });
 
-const sendWebResponse = async (
-  response: Response,
-  destination: ServerResponse,
-) => {
-  destination.statusCode = response.status;
-  for (const [name, value] of response.headers) {
-    destination.setHeader(name, value);
-  }
-  if (response.body === null) {
-    destination.end();
-    return;
-  }
-  const reader = response.body.getReader();
-  destination.on("close", () => {
-    void reader.cancel();
-  });
-  while (!destination.destroyed) {
-    const part = await reader.read();
-    if (part.done) {
-      break;
+const sendWebResponse = Effect.fn("Flect.ControlBroker.sendWebResponse")(
+  (response: Response, destination: ServerResponse) =>
+    Effect.tryPromise({
+      try: async () => {
+        destination.statusCode = response.status;
+        for (const [name, value] of response.headers) {
+          destination.setHeader(name, value);
+        }
+        if (response.body === null) {
+          destination.end();
+          return;
+        }
+        const reader = response.body.getReader();
+        destination.on("close", () => {
+          void reader.cancel();
+        });
+        while (!destination.destroyed) {
+          const part = await reader.read();
+          if (part.done) {
+            break;
+          }
+          destination.write(Buffer.from(part.value));
+        }
+        if (!destination.destroyed) {
+          destination.end();
+        }
+      },
+      catch: () => brokerError("The control response could not be sent."),
+    }),
+);
+
+const closeLoopbackServer = (server: NodeServer) =>
+  Effect.callback<void>((resume) => {
+    if (!server.listening) {
+      resume(Effect.void);
+      return;
     }
-    destination.write(Buffer.from(part.value));
-  }
-  if (!destination.destroyed) {
-    destination.end();
-  }
-};
+    server.closeAllConnections();
+    server.close(() => resume(Effect.void));
+    return Effect.sync(() => server.closeAllConnections());
+  });
 
 const startLoopbackServer = (
-  handler: (request: Request) => Promise<Response>,
-) =>
-  new Promise<LoopbackServer>((resolve, reject) => {
-    let server: NodeServer;
-    server = createServer(async (incoming, outgoing) => {
-      try {
+  handler: (request: Request) => Effect.Effect<Response, ControlBrokerError>,
+): Effect.Effect<LoopbackServer, ControlBrokerError> =>
+  Effect.callback<LoopbackServer, ControlBrokerError>((resume) => {
+    let settled = false;
+    const server = createServer((incoming, outgoing) => {
+      const serve = Effect.gen(function* () {
         const method = incoming.method ?? "GET";
         const body =
           method === "GET" || method === "HEAD"
             ? undefined
-            : await requestBody(incoming);
-        const request = new Request(`http://127.0.0.1${incoming.url ?? "/"}`, {
-          method,
-          headers: incoming.headers as HeadersInit,
-          ...(body === undefined || body.byteLength === 0
-            ? {}
-            : { body: new TextDecoder().decode(body) }),
+            : yield* requestBody(incoming);
+        const request = yield* Effect.try({
+          try: () =>
+            new Request(`http://127.0.0.1${incoming.url ?? "/"}`, {
+              method,
+              headers: incoming.headers as HeadersInit,
+              ...(body === undefined || body.byteLength === 0
+                ? {}
+                : { body: new TextDecoder().decode(body) }),
+            }),
+          catch: () => brokerError("The control request is invalid."),
         });
-        await sendWebResponse(await handler(request), outgoing);
-      } catch {
-        if (!outgoing.headersSent) {
-          outgoing.statusCode = 400;
-          outgoing.setHeader("content-type", "application/json");
-        }
-        outgoing.end('{"version":1,"error":"Invalid request"}');
-      }
-    });
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (address === null || typeof address === "string") {
-        server.close();
-        reject(new Error("missing address"));
-        return;
-      }
-      resolve({
-        port: address.port,
-        close: () =>
-          new Promise<void>((complete) => {
-            server.closeAllConnections();
-            server.close(() => complete());
+        yield* sendWebResponse(yield* handler(request), outgoing);
+      }).pipe(
+        Effect.catch(() =>
+          Effect.sync(() => {
+            if (!outgoing.headersSent) {
+              outgoing.statusCode = 400;
+              outgoing.setHeader("content-type", "application/json");
+            }
+            outgoing.end('{"version":1,"error":"Invalid request"}');
           }),
-      });
+        ),
+        Effect.catchDefect(() =>
+          Effect.sync(() => {
+            if (!outgoing.headersSent) {
+              outgoing.statusCode = 400;
+              outgoing.setHeader("content-type", "application/json");
+            }
+            outgoing.end('{"version":1,"error":"Invalid request"}');
+          }),
+        ),
+      );
+      Effect.runCallback(serve);
     });
+    const onError = () => {
+      if (!settled) {
+        settled = true;
+        server.off("error", onError);
+        try {
+          server.closeAllConnections();
+          if (server.listening) {
+            server.close();
+          }
+        } catch {
+          // Startup failed before the listener acquired an owned lifecycle.
+        }
+        resume(
+          Effect.fail(
+            brokerError("The loopback control listener could not start."),
+          ),
+        );
+      }
+    };
+    server.on("error", onError);
+    try {
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        if (address === null || typeof address === "string") {
+          onError();
+          return;
+        }
+        if (settled) {
+          return;
+        }
+        settled = true;
+        const close = closeLoopbackServer(server).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              server.off("error", onError);
+            }),
+          ),
+        );
+        resume(
+          Effect.succeed({
+            port: address.port,
+            close,
+          }),
+        );
+      });
+    } catch {
+      onError();
+    }
+    return closeLoopbackServer(server).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          server.off("error", onError);
+        }),
+      ),
+    );
   });
 
 export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
@@ -236,17 +333,15 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
     Effect.gen(function* () {
       const state = yield* Ref.make<ActiveGrant | undefined>(undefined);
       const statePermit = yield* Semaphore.make(1);
-      let handleRequest: (request: Request) => Promise<Response> = () =>
-        Promise.resolve(
+      let handleRequest: (
+        request: Request,
+      ) => Effect.Effect<Response, ControlBrokerError> = () =>
+        Effect.succeed(
           json({ version: 1, error: "Unavailable" }, { status: 503 }),
         );
       const server = yield* Effect.acquireRelease(
-        Effect.tryPromise({
-          try: () => startLoopbackServer((request) => handleRequest(request)),
-          catch: () =>
-            brokerError("The loopback control listener could not start."),
-        }),
-        (activeServer) => Effect.promise(() => activeServer.close()),
+        startLoopbackServer((request) => handleRequest(request)),
+        (activeServer) => activeServer.close,
       );
       const port = server.port;
       const url = `http://127.0.0.1:${port}`;
@@ -609,25 +704,23 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
       );
 
       handleRequest = (request) =>
-        Effect.runPromise(
-          externalRequest(request).pipe(
-            Effect.catch((error) =>
-              Effect.succeed(
-                json(
-                  {
-                    version: 1,
-                    error:
-                      error.message === "The control request is invalid."
-                        ? "Invalid request"
-                        : "Control unavailable",
-                  },
-                  {
-                    status:
-                      error.message === "The control request is invalid."
-                        ? 400
-                        : 503,
-                  },
-                ),
+        externalRequest(request).pipe(
+          Effect.catch((error) =>
+            Effect.succeed(
+              json(
+                {
+                  version: 1,
+                  error:
+                    error.message === "The control request is invalid."
+                      ? "Invalid request"
+                      : "Control unavailable",
+                },
+                {
+                  status:
+                    error.message === "The control request is invalid."
+                      ? 400
+                      : 503,
+                },
               ),
             ),
           ),

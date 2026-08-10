@@ -89,65 +89,32 @@ export const installFlectActivation = (
     if (workspace !== undefined) return workspace;
     shell.setAttribute("aria-busy", "true");
     if (status !== null) status.textContent = "Opening Flect…";
-    workspace = import("effect").then(({ Effect }) => {
-      const islandHydration = Effect.callback<void, Error>((resume) => {
-        const ready = () => resume(Effect.void);
-        const failed = () =>
-          resume(Effect.fail(new Error("Flect workspace hydration failed.")));
-        document.addEventListener("flect:workspace-ready", ready, {
-          once: true,
-        });
-        document.addEventListener("flect:workspace-error", failed, {
-          once: true,
-        });
-        document.documentElement.dataset.flectOpenRequested = "true";
-        document.dispatchEvent(new CustomEvent("flect:workspace-open"));
-        return Effect.sync(() => {
-          document.removeEventListener("flect:workspace-ready", ready);
-          document.removeEventListener("flect:workspace-error", failed);
-        });
-      });
-      const hydration =
-        load === undefined
-          ? islandHydration
-          : Effect.tryPromise({
-              try: async () => {
-                const { mountFlect } = await load();
-                await mountFlect(root);
-              },
-              catch: (error) =>
-                error instanceof Error
-                  ? error
-                  : new Error("Flect client module failed to load."),
-            });
-      return Effect.runPromise(
-        hydration.pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              if (load === undefined) root.hidden = false;
-              if (!root.hidden) shell.hidden = true;
-              shell.removeAttribute("aria-busy");
-              document.documentElement.dataset.flectState = "active";
-            }),
-          ),
-          Effect.tapError(() =>
-            Effect.sync(() => {
-              workspace = undefined;
-              root.hidden = true;
-              shell.hidden = false;
-              shell.removeAttribute("aria-busy");
-              delete document.documentElement.dataset.flectOpenRequested;
-              document.documentElement.dataset.flectState = "error";
-              if (status !== null) {
-                status.textContent =
-                  "Flect could not open. Your current view is still safe; try again.";
-                status.setAttribute("role", "alert");
-              }
-            }),
-          ),
-        ),
-      );
-    });
+    workspace = import("./workspace-activation").then(({ activateWorkspace }) =>
+      activateWorkspace({
+        document,
+        root,
+        ...(load === undefined ? {} : { load }),
+        onReady: () => {
+          if (load === undefined) root.hidden = false;
+          if (!root.hidden) shell.hidden = true;
+          shell.removeAttribute("aria-busy");
+          document.documentElement.dataset.flectState = "active";
+        },
+        onError: () => {
+          workspace = undefined;
+          root.hidden = true;
+          shell.hidden = false;
+          shell.removeAttribute("aria-busy");
+          delete document.documentElement.dataset.flectOpenRequested;
+          document.documentElement.dataset.flectState = "error";
+          if (status !== null) {
+            status.textContent =
+              "Flect could not open. Your current view is still safe; try again.";
+            status.setAttribute("role", "alert");
+          }
+        },
+      }),
+    );
     return workspace;
   };
 

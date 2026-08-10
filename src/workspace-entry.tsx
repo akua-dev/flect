@@ -229,6 +229,7 @@ function ApplicationWorkspace({
 
 export default function FlectWorkspaceIsland() {
   const [hydrated, setHydrated] = useState(false);
+  const [stylesReady, setStylesReady] = useState(false);
   const [initialPrompt] = useState(readInitialPrompt);
   const Diagnostic = useMemo(
     () =>
@@ -238,6 +239,10 @@ export default function FlectWorkspaceIsland() {
     [],
   );
   useEffect(() => setHydrated(true), []);
+  useEffect(() => {
+    if (!stylesReady) return;
+    document.dispatchEvent(new CustomEvent("flect:workspace-ready"));
+  }, [stylesReady]);
 
   if (!hydrated) {
     return <span aria-hidden="true" data-flect-island-placeholder />;
@@ -248,17 +253,29 @@ export default function FlectWorkspaceIsland() {
       <link
         data-flect-workspace-styles
         href={workspaceStylesUrl}
+        onError={() => {
+          document.dispatchEvent(
+            new CustomEvent("flect:workspace-error", {
+              detail: new Error("Flect workspace styles could not be loaded."),
+            }),
+          );
+        }}
+        onLoad={() => setStylesReady(true)}
         precedence="flect-workspace"
         rel="stylesheet"
       />
-      {Diagnostic === undefined ? (
-        <ApplicationWorkspace
-          {...(initialPrompt === undefined ? {} : { initialPrompt })}
-        />
+      {stylesReady ? (
+        Diagnostic === undefined ? (
+          <ApplicationWorkspace
+            {...(initialPrompt === undefined ? {} : { initialPrompt })}
+          />
+        ) : (
+          <Suspense fallback={<p role="status">Opening diagnostic</p>}>
+            <Diagnostic />
+          </Suspense>
+        )
       ) : (
-        <Suspense fallback={<p role="status">Opening diagnostic</p>}>
-          <Diagnostic />
-        </Suspense>
+        <span aria-hidden="true" data-flect-island-placeholder />
       )}
     </>
   );

@@ -85,47 +85,79 @@ interface CommandResult {
   readonly stderr: string;
 }
 
-const runCommand = Effect.fn("Flect.ProductSdk.runCommand")(
-  (
-    command: ReadonlyArray<string>,
-    cwd: string,
-    reason: ProductSdkPackagingError["reason"],
-  ): Effect.Effect<CommandResult, ProductSdkPackagingError> =>
-    Effect.tryPromise({
-      try: async () => {
-        const executable = command[0];
-        if (executable === undefined) {
-          throw packagingError(reason);
+const runCommand = Effect.fn("Flect.ProductSdk.runCommand")(function* (
+  command: ReadonlyArray<string>,
+  cwd: string,
+  reason: ProductSdkPackagingError["reason"],
+) {
+  const executable = command[0];
+  if (executable === undefined) {
+    return yield* Effect.fail(packagingError(reason));
+  }
+  const child = yield* Effect.try({
+    try: () =>
+      spawn(executable, command.slice(1), {
+        cwd,
+        env: process.env,
+        stdio: ["ignore", "pipe", "pipe"],
+      }),
+    catch: () => packagingError(reason),
+  });
+  return yield* Effect.callback<CommandResult, ProductSdkPackagingError>(
+    (resume) => {
+      let stdout = "";
+      let stderr = "";
+      let completed = false;
+      const cleanup = () => {
+        child.stdout.off("data", onStdout);
+        child.stderr.off("data", onStderr);
+        child.off("error", onError);
+        child.off("close", onClose);
+      };
+      const complete = (
+        result: Effect.Effect<CommandResult, ProductSdkPackagingError>,
+      ) => {
+        if (completed) {
+          return;
         }
-        const child = spawn(executable, command.slice(1), {
-          cwd,
-          env: process.env,
-          stdio: ["ignore", "pipe", "pipe"],
-        });
-        let stdout = "";
-        let stderr = "";
-        child.stdout.setEncoding("utf8");
-        child.stderr.setEncoding("utf8");
-        child.stdout.on("data", (chunk: string) => {
-          stdout += chunk;
-        });
-        child.stderr.on("data", (chunk: string) => {
-          stderr += chunk;
-        });
-        const exitCode = await new Promise<number | null>(
-          (resolveExit, reject) => {
-            child.once("error", reject);
-            child.once("close", resolveExit);
-          },
+        completed = true;
+        cleanup();
+        resume(result);
+      };
+      const onStdout = (chunk: string) => {
+        stdout += chunk;
+      };
+      const onStderr = (chunk: string) => {
+        stderr += chunk;
+      };
+      const onError = () => complete(Effect.fail(packagingError(reason)));
+      const onClose = (exitCode: number | null) => {
+        complete(
+          exitCode === 0
+            ? Effect.succeed({ stdout, stderr })
+            : Effect.fail(packagingError(reason)),
         );
-        if (exitCode !== 0) {
-          throw packagingError(reason);
+      };
+      child.stdout.setEncoding("utf8");
+      child.stderr.setEncoding("utf8");
+      child.stdout.on("data", onStdout);
+      child.stderr.on("data", onStderr);
+      child.once("error", onError);
+      child.once("close", onClose);
+      return Effect.sync(() => {
+        cleanup();
+        if (!completed) {
+          completed = true;
+          try {
+            child.kill();
+          } catch {
+            // The child already exited; interruption still owns cleanup.
+          }
         }
-        return { stdout, stderr };
-      },
-      catch: () => packagingError(reason),
-    }),
-);
+      });
+    },
+  );
+});
 
 const makeTempDirectory = (
   prefix: string,

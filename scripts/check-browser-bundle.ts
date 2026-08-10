@@ -131,10 +131,49 @@ if (activationCss.gzip > 25 * KIB) {
   fail(`initial CSS is ${activationCss.gzip} bytes gzip (limit 25600)`);
 }
 
+let activationSource = "";
+for (const path of initialScriptPaths) {
+  activationSource += `${await Bun.file(path).text()}\n`;
+}
+const workspaceActivationReference = required(
+  activationSource.match(
+    /assets\/(workspace-activation\.[A-Za-z0-9_-]+\.js)/,
+  )?.[1],
+  "Astro activation bootstrap has no deferred workspace coordinator",
+);
+const workspaceActivationGraph = await staticGraph([
+  assetPath(`/assets/${workspaceActivationReference}`),
+]);
+let workspaceActivationSource = "";
+for (const path of workspaceActivationGraph) {
+  workspaceActivationSource += `${await Bun.file(path).text()}\n`;
+}
+if (!workspaceActivationSource.includes("flect:workspace-open")) {
+  fail("Astro workspace coordinator does not request the Flect island");
+}
+
 const workspaceGraph = await staticGraph([
   assetPath(componentReference),
   assetPath(rendererReference),
 ]);
+for (const path of workspaceActivationGraph) workspaceGraph.add(path);
+let workspaceSource = "";
+for (const path of workspaceGraph) {
+  workspaceSource += `${await Bun.file(path).text()}\n`;
+}
+const workspaceCssReference = required(
+  workspaceSource.match(/\/assets\/([A-Za-z0-9_.-]+\.css)/)?.[1],
+  "protected workspace graph has no deferred stylesheet",
+);
+if (initialNames.includes(workspaceCssReference)) {
+  fail("view-only HTML eagerly references workspace CSS");
+}
+const workspaceCss = await size(assetPath(`/assets/${workspaceCssReference}`));
+if (workspaceCss.gzip > 16 * KIB || workspaceCss.decoded > 80 * KIB) {
+  fail(
+    `deferred workspace CSS is ${workspaceCss.gzip} bytes gzip / ${workspaceCss.decoded} decoded (limits 16384 / 81920)`,
+  );
+}
 const workspace = await graphSize(workspaceGraph);
 if (workspace.gzip > 200 * KIB || workspace.decoded > 600 * KIB) {
   fail(
@@ -161,13 +200,6 @@ for (const path of workspaceGraph) {
   }
 }
 
-let activationSource = "";
-for (const path of initialScriptPaths) {
-  activationSource += `${await Bun.file(path).text()}\n`;
-}
-if (!activationSource.includes("flect:workspace-open")) {
-  fail("Astro activation coordinator does not request the Flect island");
-}
 if (!html.includes('client="flect"')) {
   fail("static document does not use the client:flect Astro directive");
 }
@@ -179,6 +211,7 @@ console.log(
       viewOnlyDocument: await size(htmlPath),
       activationBootstrap: activationJs,
       initialCss: activationCss,
+      workspaceCss,
       protectedWorkspace: {
         ...workspace,
         modules: workspaceGraph.size,

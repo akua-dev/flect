@@ -6,9 +6,6 @@ const flectClientDirective: ClientDirective = (load) => {
     if (hydration !== undefined) return hydration;
     hydration = load()
       .then((run) => run())
-      .then(() => {
-        document.dispatchEvent(new CustomEvent("flect:workspace-ready"));
-      })
       .catch((error: unknown) => {
         hydration = undefined;
         document.dispatchEvent(
