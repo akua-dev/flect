@@ -9,6 +9,8 @@ import { resetBrowserWorkspace } from "./reset-browser-workspace";
 const browserFailures = new WeakMap<Page, Array<string>>();
 const completedPromptPages = new WeakSet<Page>();
 const runFile = promisify(execFile);
+const workspaceComposer = (page: Page) =>
+  page.locator("form.composer").getByRole("textbox", { name: "Message Flect" });
 
 test.beforeEach(async ({ page }) => {
   const failures: Array<string> = [];
@@ -36,9 +38,7 @@ test.beforeEach(async ({ page }) => {
   });
 
   await resetBrowserWorkspace(page);
-  await expect(
-    page.getByRole("textbox", { name: "Message Flect" }),
-  ).toBeEnabled();
+  await expect(workspaceComposer(page)).toBeEnabled();
 });
 
 test.afterEach(async ({ page }) => {
@@ -55,7 +55,7 @@ test.afterEach(async ({ page }) => {
 });
 
 const shape = async (page: Page) => {
-  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  const composer = workspaceComposer(page);
   await composer.fill("Exercise embedded Flect AXI");
   await composer.press("Enter");
   await expect(
@@ -87,9 +87,7 @@ test("Flect validates and applies local edits while protected authority stays in
 }) => {
   await shape(page);
 
-  await expect(
-    page.getByRole("textbox", { name: "Message Flect" }),
-  ).toBeVisible();
+  await expect(workspaceComposer(page)).toBeVisible();
   await expect(page.locator(".role-switcher")).toHaveCount(0);
 
   const activities = page.getByRole("button", { name: "Bash details" });
@@ -115,7 +113,7 @@ test("Flect inspects its accepted live-canvas ref through reserved embedded Git"
   page,
 }) => {
   await shape(page);
-  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  const composer = workspaceComposer(page);
   await composer.fill("Inspect embedded Git");
   await composer.press("Enter");
 
@@ -131,7 +129,7 @@ test("Flect checkpoints staged source through embedded Wasm Git", async ({
   page,
 }) => {
   await shape(page);
-  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  const composer = workspaceComposer(page);
   await composer.fill("Commit Shaper source");
   await composer.press("Enter");
 
@@ -180,7 +178,7 @@ test("Flect lists and invokes a visible product action through embedded flect", 
 }) => {
   await acceptAndRun(page);
 
-  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  const composer = workspaceComposer(page);
   await composer.fill("Invoke the visible interface action");
   await composer.press("Enter");
 
@@ -207,7 +205,7 @@ test("Flect authority and reserved-command identity fail closed", async ({
   page,
 }) => {
   await acceptAndRun(page);
-  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  const composer = workspaceComposer(page);
 
   await composer.fill("Verify App Agent authority");
   await composer.press("Enter");
@@ -234,7 +232,7 @@ test("role workspace source persists through OPFS across a page restart", async 
   page,
 }) => {
   await acceptAndRun(page);
-  let composer = page.getByRole("textbox", { name: "Message Flect" });
+  let composer = workspaceComposer(page);
   await composer.fill("Write persistent workspace marker");
   await composer.press("Enter");
   await expect(
@@ -243,7 +241,7 @@ test("role workspace source persists through OPFS across a page restart", async 
 
   await page.reload();
   await expect(page.locator(".role-shell")).toBeVisible();
-  composer = page.getByRole("textbox", { name: "Message Flect" });
+  composer = workspaceComposer(page);
   await composer.fill("Read persistent workspace marker");
   await composer.press("Enter");
   const activity = page.getByRole("button", { name: "Bash details" }).last();
@@ -260,7 +258,7 @@ test("streamed embedded CLI activity does not steal manual scroll position", asy
 }) => {
   await page.setViewportSize({ width: 900, height: 620 });
   await acceptAndRun(page);
-  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  const composer = workspaceComposer(page);
 
   await composer.fill("Show the Markdown showcase");
   await composer.press("Enter");

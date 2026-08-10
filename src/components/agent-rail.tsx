@@ -684,14 +684,12 @@ export function AgentRail({
     workspace.externalExtensions.app && workspace.externalExtensions.shaper;
   const toggleExternalExtensions = async () => {
     const enabled = !externalExtensionsEnabled;
-    const changes: Array<Promise<void>> = [];
     if (workspace.externalExtensions.app !== enabled) {
-      changes.push(workspace.toggleExternalExtensions("app"));
+      await workspace.toggleExternalExtensions("app");
     }
     if (workspace.externalExtensions.shaper !== enabled) {
-      changes.push(workspace.toggleExternalExtensions("shaper"));
+      await workspace.toggleExternalExtensions("shaper");
     }
-    await Promise.all(changes);
   };
   const candidateExtensionBlocked =
     capsuleReview !== undefined &&

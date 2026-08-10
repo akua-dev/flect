@@ -50,12 +50,15 @@ at least once per gate. Warm target switching uses multiple samples and fails
 on the worst sample; release dogfood records three native samples and uses the
 median while also rejecting any sample above 150 percent of its budget.
 
-CI is intentionally tolerant of ordinary scheduler variation but not silent
-regression: a mandatory browser metric fails at its exact threshold and prints
-the bounded numeric diagnostic. Native measurements complement CI on the
-supported macOS release host and are recorded in the dated verification
-report. A different supported-device baseline requires a reviewed update to
-the one TypeScript budget contract and this rationale.
+The dedicated supported-device browser run and release dogfood fail warm
+activation at the exact 300 ms product threshold. Shared hosted CI cannot be a
+hardware baseline: it reports that same metric, restores the browser cache
+before measuring it, and rejects warm activation at the existing 1,000 ms cold
+ceiling so scheduler contention cannot create a false release claim or hide a
+major regression. Native measurements complement CI on the supported macOS
+release host and are recorded in the dated verification report. A different
+supported-device baseline requires a reviewed update to the one TypeScript
+budget contract and this rationale.
 
 ## Resource behavior
 

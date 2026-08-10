@@ -239,6 +239,45 @@ const untestedPortableExtensions = PortableExtensionCatalogSnapshot.make({
 });
 
 describe("AgentRail", () => {
+  it("serializes the two role resets behind the single trusted-extension switch", async () => {
+    let finishApp: (() => void) | undefined;
+    const appReset = new Promise<void>((resolve) => {
+      finishApp = resolve;
+    });
+    const toggleExternalExtensions = vi.fn((role: "app" | "shaper") =>
+      role === "app" ? appReset : Promise.resolve(),
+    );
+    render(
+      <AgentRail
+        document={document}
+        mode="edit"
+        onCollapse={vi.fn()}
+        onModeChange={vi.fn()}
+        onOpenSafeMode={vi.fn()}
+        onRestoreSafeMode={vi.fn(() => Promise.resolve())}
+        preferences={preferences}
+        shaping={shaping}
+        workspace={{ ...workspace, toggleExternalExtensions }}
+      />,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Actions" }));
+    await userEvent.click(
+      screen.getByRole("menuitem", {
+        name: "Enable trusted Pi extensions",
+      }),
+    );
+    await waitFor(() =>
+      expect(toggleExternalExtensions).toHaveBeenCalledWith("app"),
+    );
+    expect(toggleExternalExtensions).not.toHaveBeenCalledWith("shaper");
+
+    finishApp?.();
+    await waitFor(() =>
+      expect(toggleExternalExtensions).toHaveBeenCalledWith("shaper"),
+    );
+  });
+
   it("keeps typed browser-build progress visible in the protected rail", () => {
     render(
       <AgentRail

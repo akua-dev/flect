@@ -462,6 +462,40 @@ describe("AgentWorkspace", () => {
       }),
   );
 
+  it.effect("stays busy until the completed turn stream has closed", () => {
+    const streamClosed = Deferred.makeUnsafe<void>();
+    const { layer } = makeLayer({
+      prompt: () =>
+        Stream.make(
+          { type: "turn_started" } as const,
+          { type: "turn_completed" } as const,
+        ).pipe(
+          Stream.concat(
+            Stream.fromEffect(Deferred.await(streamClosed)).pipe(
+              Stream.map(() => ({ type: "turn_completed" }) as const),
+            ),
+          ),
+        ),
+    });
+
+    return Effect.gen(function* () {
+      const workspace = yield* AgentWorkspace;
+      yield* workspace.refresh;
+      const running = yield* workspace
+        .submitAppPrompt(userOperation(60), "Wait for transport close")
+        .pipe(Effect.forkChild({ startImmediately: true }));
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        if ((yield* workspace.snapshot).app.status === "streaming") break;
+        yield* Effect.yieldNow;
+      }
+
+      assert.strictEqual((yield* workspace.snapshot).app.status, "streaming");
+      yield* Deferred.succeed(streamClosed, undefined);
+      yield* Fiber.join(running);
+      assert.strictEqual((yield* workspace.snapshot).app.status, "ready");
+    }).pipe(Effect.provide(layer));
+  });
+
   it.effect(
     "reuses one protected session across separate App and Shaper state",
     () => {

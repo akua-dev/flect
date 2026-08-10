@@ -1405,7 +1405,7 @@ export const AgentWorkspaceLive = Layer.effect(
                   );
                 case "turn_completed":
                 case "cancelled":
-                  return setOperationalStatus("app", "ready");
+                  return Effect.void;
                 case "error":
                 case "busy":
                   return setOperationalStatus(
@@ -1423,6 +1423,7 @@ export const AgentWorkspaceLive = Layer.effect(
               error._tag === "SessionBusy" ? Effect.void : releaseSession(),
             ),
           );
+          yield* setOperationalStatus("app", "ready");
           yield* appendJournal(operation, {
             category: "turn",
             phase: "succeeded",
@@ -1538,7 +1539,7 @@ export const AgentWorkspaceLive = Layer.effect(
                   );
                 case "turn_completed":
                 case "cancelled":
-                  return setConversationStatus("previewApp", "ready");
+                  return Effect.void;
                 case "error":
                 case "busy":
                   return setConversationStatus(
@@ -1560,6 +1561,7 @@ export const AgentWorkspaceLive = Layer.effect(
                 : releasePreviewSession(),
             ),
           );
+        yield* setConversationStatus("previewApp", "ready");
         yield* appendJournal(operation, {
           category: "turn",
           phase: "succeeded",
