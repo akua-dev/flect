@@ -8,7 +8,17 @@ import {
   type InterfaceStorageError,
 } from "./interface-store";
 
-const REVISION_JOURNAL_KEY = "flect.revisions.v1";
+export const REVISION_JOURNAL_KEY = "flect.revisions.v1";
+export const RECOVERY_MARKER_KEY = "flect.recovery.v1";
+
+export class RecoveryMarker extends Schema.Class<RecoveryMarker>(
+  "RecoveryMarker",
+)({
+  version: Schema.Literal(1),
+  status: Schema.Literals(["pending", "clear"]),
+}) {}
+
+export const decodeRecoveryMarker = Schema.decodeUnknownEffect(RecoveryMarker);
 
 class InvalidRevisionJournal extends Schema.TaggedErrorClass<InvalidRevisionJournal>()(
   "InvalidRevisionJournal",
@@ -22,6 +32,7 @@ export class InterfaceRepositoryLoad extends Schema.Class<InterfaceRepositoryLoa
 )({
   snapshot: Schema.optionalKey(ShapingSnapshot),
   recovered: Schema.Boolean,
+  recovery: Schema.optionalKey(Schema.Boolean),
 }) {}
 
 export interface InterfaceRepositoryShape {
@@ -29,6 +40,8 @@ export interface InterfaceRepositoryShape {
   readonly save: (
     snapshot: ShapingSnapshot,
   ) => Effect.Effect<void, InterfaceStorageError>;
+  readonly markRecovery?: Effect.Effect<void, InterfaceStorageError>;
+  readonly clearRecovery?: Effect.Effect<void, InterfaceStorageError>;
 }
 
 export class InterfaceRepository extends Context.Service<
@@ -49,21 +62,37 @@ export const makeInterfaceRepositoryLayer = ({
       const load = Effect.fn("Flect.InterfaceRepository.load")(function* () {
         if (safeMode) {
           return InterfaceRepositoryLoad.make({
-            recovered: false,
+            recovered: true,
           });
         }
 
         const raw = yield* storage
           .read(REVISION_JOURNAL_KEY)
           .pipe(Effect.orElseSucceed(() => undefined));
+        const recoveryRaw = yield* storage
+          .read(RECOVERY_MARKER_KEY)
+          .pipe(Effect.orElseSucceed(() => undefined));
+        const recovery =
+          recoveryRaw === undefined || recoveryRaw === null
+            ? false
+            : yield* Effect.try({
+                try: (): unknown => JSON.parse(recoveryRaw),
+                catch: () => undefined,
+              }).pipe(
+                Effect.flatMap(decodeRecoveryMarker),
+                Effect.map((marker) => marker.status === "pending"),
+                Effect.orElseSucceed(() => true),
+              );
         if (raw === null) {
           return InterfaceRepositoryLoad.make({
             recovered: false,
+            ...(recovery ? { recovery: true } : {}),
           });
         }
         if (raw === undefined) {
           return InterfaceRepositoryLoad.make({
             recovered: true,
+            ...(recovery ? { recovery: true } : {}),
           });
         }
 
@@ -77,6 +106,7 @@ export const makeInterfaceRepositoryLayer = ({
         if (Option.isNone(input)) {
           return InterfaceRepositoryLoad.make({
             recovered: true,
+            ...(recovery ? { recovery: true } : {}),
           });
         }
 
@@ -88,6 +118,7 @@ export const makeInterfaceRepositoryLayer = ({
         return InterfaceRepositoryLoad.make({
           ...(snapshot === undefined ? {} : { snapshot }),
           recovered: snapshot === undefined,
+          ...(recovery ? { recovery: true } : {}),
         });
       });
 
@@ -99,6 +130,11 @@ export const makeInterfaceRepositoryLayer = ({
               ? Effect.void
               : storage.write(REVISION_JOURNAL_KEY, JSON.stringify(snapshot)),
         ),
+        markRecovery: storage.write(
+          RECOVERY_MARKER_KEY,
+          JSON.stringify({ version: 1, status: "pending" }),
+        ),
+        clearRecovery: storage.remove(RECOVERY_MARKER_KEY),
       };
     }),
   );

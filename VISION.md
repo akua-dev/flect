@@ -168,6 +168,9 @@ Flect will let people:
   SQL capability;
 - ask the built-in agent to use approved product capabilities as well as shape
   their presentation;
+- explicitly pair a local outside agent that can inspect, operate, debug, and
+  subscribe to the same live workspace through the same user-visible command
+  and recovery boundaries;
 - use model access they control through Pi or another approved runtime instead
   of requiring every product to operate an inference service;
 - begin without an existing product backend and create local, offline-capable
@@ -360,15 +363,28 @@ this vision. They are being replaced by the continuous live-canvas loop while
 the proven credential, transport, isolation, validation, and recovery
 boundaries are retained.
 
-The desktop app carries its private runtime as a compiled sidecar over stdio
-instead of exposing it on localhost. Optional pure extension logic can run in
-a disposable, resource-limited QuickJS WebAssembly worker and return only inert
-typed intents. The current slice intentionally does not run generated React,
-native extensions, or product API capabilities.
+Internally, Guardian, accepted App Agent, Shaper, and candidate Preview App
+Agent still use separate Pi sessions behind one private runtime boundary. The
+Effect workspace controller accepts visible UI actions and explicitly
+authorized local CLI, JSON/SSE, and MCP requests, publishes their changes
+reactively, and retains bounded redacted diagnostic evidence. Outside control
+remains off by default and cannot grant itself authority.
 
-Its bounded browser-portable shell is described in
-[`docs/bun-compatibility.md`](docs/bun-compatibility.md). It does not grant
-host-shell, native-process, system-Bun, or ambient-network authority. The next
-stage keeps those boundaries while making the agent, canonical frontend
-workspace, running canvas, direct manipulation, and quiet Git history one
-coherent product experience.
+The current foundation includes a canonical browser-portable Git repository in
+OPFS, capsule import and export, bounded source-project import, typed product
+capabilities, a product-adoption SDK, in-product Pi authentication, portable
+extensions, accessibility and appearance gates, and a native update/uninstall
+boundary. Supported static and single-entry Vite JavaScript, TypeScript, and
+React projects can be imported into isolated compiled candidates. These
+capabilities are implementation foundations; their current candidate and role
+ceremony is not the destination.
+
+The desktop app carries Pi traffic through a compiled sidecar over private
+stdio. Optional pure extension logic runs in a disposable, resource-limited
+QuickJS WebAssembly worker and returns only inert typed intents. The bounded
+browser-portable shell described in
+[`docs/bun-compatibility.md`](docs/bun-compatibility.md) grants no host shell,
+native process, system Bun, or ambient network authority. The next stage keeps
+those boundaries while making the agent, canonical frontend workspace, running
+canvas, direct manipulation, and quiet Git history one coherent product
+experience.

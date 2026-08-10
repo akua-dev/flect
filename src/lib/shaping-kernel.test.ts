@@ -13,6 +13,7 @@ import {
 import {
   InterfaceRepository,
   makeInterfaceRepositoryLayer,
+  REVISION_JOURNAL_KEY,
 } from "./interface-repository";
 import { InterfaceStorage, InterfaceStorageError } from "./interface-store";
 import {
@@ -47,11 +48,20 @@ const customizedDocument = (headline: string) =>
   });
 
 const makePersistentHarness = (initial: string | null = null) => {
-  const stored = Ref.makeUnsafe<string | null>(initial);
+  const values = new Map<string, string>();
+  if (initial !== null) values.set(REVISION_JOURNAL_KEY, initial);
+  const stored = Ref.makeUnsafe(values);
   const storage = Layer.succeed(InterfaceStorage)({
-    read: () => Ref.get(stored),
-    write: (_key, value) => Ref.set(stored, value),
-    remove: () => Effect.void,
+    read: (key) =>
+      Ref.get(stored).pipe(Effect.map((current) => current.get(key) ?? null)),
+    write: (key, value) =>
+      Ref.update(stored, (current) => new Map(current).set(key, value)),
+    remove: (key) =>
+      Ref.update(stored, (current) => {
+        const next = new Map(current);
+        next.delete(key);
+        return next;
+      }),
   });
   const repository = makeInterfaceRepositoryLayer({
     safeMode: false,
@@ -71,7 +81,8 @@ const makePersistentHarness = (initial: string | null = null) => {
 
 const makeFailingRepairHarness = (initial: string) => {
   const storage = Layer.succeed(InterfaceStorage)({
-    read: () => Effect.succeed(initial),
+    read: (key) =>
+      Effect.succeed(key === REVISION_JOURNAL_KEY ? initial : null),
     write: () =>
       Effect.fail(
         new InterfaceStorageError({
@@ -152,6 +163,77 @@ describe("ShapingKernel", () => {
         assert.strictEqual(snapshot.proposal?.id, first.id);
         assert.strictEqual(snapshot.proposal?.status, "previewed");
       }),
+    );
+  });
+
+  it.layer(makeShapingKernelTestLayer())((it) => {
+    it.effect(
+      "atomically supersedes a preview without changing accepted state",
+      () =>
+        Effect.gen(function* () {
+          const kernel = yield* ShapingKernel;
+          const first = yield* kernel.propose(
+            customizedDocument("First candidate"),
+            "shaper",
+          );
+          yield* kernel.preview(first.id);
+
+          const second = yield* kernel.supersede(
+            first.id,
+            customizedDocument("Corrected candidate"),
+            "shaper",
+          );
+          const snapshot = yield* kernel.snapshot;
+
+          assert.notStrictEqual(second.id, first.id);
+          assert.strictEqual(second.status, "previewed");
+          assert.strictEqual(snapshot.proposal?.id, second.id);
+          assert.strictEqual(
+            snapshot.proposal?.document.name,
+            "Corrected candidate",
+          );
+          assert.deepStrictEqual(
+            snapshot.active.document,
+            defaultInterfaceDocument,
+          );
+          assert.strictEqual(snapshot.lastEvent.type, "revision-previewed");
+          assert.strictEqual(snapshot.lastEvent.revisionId, second.id);
+        }),
+    );
+  });
+
+  it.layer(makeShapingKernelTestLayer())((it) => {
+    it.effect(
+      "preserves the current candidate after stale or invalid supersede",
+      () =>
+        Effect.gen(function* () {
+          const kernel = yield* ShapingKernel;
+          const first = yield* kernel.propose(
+            customizedDocument("Stable candidate"),
+            "shaper",
+          );
+          yield* kernel.preview(first.id);
+
+          const stale = yield* kernel
+            .supersede(
+              RevisionId.make("revision-stale"),
+              customizedDocument("Stale candidate"),
+              "shaper",
+            )
+            .pipe(Effect.flip);
+          const invalid = yield* kernel
+            .supersede(first.id, { executable: "<script />" }, "shaper")
+            .pipe(Effect.flip);
+          const snapshot = yield* kernel.snapshot;
+
+          assert.strictEqual(stale._tag, "RevisionNotFound");
+          assert.strictEqual(invalid._tag, "InvalidInterfaceDocument");
+          assert.strictEqual(snapshot.proposal?.id, first.id);
+          assert.strictEqual(
+            snapshot.proposal?.document.name,
+            "Stable candidate",
+          );
+        }),
     );
   });
 

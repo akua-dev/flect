@@ -3,7 +3,7 @@ import { BunHttpServer, BunRuntime } from "@effect/platform-bun";
 import { Layer } from "effect";
 import { HttpRouter } from "effect/unstable/http";
 import { makeFlectHttpApp } from "./app";
-import { FlectRuntimeLive, PiSdkLive } from "./pi-runtime";
+import { FlectRuntimeWithPiLive } from "./pi-services";
 import { FlectTestRuntimeLive } from "./test-runtime";
 
 registerBunOAuthFlows();
@@ -11,7 +11,7 @@ registerBunOAuthFlows();
 const RuntimeLive =
   process.env.FLECT_TEST_MODE === "1"
     ? FlectTestRuntimeLive
-    : FlectRuntimeLive.pipe(Layer.provide(PiSdkLive));
+    : FlectRuntimeWithPiLive;
 
 const ApplicationLive = makeFlectHttpApp().pipe(
   HttpRouter.provideRequest(RuntimeLive),

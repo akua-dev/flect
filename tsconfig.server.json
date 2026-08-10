@@ -11,12 +11,29 @@
     "noEmit": true,
     "types": ["bun", "node", "vitest/globals"],
     "paths": {
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["./shared/*"],
+      "@flect/product": ["./packages/product/src/index.ts"],
+      "@flect/product/contracts": ["./packages/product/src/contracts.ts"],
+      "@flect/product/host": ["./packages/product/src/host.ts"]
     }
   },
   "include": [
     "server",
+    "cli",
+    "src/axi/broker-gateway.ts",
+    "src/axi/command.ts",
+    "src/axi/contracts.ts",
+    "src/axi/gateway.ts",
+    "src/axi/output.ts",
+    "src/axi/program.ts",
+    "src/git/repository-tar.ts",
+    "src/lib/agent-integration.ts",
+    "src/lib/native-update.ts",
+    "src/lib/shell-link.ts",
+    "src/lib/uninstall.ts",
+    "src/sharing/share-archive.ts",
     "shared",
+    "packages/product/src",
     "vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",

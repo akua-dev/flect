@@ -2,6 +2,8 @@
 
 > The interface that takes your shape.
 
+[![Flect quality](https://github.com/akua-dev/flect/actions/workflows/quality.yml/badge.svg)](https://github.com/akua-dev/flect/actions/workflows/quality.yml)
+
 ![Flect adapting across product interfaces](assets/flect-hero.png)
 
 Flect is an open-source, agent-native interface shell. You describe what you
@@ -86,18 +88,15 @@ The immediate product work is:
 
 ### Apple Silicon macOS
 
-The current native preview requires Apple Silicon, macOS 12 or newer, and a
-one-time Pi provider login. With [Bun](https://bun.sh) installed:
-
-```bash
-bunx pi
-```
-
-Run `/login` inside Pi, authenticate a supported provider, then quit Pi.
+The current native preview requires Apple Silicon and macOS 12 or newer. It
+contains its own Pi runtime; no terminal login or separate Pi installation is
+required.
 
 [Download Flect v0.2.0 for Apple Silicon macOS](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.dmg)
 ·
 [SHA-256 checksum](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.dmg.sha256)
+·
+[Release evidence](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.release.json)
 
 Download the DMG and checksum into the same directory and verify them:
 
@@ -115,34 +114,49 @@ still blocks the app:
 xattr -dr com.apple.quarantine /Applications/Flect.app
 ```
 
+Launch Flect, open the model chooser, and connect a provider under **Pi
+providers**. Provider credentials stay in Pi's private local store. Sensitive
+manual values open in a separate one-use loopback page that Flect's interface
+cannot read.
+
+Native update review and ownership-safe uninstall preparation live under
+**Diagnostics**. Development builds do not contain an update trust key; public
+builds fail closed unless the signed updater and Apple trust evidence are
+complete. See [Updates and uninstall](docs/updates-and-uninstall.md).
+
 ### Browser and source
 
 ```bash
 git clone https://github.com/akua-dev/flect.git
 cd flect
 bun install
-bunx pi
-```
-
-Run `/login` inside Pi, quit Pi, then:
-
-```bash
 bun run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite serves the current UI
-there; the origin-restricted local Pi runtime listens on `127.0.0.1:3210`.
-Provider credentials remain in Pi and never enter browser storage.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite serves the UI there;
+the origin-restricted local Pi runtime listens on `127.0.0.1:3210`. Connect a
+provider from the model chooser. Provider credentials remain in Pi and never
+enter React state, workspace snapshots, control APIs, browser storage, or
+shaped interfaces.
 
 ## What the current slice proves
 
-- authenticated Pi model discovery, selection, streamed turns, cancellation,
-  and redacted public failures;
-- schema-validated interface documents and a closed trusted renderer;
-- attributable revisions, explicit rollback, and last-known-good recovery;
-- a protected composer that remains reachable when customized UI fails;
-- bounded browser-backed workspaces without ambient host shell, filesystem, or
-  network authority;
+- in-product Pi provider discovery, authentication, model selection, streamed
+  turns, cancellation, and redacted public failures;
+- an Effect-owned workspace controller with schema-validated interface state,
+  deterministic last-known-good recovery, and a protected composer;
+- a canonical browser-portable Git repository in OPFS, guarded revision refs,
+  persistence across reloads, and complete ordinary-Git export;
+- bounded static and single-entry Vite JavaScript, TypeScript, and React import,
+  a Worker compiler, integrity-checked package resolution, and offline cache;
+- deterministic `.flect` capsule import/export, protected provenance and
+  capability review, portable sharing, and user-owned forks;
+- a typed product-capability registry plus the packable
+  [`@flect/product`](packages/product/) SDK and reference integrations;
+- an opt-in local `flect` CLI, JSON/SSE, and MCP control surface using the same
+  workspace controller as visible UI actions;
+- responsive light/dark, forced-colors, reduced-motion, keyboard, Markdown,
+  accessibility, and bounded conversation-continuity behavior;
 - browser HTTP/SSE and native private-stdio transports behind the same Effect
   capabilities; and
 - optional pure extension logic in a disposable QuickJS/Wasm worker that can
@@ -150,7 +164,36 @@ Provider credentials remain in Pi and never enter browser storage.
 
 The native app does not start the browser development server. It launches a
 compiled Bun/Pi sidecar and communicates through private NDJSON stdio exposed
-to the webview by one narrow Tauri command.
+to the webview by one narrow Tauri command. When the user enables outside
+control, that sidecar additionally exposes the authenticated loopback broker.
+
+## Adopt Flect in a product
+
+`@flect/product` is the separately versioned, browser-portable Effect SDK for
+product teams. It defines strict product metadata, recommended `.flect`
+experiences, named unary and event operations, compatibility and declarative
+migrations, inference ownership, user-state separation, and deterministic
+adoption diagnostics. It also exports policy-fixed HTTP/GraphQL and bounded
+event host Layers.
+
+Build and verify the current `0.1.0` preview tarball locally:
+
+```bash
+bun run product:package
+npm install ./dist-product-sdk/flect-product-0.1.0.tgz effect@4.0.0-beta.102
+```
+
+This command installs the tarball into a clean temporary consumer, typechecks
+it, and runs the smallest offline integration. It does not publish to npm.
+Start with the [SDK quickstart](packages/product/README.md), then compare the
+[offline, browser-direct, and brokered references](examples/product-sdk/).
+
+Flect still owns all grants, protected review, capsule activation, workspace
+Git, safe mode, and recovery. Products supply only named, bounded closures.
+Product denial overrides approval; credentials stay inside trusted host
+closures; model-provider or inference-owner choice cannot change product
+authorization. Product connection records remain separate from personal forks
+and exports, and detach preserves that user-owned work.
 
 ## Security and product boundary
 
@@ -163,15 +206,47 @@ shell, native process, system Bun, ambient filesystem, or ambient network.
 Credentials remain outside user-generated source and model-visible project
 state.
 
-Flect does not yet ship portable `.flect` capsules, a component registry,
-canonical OPFS/Git workspaces, in-Flect provider login, product/API adapters,
-privileged host brokerage, remote runtimes, automatic updates, notarization, a
-macOS App Sandbox entitlement, or Intel, Windows, and Linux packages.
+Flect now exports and imports verified declarative `.flect` capsules through a
+reviewable candidate flow. It also imports, isolates, persists, restores, and
+byte-preservingly re-exports compiled HTML capsules with verified local CSS,
+classic scripts, images, fonts, and media in supported browsers.
+Arbitrary Vite plugins/config transforms, CSS modules/preprocessors and asset
+URL rewriting, multi-entry routing, Vue/Svelte adapters, archive/Git import,
+general capsule personal-fork lineage and compatible merge, a component
+registry, custom duration/rate editing in the protected permission UI,
+database adapters, privileged native
+product transport, remote
+runtimes, a published signed updater, notarization, a
+macOS App Sandbox entitlement, and Intel, Windows, and Linux packages are not
+yet shipped.
 
 See the [capability and sandbox trust model](docs/trust-model.md) for the
 authority boundary and the
 [browser Bun compatibility matrix](docs/bun-compatibility.md) for supported
 commands and deliberate omissions.
+
+## Import an existing interface
+
+Open the composer’s **Actions** menu and choose **Import app project**. Select
+one directory with a root `index.html`. Flect currently recognizes plain static
+sites and standard Vite browser entrypoints, including React JSX/TSX. It checks
+paths and compatibility without executing source, excludes secret-shaped and
+generated dependency files before reading them, checkpoints recognizable
+source into embedded Git, and builds the exact isolated proposal locally.
+When runtime dependencies need resolution, Flect generates or verifies an npm
+v3 lock, checkpoints it into the candidate's ordinary Git source, supersedes
+the guarded proposal, and compiles only that locked commit.
+The current boundary accepts at most 255 source files (the capsule reserves one
+metadata entry), 32 MiB total, and 100 characters per portable relative path.
+Named unsupported Vite plugins, `resolve.alias`, and `node:` built-ins are
+reported before a candidate exists, with a browser-portable alternative.
+
+The resulting app opens as a candidate. Review its source revision, artifact
+digest, adaptations, ignored files, capabilities, and compatibility; exercise
+the isolated UI; then choose **Keep change** or **Reject**. A kept build exports
+as a complete `.flect` capsule and runs without Vite, npm, or a Flect-hosted
+service. Vite config and package scripts are preserved as source but never run;
+only runtime dependencies enter the portable package graph.
 
 ## Architecture, product, and vision
 
@@ -180,9 +255,14 @@ commands and deliberate omissions.
 - [Visible design system](DESIGN.md)
 - [Implemented architecture](ARCHITECTURE.md)
 - [Capability and sandbox trust model](docs/trust-model.md)
-- [Browser Bun compatibility](docs/bun-compatibility.md)
 - [Current performance and platform-native baseline](docs/verification/2026-08-10-performance-and-native-feel-baseline.md)
 - [Astro activation-shell architecture decision](docs/decisions/0003-astro-activation-shell.md)
+- [Local agent control](docs/local-control.md)
+- [Product capability adoption](docs/product-capabilities.md)
+- [Browser Bun compatibility](docs/bun-compatibility.md)
+- [Performance and memory budgets](docs/performance.md)
+- [Session continuity and recovery](docs/recovery.md)
+- [Updates and uninstall](docs/updates-and-uninstall.md)
 - [Contributor guide](CONTRIBUTING.md)
 - [Flect delivery project](https://github.com/orgs/akua-dev/projects/8)
 
@@ -194,14 +274,26 @@ bun run check:all
 ```
 
 `check:all` runs Effect preparation, lint, type checking, unit and contract
-tests, production Chromium workflows, Rust tests, and the native application
-build. `bun run test:pi-smoke` is separate because it makes one real private
-turn with the developer's existing Pi provider login.
+tests, production Chromium workflows, Rust formatting and tests, and the native
+application build. The credential-free GitHub quality workflow runs this same
+command on every pull request and every change to `main`; it uploads only
+bounded Playwright failure evidence. `bun run test:pi-smoke` is separate
+because it makes one real private turn with the developer's existing Pi
+provider login.
 
-Release maintainers can reproduce the screenshots, demo, hero, DMG, checksum,
-and MP4 with `bun run media:release` and `bun run release:package`. The media
-pipeline additionally needs FFmpeg and the WebP tools `cwebp`, `dwebp`, and
-`img2webp`.
+Release maintainers can reproduce the screenshots, demo, and hero with
+`bun run media:release`, then produce the DMG, checksum, MP4, and a
+machine-readable evidence manifest with `bun run release:package`. Public mode
+also produces the signed Tauri archive and static `latest.json`. The package
+gate verifies the mounted DMG, exact executable inventory and architecture,
+deep/strict signing, hardened runtime, and observed Gatekeeper/stapling state.
+Public mode (`FLECT_PUBLIC_RELEASE=1`) additionally requires updater signing
+material from the release environment and fails closed unless source, Developer
+ID, notarization, updater signature verification, and independent
+reproducibility proof are all present. Tauri's current Isolation Pattern intentionally generates fresh
+per-build security material, so independent native-content reproducibility is
+recorded as blocked rather than claimed. The media pipeline additionally needs
+FFmpeg and the WebP tools `cwebp`, `dwebp`, and `img2webp`.
 
 ## License
 

@@ -54,7 +54,7 @@ components:
     size: "40px"
   button-primary-hover:
     backgroundColor: "{colors.flect-rose-hover}"
-    textColor: "{colors.ink}"
+    textColor: "{colors.void}"
     rounded: "{rounded.pill}"
     size: "40px"
   prompt-surface:
@@ -341,6 +341,45 @@ The transition uses measured layout motion for at most 220ms. Under
 update, selected target, resized rail, collapse, or breakpoint must never
 create a second composer, horizontal page overflow, focus loss, application
 state reset, or hidden recovery control.
+
+### Chat Markdown
+
+Agent output uses the same SF/system family as the shell at `1rem` with a
+`1.55` dark-surface line height and a maximum assistant measure of `70ch`.
+Blocks follow a `0.65rem` rhythm. Headings use a compact fixed-rem hierarchy:
+`1.25rem`, `1.125rem`, `1rem`, then `0.875rem` for levels four through six.
+The final three levels retain their semantic rank while sharing one quiet
+visual band to suit the narrow rail.
+
+Code and tables are contained instruments, not new cards. They use the
+existing Surface, Raised Surface, Line, Ink, and Muted tokens; code is
+`0.875rem` mono and table content is `0.8125rem`. Their own viewports own
+horizontal overflow, while copy, wrap, and expand actions stay dense on
+desktop and reach `44px` at compact widths. Details remain native disclosures,
+links use Flect Rose only as an interaction cue, and footnotes remain subdued.
+The complete rendering and trust contract lives in
+[`docs/superpowers/specs/2026-07-31-flect-chat-markdown-design.md`](docs/superpowers/specs/2026-07-31-flect-chat-markdown-design.md).
+
+### Activity, Follow, and Diagnostics
+
+Tool use is a compact instrument in the conversation timeline, not a generic assistant
+sentence and not a developer-console dump. A card always names the tool and
+shows queued, running, completed, or failed state. Duration stays visible;
+bounded commands, output, exit status, preview links, validation paths, and
+operation identifiers live in a native disclosure. Ready Mint and Failure Red
+support the label but never carry meaning alone.
+
+Conversation follow respects the reader. Content follows while the viewport is
+within 48px of its bottom. Once the person scrolls away, streaming and tool
+updates preserve that position and surface a quiet, keyboard-operable **Jump
+to latest** control with an unread count. Following never focuses the timeline
+or composer.
+
+Diagnostics is a protected disclosure above the composer. At rest it shows
+only local-control state and connected-client count. When opened, it exposes
+the explicit enable/revoke action and the latest correlated, redacted
+operation evidence. It must remain legible and useful without turning the
+ordinary product surface into infrastructure chrome.
 
 ## 7. Do's and Don'ts
 

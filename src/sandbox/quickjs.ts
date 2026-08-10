@@ -1,16 +1,16 @@
 import variant from "@jitl/quickjs-ng-wasmfile-release-sync";
-import { Effect, Schema, type SchemaAST } from "effect";
+import { Effect, Option, Schema, type SchemaAST } from "effect";
 import {
   newQuickJSWASMModuleFromVariant,
   type QuickJSWASMModule,
 } from "quickjs-emscripten-core";
+import { MAX_PORTABLE_EXTENSION_SOURCE_BYTES } from "../../shared/extensions";
 import {
   type QuickJsExtensionRequest,
   SandboxExecutionFailed,
   SandboxResult,
 } from "../../shared/sandbox";
 
-const SOURCE_LIMIT_BYTES = 256 * 1024;
 const INPUT_LIMIT_BYTES = 1024 * 1024;
 const OUTPUT_LIMIT_BYTES = 1024 * 1024;
 const MEMORY_LIMIT_BYTES = 16 * 1024 * 1024;
@@ -23,6 +23,7 @@ const strictOptions: SchemaAST.ParseOptions = {
 };
 
 const decodeResult = Schema.decodeUnknownEffect(SandboxResult, strictOptions);
+const decodeSandboxFailure = Schema.decodeUnknownOption(SandboxExecutionFailed);
 const textEncoder = new TextEncoder();
 
 const sandboxFailure = (reason: SandboxExecutionFailed["reason"]) =>
@@ -176,16 +177,20 @@ const executeInModule = Effect.fn("Flect.Sandbox.executeInModule")(
         }
       },
       catch: (error) =>
-        error instanceof SandboxExecutionFailed
-          ? error
-          : sandboxFailure("execution"),
+        Option.match(decodeSandboxFailure(error), {
+          onNone: () => sandboxFailure("execution"),
+          onSome: (failure) => failure,
+        }),
     }),
 );
 
 export const executeQuickJsExtension = Effect.fn(
   "Flect.Sandbox.executeQuickJsExtension",
 )(function* (request: QuickJsExtensionRequest) {
-  if (textEncoder.encode(request.source).byteLength > SOURCE_LIMIT_BYTES) {
+  if (
+    textEncoder.encode(request.source).byteLength >
+    MAX_PORTABLE_EXTENSION_SOURCE_BYTES
+  ) {
     return yield* Effect.fail(sandboxFailure("source-limit"));
   }
 

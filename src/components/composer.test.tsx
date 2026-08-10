@@ -14,6 +14,7 @@ const model = new ModelSummary({
   provider: "openai-codex",
   id: "gpt-5.6",
   name: "GPT-5.6",
+  reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
 });
 
 const props = (overrides: Partial<ComposerProps> = {}): ComposerProps => ({
@@ -32,6 +33,7 @@ const props = (overrides: Partial<ComposerProps> = {}): ComposerProps => ({
   onSubmit: vi.fn(() => Promise.resolve()),
   onCancel: vi.fn(() => Promise.resolve()),
   onRollback: vi.fn(() => Promise.resolve()),
+  onExportRepository: vi.fn(() => Promise.resolve()),
   onOpenSafeMode: vi.fn(),
   externalExtensionsEnabled: false,
   onToggleExternalExtensions: vi.fn(() => Promise.resolve()),
@@ -58,7 +60,7 @@ describe("Composer", () => {
     expect(input).toHaveValue("");
   });
 
-  it("retains a separate draft for each explicit role", async () => {
+  it("retains separate drafts for Shape, accepted Use, and candidate Use", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Composer {...props()} />);
     await user.type(
@@ -71,10 +73,78 @@ describe("Composer", () => {
     expect(appInput).toHaveValue("");
     await user.type(appInput, "Run draft");
 
+    rerender(
+      <Composer
+        {...props({
+          agentLabel: "Preview App Agent",
+          conversationKey: "candidate-use",
+          mode: "edit",
+          target: "use",
+        })}
+      />,
+    );
+    const previewInput = screen.getByRole("textbox", {
+      name: "Message Preview App Agent",
+    });
+    expect(previewInput).toHaveValue("");
+    await user.type(previewInput, "Candidate draft");
+
     rerender(<Composer {...props({ mode: "edit" })} />);
     expect(screen.getByRole("textbox", { name: "Message Shaper" })).toHaveValue(
       "Edit draft",
     );
+    rerender(<Composer {...props({ mode: "run" })} />);
+    expect(
+      screen.getByRole("textbox", { name: "Message App Agent" }),
+    ).toHaveValue("Run draft");
+  });
+
+  it("hydrates private drafts and reports edits through their exact target", async () => {
+    const user = userEvent.setup();
+    const onDraftChange = vi.fn(() => Promise.resolve());
+    const { rerender } = render(
+      <Composer
+        {...props({
+          drafts: {
+            acceptedUse: "Saved accepted question",
+            candidateUse: "Saved candidate test",
+            shape: "Saved shape request",
+          },
+          onDraftChange,
+        })}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Message Shaper" })).toHaveValue(
+      "Saved shape request",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: "Message Shaper" }),
+      " now",
+    );
+    expect(onDraftChange).toHaveBeenLastCalledWith(
+      "shape",
+      "Saved shape request now",
+    );
+
+    rerender(
+      <Composer
+        {...props({
+          conversationKey: "candidate-use",
+          drafts: {
+            acceptedUse: "Saved accepted question",
+            candidateUse: "Saved candidate test",
+            shape: "Saved shape request now",
+          },
+          mode: "edit",
+          onDraftChange,
+          target: "use",
+        })}
+      />,
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Message App Agent" }),
+    ).toHaveValue("Saved candidate test");
   });
 
   it("grows with the draft and scrolls only after the height bound", () => {
@@ -162,7 +232,7 @@ describe("Composer", () => {
 
     expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Run · App Agent" }),
+      screen.getByRole("button", { name: "Use · App Agent" }),
     ).toBeDisabled();
   });
 });

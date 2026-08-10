@@ -4,7 +4,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { Effect, Layer, ManagedRuntime, Stream } from "effect";
 import { describe, expect, it, vi } from "vitest";
-import { BunCommandResult } from "../../shared/bun-command";
+import { BunCommandFailed, BunCommandResult } from "../../shared/bun-command";
 import {
   AgentShellRequest,
   GuardianDiagnostic,
@@ -14,17 +14,24 @@ import {
   SessionSelection,
   ShapeCompleted,
 } from "../../shared/contracts";
+import { AgentCommandSource } from "../../shared/control";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
+import {
+  AgentWorkspace,
+  AgentWorkspaceLive,
+  type AgentWorkspaceShape,
+} from "../lib/agent-workspace";
 import {
   FlectClient,
   type FlectClientShape,
   FlectUnavailableError,
 } from "../lib/api";
+import { Clipboard } from "../lib/clipboard";
 import {
   InterfaceStorage,
   type InterfaceStorageShape,
 } from "../lib/interface-store";
-import type { FlectBrowserRuntime } from "../lib/runtime";
+import { OperationJournalLive } from "../lib/operation-journal";
 import {
   defaultShellPreferences,
   ShellPreferences,
@@ -33,15 +40,19 @@ import {
   SandboxedShell,
   type SandboxedShellShape,
 } from "../shell/sandboxed-shell-service";
-import { useAgentSession } from "./use-agent-session";
+import {
+  type AgentWorkspaceRuntime,
+  useAgentSession,
+} from "./use-agent-session";
 
 function createFakeRuntime({
-  createSession = () => Effect.succeed("session-1"),
+  createSession = () => Effect.succeed("session-hook-test"),
   models = [
     new ModelSummary({
       provider: "openai-codex",
       id: "gpt-5.6",
       name: "GPT-5.6",
+      reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
     }),
   ],
   prompt = () =>
@@ -50,8 +61,15 @@ function createFakeRuntime({
       { type: "text_delta" as const, delta: "A shaped response" },
       { type: "turn_completed" as const },
     ]),
-  shape = (_sessionId, _instruction, document) =>
-    Stream.succeed(ShapeCompleted.make({ type: "shape_completed", document })),
+  shape = () =>
+    Stream.make(
+      AgentShellRequest.make({
+        type: "shell_request",
+        requestId: "shell-default-proposal",
+        command: "flect interface propose /workspace/interface.json",
+      }),
+      ShapeCompleted.make({ type: "shape_completed" }),
+    ),
   cancel = () => Effect.void,
   completeShellRequest = () => Effect.void,
   shellExecute = () =>
@@ -83,6 +101,12 @@ function createFakeRuntime({
   const client: FlectClientShape = {
     status: Effect.succeed(new RuntimeStatus({ version: 1, status: "ready" })),
     models: Effect.succeed(models),
+    providerAuth: Effect.succeed([]),
+    loginProvider: () => Stream.empty,
+    replyProviderAuth: () => Effect.void,
+    cancelProviderAuth: () => Effect.void,
+    refreshProviderAuth: Effect.succeed([]),
+    logoutProvider: () => Effect.succeed([]),
     createSession: vi.fn(createSession),
     closeSession: vi.fn(() => Effect.void),
     prompt: vi.fn(prompt),
@@ -91,8 +115,53 @@ function createFakeRuntime({
     completeShellRequest: vi.fn(completeShellRequest),
     diagnoseRecovery: vi.fn(diagnoseRecovery),
   };
+  let workspacePromise: Promise<AgentWorkspaceShape> | undefined;
   const shell: SandboxedShellShape = {
-    execute: vi.fn(shellExecute),
+    replaceTree: () => Effect.void,
+    execute: vi.fn((role, line, options) =>
+      shellExecute(role, line, options).pipe(
+        Effect.flatMap((result) => {
+          if (role !== "shaper" || options?.agentContext === undefined) {
+            return Effect.succeed(result);
+          }
+          const currentWorkspace = workspacePromise;
+          if (currentWorkspace === undefined) {
+            return Effect.fail(
+              BunCommandFailed.make({
+                reason: "execution",
+                message: "The test Shaper proposal bridge is unavailable.",
+              }),
+            );
+          }
+          return Effect.tryPromise({
+            try: () => currentWorkspace,
+            catch: () =>
+              BunCommandFailed.make({
+                reason: "execution",
+                message: "The test Shaper proposal bridge is unavailable.",
+              }),
+          }).pipe(
+            Effect.flatMap((workspace) =>
+              workspace.proposeShaperInterface(
+                AgentCommandSource.make({
+                  kind: "agent",
+                  role,
+                  ...options.agentContext,
+                }),
+                defaultInterfaceDocument,
+              ),
+            ),
+            Effect.mapError(() =>
+              BunCommandFailed.make({
+                reason: "execution",
+                message: "The test proposal was rejected.",
+              }),
+            ),
+            Effect.as(result),
+          );
+        }),
+      ),
+    ),
     stop: () => Effect.void,
   };
   const storage: InterfaceStorageShape = {
@@ -100,17 +169,23 @@ function createFakeRuntime({
     write: () => Effect.void,
     remove: () => Effect.void,
   };
-  const runtime: FlectBrowserRuntime = ManagedRuntime.make(
-    Layer.mergeAll(
-      Layer.succeed(FlectClient)(client),
-      Layer.succeed(InterfaceStorage)(storage),
-      Layer.succeed(SandboxedShell)(shell),
-      Layer.succeed(ShellPreferences)({
-        load: Effect.succeed(defaultShellPreferences),
-        save: () => Effect.void,
-      }),
-    ),
+  const dependencies = Layer.mergeAll(
+    Layer.succeed(FlectClient)(client),
+    Layer.succeed(Clipboard)({
+      writeText: () => Effect.void,
+    }),
+    Layer.succeed(InterfaceStorage)(storage),
+    Layer.succeed(SandboxedShell)(shell),
+    Layer.succeed(ShellPreferences)({
+      load: Effect.succeed(defaultShellPreferences),
+      save: () => Effect.void,
+    }),
+    OperationJournalLive,
   );
+  const runtime: AgentWorkspaceRuntime = ManagedRuntime.make(
+    AgentWorkspaceLive.pipe(Layer.provideMerge(dependencies)),
+  );
+  workspacePromise = runtime.runPromise(AgentWorkspace);
 
   return { client, runtime, shell };
 }
@@ -181,6 +256,11 @@ describe("useAgentSession", () => {
         id: expect.any(String),
         role: "assistant",
         content: `Preview ready: ${defaultInterfaceDocument.name}`,
+      },
+      {
+        id: expect.any(String),
+        role: "activity",
+        content: "Shaper used its sandbox.",
       },
     ]);
 
@@ -278,9 +358,16 @@ describe("useAgentSession", () => {
       await result.current.submit("Run the project");
     });
 
-    expect(shell.execute).toHaveBeenCalledWith("app", "bun run src/index.ts");
+    expect(shell.execute).toHaveBeenCalledWith("app", "bun run src/index.ts", {
+      agentContext: {
+        sessionId: "session-hook-test",
+        binding: "accepted",
+        parentOperationId: expect.stringMatching(/^operation-/),
+        requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+      },
+    });
     expect(client.completeShellRequest).toHaveBeenCalledWith(
-      "session-1",
+      "session-hook-test",
       "app",
       "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
       shellResult,
@@ -301,7 +388,7 @@ describe("useAgentSession", () => {
     expect(document).toEqual(defaultInterfaceDocument);
     expect(client.createSession).toHaveBeenCalledOnce();
     expect(client.shape).toHaveBeenCalledWith(
-      "session-1",
+      "session-hook-test",
       "Make it focused",
       defaultInterfaceDocument,
     );
@@ -318,7 +405,7 @@ describe("useAgentSession", () => {
       stderr: "",
     });
     const { client, runtime, shell } = createFakeRuntime({
-      shape: (_sessionId, _instruction, document) =>
+      shape: () =>
         Stream.concat(
           Stream.succeed(
             AgentShellRequest.make({
@@ -327,9 +414,7 @@ describe("useAgentSession", () => {
               command: "bun run src/index.ts",
             }),
           ),
-          Stream.succeed(
-            ShapeCompleted.make({ type: "shape_completed", document }),
-          ),
+          Stream.succeed(ShapeCompleted.make({ type: "shape_completed" })),
         ),
       shellExecute: () => Effect.succeed(shellResult),
     });
@@ -346,9 +431,16 @@ describe("useAgentSession", () => {
     expect(shell.execute).toHaveBeenCalledWith(
       "shaper",
       "bun run src/index.ts",
+      {
+        agentContext: {
+          sessionId: "session-hook-test",
+          parentOperationId: expect.stringMatching(/^operation-/),
+          requestId: "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        },
+      },
     );
     expect(client.completeShellRequest).toHaveBeenCalledWith(
-      "session-1",
+      "session-hook-test",
       "shaper",
       "shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
       shellResult,
@@ -370,7 +462,7 @@ describe("useAgentSession", () => {
       shape: () =>
         Stream.fail(
           new SessionBusy({
-            sessionId: "session-1",
+            sessionId: "session-hook-test",
             message: "The session is busy.",
           }),
         ),
@@ -383,7 +475,7 @@ describe("useAgentSession", () => {
         result.current.shape("Make it focused", defaultInterfaceDocument),
       ).rejects.toEqual(
         new SessionBusy({
-          sessionId: "session-1",
+          sessionId: "session-hook-test",
           message: "The session is busy.",
         }),
       );
@@ -420,7 +512,7 @@ describe("useAgentSession", () => {
     });
 
     await waitFor(() =>
-      expect(client.closeSession).toHaveBeenCalledWith("session-1"),
+      expect(client.closeSession).toHaveBeenCalledWith("session-hook-test"),
     );
     expect(result.current.shaper.status).toBe("error");
     expect(result.current.app.status).toBe("ready");
@@ -446,7 +538,7 @@ describe("useAgentSession", () => {
 
     expect(result.current.status).toBe("error");
     expect(result.current.lastPrompt).toBe("Keep this prompt");
-    expect(client.closeSession).toHaveBeenCalledWith("session-1");
+    expect(client.closeSession).toHaveBeenCalledWith("session-hook-test");
     unmount();
     await runtime.dispose();
   });
@@ -456,7 +548,7 @@ describe("useAgentSession", () => {
       prompt: () =>
         Stream.fail(
           new SessionBusy({
-            sessionId: "session-1",
+            sessionId: "session-hook-test",
             message: "The session is busy.",
           }),
         ),
@@ -526,7 +618,7 @@ describe("useAgentSession", () => {
       await result.current.cancel();
     });
 
-    expect(client.cancel).toHaveBeenCalledWith("session-1", "app");
+    expect(client.cancel).toHaveBeenCalledWith("session-hook-test", "app");
     expect(streamInterrupted).toBe(true);
     expect(result.current.status).toBe("ready");
     unmount();
@@ -564,7 +656,7 @@ describe("useAgentSession", () => {
       await result.current.shaper.cancel();
     });
 
-    expect(client.cancel).toHaveBeenCalledWith("session-1", "shaper");
+    expect(client.cancel).toHaveBeenCalledWith("session-hook-test", "shaper");
     expect(shapeInterrupted).toBe(true);
     expect(result.current.shaper.status).toBe("ready");
     expect(result.current.app.status).toBe("ready");
@@ -613,11 +705,13 @@ describe("useAgentSession", () => {
         provider: "openai-codex",
         id: "gpt-5.6",
         name: "GPT-5.6",
+        reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
       }),
       new ModelSummary({
         provider: "anthropic",
         id: "claude-sonnet",
         name: "Claude Sonnet",
+        reasoningLevels: ["off", "low", "medium", "high"],
       }),
     ];
     const { client, runtime } = createFakeRuntime({
@@ -690,7 +784,7 @@ describe("useAgentSession", () => {
       "The protected launcher remains available.",
     );
     expect(client.diagnoseRecovery).toHaveBeenCalledWith(
-      "session-1",
+      "session-hook-test",
       "rollback-failed",
     );
     unmount();
@@ -721,7 +815,7 @@ describe("useAgentSession", () => {
     });
 
     await waitFor(() =>
-      expect(client.closeSession).toHaveBeenCalledWith("session-1"),
+      expect(client.closeSession).toHaveBeenCalledWith("session-hook-test"),
     );
     unmount();
     await runtime.dispose();
@@ -732,7 +826,7 @@ describe("useAgentSession", () => {
       diagnoseRecovery: () =>
         Effect.fail(
           new SessionBusy({
-            sessionId: "session-1",
+            sessionId: "session-hook-test",
             message: "The session is busy.",
           }),
         ),
@@ -745,7 +839,7 @@ describe("useAgentSession", () => {
         result.current.diagnoseRecovery("rollback-failed"),
       ).rejects.toEqual(
         new SessionBusy({
-          sessionId: "session-1",
+          sessionId: "session-hook-test",
           message: "The session is busy.",
         }),
       );
