@@ -219,12 +219,10 @@ export function RoleAwareShell({
     phase === "safe"
       ? "Safe mode. Customized interface state is bypassed. Restore, export, discard, or retry continuity from the protected shell."
       : shaping.status === "preview"
-        ? `Candidate ${document.name} validated. Test it with Preview App Agent, then keep or reject the change.`
+        ? `Imported candidate ${document.name} validated. Review its authority changes, then activate or discard it.`
         : operationActive
-          ? `${target === "use" ? (preview ? "Preview App Agent" : "App Agent") : "Shaper"} is responding. Cancel is available.`
-          : target === "use"
-            ? `${preview ? "Preview App Agent" : "App Agent"} ready. Use the accepted interface.`
-            : "Shaper ready. Describe the interface change you want.";
+          ? "Flect is responding. Cancel is available."
+          : "Flect is ready. Build, change, or use the product in one conversation.";
 
   useEffect(() => {
     if (controlledMode !== undefined) {
@@ -607,7 +605,7 @@ export function RoleAwareShell({
           )}
         {!docked ? (
           <section className="blank-invitation">
-            <h1>What should we shape?</h1>
+            <h1>What do you want to make?</h1>
           </section>
         ) : compiledCapsule !== undefined ? (
           <CapsuleFrame
@@ -628,7 +626,7 @@ export function RoleAwareShell({
                 onClick={expand}
                 type="button"
               >
-                Open {target === "use" ? "App Agent" : "Shaper"}
+                Open Flect
               </button>
             )}
           />
@@ -667,13 +665,10 @@ export function RoleAwareShell({
           document={document}
           extensions={extensions}
           mode={mode}
-          target={target}
           preview={preview}
           candidateRevisionId={candidateRevisionId}
-          useDisabled={useDisabled}
+          useDisabled={useDisabled || phase === "blank"}
           onCollapse={collapse}
-          onModeChange={selectMode}
-          onTargetChange={selectTarget}
           onOpenSafeMode={onOpenSafeMode}
           {...(onOpenShareUrl === undefined || onOpenShareGit === undefined
             ? {}
@@ -710,7 +705,7 @@ export function RoleAwareShell({
           type="button"
         >
           <PanelOpenIcon />
-          <span>{target === "use" ? "App Agent" : "Shaper"}</span>
+          <span>Flect</span>
         </button>
       )}
       {compactViewport && docked && !collapsed && (

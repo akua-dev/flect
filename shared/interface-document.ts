@@ -255,7 +255,7 @@ export const defaultInterfaceDocument: InterfaceDocument = Object.freeze(
         {
           id: "headline",
           type: "text",
-          text: "What should we shape?",
+          text: "What do you want to make?",
           style: "headline",
         },
         {
@@ -272,7 +272,7 @@ export const defaultInterfaceDocument: InterfaceDocument = Object.freeze(
             {
               id: "shape-interface",
               type: "button",
-              label: "Shape interface",
+              label: "Start building",
               action: "shape",
             },
           ],

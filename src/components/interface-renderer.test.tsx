@@ -29,14 +29,14 @@ describe("InterfaceRenderer", () => {
     );
 
     expect(
-      screen.getByRole("heading", { name: "What should we shape?" }),
+      screen.getByRole("heading", { name: "What do you want to make?" }),
     ).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Prompt" })).toHaveAttribute(
       "placeholder",
       "Build, change, or connect anything",
     );
 
-    await user.click(screen.getByRole("button", { name: "Shape interface" }));
+    await user.click(screen.getByRole("button", { name: "Start building" }));
     expect(onAction).toHaveBeenCalledWith("shape", "shape-interface");
   });
 
@@ -48,7 +48,7 @@ describe("InterfaceRenderer", () => {
         actions={[
           InterfaceActionProjection.make({
             nodeId: "shape-interface",
-            label: "Shape interface",
+            label: "Start building",
             action: "shape",
             available: false,
             unavailableReason: "Leave safe mode first.",
@@ -60,7 +60,7 @@ describe("InterfaceRenderer", () => {
       />,
     );
 
-    const button = screen.getByRole("button", { name: "Shape interface" });
+    const button = screen.getByRole("button", { name: "Start building" });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", "Leave safe mode first.");
     await user.click(button);

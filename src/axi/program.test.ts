@@ -693,7 +693,7 @@ describe("Flect AXI program", () => {
         );
         assert.include(
           actions.stdout,
-          "shape-interface,Shape interface,shape,true",
+          "shape-interface,Start building,shape,true",
         );
       });
     },

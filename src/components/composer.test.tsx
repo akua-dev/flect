@@ -21,13 +21,11 @@ const props = (overrides: Partial<ComposerProps> = {}): ComposerProps => ({
   mode: "edit",
   placeholder: "Build, change, or connect anything",
   disabled: false,
-  roleSwitchDisabled: false,
   status: "ready",
   models: [model],
   selectedModel: undefined,
   modelFavorites: [],
   rollbackAvailable: false,
-  onModeChange: vi.fn(),
   onSelectModel: vi.fn(),
   onToggleModelFavorite: vi.fn(() => Promise.resolve()),
   onSubmit: vi.fn(() => Promise.resolve()),
@@ -45,7 +43,7 @@ describe("Composer", () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn(() => Promise.resolve());
     render(<Composer {...props({ onSubmit })} />);
-    const input = screen.getByRole("textbox", { name: "Message Shaper" });
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
 
     await user.type(input, "First line{Shift>}{Enter}{/Shift}Second line");
     expect(input).toHaveValue("First line\nSecond line");
@@ -60,96 +58,50 @@ describe("Composer", () => {
     expect(input).toHaveValue("");
   });
 
-  it("retains separate drafts for Shape, accepted Use, and candidate Use", async () => {
+  it("keeps one draft while internal routing changes", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Composer {...props()} />);
     await user.type(
-      screen.getByRole("textbox", { name: "Message Shaper" }),
-      "Edit draft",
+      screen.getByRole("textbox", { name: "Message Flect" }),
+      "Continuous draft",
     );
 
     rerender(<Composer {...props({ mode: "run" })} />);
-    const appInput = screen.getByRole("textbox", { name: "Message App Agent" });
-    expect(appInput).toHaveValue("");
-    await user.type(appInput, "Run draft");
-
-    rerender(
-      <Composer
-        {...props({
-          agentLabel: "Preview App Agent",
-          conversationKey: "candidate-use",
-          mode: "edit",
-          target: "use",
-        })}
-      />,
+    expect(screen.getByRole("textbox", { name: "Message Flect" })).toHaveValue(
+      "Continuous draft",
     );
-    const previewInput = screen.getByRole("textbox", {
-      name: "Message Preview App Agent",
-    });
-    expect(previewInput).toHaveValue("");
-    await user.type(previewInput, "Candidate draft");
-
-    rerender(<Composer {...props({ mode: "edit" })} />);
-    expect(screen.getByRole("textbox", { name: "Message Shaper" })).toHaveValue(
-      "Edit draft",
-    );
-    rerender(<Composer {...props({ mode: "run" })} />);
     expect(
-      screen.getByRole("textbox", { name: "Message App Agent" }),
-    ).toHaveValue("Run draft");
+      screen.queryByRole("button", { name: /App Agent|Shaper/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it("hydrates private drafts and reports edits through their exact target", async () => {
+  it("hydrates the single private draft and reports it as accepted continuity", async () => {
     const user = userEvent.setup();
     const onDraftChange = vi.fn(() => Promise.resolve());
-    const { rerender } = render(
+    render(
       <Composer
         {...props({
           drafts: {
-            acceptedUse: "Saved accepted question",
-            candidateUse: "Saved candidate test",
-            shape: "Saved shape request",
+            acceptedUse: "Saved Flect message",
+            candidateUse: "Legacy candidate draft",
+            shape: "Legacy shape draft",
           },
           onDraftChange,
         })}
       />,
     );
-
-    expect(screen.getByRole("textbox", { name: "Message Shaper" })).toHaveValue(
-      "Saved shape request",
-    );
-    await user.type(
-      screen.getByRole("textbox", { name: "Message Shaper" }),
-      " now",
-    );
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
+    expect(input).toHaveValue("Saved Flect message");
+    await user.type(input, " now");
     expect(onDraftChange).toHaveBeenLastCalledWith(
-      "shape",
-      "Saved shape request now",
+      "acceptedUse",
+      "Saved Flect message now",
     );
-
-    rerender(
-      <Composer
-        {...props({
-          conversationKey: "candidate-use",
-          drafts: {
-            acceptedUse: "Saved accepted question",
-            candidateUse: "Saved candidate test",
-            shape: "Saved shape request now",
-          },
-          mode: "edit",
-          onDraftChange,
-          target: "use",
-        })}
-      />,
-    );
-    expect(
-      screen.getByRole("textbox", { name: "Message App Agent" }),
-    ).toHaveValue("Saved candidate test");
   });
 
   it("grows with the draft and scrolls only after the height bound", () => {
     render(<Composer {...props()} />);
-    const input = screen.getByRole("textbox", { name: "Message Shaper" });
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
 
     Object.defineProperty(input, "scrollHeight", {
       configurable: true,
@@ -184,7 +136,7 @@ describe("Composer", () => {
   it("disables empty submission with a direct accessible reason", () => {
     render(<Composer {...props()} />);
 
-    const send = screen.getByRole("button", { name: "Send to Shaper" });
+    const send = screen.getByRole("button", { name: "Send to Flect" });
     expect(send).toHaveAccessibleDescription("Enter a message to enable Send.");
     expect(send).toBeDisabled();
   });
@@ -200,39 +152,38 @@ describe("Composer", () => {
       render(<Composer {...props({ status })} />);
       const action =
         status === "cancelling"
-          ? screen.getByRole("button", { name: "Stop Shaper" })
-          : screen.getByRole("button", { name: "Send to Shaper" });
+          ? screen.getByRole("button", { name: "Stop Flect" })
+          : screen.getByRole("button", { name: "Send to Flect" });
       expect(action).toHaveAccessibleDescription(help);
     },
   );
 
-  it("turns the primary action into a role-aware stop control", async () => {
+  it("turns the primary action into a single Flect stop control", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn(() => Promise.resolve());
     render(<Composer {...props({ status: "streaming", onCancel })} />);
 
-    await user.click(screen.getByRole("button", { name: "Stop Shaper" }));
+    await user.click(screen.getByRole("button", { name: "Stop Flect" }));
 
     expect(onCancel).toHaveBeenCalledOnce();
     expect(
-      screen.queryByRole("button", { name: "Send to Shaper" }),
+      screen.queryByRole("button", { name: "Send to Flect" }),
     ).not.toBeInTheDocument();
   });
 
-  it("disables protected actions and role switching while active", () => {
+  it("disables protected actions and exposes no role switching while active", () => {
     render(
       <Composer
         {...props({
           status: "streaming",
           rollbackAvailable: true,
-          roleSwitchDisabled: true,
         })}
       />,
     );
 
     expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Use · App Agent" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: /App Agent|Shaper/ }),
+    ).not.toBeInTheDocument();
   });
 });

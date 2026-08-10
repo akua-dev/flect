@@ -239,30 +239,43 @@ describe("useAgentSession", () => {
         id: expect.any(String),
         role: "user",
         content: "Use the product",
+        createdAt: expect.any(Number),
       },
       {
         id: expect.any(String),
         role: "assistant",
         content: "A shaped response",
+        createdAt: expect.any(Number),
       },
     ]);
-    expect(result.current.shaper.messages).toEqual([
-      {
-        id: expect.any(String),
-        role: "user",
-        content: "Change the interface",
-      },
-      {
-        id: expect.any(String),
-        role: "assistant",
-        content: `Preview ready: ${defaultInterfaceDocument.name}`,
-      },
-      {
-        id: expect.any(String),
-        role: "activity",
-        content: "Shaper used its sandbox.",
-      },
-    ]);
+    expect(result.current.shaper.messages).toEqual(
+      expect.arrayContaining([
+        {
+          id: expect.any(String),
+          role: "user",
+          content: "Change the interface",
+          createdAt: expect.any(Number),
+        },
+        {
+          id: expect.any(String),
+          role: "assistant",
+          content: `Preview ready: ${defaultInterfaceDocument.name}`,
+          createdAt: expect.any(Number),
+        },
+        {
+          id: expect.any(String),
+          role: "activity",
+          content: "Shaper used its sandbox.",
+          createdAt: expect.any(Number),
+        },
+      ]),
+    );
+    const shaperTimes = result.current.shaper.messages.map(
+      (message) => message.createdAt ?? 0,
+    );
+    expect(shaperTimes).toEqual(
+      [...shaperTimes].sort((left, right) => left - right),
+    );
 
     unmount();
     await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
@@ -312,17 +325,29 @@ describe("useAgentSession", () => {
 
     expect(client.createSession).toHaveBeenCalledOnce();
     expect(result.current.messages).toEqual([
-      { id: expect.any(String), role: "user", content: "Shape this" },
       {
         id: expect.any(String),
-        role: "assistant",
-        content: "A shaped response",
+        role: "user",
+        content: "Shape this",
+        createdAt: expect.any(Number),
       },
-      { id: expect.any(String), role: "user", content: "And this" },
       {
         id: expect.any(String),
         role: "assistant",
         content: "A shaped response",
+        createdAt: expect.any(Number),
+      },
+      {
+        id: expect.any(String),
+        role: "user",
+        content: "And this",
+        createdAt: expect.any(Number),
+      },
+      {
+        id: expect.any(String),
+        role: "assistant",
+        content: "A shaped response",
+        createdAt: expect.any(Number),
       },
     ]);
     expect(result.current.status).toBe("ready");
@@ -449,6 +474,7 @@ describe("useAgentSession", () => {
       id: expect.any(String),
       role: "activity",
       content: "Shaper used its sandbox.",
+      createdAt: expect.any(Number),
     });
     expect(JSON.stringify(result.current.shaper.messages)).not.toContain(
       "bun run src/index.ts",

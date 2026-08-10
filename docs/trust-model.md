@@ -57,8 +57,9 @@ or host-function authority by constructing a different return value.
 
 ### Browser agent workspace
 
-Accepted App Agent, candidate Preview App Agent, and Shaper may each use one
-Pi-visible `bash` tool. Pi does not run a host shell: each tool call returns
+Behind the single visible Flect conversation, accepted App, candidate Preview,
+and Shaper authorities may each use one Pi-visible `bash` tool. These are trust
+partitions, not user-facing roles or modes. Pi does not run a host shell: each tool call returns
 over the Flect transport to that context's separate just-bash workspace inside
 the browser or desktop WebView. Preview App retains App authority but cannot
 read or mutate the accepted App filesystem. Guardian remains tool-free.

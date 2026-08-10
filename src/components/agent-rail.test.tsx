@@ -333,8 +333,8 @@ describe("AgentRail", () => {
     expect(user?.querySelectorAll("br")).toHaveLength(1);
   });
 
-  it("renders only the selected role history", () => {
-    const { rerender } = render(
+  it("renders one Flect conversation across internal agent roles", () => {
+    render(
       <AgentRail
         document={document}
         mode="run"
@@ -348,23 +348,13 @@ describe("AgentRail", () => {
       />,
     );
     expect(screen.getByText("App only")).toBeVisible();
-    expect(screen.queryByText("Shaper only")).not.toBeInTheDocument();
-
-    rerender(
-      <AgentRail
-        document={document}
-        mode="edit"
-        onCollapse={vi.fn()}
-        onModeChange={vi.fn()}
-        onOpenSafeMode={vi.fn()}
-        onRestoreSafeMode={vi.fn(() => Promise.resolve())}
-        preferences={preferences}
-        shaping={shaping}
-        workspace={workspace}
-      />,
-    );
     expect(screen.getByText("Shaper only")).toBeVisible();
-    expect(screen.queryByText("App only")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Message Flect" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /App Agent|Shaper/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("bypasses ordinary sending in safe mode", () => {
@@ -386,11 +376,11 @@ describe("AgentRail", () => {
       screen.getByText("Custom interface state is bypassed."),
     ).toBeVisible();
     expect(
-      screen.getByRole("textbox", { name: "Message Shaper" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeDisabled();
   });
 
-  it("focuses the decision while keeping candidate Use and Shape reachable", async () => {
+  it("focuses an explicit import decision while keeping Flect reachable", async () => {
     render(
       <AgentRail
         document={document}
@@ -407,17 +397,19 @@ describe("AgentRail", () => {
     );
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Keep change" })).toHaveFocus(),
+      expect(
+        screen.getByRole("button", { name: "Activate app" }),
+      ).toHaveFocus(),
     );
     expect(
-      screen.getByRole("button", { name: "Use · App Agent" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeEnabled();
     expect(
-      screen.getByRole("textbox", { name: "Message Shaper" }),
-    ).toBeEnabled();
+      screen.queryByRole("button", { name: /App Agent|Shaper/ }),
+    ).not.toBeInTheDocument();
   });
 
-  it("blocks Keep until an enabled candidate extension passes its protected test", async () => {
+  it("blocks activation until an enabled candidate extension passes its protected test", async () => {
     const testExtension = vi.fn(() => Promise.resolve());
     const noChange = vi.fn(() => Promise.resolve());
     render(
@@ -444,10 +436,10 @@ describe("AgentRail", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Keep change" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Activate app" })).toBeDisabled();
     expect(
       screen.getByText(
-        /must pass its bounded test before this app can be kept/i,
+        /must pass its bounded test before this app can be activated/i,
       ),
     ).toBeVisible();
     await userEvent.click(
@@ -556,8 +548,8 @@ describe("AgentRail", () => {
     expect(
       screen.getByText("Locked in source Git · graph fffffff"),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Keep change" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reject" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Activate app" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Discard" })).toBeEnabled();
   });
 
   it("reports a capability grant that could not be saved", async () => {

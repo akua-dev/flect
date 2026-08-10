@@ -9,12 +9,12 @@ work.
 
 ## What survives a refresh or restart
 
-- accepted App Agent messages;
-- candidate Preview App Agent messages only while the exact candidate revision
-  still exists;
-- Shaper messages;
-- separate accepted-Use, candidate-Use, and Shape drafts; and
-- the canonical accepted, last-known-good, and candidate interface revisions.
+- the one visible Flect conversation, reconstructed chronologically from its
+  internally isolated App, Preview, and Shaper records;
+- one visible Flect draft (`acceptedUse` in the version-1 compatibility record);
+  legacy candidate and Shape draft fields are decoded but not exposed; and
+- the canonical accepted, last-known-good, and external-candidate interface
+  revisions.
 
 An in-flight user message may be retained, but a partial assistant stream is
 not. Active sessions, tool calls, raw tool output, shell processes, and partial
@@ -23,10 +23,11 @@ session internals, authentication events, protected-entry references, outside
 control grants, connected-client state, and provider/model payloads never
 enter the continuity record.
 
-The continuity record is strict Effect Schema data under
-`flect.role-continuity.v1`. It is limited to 512 KiB, 200 messages per role,
-16,000 retained characters per projected message, a 100,000-character Use
-draft, and a 4,000-character Shape draft. Tool activities are not persisted.
+The continuity record remains strict Effect Schema data under
+`flect.role-continuity.v1` for backward compatibility. It is limited to 512
+KiB, 200 messages per internal authority, 16,000 retained characters per
+projected message, and a 100,000-character visible draft. Tool activities are
+not persisted.
 
 ## Conflicts and storage failures
 
@@ -38,8 +39,9 @@ or host failures leave the prior record intact.
 
 Malformed, oversized, unknown-version, and incompatible records are rejected
 before runtime mutation. Flect does not opportunistically rewrite them. A
-candidate mismatch discards only candidate-use continuity. Accepted App Agent
-and Shaper continuity remain separate.
+candidate mismatch discards only its internal candidate continuity. The visible
+Flect history remains available and does not expose those storage partitions as
+product modes.
 
 ## Protected recovery
 
@@ -70,8 +72,8 @@ render or repackage undecoded stored content. Discard remains available.
 
 ## Current proof boundary
 
-Production Chromium tests cover completed App/Shaper conversation restoration,
-three isolated drafts, candidate refresh, rejection cleanup, active Shaper
+Production Chromium tests cover the merged Flect conversation over isolated
+internal records, one visible draft, candidate refresh, discard cleanup, active
 interruption, safe-mode non-hydration, valid export, isolated discard, a real
 same-origin stale second tab, injected browser quota exhaustion, protected Git
 commit advancement on safe-mode entry/restore, and restoration after reload.

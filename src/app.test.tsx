@@ -164,7 +164,7 @@ const makeRuntime = (safeMode = false) => {
                     version: 1,
                     id: RevisionId.make("revision-app-test"),
                     parentId: current.shaping.active.id,
-                    status: "previewed",
+                    status: "accepted",
                     source: "shaper",
                     document: candidate,
                     createdAt: 1,
@@ -172,25 +172,25 @@ const makeRuntime = (safeMode = false) => {
                   return FlectWorkspaceSnapshot.make({
                     ...current,
                     sequence,
-                    phase: "preview",
-                    mode: "edit",
+                    phase: "ready",
+                    mode: "run",
                     document: candidate,
                     shaping: ShapingSnapshot.make({
                       ...current.shaping,
-                      proposal,
+                      active: proposal,
+                      lastKnownGood: current.shaping.active,
                       lastEvent: ShapingEvent.make({
                         version: 1,
                         sequence: current.shaping.lastEvent.sequence + 2,
-                        type: "revision-previewed",
+                        type: "revision-accepted",
                         revisionId: proposal.id,
                       }),
                     }),
                     workbench: WorkbenchSnapshot.make({
                       target: "use",
-                      binding: "candidate",
+                      binding: "accepted",
                       transitionSequence:
                         (current.workbench?.transitionSequence ?? 0) + 1,
-                      candidateRevisionId: proposal.id,
                     }),
                   });
                 })()
@@ -266,7 +266,7 @@ describe("App", () => {
     render(<App runtime={runtime} />);
 
     const input = await screen.findByRole("textbox", {
-      name: "Message Shaper",
+      name: "Message Flect",
     });
     await user.type(input, "Create a focused project overview{Enter}");
 
@@ -277,13 +277,19 @@ describe("App", () => {
         ),
       ).toBe(true),
     );
+    expect(await screen.findByText("Focused project overview")).toBeVisible();
     expect(
-      await screen.findByRole("region", { name: "Revision decision" }),
-    ).toBeVisible();
+      screen.queryByRole("region", { name: "Import decision" }),
+    ).not.toBeInTheDocument();
     expect(
-      screen.getByRole("textbox", { name: "Message Preview App Agent" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeVisible();
     expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    expect(
+      dispatch.mock.calls.some(
+        ([envelope]) => envelope.command.type === "accept-proposal",
+      ),
+    ).toBe(false);
 
     await user.click(screen.getByRole("button", { name: "Diagnostics" }));
     await user.click(
@@ -301,13 +307,13 @@ describe("App", () => {
   it("renders outside state changes without a parallel local mode", async () => {
     const { runtime, setOutsideMode } = makeRuntime();
     render(<App runtime={runtime} />);
-    await screen.findByRole("textbox", { name: "Message Shaper" });
+    await screen.findByRole("textbox", { name: "Message Flect" });
 
     await act(async () => {
       await runtime.runPromise(setOutsideMode("run"));
     });
     expect(
-      await screen.findByRole("textbox", { name: "Message App Agent" }),
+      await screen.findByRole("textbox", { name: "Message Flect" }),
     ).toBeVisible();
 
     await runtime.dispose();
@@ -321,7 +327,7 @@ describe("App", () => {
       await screen.findByText("Custom interface state is bypassed."),
     ).toBeVisible();
     expect(
-      screen.getByRole("textbox", { name: "Message Shaper" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeDisabled();
 
     await runtime.dispose();

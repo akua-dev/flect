@@ -14,10 +14,10 @@ with the public key compiled into that release. The opaque candidate token is
 single-use and a newer check invalidates an older candidate.
 
 Only the compiled main Flect window has this native authority. Capsules, shaped
-interfaces, App Agent, Preview App Agent, Shaper, Guardian, portable extensions,
-embedded Bash, product adapters, Local control, AXI, and MCP cannot check,
-install, or relaunch an application update. Development builds intentionally say
-that no trusted update key is configured.
+interfaces, the internal App/Preview/Shaper/Guardian authorities behind the one
+Flect conversation, portable extensions, embedded Bash, product adapters, Local
+control, AXI, and MCP cannot check, install, or relaunch an application update.
+Development builds intentionally say that no trusted update key is configured.
 
 The private update key is never part of Flect. Public packaging reads it only
 from Tauri's release environment. The package gate verifies the generated

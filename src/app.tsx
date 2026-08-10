@@ -73,12 +73,14 @@ const toMessages = (
     readonly id: string;
     readonly role: "user" | "assistant";
     readonly content: string;
+    readonly createdAt: number;
   }>,
 ): ReadonlyArray<ConversationMessage> =>
   messages.map((message) => ({
     id: message.id,
     role: message.role,
     content: message.content,
+    createdAt: message.createdAt,
   }));
 
 const modelKey = (model: Pick<ModelSummary, "provider" | "id">) =>

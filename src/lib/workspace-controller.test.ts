@@ -2343,6 +2343,24 @@ describe("FlectWorkspaceController", () => {
           "browser",
           "macos",
         ]);
+        const blocked = yield* controller
+          .dispatch(
+            envelope(
+              70,
+              SubmitShaperInstruction.make({
+                type: "submit-shaper-instruction",
+                instruction: "Silently activate this import",
+              }),
+            ),
+          )
+          .pipe(Effect.flip);
+        assert.strictEqual(blocked._tag, "OperationFailed");
+        const retained = yield* controller.snapshot;
+        assert.strictEqual(
+          retained.shaping.proposal?.document.name,
+          "Imported product",
+        );
+        assert.strictEqual(retained.shaping.proposal?.status, "previewed");
       }).pipe(Effect.provide(layer));
     },
   );
@@ -3118,9 +3136,6 @@ describe("FlectWorkspaceController", () => {
             }),
           ),
         );
-        yield* controller.dispatch(
-          envelope(71, AcceptProposal.make({ type: "accept-proposal" })),
-        );
 
         yield* controller.dispatch(
           envelope(
@@ -3145,12 +3160,12 @@ describe("FlectWorkspaceController", () => {
             }),
           ),
         );
-        const preview = yield* controller.snapshot;
-        assert.strictEqual(preview.shaping.proposal?.status, "previewed");
-        assert.strictEqual(preview.workbench?.target, "use");
-        assert.strictEqual(preview.workbench?.binding, "candidate");
+        const edited = yield* controller.snapshot;
+        assert.isUndefined(edited.shaping.proposal);
+        assert.strictEqual(edited.workbench?.target, "use");
+        assert.strictEqual(edited.workbench?.binding, "accepted");
         assert.strictEqual(
-          preview.workbench?.handoff?.instruction,
+          edited.workbench?.handoff?.instruction,
           "Make the primary action blue",
         );
         assert.include(
@@ -3161,74 +3176,78 @@ describe("FlectWorkspaceController", () => {
     },
   );
 
-  it.effect("uses an explicit warm Shape and candidate Use workbench", () => {
-    const { layer, submitPreviewPrompt } = makeLayer();
-    return Effect.gen(function* () {
-      const controller = yield* FlectWorkspaceController;
-      const initial = yield* controller.snapshot;
+  it.effect(
+    "keeps internal routing behind one continuously active product",
+    () => {
+      const { layer, submitAppPrompt, submitPreviewPrompt } = makeLayer();
+      return Effect.gen(function* () {
+        const controller = yield* FlectWorkspaceController;
+        const initial = yield* controller.snapshot;
 
-      assert.strictEqual(initial.workbench?.target, "shape");
-      yield* controller.dispatch(
-        envelope(
-          60,
-          SubmitShaperInstruction.make({
-            type: "submit-shaper-instruction",
-            instruction: "Create a focused product",
-          }),
-        ),
-      );
-      const preview = yield* controller.snapshot;
-      assert.strictEqual(preview.workbench?.target, "use");
-      assert.strictEqual(preview.workbench?.binding, "candidate");
-      assert.strictEqual(preview.mode, "edit");
+        assert.strictEqual(initial.workbench?.target, "shape");
+        yield* controller.dispatch(
+          envelope(
+            60,
+            SubmitShaperInstruction.make({
+              type: "submit-shaper-instruction",
+              instruction: "Create a focused product",
+            }),
+          ),
+        );
+        const first = yield* controller.snapshot;
+        assert.strictEqual(first.workbench?.target, "use");
+        assert.strictEqual(first.workbench?.binding, "accepted");
+        assert.strictEqual(first.mode, "run");
 
-      yield* controller.dispatch(
-        envelope(
-          61,
-          SubmitAppPrompt.make({
-            type: "submit-app-prompt",
-            text: "What can this candidate do?",
-          }),
-        ),
-      );
-      assert.strictEqual(submitPreviewPrompt.mock.calls.length, 1);
-      assert.strictEqual(
-        submitPreviewPrompt.mock.calls[0]?.[1],
-        "What can this candidate do?",
-      );
+        yield* controller.dispatch(
+          envelope(
+            61,
+            SubmitAppPrompt.make({
+              type: "submit-app-prompt",
+              text: "What can this product do?",
+            }),
+          ),
+        );
+        assert.strictEqual(submitPreviewPrompt.mock.calls.length, 0);
+        assert.strictEqual(
+          submitAppPrompt.mock.calls.at(-1)?.[1],
+          "What can this product do?",
+        );
 
-      yield* controller.dispatch(
-        envelope(
-          62,
-          SelectWorkbenchTarget.make({
-            type: "select-workbench-target",
-            target: "shape",
-          }),
-        ),
-      );
-      assert.strictEqual(
-        (yield* controller.snapshot).workbench?.target,
-        "shape",
-      );
+        yield* controller.dispatch(
+          envelope(
+            62,
+            SelectWorkbenchTarget.make({
+              type: "select-workbench-target",
+              target: "shape",
+            }),
+          ),
+        );
+        assert.strictEqual(
+          (yield* controller.snapshot).workbench?.target,
+          "shape",
+        );
 
-      yield* controller.dispatch(
-        envelope(
-          63,
-          SubmitShaperInstruction.make({
-            type: "submit-shaper-instruction",
-            instruction: "Correct the candidate",
-          }),
-        ),
-      );
-      const corrected = yield* controller.snapshot;
-      assert.strictEqual(corrected.workbench?.target, "use");
-      assert.strictEqual(corrected.shaping.proposal?.status, "previewed");
-      assert.notStrictEqual(
-        corrected.shaping.proposal?.id,
-        preview.shaping.proposal?.id,
-      );
-    }).pipe(Effect.provide(layer));
-  });
+        yield* controller.dispatch(
+          envelope(
+            63,
+            SubmitShaperInstruction.make({
+              type: "submit-shaper-instruction",
+              instruction: "Correct the candidate",
+            }),
+          ),
+        );
+        const corrected = yield* controller.snapshot;
+        assert.strictEqual(corrected.workbench?.target, "use");
+        assert.strictEqual(corrected.workbench?.binding, "accepted");
+        assert.isUndefined(corrected.shaping.proposal);
+        assert.notStrictEqual(
+          corrected.shaping.active.id,
+          first.shaping.active.id,
+        );
+      }).pipe(Effect.provide(layer));
+    },
+  );
 
   it.effect(
     "rejects stale failure handoffs and injects only correlated evidence",
@@ -3245,9 +3264,6 @@ describe("FlectWorkspaceController", () => {
               instruction: "Create a product",
             }),
           ),
-        );
-        yield* controller.dispatch(
-          envelope(81, AcceptProposal.make({ type: "accept-proposal" })),
         );
         yield* controller
           .dispatch(
@@ -3440,9 +3456,6 @@ describe("FlectWorkspaceController", () => {
           }),
         ),
       );
-      yield* controller.dispatch(
-        envelope(39, AcceptProposal.make({ type: "accept-proposal" })),
-      );
       assert.strictEqual((yield* controller.snapshot).workbench?.target, "use");
       const invoked = yield* controller.dispatch(
         envelope(
@@ -3588,7 +3601,7 @@ describe("FlectWorkspaceController", () => {
   );
 
   it.effect(
-    "creates a preview from Shaper and accepts it through typed commands",
+    "activates a local interface edit without a separate review decision",
     () => {
       const { layer } = makeLayer();
       return Effect.gen(function* () {
@@ -3602,17 +3615,11 @@ describe("FlectWorkspaceController", () => {
             }),
           ),
         );
-        const preview = yield* controller.snapshot;
-        yield* controller.dispatch(
-          envelope(2, AcceptProposal.make({ type: "accept-proposal" })),
-        );
         const accepted = yield* controller.snapshot;
 
-        assert.strictEqual(preview.phase, "preview");
-        assert.strictEqual(preview.document.name, "Controller proposal");
-        assert.strictEqual(preview.shaping.proposal?.status, "previewed");
         assert.strictEqual(accepted.phase, "ready");
         assert.strictEqual(accepted.shaping.proposal, undefined);
+        assert.strictEqual(accepted.document.name, "Controller proposal");
         assert.strictEqual(
           accepted.shaping.active.document.name,
           "Controller proposal",
@@ -3643,7 +3650,7 @@ describe("FlectWorkspaceController", () => {
   );
 
   it.effect(
-    "lets outside clients test a preview without bypassing its decision",
+    "lets outside clients use accepted edits without bypassing safe mode",
     () => {
       const { layer } = makeLayer();
       return Effect.gen(function* () {
@@ -3673,9 +3680,6 @@ describe("FlectWorkspaceController", () => {
         );
         const stillPreview = yield* controller.snapshot;
         yield* controller.dispatch(
-          envelope(4, AcceptProposal.make({ type: "accept-proposal" })),
-        );
-        yield* controller.dispatch(
           envelope(5, EnterSafeMode.make({ type: "enter-safe-mode" })),
         );
         const safePrompt = yield* controller
@@ -3693,7 +3697,7 @@ describe("FlectWorkspaceController", () => {
 
         assert.strictEqual(previewMode.status, "completed");
         assert.strictEqual(previewPrompt.status, "completed");
-        assert.strictEqual(stillPreview.shaping.proposal?.status, "previewed");
+        assert.isUndefined(stillPreview.shaping.proposal);
         assert.strictEqual(safePrompt._tag, "OperationFailed");
         const snapshot = yield* controller.snapshot;
         assert.strictEqual(snapshot.phase, "safe-mode");

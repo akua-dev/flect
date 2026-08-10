@@ -17,26 +17,27 @@ import {
 import { ComposerActionsMenu } from "./composer-actions-menu";
 import { ArrowUpIcon, StopIcon } from "./icons";
 import { ModelMenu } from "./model-menu";
-import {
-  type ConversationTarget,
-  RoleSwitcher,
-  type ShellMode,
-} from "./role-switcher";
+import type { ConversationTarget, ShellMode } from "./role-switcher";
 
 const MAX_COMPOSER_HEIGHT = 168;
 const MIN_COMPOSER_HEIGHT = 48;
 
 export interface ComposerProps {
   readonly mode: ShellMode;
+  /** @deprecated Flect presents one conversation and ignores role targeting. */
   readonly target?: ConversationTarget;
+  /** @deprecated Flect persists one visible draft. */
   readonly conversationKey?: "accepted-use" | "candidate-use" | "shape";
+  /** @deprecated Internal agent roles are not a user-facing mode. */
   readonly agentLabel?: "App Agent" | "Preview App Agent" | "Shaper";
+  /** @deprecated Routing is automatic. */
   readonly useDisabled?: boolean;
   readonly placeholder: string;
   readonly disabled?: boolean;
   readonly disabledReason?: string;
   readonly drafts?: ContinuityDrafts;
-  readonly roleSwitchDisabled: boolean;
+  /** @deprecated There is no visible role switcher. */
+  readonly roleSwitchDisabled?: boolean;
   readonly status: AgentSessionStatus;
   readonly models: ReadonlyArray<ModelSummary>;
   readonly selectedModel: ModelSummary | undefined;
@@ -45,7 +46,9 @@ export interface ComposerProps {
   readonly authEvent?: AuthLoginEvent;
   readonly modelFavorites: ReadonlyArray<string>;
   readonly rollbackAvailable: boolean;
+  /** @deprecated There is no visible mode switcher. */
   readonly onModeChange?: (mode: Exclude<ShellMode, "safe">) => void;
+  /** @deprecated Flect routes typed work internally. */
   readonly onTargetChange?: (target: ConversationTarget) => void;
   readonly onSelectModel: (model: ModelSummary | undefined) => void;
   readonly onSelectReasoning?: (
@@ -82,15 +85,10 @@ export interface ComposerProps {
 
 export function Composer({
   mode,
-  target,
-  conversationKey,
-  agentLabel,
-  useDisabled = false,
   placeholder,
   disabled = false,
   disabledReason,
   drafts: persistedDrafts,
-  roleSwitchDisabled,
   status,
   models,
   selectedModel,
@@ -99,8 +97,6 @@ export function Composer({
   authEvent,
   modelFavorites,
   rollbackAvailable,
-  onModeChange,
-  onTargetChange,
   onSelectModel,
   onSelectReasoning = () => undefined,
   onLoginProvider = () => undefined,
@@ -130,17 +126,8 @@ export function Composer({
   const composingRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const helpId = useId();
-  const conversationTarget =
-    target ?? (mode === "run" ? "use" : ("shape" as const));
-  const draftKey =
-    conversationKey ??
-    (conversationTarget === "use" ? "accepted-use" : "shape");
-  const continuityKey: keyof ContinuityDrafts =
-    draftKey === "accepted-use"
-      ? "acceptedUse"
-      : draftKey === "candidate-use"
-        ? "candidateUse"
-        : "shape";
+  const draftKey = "accepted-use";
+  const continuityKey: keyof ContinuityDrafts = "acceptedUse";
   const prompt = mode === "safe" ? "" : (drafts[draftKey] ?? "");
   const isActive = isAgentSessionActive(status);
   const isUnavailable =
@@ -156,8 +143,7 @@ export function Composer({
     status === "unavailable" ||
     isActive;
   const canSubmit = prompt.trim().length > 0 && !isUnavailable && !isActive;
-  const roleName =
-    agentLabel ?? (conversationTarget === "use" ? "App Agent" : "Shaper");
+  const roleName = "Flect";
   const help =
     disabledReason ??
     (mode === "safe"
@@ -183,8 +169,6 @@ export function Composer({
     setDrafts((current) => ({
       ...current,
       "accepted-use": persistedDrafts.acceptedUse,
-      "candidate-use": persistedDrafts.candidateUse,
-      shape: persistedDrafts.shape,
     }));
   }, [persistedDrafts]);
 
@@ -220,7 +204,7 @@ export function Composer({
     <form
       aria-busy={isActive}
       className={`composer${isActive ? " composer--active" : ""}`}
-      data-composer-role={conversationTarget}
+      data-composer-role="flect"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
@@ -281,21 +265,8 @@ export function Composer({
             rollbackAvailable={rollbackAvailable}
             rollbackDisabled={isActive}
           />
-          {mode === "safe" ? (
+          {mode === "safe" && (
             <span className="composer__safe-label">Safe mode</span>
-          ) : (
-            <RoleSwitcher
-              disabled={roleSwitchDisabled}
-              onChange={(next) => {
-                if (onTargetChange !== undefined) {
-                  onTargetChange(next);
-                } else {
-                  onModeChange?.(next === "use" ? "run" : "edit");
-                }
-              }}
-              target={conversationTarget}
-              useDisabled={useDisabled}
-            />
           )}
           <ModelMenu
             authEvent={authEvent}

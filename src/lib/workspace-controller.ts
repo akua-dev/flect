@@ -2254,6 +2254,27 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             commandRejected("Leave safe mode before shaping."),
           );
         }
+        const [presentation, pendingShare, extensionSnapshot] =
+          yield* Effect.all([
+            SubscriptionRef.get(capsulePresentation),
+            Ref.get(shareCandidate),
+            extensionCatalog === undefined
+              ? Effect.succeed(undefined)
+              : extensionCatalog.snapshot,
+          ]);
+        if (
+          presentation.candidateReview !== undefined ||
+          pendingShare !== undefined ||
+          extensionSnapshot?.entries.some(
+            (entry) => entry.binding === "candidate",
+          ) === true
+        ) {
+          return yield* Effect.fail(
+            commandRejected(
+              "Activate or discard the external candidate before making local interface edits.",
+            ),
+          );
+        }
         const current = yield* SubscriptionRef.get(state);
         const previous =
           current.workbench ?? initialWorkbenchState(current.shaping);
@@ -2313,20 +2334,18 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             ? {}
             : { lastKnownGoodReview: current.lastKnownGoodReview }),
         }));
-        const preview =
-          shaping.proposal === undefined
-            ? yield* kernel
-                .propose(candidate, "shaper")
-                .pipe(Effect.flatMap((proposal) => kernel.preview(proposal.id)))
-            : yield* kernel.supersede(shaping.proposal.id, candidate, "shaper");
-        const next = yield* kernel.snapshot;
-        yield* transitionShaping(
-          envelope,
-          operationId,
-          "revision-previewed",
-          next,
-          preview.id,
-        );
+        yield* shaping.proposal === undefined
+          ? kernel
+              .propose(candidate, "shaper")
+              .pipe(Effect.flatMap((proposal) => kernel.preview(proposal.id)))
+          : kernel.supersede(shaping.proposal.id, candidate, "shaper");
+
+        // A Shaper result is a typed, local InterfaceDocument. It cannot add
+        // host capabilities or install external code, so making the user
+        // approve it again only duplicates the instruction they just gave.
+        // Imported capsules, shares, and capability changes still enter via
+        // their explicit candidate flows and retain their authority review.
+        yield* acceptProposal(envelope, operationId);
       },
     );
 

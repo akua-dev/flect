@@ -241,12 +241,15 @@ metadata entry), 32 MiB total, and 100 characters per portable relative path.
 Named unsupported Vite plugins, `resolve.alias`, and `node:` built-ins are
 reported before a candidate exists, with a browser-portable alternative.
 
-The resulting app opens as a candidate. Review its source revision, artifact
-digest, adaptations, ignored files, capabilities, and compatibility; exercise
-the isolated UI; then choose **Keep change** or **Reject**. A kept build exports
-as a complete `.flect` capsule and runs without Vite, npm, or a Flect-hosted
-service. Vite config and package scripts are preserved as source but never run;
-only runtime dependencies enter the portable package graph.
+The resulting external app opens as an isolated import candidate. Review its
+source revision, artifact digest, adaptations, ignored files, capabilities, and
+compatibility; exercise the isolated UI; then choose **Activate app** or
+**Discard**. This explicit decision exists because imported code can introduce
+new authority. Ordinary UI edits requested in the Flect conversation validate,
+activate, and checkpoint automatically. An activated build exports as a complete
+`.flect` capsule and runs without Vite, npm, or a Flect-hosted service. Vite
+config and package scripts are preserved as source but never run; only runtime
+dependencies enter the portable package graph.
 
 ## Architecture, product, and vision
 

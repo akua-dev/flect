@@ -47,6 +47,7 @@ export interface ConversationMessage {
   readonly id: string;
   readonly role: "user" | "assistant" | "activity";
   readonly content: string;
+  readonly createdAt?: number;
 }
 
 export interface RoleConversationState {
@@ -146,6 +147,7 @@ const activityMessage = (
 ): ConversationMessage => ({
   id: activity.id,
   role: "activity",
+  createdAt: activity.updatedAt,
   content:
     activity.toolName === "bash"
       ? `${role === "app" ? "App Agent" : "Shaper"} used its sandbox.`
@@ -156,16 +158,22 @@ const activityMessage = (
 
 const conversationMessages = (
   conversation: RoleConversationSnapshot,
-): ReadonlyArray<ConversationMessage> => [
-  ...conversation.messages.map((message) => ({
-    id: message.id,
-    role: message.role,
-    content: message.content,
-  })),
-  ...conversation.activities.map((activity) =>
-    activityMessage(conversation.role, activity),
-  ),
-];
+): ReadonlyArray<ConversationMessage> =>
+  [
+    ...conversation.messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      createdAt: message.createdAt,
+    })),
+    ...conversation.activities.map((activity) =>
+      activityMessage(conversation.role, activity),
+    ),
+  ].sort((left, right) =>
+    left.createdAt === undefined || right.createdAt === undefined
+      ? 0
+      : left.createdAt - right.createdAt,
+  );
 
 const pendingRole = (role: InteractiveAgentRole): RoleConversationSnapshot => ({
   role,

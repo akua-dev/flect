@@ -62,6 +62,7 @@ export interface ShapingController {
 export interface AgentRailProps {
   readonly build?: WorkspaceBuildSnapshot;
   readonly mode: ShellMode;
+  /** @deprecated Flect routes internal roles automatically. */
   readonly target?: ConversationTarget;
   readonly preview?: boolean;
   readonly candidateRevisionId?: RevisionId;
@@ -73,7 +74,9 @@ export interface AgentRailProps {
   readonly workspace: AgentWorkspaceController;
   readonly shaping: ShapingController;
   readonly preferences: ShellPreferencesController;
-  readonly onModeChange: (mode: Exclude<ShellMode, "safe">) => void;
+  /** @deprecated There is no visible mode switcher. */
+  readonly onModeChange?: (mode: Exclude<ShellMode, "safe">) => void;
+  /** @deprecated Flect routes typed work internally. */
   readonly onTargetChange?: (target: ConversationTarget) => void;
   readonly onCollapse: () => void;
   readonly onOpenSafeMode: () => void;
@@ -399,15 +402,10 @@ function Conversation({
     >
       {messages.length === 0 && activities.length === 0 && (
         <div className="conversation__empty">
-          <strong>
-            {label === "Shaper"
-              ? "Shape the interface in plain language."
-              : "Use the app through its agent."}
-          </strong>
+          <strong>Build and use the product in one conversation.</strong>
           <p>
-            {label === "Shaper"
-              ? "Every proposal is validated before it reaches the canvas."
-              : "Ask about the current experience or call an approved action."}
+            Ask for a change, use the current interface, or call an approved
+            action. Flect routes the work for you.
           </p>
         </div>
       )}
@@ -476,7 +474,6 @@ function Conversation({
 export function AgentRail({
   build,
   mode,
-  target: controlledTarget,
   preview = false,
   candidateRevisionId,
   capsuleReview,
@@ -487,8 +484,6 @@ export function AgentRail({
   workspace,
   shaping,
   preferences,
-  onModeChange,
-  onTargetChange,
   onCollapse,
   onOpenSafeMode,
   onOpenShareSource,
@@ -505,26 +500,73 @@ export function AgentRail({
   onRemovePortableExtension,
   diagnostics,
 }: AgentRailProps) {
-  const target = controlledTarget ?? (mode === "run" ? "use" : "shape");
+  const conversationControllers = [
+    workspace.app,
+    workspace.previewApp,
+    workspace.shaper,
+  ] as const;
+  const preferredController = preview
+    ? workspace.previewApp
+    : useDisabled
+      ? workspace.shaper
+      : workspace.app;
   const controller =
-    target === "use"
-      ? preview
-        ? workspace.previewApp
-        : workspace.app
-      : workspace.shaper;
-  const roleLabel =
-    mode === "safe"
-      ? "Recovery"
-      : target === "shape"
-        ? "Shaper"
-        : preview
-          ? "Preview App Agent"
-          : "App Agent";
+    conversationControllers.find((entry) =>
+      isAgentSessionActive(entry.status),
+    ) ?? preferredController;
+  const roleLabel = mode === "safe" ? "Recovery" : "Flect";
+  const messages = conversationControllers
+    .flatMap((entry) => entry.messages)
+    .filter((message) => message.role !== "activity")
+    .map((message, sequence) => ({ message, sequence }))
+    .sort((left, right) => {
+      const leftTime = left.message.createdAt;
+      const rightTime = right.message.createdAt;
+      return leftTime === undefined || rightTime === undefined
+        ? left.sequence - right.sequence
+        : leftTime - rightTime || left.sequence - right.sequence;
+    })
+    .map(({ message }) => message);
+  const activities = conversationControllers
+    .flatMap((entry) => entry.activities ?? [])
+    .sort((left, right) => left.updatedAt - right.updatedAt);
   const operationActive =
     isAgentSessionActive(workspace.app.status) ||
     isAgentSessionActive(workspace.previewApp.status) ||
     isAgentSessionActive(workspace.shaper.status) ||
     shaping.status === "shaping";
+  const cancel = async () => {
+    const active = conversationControllers.filter((entry) =>
+      isAgentSessionActive(entry.status),
+    );
+    await Promise.all(
+      (active.length === 0 ? [controller] : active).map((entry) =>
+        entry.cancel(),
+      ),
+    );
+  };
+  const submit =
+    mode === "safe"
+      ? async () => undefined
+      : preview && candidateRevisionId !== undefined
+        ? (text: string) =>
+            workspace.previewApp.submit(text, document, candidateRevisionId)
+        : useDisabled
+          ? shaping.request
+          : workspace.app.submit;
+  const externalExtensionsEnabled =
+    workspace.externalExtensions.app && workspace.externalExtensions.shaper;
+  const toggleExternalExtensions = async () => {
+    const enabled = !externalExtensionsEnabled;
+    const changes: Array<Promise<void>> = [];
+    if (workspace.externalExtensions.app !== enabled) {
+      changes.push(workspace.toggleExternalExtensions("app"));
+    }
+    if (workspace.externalExtensions.shaper !== enabled) {
+      changes.push(workspace.toggleExternalExtensions("shaper"));
+    }
+    await Promise.all(changes);
+  };
   const candidateExtensionBlocked =
     capsuleReview !== undefined &&
     extensions?.entries.some(
@@ -731,15 +773,7 @@ export function AgentRail({
       <header className="agent-rail__header">
         <div className="agent-rail__identity">
           <strong>{roleLabel}</strong>
-          <span>
-            {target === "use"
-              ? preview
-                ? "Test candidate"
-                : "Use app"
-              : mode === "safe"
-                ? "Protected shell"
-                : "Edit interface"}
-          </span>
+          <span>{mode === "safe" ? "Protected shell" : "Live canvas"}</span>
         </div>
         <div className="agent-rail__header-actions">
           <RuntimeState status={controller.status} />
@@ -755,19 +789,11 @@ export function AgentRail({
       </header>
 
       <Conversation
-        activities={controller.activities ?? []}
+        activities={activities}
         label={roleLabel}
-        messages={
-          (controller.activities?.length ?? 0) > 0
-            ? controller.messages.filter(
-                (message) => message.role !== "activity",
-              )
-            : controller.messages
-        }
+        messages={messages}
         status={controller.status}
-        {...(roleLabel === "Shaper"
-          ? {}
-          : { onFixFailure: (activity) => void shaping.fixFailure(activity) })}
+        onFixFailure={(activity) => void shaping.fixFailure(activity)}
       />
 
       <div className="agent-rail__dock">
@@ -865,9 +891,9 @@ export function AgentRail({
           )}
 
         {shaping.status === "preview" && (
-          <section aria-label="Revision decision" className="revision-banner">
+          <section aria-label="Import decision" className="revision-banner">
             <div className="revision-banner__copy">
-              <span>Validated preview</span>
+              <span>Imported app ready</span>
               <strong>{document.name}</strong>
               <small>
                 {shaping.isolation === "ready"
@@ -889,8 +915,8 @@ export function AgentRail({
                 {acceptedCapsuleReview !== undefined && (
                   <p className="capsule-review__comparison">
                     {acceptedCapsuleReview.id === capsuleReview.id
-                      ? "The installed app stays active until you explicitly keep this version."
-                      : "The current installed app stays active until you explicitly keep this replacement."}
+                      ? "The installed app stays active until you explicitly activate this version."
+                      : "The current installed app stays active until you explicitly activate this replacement."}
                   </p>
                 )}
                 <dl>
@@ -1035,15 +1061,15 @@ export function AgentRail({
                   <p className="capsule-review__warning" role="alert">
                     {!capsuleReview.flectCompatible ||
                     !capsuleReview.platformCompatible
-                      ? "This app is incompatible with this Flect version or host. You can inspect the preview, but it cannot be kept."
-                      : "This app requires capabilities that are not granted. You can inspect the preview, but it cannot be kept."}
+                      ? "This app is incompatible with this Flect version or host. You can inspect it, but it cannot be activated."
+                      : "This app requires capabilities that are not granted. You can inspect it, but it cannot be activated."}
                   </p>
                 )}
                 {candidateExtensionBlocked && (
                   <p className="capsule-review__warning" role="alert">
                     Every enabled candidate extension must pass its bounded test
-                    before this app can be kept. Disable failed extensions or
-                    fix them in Shape.
+                    before this app can be activated. Disable failed extensions
+                    or ask Flect to fix them.
                   </p>
                 )}
               </details>
@@ -1060,7 +1086,7 @@ export function AgentRail({
                 ref={keepChangeRef}
                 type="button"
               >
-                Keep change
+                Activate app
               </button>
               <button
                 className="decision-button"
@@ -1069,7 +1095,7 @@ export function AgentRail({
                 ref={rejectChangeRef}
                 type="button"
               >
-                Reject
+                Discard
               </button>
             </div>
           </section>
@@ -1126,31 +1152,17 @@ export function AgentRail({
         )}
 
         <Composer
-          agentLabel={roleLabel === "Recovery" ? "Shaper" : roleLabel}
-          conversationKey={
-            target === "shape"
-              ? "shape"
-              : preview
-                ? "candidate-use"
-                : "accepted-use"
-          }
           disabled={mode === "safe"}
           drafts={workspace.drafts}
-          externalExtensionsEnabled={
-            target === "use"
-              ? workspace.externalExtensions.app
-              : workspace.externalExtensions.shaper
-          }
+          externalExtensionsEnabled={externalExtensionsEnabled}
           mode={mode}
           modelFavorites={preferences.value.modelFavorites}
           models={workspace.models}
           reasoningLevel={workspace.reasoningLevel}
           providers={workspace.providers}
           authEvent={workspace.authEvent}
-          onCancel={controller.cancel}
+          onCancel={cancel}
           onDraftChange={workspace.setDraft}
-          onModeChange={onModeChange}
-          onTargetChange={onTargetChange}
           onOpenSafeMode={onOpenSafeMode}
           onExportRepository={exportRepository}
           onExportCapsule={exportCapsule}
@@ -1172,39 +1184,13 @@ export function AgentRail({
           onCancelProviderAuth={workspace.cancelProviderAuth}
           onRefreshProviderAuth={workspace.refreshProviderAuth}
           onLogoutProvider={workspace.logoutProvider}
-          onToggleExternalExtensions={() =>
-            workspace.toggleExternalExtensions(
-              target === "use" ? "app" : "shaper",
-            )
-          }
-          onSubmit={
-            mode === "safe"
-              ? async () => undefined
-              : target === "shape"
-                ? shaping.request
-                : preview && candidateRevisionId !== undefined
-                  ? (text) =>
-                      workspace.previewApp.submit(
-                        text,
-                        document,
-                        candidateRevisionId,
-                      )
-                  : workspace.app.submit
-          }
+          onToggleExternalExtensions={toggleExternalExtensions}
+          onSubmit={submit}
           onToggleModelFavorite={preferences.toggleModelFavorite}
-          placeholder={
-            target === "use"
-              ? preview
-                ? "Test this candidate or ask what it can do"
-                : "Ask about this app or take an action"
-              : "Build, change, or connect anything"
-          }
-          roleSwitchDisabled={operationActive || mode === "safe"}
+          placeholder="Build, change, use, or connect anything"
           rollbackAvailable={shaping.rollbackAvailable}
           selectedModel={workspace.selectedModel}
           status={controller.status}
-          target={target}
-          useDisabled={useDisabled}
         />
         {installOpen && (
           <dialog
