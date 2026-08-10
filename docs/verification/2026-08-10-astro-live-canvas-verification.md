@@ -69,6 +69,17 @@ Activation is measured inside the page with `performance.now()` and a
 `MutationObserver`, avoiding remote-driver polling overhead. Model/provider
 latency remains separate from local UI latency.
 
+The canonical hosted PR run
+[`31394013331`](https://github.com/akua-dev/flect/actions/runs/31394013331)
+independently passed the complete gate on commit `ddfe43c`: 166 source test
+files / 888 tests, 85 production Chromium workflows, 26 Rust host tests, and
+the signed-ad-hoc desktop app build. Its shared-runner observations were 426 ms
+cold and 405 ms warm activation, 954 ms warmed activation on Fast 4G with 4×
+CPU throttling, 429 ms Fast-4G LCP, 1,367 ms Slow-4G LCP, zero CLS, and 11 ms
+composer p95. As defined in `docs/performance.md`, shared CI applies the
+1,000 ms scheduler ceiling to warm activation; only the supported-device gate
+makes the 300 ms product claim.
+
 ## Long-session behavior
 
 The strict repeated-cycle gate runs 50 complete UI edit/use cycles without an
@@ -81,6 +92,10 @@ intermediate garbage collection:
 | Final heap including Markdown | 24,505,472 B | 64 MiB |
 | Worst candidate rebuild request | 62 ms | 1,000 ms |
 | Worst complete cycle | 1,811 ms | diagnostic end-to-end |
+
+The hosted shared runner retained 7,248,644 B across the same 50-cycle gate,
+reported a 228 ms worst candidate rebuild and a diagnostic 4,933 ms worst
+complete cycle, and stayed below the source-of-truth heap and rebuild budgets.
 
 The hot state path uses bounded projections, sliding latest-value streams, and
 shallow trusted snapshot evolution. The embedded libgit2 worker is recycled on
@@ -134,7 +149,7 @@ The local package verification establishes ad-hoc-signed packaged-host behavior;
 it does not substitute for Developer ID distribution trust. Developer ID
 signing, Apple notarization, and clean-machine launch proof require release
 credentials and an external clean macOS runner; those gates remain fail-closed
-and cannot be completed in an unpushed local-only run.
+and cannot be completed in an untrusted PR workflow.
 
 ## Commands
 
@@ -155,5 +170,5 @@ capability revocation. A submit/menu race found by the first full run was fixed
 by locking protected composer actions synchronously; the regression and the
 complete final run pass.
 
-The final command results and AXI request/focus inspection are recorded in the
-local completion commit and the open-issue audit.
+The final command results, hosted run, and AXI request/focus inspection are
+recorded in the completion commits and the open-issue audit.

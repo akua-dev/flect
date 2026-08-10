@@ -4,8 +4,9 @@ This audit maps every open GitHub issue to the tested implementation and the
 authority still needed to close it. The implementation is maintained on
 `codex/flect-vision-complete` and proposed by
 [PR #38](https://github.com/akua-dev/flect/pull/38). Hosted evidence for each
-pushed head is authoritative in the PR checks; the previous
-[quality run](https://github.com/akua-dev/flect/actions/runs/31384628554) passed.
+pushed head is authoritative in the PR checks; the final
+[quality run](https://github.com/akua-dev/flect/actions/runs/31394013331) passed
+on commit `ddfe43c`.
 The PR has not been merged. A PR-ready status does not mean the change exists
 on GitHub `main`.
 
@@ -14,8 +15,8 @@ Status meanings:
 - **pr-ready**: the accepted implementation passes local and canonical hosted
   gates on PR #38 and can close through intentional integration;
 - **external-gate**: implementation exists locally, but closure requires a
-  credential, hosted run, independent review, or clean device unavailable to
-  this no-push run; and
+  credential, independent review, repository-policy change, or clean device
+  unavailable to the PR workflow; and
 - **tracking**: an epic remains open while any required child gate remains.
 
 | Issue | Status | Evidence and remaining gate |
@@ -37,7 +38,7 @@ Status meanings:
 | #25 | pr-ready | One embedded-Git canonical workspace supplies automatic accepted checkpoints, simple Undo, retained last-known-good state, conflict rejection, cross-tab serialization, and complete source/history export. |
 | #27 | pr-ready | Bounded static HTML/CSS/script/assets import preserves files and attribution, isolates runtime authority, rejects malformed/remote assumptions, and runs offline as a capsule. |
 | #28 | external-gate | The five-export `@flect/product` tarball and clean-consumer/reference-product suites pass. Publishing a registry artifact or deploying references was not authorized by the push-only request. |
-| #31 | external-gate | The canonical workflow passed on PR #38 in hosted run 31383464208: 888 source tests, 84 production-Chromium workflows, Rust host tests, and the desktop app build. Repository settings currently show no classic protection and no ruleset, so requiring this check on `main` remains an explicit repository-policy change. |
+| #31 | external-gate | The canonical workflow passed on PR #38 in hosted run 31394013331 at commit `ddfe43c`: 888 source tests, 85 production-Chromium workflows, 26 Rust host tests, and the signed-ad-hoc desktop app build. Repository settings currently show no classic protection and no ruleset, so requiring this check on `main` remains an explicit repository-policy change. |
 | #32 | pr-ready | One conversation continuously turns local valid edits into the running canvas with last-known-good failure behavior and no Keep/Reject ceremony. |
 | #33 | pr-ready | Persistent source/Git/package state, warm typed build boundaries, state-preserving live presentation, offline reuse, and repeated edit-cycle bounds pass. |
 | #34 | pr-ready | Bounded revision-bound workspace commands, semantic selected-element context, build/shell diagnostics, protected capability invocation, stale-result rejection, and visible concise tool activity pass. |
@@ -49,8 +50,8 @@ Status meanings:
 
 - `bun run check`: 166 passed test files, 888 passed tests, one deliberate skip.
 - `bun run test:e2e`: 85 of 85 production Chromium workflows passed.
-- hosted `Flect quality gate`: run 31383464208 passed the same source/browser
-  gates plus Rust host tests and the desktop app build on commit `53ebc56`.
+- hosted `Flect quality gate`: run 31394013331 passed the same source/browser
+  gates plus 26 Rust host tests and the desktop app build on commit `ddfe43c`.
 - `bun run product:package`: 63,559-byte verified package tarball.
 - `bun run check:rust`: 26 of 26 Rust host tests passed.
 - `bun run build:desktop -- --bundles app`: final ad-hoc signed app bundle built.
