@@ -1,9 +1,9 @@
 # Open-issue audit — 2026-08-10
 
-This audit maps every open GitHub issue to the tested local implementation and
-the authority still needed to close it. The implementation is on the unpushed
-`codex/flect-vision-complete` branch. A local-ready status does not mean the
-change exists on GitHub `main`.
+This audit maps every open GitHub issue to the tested implementation and the
+authority still needed to close it. The implementation through `524fb8f` is
+pushed to `codex/flect-vision-complete`; it has not been proposed or merged.
+A local-ready status does not mean the change exists on GitHub `main`.
 
 Status meanings:
 
@@ -31,8 +31,8 @@ Status meanings:
 | #23 | external-gate | The final optimized `Flect.app`, private runtime, updater boundary, Swift adapter, ownership-aware setup/uninstall, and ad-hoc signing build locally. Developer ID, notarization, hardened-runtime review, and clean-machine launch require Apple credentials and external hardware. |
 | #25 | local-ready | One embedded-Git canonical workspace supplies automatic accepted checkpoints, simple Undo, retained last-known-good state, conflict rejection, cross-tab serialization, and complete source/history export. |
 | #27 | local-ready | Bounded static HTML/CSS/script/assets import preserves files and attribution, isolates runtime authority, rejects malformed/remote assumptions, and runs offline as a capsule. |
-| #28 | external-gate | The five-export `@flect/product` tarball and clean-consumer/reference-product suites pass. Publishing a registry artifact or deploying references was not authorized by the local-only request. |
-| #31 | external-gate | The canonical workflow is checked in and its complete equivalent passes locally. A GitHub Actions check and branch protection cannot be observed until a branch is pushed. |
+| #28 | external-gate | The five-export `@flect/product` tarball and clean-consumer/reference-product suites pass. Publishing a registry artifact or deploying references was not authorized by the push-only request. |
+| #31 | external-gate | The canonical workflow is checked in and its complete equivalent passes locally. The branch is pushed, but the workflow intentionally triggers only for pull requests and `main`; no pull request, merge, or branch-protection change was authorized. |
 | #32 | local-ready | One conversation continuously turns local valid edits into the running canvas with last-known-good failure behavior and no Keep/Reject ceremony. |
 | #33 | local-ready | Persistent source/Git/package state, warm typed build boundaries, state-preserving live presentation, offline reuse, and repeated edit-cycle bounds pass. |
 | #34 | local-ready | Bounded revision-bound workspace commands, semantic selected-element context, build/shell diagnostics, protected capability invocation, stale-result rejection, and visible concise tool activity pass. |
