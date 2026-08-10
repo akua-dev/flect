@@ -129,10 +129,21 @@ bounded worker test before activation; a failed candidate must be disabled or fi
 before acceptance. The controller repeats this check even if customized UI is
 bypassed.
 
-Pins and local-fork revision markers survive as update conflicts. Because
-three-way capsule merging is not implemented in version 1, the honest choices
-are to use the upstream package or reject the candidate app update and keep the
-current fork. Flect does not silently combine or relabel package bytes.
+Pins and local-fork revision markers survive as update conflicts. A raw update
+to the single primary app is never silently combined: the user either accepts
+the upstream archive or keeps the current fork. Provider-neutral shared sources
+add the guarded personal-fork lifecycle on top of capsule artifacts: immutable
+base, upstream, and fork Git refs drive a deterministic three-way file merge;
+overlapping edits become explicit conflict paths and require a reviewed
+resolution. Flect never silently combines or relabels package bytes.
+
+Removing a shared source first detaches only that source's installed parts and
+preserves its personal fork for export. Deleting local data is a separate,
+guarded action that is refused while the source is installed. The primary
+capsule store likewise removes only archives named by its strict binding file;
+unknown files, unrelated Git history, workspace documents, grants, and other
+storage namespaces are not deletion targets. Corrupt bindings fail closed
+instead of broadening cleanup.
 
 ## Runtime intents
 

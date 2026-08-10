@@ -8,8 +8,6 @@ change exists on GitHub `main`.
 Status meanings:
 
 - **local-ready**: the accepted implementation and local observable tests pass;
-- **local-slice-ready**: a substantial accepted slice passes, but another
-  explicitly named acceptance condition remains;
 - **external-gate**: implementation exists locally, but closure requires a
   credential, hosted run, independent review, or clean device unavailable to
   this no-push run; and
@@ -21,14 +19,14 @@ Status meanings:
 | #5 | local-ready | Integrity-checked package graphs, bounded extraction, cache reuse, offline rebuild, and provider separation pass source and Chromium tests. |
 | #8 | local-ready | Folder, ZIP, POSIX TAR, and exact immutable Git ingestion feed standard Vite/React through the same isolated build/export path. |
 | #9 | local-ready | Vanilla, React, Vue, and Svelte fixtures use the same Rolldown workspace, capsule, failure, and offline-cache contract. |
-| #10 | local-slice-ready | File/URL installation, review, offline execution, provenance, fork lineage, update comparison, and Git share merge/conflict handling pass. Capsule-specific three-way personal-fork/uninstall proof remains if it is required independently from the implemented share lifecycle. |
+| #10 | local-ready | File/URL installation, review, offline execution, provenance, explicit fork lineage, guarded three-way update/conflict resolution, export, and two-stage uninstall pass. The primary capsule store additionally proves that only strictly bound objects are removed while unrelated workspace and unknown data survive. |
 | #11 | local-ready | Canonical Ed25519 content signing, key validity/rotation/revocation policy, all requested trust states, protected presentation, and unsigned fork lineage pass source and production Chromium tests. |
 | #12 | local-ready | A real Swift/AppKit accent read crosses a fixed C ABI and main-window-only Rust command, then a schema-decoded Effect service and explicit revocable broker grant; browsers receive typed unavailability. |
 | #13 | external-gate | ADR 0004 selects user-hosted first and specifies authorities, threats, key lifecycle, protocol, offline behavior, and operations. Pure fixtures cover pairing, reconnect, replay, interruption, revocation, and lost-device recovery. Independent security approval is still required; no listener was implemented. |
 | #17 | tracking | The 84-flow production Chromium journey passes; clean packaged macOS, real provider, VoiceOver, and hosted-CI children remain. |
 | #19 | external-gate | In-product provider authentication, model selection, cancellation, redaction, and draft continuity are implemented and tested deterministically. A clean profile with real provider authorization remains external. |
-| #20 | local-ready | Browser budgets pass: 239 ms cold activation, 223 ms warm activation, 5 ms composer p95, 58 ms worst rebuild request, 0 ms cancellation acknowledgement, and 7,493,512 B retained growth after 50 cycles. |
-| #21 | local-slice-ready | Workspace, role mirrors, Git, accepted canvas, one conversation, drafts, interruption normalization, stale writers, quota failure, reload, and offline package state pass in Chromium. Clean packaged-host storage-pressure/restart proof remains external. |
+| #20 | local-ready | Browser budgets pass: 243 ms cold activation, 228 ms warm activation, 6 ms composer p95, 397 ms worst rebuild request, 0 ms cancellation acknowledgement, and 7,486,148 B retained growth after 50 cycles. |
+| #21 | external-gate | Workspace, role mirrors, Git, accepted canvas, one conversation, drafts, interruption normalization, stale writers, quota failure, reload, and offline package state pass in Chromium. Clean packaged-host storage-pressure/restart proof requires the external macOS runner. |
 | #22 | external-gate | AXE gates, AA contrast, keyboard/focus, light/dark, forced colors, reduced motion, 200% text, 320 px reflow, and compact 44 px protected targets pass. Manual VoiceOver and packaged-host assistive-technology evidence remain external. |
 | #23 | external-gate | The final optimized `Flect.app`, private runtime, updater boundary, Swift adapter, ownership-aware setup/uninstall, and ad-hoc signing build locally. Developer ID, notarization, hardened-runtime review, and clean-machine launch require Apple credentials and external hardware. |
 | #25 | local-ready | One embedded-Git canonical workspace supplies automatic accepted checkpoints, simple Undo, retained last-known-good state, conflict rejection, cross-tab serialization, and complete source/history export. |
@@ -44,7 +42,7 @@ Status meanings:
 
 ## Final local gates
 
-- `bun run check`: 166 passed test files, 881 passed tests, one deliberate skip.
+- `bun run check`: 166 passed test files, 883 passed tests, one deliberate skip.
 - `bun run test:e2e`: 84 of 84 production Chromium workflows passed.
 - `bun run product:package`: 63,559-byte verified package tarball.
 - `bun run check:rust`: 26 of 26 Rust host tests passed.

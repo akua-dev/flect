@@ -49,14 +49,14 @@ The production Chromium performance gate records:
 | Metric | Result | Budget |
 | --- | ---: | ---: |
 | View-only readiness | 19 ms | diagnostic |
-| Cold protected-workspace activation | 239 ms | 1,000 ms |
-| Warm activation | 223 ms | 300 ms |
-| Composer p95 acknowledgement | 5 ms | 50 ms |
-| View-only transfer | 3,496 B | 200 KiB |
+| Cold protected-workspace activation | 243 ms | 1,000 ms |
+| Warm activation | 228 ms | 300 ms |
+| Composer p95 acknowledgement | 6 ms | 50 ms |
+| View-only transfer | 3,494 B | 200 KiB |
 | View-only decoded bytes | 6,928 B | 600 KiB |
-| Deterministic model fixture | 48 ms | reported separately |
+| Deterministic model fixture | 52 ms | reported separately |
 | Cancellation acknowledgement | 0 ms | 250 ms |
-| Representative Markdown | 182 ms | 1,000 ms |
+| Representative Markdown | 209 ms | 1,000 ms |
 
 Activation is measured inside the page with `performance.now()` and a
 `MutationObserver`, avoiding remote-driver polling overhead. Model/provider
@@ -69,11 +69,11 @@ intermediate garbage collection:
 
 | Metric | Result | Budget |
 | --- | ---: | ---: |
-| Baseline used heap | 16,372,704 B | — |
-| Retained growth after 50 cycles | 7,493,512 B | 8 MiB |
-| Final heap including Markdown | 25,829,536 B | 64 MiB |
-| Worst candidate rebuild request | 58 ms | 1,000 ms |
-| Worst complete cycle | 1,830 ms | diagnostic end-to-end |
+| Baseline used heap | 16,366,832 B | — |
+| Retained growth after 50 cycles | 7,486,148 B | 8 MiB |
+| Final heap including Markdown | 25,738,564 B | 64 MiB |
+| Worst candidate rebuild request | 397 ms | 1,000 ms |
+| Worst complete cycle | 1,930 ms | diagnostic end-to-end |
 
 The hot state path uses bounded projections, sliding latest-value streams, and
 shallow trusted snapshot evolution. The embedded libgit2 worker is recycled on
@@ -129,7 +129,7 @@ bunx playwright test
 bun run check:rust
 ```
 
-The final source gate passed 166 test files / 881 tests with one deliberate
+The final source gate passed 166 test files / 883 tests with one deliberate
 skip. The production Chromium gate passed all 84 workflows, including the
 50-cycle performance case, framework imports, direct manipulation, offline
 package reuse, Capsule trust, accessibility, Git history, sharing, and

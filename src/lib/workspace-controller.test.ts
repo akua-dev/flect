@@ -2258,6 +2258,10 @@ describe("FlectWorkspaceController", () => {
           persistence: "session",
           load: Effect.succeed({}),
           save: () => Effect.void,
+          uninstall: Effect.succeed({
+            removedBindings: 0,
+            removedObjects: 0,
+          }),
         },
       });
       const controller = yield* FlectWorkspaceController.pipe(
