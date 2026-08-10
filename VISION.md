@@ -41,6 +41,98 @@ Most people will use good defaults. The point is not to make everyone design
 software. The point is to ensure that nobody is trapped by a fixed interface
 when their needs differ.
 
+## A day with Flect
+
+The following story describes the destination. It is a product test for what
+Flect should feel like, not a claim that the current developer preview already
+implements every part.
+
+Mara does not open Flect to write code. She opens it because the small
+logistics company she runs has outgrown its spreadsheet.
+
+The window appears immediately. There is no project wizard, framework
+selection, or agent mode. There is an empty canvas and a quiet prompt:
+
+> What do you need?
+
+Mara asks for a live view of today's deliveries, with late orders first,
+drivers grouped clearly, and urgent work impossible to miss.
+
+The agent explains that it needs read-only access to deliveries and drivers.
+Flect shows exactly what that capability permits and what it does not. Mara
+approves it. Seconds later, the empty canvas becomes a working application.
+
+Real deliveries appear. Cards move as statuses change. A small map shows where
+drivers are. The application is already running; there is no separate preview
+mode or review screen between Mara and a valid local UI change.
+
+Mara selects the red _Late_ badge and asks the agent to make it calmer without
+making urgent orders easier to miss. The agent changes the color, contrast,
+spacing, and icon treatment while she looks at the result. It checks the
+accessible contrast in the background and briefly explains why a paler red
+would not be safe enough.
+
+She drags the driver summary above the map. Flect understands the gesture as a
+change to the real interface, not as temporary canvas state. The canonical
+source changes, the running app updates incrementally, and a quiet history
+checkpoint is created. No Save or Keep button interrupts her.
+
+Later, the page feels crowded on Mara's laptop. She selects the delivery list
+and says:
+
+> On small screens, collapse completed deliveries and keep the driver names
+> visible.
+
+The agent can inspect the running layout, the selected element, its computed
+styles, the source that produced it, and the current viewport. It makes the
+change without asking Mara which file or framework component to edit.
+
+Something breaks during the next request. The build status turns amber, but
+the working application never disappears. Flect keeps the last-known-good
+revision running while the agent reads the compiler diagnostic, finds the
+incorrect component property, repairs it, and continues.
+
+Mara sees one useful sentence:
+
+> I hit a build error and fixed it. Your working version stayed available.
+
+At the end of the afternoon, Mara realizes that she preferred the map from
+three changes ago. She opens History. It does not look like a Git client. It
+shows a small sequence of understandable changes:
+
+- _Made late deliveries calmer_
+- _Moved the driver summary above the map_
+- _Improved the small-screen layout_
+- _Changed map grouping_
+
+She chooses the earlier map and restores it. The running canvas changes
+immediately. Underneath, Flect performs an ordinary Git operation in an
+ordinary repository. Nothing is trapped inside a proprietary design file.
+
+The next morning, Mara reopens Flect. The application, conversation,
+permissions, and history are where she left them. The shell is responsive
+before the model or network has fully reconnected.
+
+Her developer, Leo, opens the same project in his editor. He finds normal
+source code, readable commits, standard dependencies, and no mysterious
+generated format. He improves an API type and pushes the change. Flect picks it
+up and keeps going.
+
+A week later, Mara shares the application with her team. Reading deliveries is
+already approved. Updating delivery status requires a new capability, so Flect
+asks for the one confirmation that matters: whether the interface may gain
+that outside authority. Mara grants it only to supervisors.
+
+The interface can reshape itself. It cannot quietly gain power.
+
+Months pass. The delivery view becomes the company's daily operating surface.
+Mara still changes it by describing problems and manipulating what she sees.
+Leo still owns understandable code. Git still records everything. The agent
+handles the machinery between intention and implementation.
+
+Flect itself mostly disappears. What remains is the feeling that software is
+not a finished object handed to Mara. It is alive, understandable, and hers.
+
 ## Product boundary
 
 > Interfaces may reshape the user experience, but may affect the outside world
@@ -66,7 +158,7 @@ Flect will let people:
   including the normal agent composer and rail;
 - import and adapt supported React, Vue, Svelte, HTML, and CSS source projects
   into portable Flect experiences;
-- author, build, and preview interfaces locally in a normal browser without a
+- author, build, and run interfaces locally in a normal browser without a
   proprietary hosted development runtime;
 - install compiled `.flect` capsules that continue to run without their build
   tool or package registry;
@@ -87,8 +179,8 @@ Flect will let people:
 - run the shared interface in browsers and desktop hosts, extend it to mobile,
   and add genuinely native platform experiences through narrow Swift, Kotlin,
   or Rust capabilities; and
-- preview, accept, reject, compare, version, undo, and recover every
-  attributable interface revision.
+- see valid local changes in the running interface immediately, compare and
+  version them, undo or restore them, and recover every attributable revision.
 
 These primitives can produce dashboards, internal tools, API consoles,
 research environments, personal workspaces, agent control surfaces, and many
@@ -108,17 +200,18 @@ A shared interface, component, or extension cannot:
 - access Pi credentials, model-provider tokens, or another product's secrets;
 - bypass product authentication, authorization, rate limits, or API policy;
 - grant itself capabilities or silently expand a previous grant;
-- modify the Guardian, recovery shell, capability broker, validation rules, or
+- modify the protected recovery shell, capability broker, validation rules, or
   required recovery journal;
 - erase attribution required to explain and recover a change;
-- replace the accepted interface without a validated, attributable revision;
-  or
+- replace the last-known-good interface with an invalid or unattributed
+  revision; or
 - become trusted merely because it was generated by a model or signed by a
   publisher.
 
-Recovery cannot depend on a model being available. The Guardian may assist
-diagnosis and repair, but validation, safe mode, permission revocation, and
-last-known-good rollback remain deterministic protected-core behavior.
+Recovery cannot depend on a model being available. The agent may assist
+diagnosis and repair when it is available, but validation, permission
+revocation, last-known-good rollback, and the minimal recovery path remain
+deterministic protected-core behavior.
 
 ### What Flect does not promise
 
@@ -148,6 +241,29 @@ live in extensions.
 Customization is not a separate design phase followed by an export. The
 running interface is the canvas. Users change it through conversation and
 direct manipulation, see the result immediately, and continue from there.
+
+### Every host feels native
+
+Platform-native quality is a release condition, not optional polish. Flect
+shares its agent, workspace, history, capability, and recovery contracts across
+hosts; it does not force every host into one lowest-common-denominator shell.
+
+The browser must behave like an excellent web application. The macOS app must
+respect macOS windowing, menus, focus, keyboard shortcuts, trackpad behavior,
+appearance, accessibility, and lifecycle expectations. Future iOS and Android
+hosts must adopt their own navigation, back, keyboard, touch, safe-area,
+haptic, and system-surface conventions before they can be called supported.
+
+Shared web UI is an implementation option, not an excuse for imitation. When a
+WebView cannot meet a platform's behavior, latency, accessibility, or visual
+quality, the protected host shell provides a native surface through a narrow
+adapter. Flect does not ship a fake macOS control, a desktop-shaped mobile UI,
+or browser behavior hidden behind simulated application chrome.
+
+No supported host may exhibit input lag, scroll hitching, avoidable full-page
+reloads, layout jumps, mismatched system appearance, or motion that fights the
+platform. These claims are proven on real supported browsers and devices, not
+only with screenshots or a shared DOM test.
 
 ### Products expose capabilities
 
@@ -230,26 +346,29 @@ interface can become personal, situational, and continuously useful.
 
 Flect is that foundation.
 
-## The first working slice
+## The current implementation
 
-The repository now implements a protected vertical slice in the browser and a
-macOS Tauri app. A user can ask the Shaper Pi to revise a schema-defined
-interface, preview the validated result, keep or reject it, then use the
-accepted experience through its separate App Agent. Recovery remains available
-through last-known-good rollback or the compiled recovery shell.
+The repository currently implements an earlier protected vertical slice in the
+browser and a macOS Tauri app. It proves Pi-backed model access, streamed
+turns, schema validation, attributable revisions, last-known-good rollback,
+bounded browser workspaces, and matching browser/native runtime boundaries.
 
-Guardian, App Agent, and Shaper use separate in-memory Pi sessions behind one
-private runtime boundary. The same protected composer routes a blank workspace
-to Edit/Shaper and an accepted experience to Run/App Agent. The desktop app
-carries that runtime as a compiled sidecar over stdio instead of exposing it on
-localhost. Optional pure extension logic can run in a disposable,
-resource-limited QuickJS WebAssembly worker and return only inert typed intents.
+That slice still exposes Edit and Run modes, Shaper and App Agent roles,
+explicit Keep/Reject decisions, and a separate safe-mode surface. These are
+current implementation facts, not the intended product workflow described by
+this vision. They are being replaced by the continuous live-canvas loop while
+the proven credential, transport, isolation, validation, and recovery
+boundaries are retained.
 
-This slice intentionally does not run generated React, native extensions, or
-product API capabilities. Interactive roles may use the bounded
-browser-portable shell described in
-[`docs/bun-compatibility.md`](docs/bun-compatibility.md), but it does not grant
-host-shell, native-process, system-Bun, or ambient-network authority. The slice
-proves the model, credential, shaping, preview, transport, logic-sandbox, and
-deterministic recovery boundaries on which the larger ecosystem can safely
-build.
+The desktop app carries its private runtime as a compiled sidecar over stdio
+instead of exposing it on localhost. Optional pure extension logic can run in
+a disposable, resource-limited QuickJS WebAssembly worker and return only inert
+typed intents. The current slice intentionally does not run generated React,
+native extensions, or product API capabilities.
+
+Its bounded browser-portable shell is described in
+[`docs/bun-compatibility.md`](docs/bun-compatibility.md). It does not grant
+host-shell, native-process, system-Bun, or ambient-network authority. The next
+stage keeps those boundaries while making the agent, canonical frontend
+workspace, running canvas, direct manipulation, and quiet Git history one
+coherent product experience.

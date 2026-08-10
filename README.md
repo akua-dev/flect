@@ -4,32 +4,101 @@
 
 ![Flect adapting across product interfaces](assets/flect-hero.png)
 
-Flect is an open-source, agent-native interface shell whose running UI can be
-changed from inside itself. It works as a local macOS app and in a browser,
-uses models already authenticated through [Pi](https://pi.dev), and keeps a
-protected path back when a customized interface fails.
+Flect is an open-source, agent-native interface shell. You describe what you
+need, the agent builds and repairs it, and the running interface remains the
+place where you keep shaping the work.
 
-**Flect is a public developer preview of the protected vertical slice:** start
-with one excellent composer, shape an interface in Edit mode, inspect and keep
-the validated preview, then use the resulting product through its separate App
-Agent in Run mode.
+The agent is not a chatbot beside a static application. It is the programmable
+backbone of the interface. Git quietly protects the work underneath, while
+typed capabilities keep outside effects inspectable, approved, and revocable.
 
-[Download Flect for Apple Silicon macOS](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.dmg)
-·
-[SHA-256 checksum](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.dmg.sha256)
+## A glimpse of the final Flect
 
-## Install Flect
+Mara opens Flect because her logistics company has outgrown its spreadsheet.
+There is no project wizard or framework selector, just an empty canvas and one
+question: _What do you need?_
+
+She asks for a live view of today's deliveries. Flect requests read-only access
+to the delivery API, then a working interface appears. Mara selects a late
+delivery badge and asks the agent to make it calmer. The valid change appears
+directly on the running canvas. She drags the driver summary above the map and
+Flect updates the ordinary source project behind it.
+
+When a later edit fails to build, the working interface never disappears. The
+agent reads the source and runtime diagnostics, repairs the problem, and keeps
+going. History shows human descriptions such as _Improved the small-screen
+layout_, not a wall of Git terminology. Mara can Undo or restore any earlier
+state immediately; her developer can still open the same work as a normal Git
+repository.
+
+Flect mostly disappears. What remains is software that is alive,
+understandable, and owned by the person using it.
+
+Read the complete story and product boundary in [VISION.md](VISION.md).
+
+## The product promise
+
+- The running interface is the canvas; there is no mandatory preview or review
+  ceremony for a valid local UI edit.
+- One continuous agent conversation can create, inspect, modify, and repair the
+  frontend while it is running.
+- People can edit by describing an outcome, selecting what they see, or using
+  direct manipulation where it is safe and unambiguous.
+- A persistent incremental workspace keeps the agent, compiler, running
+  canvas, Git history, and exported source on one canonical revision.
+- The last-known-good interface remains usable when an edit or build fails.
+- History feels like Undo, Redo, and Restore. Ordinary Git remains available as
+  progressive disclosure and as the portable source of truth.
+- External effects remain behind typed, bounded capabilities. Flect asks for
+  confirmation when authority changes, not for every visual iteration.
+- Every supported host feels first-party to its platform. Shared product logic
+  never excuses lag, fake native controls, mismatched appearance, or generic
+  WebView behavior.
+
+## Project status
+
+Flect is under active development. The destination above is the product
+direction, not a claim that every part already ships.
+
+The current repository and v0.2.0 macOS build implement an earlier protected
+vertical slice. It proves Pi-backed model access, streamed turns, deterministic
+validation, attributable revisions, last-known-good recovery, bounded browser
+workspaces, and matching browser/native runtime boundaries.
+
+That slice still exposes Edit/Run modes, Shaper/App Agent roles, explicit
+Keep/Reject decisions, and a separate safe-mode surface. Those are current
+implementation artifacts being replaced, not the intended final workflow.
+The active delivery plan is tracked by the
+[Flect 1.0 epic](https://github.com/akua-dev/flect/issues/1) and the
+[Flect project](https://github.com/orgs/akua-dev/projects/8).
+
+The immediate product work is:
+
+- [the running interface as the live editing canvas](https://github.com/akua-dev/flect/issues/32);
+- [a persistent incremental frontend workspace](https://github.com/akua-dev/flect/issues/33);
+- [typed tools for the agent to inspect and repair the running frontend](https://github.com/akua-dev/flect/issues/34);
+- [element selection and direct manipulation](https://github.com/akua-dev/flect/issues/35); and
+- [first-party native behavior on every supported host](https://github.com/akua-dev/flect/issues/36).
+
+## Try the current developer preview
+
+![Current Flect developer-preview demo](assets/demo/flect-v0.2-demo.webp)
 
 ### Apple Silicon macOS
 
-The native preview requires Apple Silicon, macOS 12 or newer, and a one-time Pi
-provider login. With [Bun](https://bun.sh) installed:
+The current native preview requires Apple Silicon, macOS 12 or newer, and a
+one-time Pi provider login. With [Bun](https://bun.sh) installed:
 
 ```bash
 bunx pi
 ```
 
 Run `/login` inside Pi, authenticate a supported provider, then quit Pi.
+
+[Download Flect v0.2.0 for Apple Silicon macOS](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.dmg)
+·
+[SHA-256 checksum](https://github.com/akua-dev/flect/releases/latest/download/Flect_0.2.0_aarch64.dmg.sha256)
+
 Download the DMG and checksum into the same directory and verify them:
 
 ```bash
@@ -39,7 +108,7 @@ shasum -a 256 -c Flect_0.2.0_aarch64.dmg.sha256
 
 Open the DMG and drag Flect into Applications. The v0.2.0 app is ad-hoc signed
 and unnotarized, so Gatekeeper may block the first launch. After verifying the
-checksum, use Finder’s **Open** action from the context menu. If quarantine
+checksum, use Finder's **Open** action from the context menu. If quarantine
 still blocks the app:
 
 ```bash
@@ -61,82 +130,59 @@ Run `/login` inside Pi, quit Pi, then:
 bun run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite serves the UI there;
-the origin-restricted local Pi runtime listens on `127.0.0.1:3210`. Provider
-credentials remain in Pi and never enter browser storage.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite serves the current UI
+there; the origin-restricted local Pi runtime listens on `127.0.0.1:3210`.
+Provider credentials remain in Pi and never enter browser storage.
 
-## See it shape
+## What the current slice proves
 
-![Flect interface shaping demo](assets/demo/flect-v0.2-demo.webp)
-
-Blank workspaces begin with the Shaper in a centered, protected composer. Ask
-for an interface and that same composer moves into the conversation rail while
-the validated result appears on the canvas.
-
-![Flect Edit mode with the centered Shaper composer](assets/screenshots/flect-edit-mode.png)
-
-The proposal is only a preview until you explicitly keep it. Reject and
-rollback remain deterministic, and safe mode always bypasses shaped state.
-
-![A validated Flect interface proposal](assets/screenshots/flect-shaper-preview.png)
-
-Keep the interface and switch to Run to speak with its App Agent. Edit and Run
-retain distinct histories, drafts, Pi sessions, and sandbox workspaces.
-
-![Flect Run mode with the product App Agent](assets/screenshots/flect-run-mode.png)
-
-## What works today
-
-- authenticated Pi model discovery, explicit selection, streamed turns, stop,
+- authenticated Pi model discovery, selection, streamed turns, cancellation,
   and redacted public failures;
-- separate Guardian, App Agent, and Shaper Pi sessions with independent
-  policies and lifecycle state; Guardian is tool-free while the interactive
-  roles receive isolated browser-backed Bash workspaces;
-- one role-explicit composer that starts centered, moves into an inline,
-  resizable right rail, and becomes an accessible sheet on compact screens;
-- separate Edit/Shaper and Run/App Agent conversations, including per-role
-  drafts, cancellation, shell results, and visible authority before send;
-- Effect Schema-validated interface documents and a closed trusted renderer;
-- propose, preview, keep, reject, rollback, last-known-good recovery, and a
-  compiled `?safe=1` recovery shell;
-- a protected composer even when a shaped document omits its own prompt;
-- one Pi-visible `bash` tool per interactive role, backed by a role-owned
-  browser workspace with reserved Bun-compatible run, build, package, preview,
-  and stop commands;
+- schema-validated interface documents and a closed trusted renderer;
+- attributable revisions, explicit rollback, and last-known-good recovery;
+- a protected composer that remains reachable when customized UI fails;
+- bounded browser-backed workspaces without ambient host shell, filesystem, or
+  network authority;
 - browser HTTP/SSE and native private-stdio transports behind the same Effect
   capabilities; and
-- optional pure extension logic in a disposable QuickJS/Wasm worker that may
+- optional pure extension logic in a disposable QuickJS/Wasm worker that can
   return inert, schema-decoded intents only.
 
 The native app does not start the browser development server. It launches a
 compiled Bun/Pi sidecar and communicates through private NDJSON stdio exposed
 to the webview by one narrow Tauri command.
 
-## Current security and product boundary
+## Security and product boundary
 
-The QuickJS worker and browser agent workspace are defense-in-depth execution
-realms, not operating-system sandboxes. The source build can execute generated
-workspace code through its bounded browser shell, but it cannot invoke a host
+> Interfaces may reshape the user experience, but may affect the outside world
+> only through inspectable, approved, and revocable capabilities.
+
+The generated frontend and browser agent workspace are defense-in-depth
+execution realms, not operating-system sandboxes. They cannot invoke a host
 shell, native process, system Bun, ambient filesystem, or ambient network.
+Credentials remain outside user-generated source and model-visible project
+state.
+
 Flect does not yet ship portable `.flect` capsules, a component registry,
 canonical OPFS/Git workspaces, in-Flect provider login, product/API adapters,
 privileged host brokerage, remote runtimes, automatic updates, notarization, a
 macOS App Sandbox entitlement, or Intel, Windows, and Linux packages.
 
-User-shaped documents cannot replace deterministic validation, revision
-storage, rollback, safe mode, or the compiled recovery path. See the
-[capability and sandbox trust model](docs/trust-model.md) for the authority
-boundary and the exact
+See the [capability and sandbox trust model](docs/trust-model.md) for the
+authority boundary and the
 [browser Bun compatibility matrix](docs/bun-compatibility.md) for supported
 commands and deliberate omissions.
 
-## Architecture and vision
+## Architecture, product, and vision
 
-- [Vision and intentional non-capabilities](VISION.md)
+- [Vision, final product story, and intentional non-capabilities](VISION.md)
+- [Users, positioning, and product principles](PRODUCT.md)
+- [Visible design system](DESIGN.md)
 - [Implemented architecture](ARCHITECTURE.md)
+- [Capability and sandbox trust model](docs/trust-model.md)
 - [Browser Bun compatibility](docs/bun-compatibility.md)
-- [Users and product principles](PRODUCT.md)
-- [Design system](DESIGN.md)
+- [Current performance and platform-native baseline](docs/verification/2026-08-10-performance-and-native-feel-baseline.md)
+- [Astro activation-shell architecture decision](docs/decisions/0003-astro-activation-shell.md)
 - [Contributor guide](CONTRIBUTING.md)
 - [Flect delivery project](https://github.com/orgs/akua-dev/projects/8)
 
@@ -150,7 +196,7 @@ bun run check:all
 `check:all` runs Effect preparation, lint, type checking, unit and contract
 tests, production Chromium workflows, Rust tests, and the native application
 build. `bun run test:pi-smoke` is separate because it makes one real private
-turn with the developer’s existing Pi provider login.
+turn with the developer's existing Pi provider login.
 
 Release maintainers can reproduce the screenshots, demo, hero, DMG, checksum,
 and MP4 with `bun run media:release` and `bun run release:package`. The media
