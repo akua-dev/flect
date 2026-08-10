@@ -59,28 +59,27 @@ Read the complete story and product boundary in [VISION.md](VISION.md).
 
 ## Project status
 
-Flect is under active development. The destination above is the product
-direction, not a claim that every part already ships.
+The checked-out repository now implements the continuous live-canvas workflow:
+one visible conversation, automatic routing between internally isolated agent
+authorities, atomic acceptance of valid local UI changes, quiet Git-backed
+history, deterministic recovery, responsive platform-aware layout, and an
+Astro-on-Vite activation shell. Imported apps, shared artifacts, and new
+capabilities still require an explicit **Activate app** or **Discard** decision
+because they can change authority.
 
-The current repository and v0.2.0 macOS build implement an earlier protected
-vertical slice. It proves Pi-backed model access, streamed turns, deterministic
-validation, attributable revisions, last-known-good recovery, bounded browser
-workspaces, and matching browser/native runtime boundaries.
+The static Astro document loads first. Focus or pointer intent prewarms only the
+tiny activation bootstrap; sending a prompt, using the Flect shortcut, or
+opening an agent action loads the protected React/Effect workspace. Compiler,
+package, shell, Worker, and Wasm substrates remain on demand until a typed
+operation needs them. The measured production gates and exact budgets are
+documented below.
 
-That slice still exposes Edit/Run modes, Shaper/App Agent roles, explicit
-Keep/Reject decisions, and a separate safe-mode surface. Those are current
-implementation artifacts being replaced, not the intended final workflow.
-The active delivery plan is tracked by the
+Flect remains under active development. The published v0.2.0 macOS preview is
+older than the checked-out live-canvas implementation, and signed/notarized
+multi-platform release artifacts still depend on release credentials and clean
+platform builders. Delivery evidence is tracked by the
 [Flect 1.0 epic](https://github.com/akua-dev/flect/issues/1) and the
 [Flect project](https://github.com/orgs/akua-dev/projects/8).
-
-The immediate product work is:
-
-- [the running interface as the live editing canvas](https://github.com/akua-dev/flect/issues/32);
-- [a persistent incremental frontend workspace](https://github.com/akua-dev/flect/issues/33);
-- [typed tools for the agent to inspect and repair the running frontend](https://github.com/akua-dev/flect/issues/34);
-- [element selection and direct manipulation](https://github.com/akua-dev/flect/issues/35); and
-- [first-party native behavior on every supported host](https://github.com/akua-dev/flect/issues/36).
 
 ## Try the current developer preview
 
@@ -133,8 +132,9 @@ bun install
 bun run dev
 ```
 
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Vite serves the UI there;
-the origin-restricted local Pi runtime listens on `127.0.0.1:3210`. Connect a
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). Astro serves the static
+activation shell through its Vite development pipeline; the origin-restricted
+local Pi runtime listens on `127.0.0.1:3210`. Connect a
 provider from the model chooser. Provider credentials remain in Pi and never
 enter React state, workspace snapshots, control APIs, browser storage, or
 shaped interfaces.
@@ -143,8 +143,9 @@ shaped interfaces.
 
 - in-product Pi provider discovery, authentication, model selection, streamed
   turns, cancellation, and redacted public failures;
-- an Effect-owned workspace controller with schema-validated interface state,
-  deterministic last-known-good recovery, and a protected composer;
+- an Effect-owned continuous workspace controller with one protected composer,
+  schema-validated interface state, atomic local acceptance, and deterministic
+  last-known-good recovery;
 - a canonical browser-portable Git repository in OPFS, guarded revision refs,
   persistence across reloads, and complete ordinary-Git export;
 - bounded static and single-entry Vite JavaScript, TypeScript, and React import,
@@ -156,7 +157,8 @@ shaped interfaces.
 - an opt-in local `flect` CLI, JSON/SSE, and MCP control surface using the same
   workspace controller as visible UI actions;
 - responsive light/dark, forced-colors, reduced-motion, keyboard, Markdown,
-  accessibility, and bounded conversation-continuity behavior;
+  accessibility, 44 px compact touch targets, focus restoration, and bounded
+  conversation-continuity behavior;
 - browser HTTP/SSE and native private-stdio transports behind the same Effect
   capabilities; and
 - optional pure extension logic in a disposable QuickJS/Wasm worker that can
@@ -211,12 +213,12 @@ reviewable candidate flow. It also imports, isolates, persists, restores, and
 byte-preservingly re-exports compiled HTML capsules with verified local CSS,
 classic scripts, images, fonts, and media in supported browsers.
 Arbitrary Vite plugins/config transforms, CSS modules/preprocessors and asset
-URL rewriting, multi-entry routing, Vue/Svelte adapters, archive/Git import,
-general capsule personal-fork lineage and compatible merge, a component
-registry, custom duration/rate editing in the protected permission UI,
-database adapters, privileged native
-product transport, remote
-runtimes, a published signed updater, notarization, a
+URL rewriting, multi-entry routing, Vue/Svelte project adapters, archive/Git
+ingestion for ordinary project directories, capsule-level personal-fork merges
+outside the implemented `.flect-share` lifecycle, a public component registry,
+custom duration/rate editing in the protected permission UI, database adapters,
+privileged native product transport, remote runtimes, a published signed
+updater, notarization, a
 macOS App Sandbox entitlement, and Intel, Windows, and Linux packages are not
 yet shipped.
 
@@ -258,7 +260,8 @@ dependencies enter the portable package graph.
 - [Visible design system](DESIGN.md)
 - [Implemented architecture](ARCHITECTURE.md)
 - [Capability and sandbox trust model](docs/trust-model.md)
-- [Current performance and platform-native baseline](docs/verification/2026-08-10-performance-and-native-feel-baseline.md)
+- [Current Astro/live-canvas performance verification](docs/verification/2026-08-10-astro-live-canvas-verification.md)
+- [Historical pre-migration performance baseline](docs/verification/2026-08-10-performance-and-native-feel-baseline.md)
 - [Astro activation-shell architecture decision](docs/decisions/0003-astro-activation-shell.md)
 - [Local agent control](docs/local-control.md)
 - [Product capability adoption](docs/product-capabilities.md)

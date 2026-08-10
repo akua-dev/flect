@@ -351,17 +351,18 @@ Flect is that foundation.
 
 ## The current implementation
 
-The repository currently implements an earlier protected vertical slice in the
-browser and a macOS Tauri app. It proves Pi-backed model access, streamed
-turns, schema validation, attributable revisions, last-known-good rollback,
-bounded browser workspaces, and matching browser/native runtime boundaries.
+The repository now implements the continuous live-canvas loop in the browser
+and the shared macOS Tauri frontend: one visible conversation and draft, no
+Edit/Run or agent-role switcher, direct validated local UI changes without
+Keep/Reject ceremony, responsive protected controls, quiet Git-backed history,
+and deterministic last-known-good recovery. External capsules, shared code,
+and authority changes remain explicit Activate/Discard decisions.
 
-That slice still exposes Edit and Run modes, Shaper and App Agent roles,
-explicit Keep/Reject decisions, and a separate safe-mode surface. These are
-current implementation facts, not the intended product workflow described by
-this vision. They are being replaced by the continuous live-canvas loop while
-the proven credential, transport, isolation, validation, and recovery
-boundaries are retained.
+An Astro static document sits on Vite and loads the protected Flect workspace
+only after focus, pointer, keyboard, or an initial prompt activates it. The
+compiler, package resolver, shell, Workers, and Wasm runtimes are separately
+lazy. This makes the opened product useful without preloading its authoring
+system while preserving the existing typed boundaries.
 
 Internally, Guardian, accepted App Agent, Shaper, and candidate Preview App
 Agent still use separate Pi sessions behind one private runtime boundary. The
@@ -375,9 +376,8 @@ OPFS, capsule import and export, bounded source-project import, typed product
 capabilities, a product-adoption SDK, in-product Pi authentication, portable
 extensions, accessibility and appearance gates, and a native update/uninstall
 boundary. Supported static and single-entry Vite JavaScript, TypeScript, and
-React projects can be imported into isolated compiled candidates. These
-capabilities are implementation foundations; their current candidate and role
-ceremony is not the destination.
+React projects can be imported into isolated compiled candidates. Candidate
+ceremony exists only where code or authority crosses a trust boundary.
 
 The desktop app carries Pi traffic through a compiled sidecar over private
 stdio. Optional pure extension logic runs in a disposable, resource-limited

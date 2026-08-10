@@ -380,9 +380,10 @@ current desktop host uses the same CORS-aware WebView fetch behavior as the
 browser.
 
 Arbitrary Vite plugin activation, capsule-carried Pi extensions, additional
-product/API adapters, privileged native brokerage, publisher signature
-verification, real-time collaboration, mobile hosts, and remote runtimes remain
-future work. The current inactive sharing, guarded personal-fork, clean-merge,
+product/API adapters, privileged native brokerage, authoritative `.flect`
+capsule publisher-signature verification, real-time collaboration, mobile hosts,
+and remote runtimes remain future work. The current inactive sharing,
+Ed25519-verified publisher claims, guarded personal-fork, clean-merge,
 and explicit shared-conflict boundary is documented
 in [`docs/sharing.md`](sharing.md). See
 [`README.md`](../README.md) for the current user-facing status and

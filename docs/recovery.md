@@ -25,9 +25,9 @@ enter the continuity record.
 
 The continuity record remains strict Effect Schema data under
 `flect.role-continuity.v1` for backward compatibility. It is limited to 512
-KiB, 200 messages per internal authority, 16,000 retained characters per
-projected message, and a 100,000-character visible draft. Tool activities are
-not persisted.
+KiB. Runtime projections retain at most 12 messages and eight activities per
+internal authority; persisted message text and the visible draft remain
+individually bounded. Tool activities are not persisted.
 
 ## Conflicts and storage failures
 
@@ -50,7 +50,9 @@ does not hydrate stored drafts or conversations into the UI. It can show only
 bounded generation/revision metadata and a closed recovery reason.
 
 The `?safe=1` URL is a one-shot protected launcher, not a durable repository
-mode. A successful **Restore interface** writes the recovered snapshot through
+mode. Entering safe mode writes a guarded marker on
+`flect/shared/recovery` without changing `flect/accepted`. A successful
+**Restore interface** writes the recovered snapshot through
 the guarded Git repository, removes only the `safe=1` query parameter while
 preserving other URL state, and remains restored after reload or process
 restart. A failed restore keeps the launcher and prior protected refs intact.
@@ -75,8 +77,9 @@ render or repackage undecoded stored content. Discard remains available.
 Production Chromium tests cover the merged Flect conversation over isolated
 internal records, one visible draft, candidate refresh, discard cleanup, active
 interruption, safe-mode non-hydration, valid export, isolated discard, a real
-same-origin stale second tab, injected browser quota exhaustion, protected Git
-commit advancement on safe-mode entry/restore, and restoration after reload.
+same-origin stale second tab, injected browser quota exhaustion, unchanged
+accepted product state on safe-mode entry, guarded restoration, and restoration
+after reload.
 Unit tests additionally inject malformed, incompatible, oversized, stale,
 rejected, missing-receipt, legacy-ref, and receipt/ref-mismatch states.
 

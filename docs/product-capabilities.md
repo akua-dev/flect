@@ -90,7 +90,7 @@ Protected review projects one lifecycle value per request:
 - `expired`: its duration elapsed or its one-use allowance was consumed; or
 - `revoked`: explicitly revoked.
 
-Availability is separate: an unavailable request stays visible and blocks Keep
+Availability is separate: an unavailable request stays visible and blocks activation
 when required. The protected component shows operation/resource/data scope,
 lifetime, rate, and decision identity without showing payloads or credentials.
 

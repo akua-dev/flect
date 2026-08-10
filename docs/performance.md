@@ -1,7 +1,7 @@
 # Flect performance and memory budgets
 
-This is the human decision record for `FQ-15.1` through `FQ-15.9`. The exact
-release thresholds live once in
+This is the human decision record for Flect's release performance contract. The
+exact thresholds live once in
 [`shared/performance-budgets.ts`](../shared/performance-budgets.ts); tests and
 release measurements import or report those values rather than copying them.
 
@@ -10,20 +10,22 @@ release measurements import or report those values rather than copying them.
 On the supported Apple Silicon development/release baseline, production Flect
 must stay within these user-visible classes:
 
-- browser shell interactive in 2,000 ms;
-- initial browser transfer at or below 1.5 MB and decoded initial resources at
-  or below 4 MB;
-- model menu and composer input acknowledgement within 250 ms;
-- warm Use–Shape switches within 350 ms;
-- candidate rebuild within 3,000 ms;
-- representative complete Markdown within 2,000 ms;
-- browser cancellation acknowledgement within 500 ms;
-- garbage-collected Chromium heap at or below 96 MiB, growing by no more than
-  24 MiB across the gated repeated product cycles;
-- packaged-macOS cold window within 5,000 ms, reopen within 1,000 ms, and first
-  model-ready state within 5,000 ms;
-- packaged cancellation acknowledgement within 1,000 ms; and
-- packaged steady RSS at or below 400 MiB, growing by no more than 64 MiB over
+- browser cold activation within 1,000 ms and warm activation within 300 ms;
+- protected pre-tool client at or below 200 KiB gzip / 600 KiB decoded and
+  initial CSS at or below 25 KiB gzip;
+- composer p95 acknowledgement within 50 ms and ordinary interaction within
+  100 ms;
+- text/CSS patch within 150 ms and component patch within 500 ms;
+- external candidate rebuild and representative complete Markdown within
+  1,000 ms;
+- browser cancellation acknowledgement within 250 ms;
+- Fast 4G LCP within 1,000 ms and Slow 4G LCP within 2,500 ms;
+- 16.7 ms frame and 50 ms long-task thresholds;
+- garbage-collected Chromium heap at or below 64 MiB, growing by no more than
+  8 MiB across 50 complete product cycles;
+- packaged-macOS cold window within 2,000 ms and reopen within 500 ms;
+- packaged cancellation acknowledgement within 250 ms; and
+- packaged steady RSS at or below 250 MiB, growing by no more than 32 MiB over
   the release repetition run.
 
 The budgets include Flect orchestration and rendering, not provider inference
@@ -32,12 +34,14 @@ spinner budget.
 
 ## Measurement contract
 
-Mandatory browser gates use a production Vite build, Playwright Chromium, one
+Mandatory browser gates use a production Astro-on-Vite build, Playwright Chromium, one
 worker, deterministic Flect fixtures, a 1180 × 781 desktop viewport unless the
 scenario names another size, and no network other than the origin-restricted
 test runtime. Resource measurements use browser `PerformanceResourceTiming`.
-Heap gates use Chromium CDP after an explicit garbage collection before both
-samples.
+Heap gates expose Chromium's precise memory information. The strict long-session
+gate deliberately performs no intermediate garbage collection: it measures 50
+real create/use cycles and fails above 8 MiB retained growth. A final collected
+sample may be reported separately as diagnostic evidence.
 
 Timing diagnostics contain only metric names, durations, byte counts, and
 iteration counts. They must not contain prompts, model output, product data,
@@ -55,9 +59,16 @@ the one TypeScript budget contract and this rationale.
 
 ## Resource behavior
 
-Flect keeps the existing deterministic limits on sessions, queues, messages,
-activities, output, frames, QuickJS work, auth logins, and auth events.
+Flect keeps deterministic limits on sessions, queues, messages, activities,
+output, frames, QuickJS work, auth logins, and auth events. The hot workspace
+path uses shallow trusted snapshot evolution instead of recursively decoding
+unchanged history on every streamed update. Public operation projection is 12
+records; the internal journal is bounded to 128 records / 512 KiB. Internal
+conversation projections retain 12 messages and eight activities per authority.
 Performance instrumentation creates no telemetry, identifier, daemon, cache,
 or second runtime state. A failed budget is fixed by reducing user-visible
 work—such as lazy-loading a large optional surface—rather than by suppressing
 the measurement or retaining more hidden work.
+
+The current measured release evidence is in
+[`docs/verification/2026-08-10-astro-live-canvas-verification.md`](verification/2026-08-10-astro-live-canvas-verification.md).

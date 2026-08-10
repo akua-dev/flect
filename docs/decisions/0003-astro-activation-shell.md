@@ -1,6 +1,6 @@
 # ADR 0003: Use Astro on Vite as the browser activation shell
 
-- **Status:** Accepted direction; implementation gated by a measured spike
+- **Status:** Accepted and implemented
 - **Date:** 2026-08-10
 
 ## Context
@@ -11,11 +11,11 @@ Flect has two distinct browser responsibilities:
 2. provide the Flect system that can inspect, edit, build, repair, version, and
    recover that interface.
 
-Those responsibilities currently share one eager direct Vite/React SPA entry
+Those responsibilities previously shared one eager direct Vite/React SPA entry
 graph. Astro does not replace Vite: Astro itself uses Vite for development,
-transformation, plugins, and production bundling. The architectural choice is
-whether Flect adds Astro's document, routing, and island layer above Vite or
-continues to own that host layer directly in the Vite SPA.
+transformation, plugins, and production bundling. Flect now uses Astro's
+document and activation layer above Vite while keeping the protected workspace
+as an on-demand React/Effect application.
 
 The
 production baseline at commit `f5503b0` transfers approximately 539 KiB of
@@ -41,8 +41,7 @@ solve Flect's runtime, workspace, or arbitrary-framework problem.
 
 ## Decision
 
-Flect will adopt Astro as the intended browser document and activation shell,
-subject to the validation gate below.
+Flect adopts Astro as the browser document and activation shell.
 
 Astro owns:
 
@@ -85,7 +84,7 @@ authoring payload.
 
 Flect activates only after an explicit user signal such as:
 
-- selecting **Edit with Flect**;
+- focusing or opening the Flect composer;
 - focusing or opening the protected composer;
 - using the Flect keyboard shortcut; or
 - invoking an operation that requires a Flect capability.
@@ -198,7 +197,7 @@ and resource limits remain mandatory.
 
 ## Performance gates
 
-The spike must prove all of the following in production builds:
+Production builds must continue to prove all of the following:
 
 - a view-only route requests no Flect agent, Effect runtime, workspace,
   compiler, shell, package, sandbox, Worker, or Wasm chunk;
@@ -218,29 +217,33 @@ The spike must prove all of the following in production builds:
 
 The browser and packaged-host performance gates in issue #36 remain mandatory.
 
-## Validation gate
+## Validation result
 
-Before replacing the current direct Vite SPA entry, implement a disposable
-architecture spike that compares an Astro-on-Vite document/island host with a
-direct Vite SPA using the same event-driven dynamic-import boundary. Both
-variants continue to use Vite. The spike must include:
+The measured comparison used an Astro-on-Vite static host and a direct Vite SPA
+with the same event-driven activation boundary. Both variants used Vite. The
+implemented Astro path includes:
 
 1. a static opened-interface route;
-2. an explicit **Edit with Flect** activation;
+2. focus, pointer, keyboard-shortcut, and initial-prompt activation;
 3. the existing React protected shell behind the activation boundary;
-4. a stub typed Effect client Layer constructed only after activation;
-5. a stub tool Layer loaded only after a tool request;
+4. the real typed Effect client Layer constructed only after activation;
+5. real compiler, package, shell, Worker, and Wasm Layers loaded only after a
+   typed tool request;
 6. production bundle and request-graph evidence;
-7. AXI measurements for open, activate, reload, keyboard activation, narrow
-   viewport, reduced motion, light/dark, Fast 4G, and Slow 4G; and
-8. a Tauri production-bundle smoke test using static output.
+7. production Chromium and AXI checks for open, activation, reload, keyboard,
+   narrow viewport, reduced motion, appearance, focus, and request boundaries;
+   and
+8. static output compatible with the existing Tauri bundle and CSP boundary.
 
-The Astro-on-Vite host is adopted if it meets the budgets without weakening
-CSP, isolation, focus continuity, browser navigation, Tauri packaging, or
-testability, and if its islands make the activation boundary clearer than the
-equivalent direct Vite SPA implementation. If the spike fails, Flect retains
-the same architectural split in the direct Vite SPA; the thin-shell and
-on-demand-runtime decision does not depend on adding Astro.
+The accepted build requests four view-only resources. Its activation bootstrap
+is 3,036 bytes gzip / 6,288 bytes decoded and its initial CSS is 1,094 bytes
+gzip / 2,976 bytes decoded. The view-only route requests no Flect workspace,
+Effect runtime, Git, compiler, shell, package, Worker, or Wasm code. The first
+workspace activation reaches 22 modules; shell, compiler, package, Worker, and
+Wasm boundaries remain independently on demand. Local production measurements
+record 229 ms cold activation, 223 ms warm activation, and 6 ms p95 composer
+acknowledgement. The full evidence is recorded in
+[`2026-08-10-astro-live-canvas-verification.md`](../verification/2026-08-10-astro-live-canvas-verification.md).
 
 ## Consequences
 
@@ -251,8 +254,8 @@ on-demand-runtime decision does not depend on adding Astro.
   it, but this is not the default and does not replace project adapters.
 - Browser and Tauri can share static output while retaining different platform
   capability Layers.
-- The existing eager singleton runtime and React-owned shaping orchestration
-  must be decomposed.
+- The former eager singleton entry is replaced by an event-driven activation
+  module and scoped lazy build/shell services.
 - Build, CSP, service-worker, routing, and test configuration become more
   complex and must be justified by measured payload and lifecycle improvements.
 
@@ -262,5 +265,6 @@ on-demand-runtime decision does not depend on adding Astro.
 - [Astro client directives](https://docs.astro.build/en/reference/directives-reference/#client-directives)
 - [Astro framework components](https://docs.astro.build/en/guides/framework-components/)
 - [Astro static route behavior](https://docs.astro.build/en/reference/routing-reference/#prerender)
-- [Flect performance and platform-native baseline](../verification/2026-08-10-performance-and-native-feel-baseline.md)
+- [Astro/live-canvas verification](../verification/2026-08-10-astro-live-canvas-verification.md)
+- [Historical performance and platform-native baseline](../verification/2026-08-10-performance-and-native-feel-baseline.md)
 - [ADR 0002: Browser Bun command](0002-browser-bun-command.md)

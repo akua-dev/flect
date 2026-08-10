@@ -16,7 +16,7 @@ signature identifies a claim; it never grants a capability.
 Retaining a source imports only its exact reachable Git objects and creates
 opaque namespaced `base`, `upstream`, and user-owned `fork` refs in Flect's
 OPFS-backed repository. It imports no credentials or grants. The accepted app
-continues to run until the user explicitly previews and keeps selected parts.
+continues to run until the user explicitly previews and activates selected parts.
 
 Shaper can personalize a retained fork from its browser-portable Bash sandbox:
 
@@ -37,16 +37,16 @@ When an exact upstream update arrives, Flect fast-forwards an untouched fork or
 computes a bounded three-way merge. A clean personalized merge is a real Git
 commit with the personal fork and exact upstream revision as its two parents;
 the Worker verifies both the parents and the complete resolved tree before the
-candidate ref moves. The user still previews and keeps it through the normal
+candidate ref moves. The user still previews and activates it through the normal
 protected decision.
 
-Conflicting updates remain inactive and Keep stays disabled. Flect preserves
+Conflicting updates remain inactive and activation stays disabled. Flect preserves
 the base, upstream, fork, and bounded conflict paths. The review offers three
-explicit choices: continue with the retained fork, open the conflict in Shape,
-or reject the update. Continue still creates an inactive candidate for Preview
-and Keep; it does not silently discard the update.
+explicit choices: continue with the retained fork, resolve the conflict with
+Flect, or discard the update. Continue still creates an inactive candidate for Preview
+and activation; it does not silently discard the update.
 
-Open in Shape materializes only the recorded conflict versions below
+Resolve with Flect materializes only the recorded conflict versions below
 `/workspace/.flect/share-conflicts/<share-id>`. Shaper writes exactly one result
 or removal for every listed path and submits the exact guarded refs:
 

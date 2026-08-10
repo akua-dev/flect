@@ -1,7 +1,9 @@
 # Flect architecture
 
 Flect is an agent-native interface shell with one shared TypeScript application
-kernel and two current hosts: a normal browser and a Tauri desktop app.
+kernel and two current hosts: a normal browser and a Tauri desktop app. Astro
+owns the static browser document above Vite; the protected React/Effect
+workspace activates only after an explicit user signal.
 
 This document describes the implementation that exists now. Future platform and
 remote-runtime work belongs in the design documents under `docs/superpowers/`.
@@ -9,11 +11,16 @@ remote-runtime work belongs in the design documents under `docs/superpowers/`.
 ## Runtime topology
 
 ```text
-                         validated InterfaceDocument
-                         revision and shaping state
-                                    |
-                                    v
-Browser or Tauri WebView -> Effect application kernel -> React renderer
+Astro static document -- focus/pointer/Cmd-K/prompt --> React workspace entry
+        |                                      |
+        | view-only: no Flect runtime          v
+        |                            Effect application kernel
+        |                                      |
+        |                                      +-> validated live canvas
+        |                                      +-> one protected conversation
+        |                                      +-> bounded Git-backed history
+        |
+Browser or Tauri WebView ----------------------+
              |                      |
              |                      +-> FlectWorkspaceController
              |                          -> typed commands and events
@@ -22,7 +29,7 @@ Browser or Tauri WebView -> Effect application kernel -> React renderer
              |                      +-> disposable QuickJS-NG/WASM Worker
              |                          -> typed inert intents only
              |
-             |                      +-> role-owned just-bash workspace
+             |                      +-> lazy role-owned just-bash workspace
              |                          -> reserved Bun-compatible command
              |                          -> reserved role-bound `flect`
              |                          -> Rifty Workers and preview broker
@@ -52,6 +59,9 @@ Browser or Tauri WebView -> Effect application kernel -> React renderer
 
 The browser never imports Pi. React never writes interface storage or revision
 state directly. The native host never interprets prompts or model responses.
+The static view-only route imports neither React nor Effect. Compiler, package,
+shell, Worker, and Wasm implementations are separate dynamic boundaries after
+workspace activation.
 
 ## Effect application kernel
 
@@ -98,7 +108,8 @@ finalizer. This lets Shaper checkpoint a retained share fork or submit an exact
 reviewed conflict resolution without deadlock or granting App Agent, Capsule,
 or unrelated agent turns concurrent mutation.
 
-`OperationJournal` retains at most 500 records and two MiB in memory. Records
+`OperationJournal` retains at most 128 records and 512 KiB in memory; the public
+workspace snapshot projects only the latest 12. Records
 correlate workspace, command, operation, role, session, tool call, revision,
 and outside client identifiers. Secret-shaped text is redacted before storage.
 It is diagnostic evidence, not revision authority or a durable audit store.
@@ -144,15 +155,18 @@ evidence in the activity UI and journal.
 
 The `ShapingKernel` owns the active, proposed, previewed, superseded, accepted,
 last-known-good, rejected, and recovered revision transitions. A Shaper result
-is decoded as an unknown value and fully validated before it becomes a preview.
+is decoded as an unknown value and fully validated. A valid local conversation
+edit becomes one accepted Git transition without a visible proposal. External
+code, shared artifacts, and authority changes remain isolated candidates until
+explicit activation.
 Ordinary transitions write one versioned journal snapshot before making the
 new state visible; the startup-only reconciliation of a persisted `proposed`
 revision is the exception. Reconciliation first creates the in-memory
 `previewed` state, then makes its repair write best-effort so a storage failure
 does not remove the visible preview or the safe-mode escape. Each journal
 snapshot contains the active and last-known-good revisions, any proposal,
-disabled extensions, safe-mode state, and the latest sequenced event. Rejecting
-leaves the active document unchanged. Rollback and safe mode are deterministic
+disabled extensions, safe-mode state, and the latest sequenced event. Discarding
+an external candidate leaves the active document unchanged. Undo and safe mode are deterministic
 and do not require Pi. The previous document-only storage key is read only as a
 one-time migration source when no journal exists.
 
@@ -160,10 +174,10 @@ The built-in recovery shell is compiled with the app. `?safe=1` bypasses
 customized storage without reading or writing it. Invalid persisted state fails
 closed to that shell in a protected recovery state. The shell renders one
 compiled composer outside the customizable document, so shaping cannot remove
-the user's route back to an agent. A blank workspace selects **Shape**; a
-candidate or accepted product selects **Use**. The same mounted composer moves
-from the centered blank state into the protected right rail when a document or
-conversation appears.
+the user's route back to the agent. Internal bindings route each request, but
+the person sees no Use/Shape or agent-role selector. The same mounted composer
+moves from the centered blank state into the protected right rail when a
+document or conversation appears.
 
 ## Pi trust domains
 
@@ -188,14 +202,14 @@ Its primary session set contains three isolated agent sessions:
   enables them for Shaper. A shaped document still returns as an untrusted
   candidate for Flect to validate.
 
-While a proposal exists, the client acquires another Pi session set and uses
+While an external candidate exists, the client acquires another Pi session set and uses
 its App session as **Preview App Agent**. It receives only a bounded public
 projection of the candidate document, the candidate revision identifier, and
 the user's request. It has its own history, lifecycle, cancellation, Pi session,
 and disposable browser-shell workspace; it cannot see accepted-product history
-or Keep, Reject, shaping, recovery, credential, or host authority. Repeated
-corrections keep this candidate conversation warm. Keep or Reject disposes its
-session authority.
+or activation, discard, shaping, recovery, credential, or host authority.
+Repeated corrections keep this candidate conversation warm. Activate or
+Discard disposes its candidate session authority.
 
 Each session has its own in-memory `SessionManager`, `SettingsManager`, and
 `DefaultResourceLoader`. Their only shared object is the provider/model runtime.
@@ -216,29 +230,22 @@ disposes every session in that set.
 Raw Shaper output is capped at 256 KiB and raw Guardian output at 16 KiB before
 either can cross the runtime boundary.
 
-## Role-aware protected shell
+## Continuous protected shell
 
 React derives four workspace phases from the validated revision snapshot:
-blank, preview, accepted, and safe. A typed `WorkbenchSnapshot` independently
-records the visible **Use** or **Shape** target and whether Use is bound to the
-accepted or candidate revision. Blank disables Use. A valid proposal
-automatically selects candidate Use; **Shape** returns to the warm Shaper; a
-valid correction atomically supersedes the candidate and selects Use again.
-Safe mode replaces both with protected recovery. Switching targets changes the
-visible target-owned timeline without relabeling messages, submitting another
-draft, or mounting a second composer.
+blank, preview, accepted, and safe. A typed `WorkbenchSnapshot` retains internal
+routing and accepted/candidate bindings, but those trust domains are not user
+modes. One composer and one chronological conversation stay mounted while Flect
+routes product work and edit work. Valid local changes become the running canvas
+immediately; external candidates expose only **Activate app** and **Discard**.
+Safe mode replaces the canvas with deterministic protected recovery.
 
 App Agent does not rely on a semantic text router. Questions and product work
 stay in Use. Its Pi session has a bounded `request_interface_edit` tool; only a
 typed tool event can request the controller to hand an explicit edit to Shaper.
-The controller correlates revision and operation identifiers and still routes
-the result through validation and protected Keep/Reject.
-
-The current warm-target browser budget is **less than 350 ms** from selecting
-the other target until its composer is visible, including the shell's 220 ms
-layout motion. The production Chromium workflow repeats both directions and
-asserts that the transition makes no Pi prompt or shape request. Native and
-long-session performance budgets remain tracked separately.
+The controller correlates revision and operation identifiers and routes the
+result through validation and atomic local acceptance. Internal authority
+selection never mounts a second composer or asks the person to choose an agent.
 
 At wide sizes the agent rail is inline, 400 px by default, and keyboard- or
 pointer-resizable from 340–520 px. At 761–980 px it becomes a right sheet; at
@@ -402,7 +409,7 @@ decoder.
 
 The end-user flow exports an accepted interface and imports a verified capsule
 as an isolated proposal. Import never replaces accepted state directly; the
-ordinary preview/keep/discard boundary remains authoritative. Declarative
+external preview/activate/discard boundary remains authoritative. Declarative
 entrypoints use the trusted closed renderer. Compiled HTML entrypoints run in
 an opaque-origin `allow-scripts` iframe with a network-denying CSP and one
 rate/size-bounded Effect Schema `MessageChannel`. Capsule messages and host
@@ -410,14 +417,14 @@ replies are JSON-only, limited to 64 KiB, correlated by an intent identifier,
 and closed over a versioned success/failure union. Capsules receive no direct
 host authority. Safe mode bypasses the frame. Shaper may invoke import through its
 reserved sandboxed `flect capsule import` command; App Agent may not.
-Before Keep, the protected shell projects a bounded review from the decoded
+Before activation, the protected shell projects a bounded review from the decoded
 manifest: publisher, version, source revision, signature presence, contents,
 platforms, and all requested capabilities. Required capabilities are activation
 preconditions. The shell evaluates the declared semver range against the actual
 Flect package version and the declared platform set against the browser or
 native host; incompatibility blocks activation at the UI and controller while
 leaving the isolated preview inspectable. A required request without a
-registered grant keeps the preview inspectable but blocks acceptance in both
+registered grant keeps the preview inspectable but blocks activation in both
 the UI and controller; optional requests remain ungranted. Protected review
 projects availability separately from requested, granted, denied, expired, and
 revoked lifecycle state.
@@ -499,9 +506,12 @@ App Agent guidance and an optional Shaper role; the private-sharing reference
 composes only the trusted source adapter. The Flect-owned harness supplies
 grants and protected state.
 
-Capsule publisher-signature verification, capsule update/fork lineage, and
-framework source builds remain later layers over the format and frame
-contracts. Verified archive-local stylesheets, classic scripts, images,
+Ed25519 publisher-signature verification is implemented for `.flect-share`
+manifests, while ordinary `.flect` capsule signature claims remain
+presence-only and non-authoritative. Guarded personal forks and two-parent
+merges are implemented by the sharing lifecycle, and standard single-entry
+Vite JavaScript, TypeScript, and React source projects compile through the
+separate build adapter. Verified archive-local stylesheets, classic scripts, images,
 fonts/media, and CSS URLs are projected into the generated `srcdoc`: text is
 strict UTF-8, binary assets become `data:` URLs, and unresolved or remote
 references remain unavailable under the deny-by-default CSP. Module graphs,
@@ -516,7 +526,7 @@ integrity failure leaves accepted state untouched.
 
 If an installed and candidate capsule share an ID, the protected shell labels
 the transition with both versions. A different ID is labeled as a replacement.
-In both cases the accepted archive remains bound until Keep, so Reject is a
+In both cases the accepted archive remains bound until activation, so Discard is a
 lossless return to the installed version. Capsule personal-fork lineage and
 compatible merge policy remain future layers rather than implicit overwrite
 behavior.
@@ -530,11 +540,11 @@ executed during inspection. The ordinary manifest review and opaque compiled
 frame remain the only path to preview. The current adapter does not yet commit
 source to accepted state directly: it checkpoints recognizable files under
 `project/` on isolated `flect/authoring`; the existing proposal-source delta
-promotes them to `flect/accepted` only on Keep. It does not yet analyze
+promotes them to `flect/accepted` only on Activate. It does not yet analyze
 multi-page routes, archives, repositories, or content-dependent secrets. Its
 bounded text inspection does report forms, module graphs, remote URLs, storage,
 and workers as visible manifest requests;
-unsupported required assumptions block Keep.
+unsupported required assumptions block activation.
 
 Compiled capsule bytes persist through `CapsuleStore`, independently from the
 user-controlled interface Git repository. The production store uses the
@@ -555,10 +565,10 @@ the fallback is never presented as durable persistence.
 This capsule persistence contract currently supports compiled HTML entrypoints
 plus the bounded local asset classes above. Framework source builds and module
 graphs are compiled before capsule persistence and are not part of the runtime
-capsule format. Additional capability adapters, capsule signing, and compatible
-capsule update/fork lineage remain open. Accepting an already-restored
-candidate is also held open until the pinned Wasm-Git adapter reliably advances
-the accepted snapshot commit after worker restart.
+capsule format. Additional capability adapters, authoritative capsule signing,
+and capsule-level update/fork lineage remain open. Restored candidates can be
+activated after worker restart; the guarded Wasm-Git transaction advances the
+accepted snapshot before the decision completes.
 
 ## Restricted browser build boundary
 
@@ -601,8 +611,8 @@ reload. The protected **Import app project** flow also recognizes standard Vite
 browser entrypoints, checkpoints source on `flect/authoring`, supersedes the
 candidate from that source, compiles the exact guarded proposal, packages only
 the verified outputs plus the inert import report, and opens the normal
-Keep/Reject review. The review exposes the exact source revision and artifact
-digest. Chromium proves Vite TypeScript Keep/reload/export and a React JSX
+Activate/Discard review. The review exposes the exact source revision and artifact
+digest. Chromium proves Vite TypeScript activation/reload/export and a React JSX
 import whose cached dependency graph rebuilds with the npm registry blocked.
 
 `BrowserPackageResolver` supplies the package-lock/cache part of that boundary.
@@ -753,9 +763,17 @@ the repository service commits the built-in interface and establishes matching
 accepted, last-known-good, and activation state before exposing the workspace.
 This makes a no-edit reload durable without weakening receipt/ref
 reconciliation. Legacy state follows the separate, explicit migration path.
-A separate bounded role-continuity projection
-stores only three isolated composer drafts and completed App, Preview App, and
-Shaper messages. It is not interface history and can be discarded without
+The Git service serializes every operation before selecting its current Worker;
+the Worker is recycled after a bounded lease so long sessions release libgit2
+state without handing queued work a terminated instance. Main-realm durable
+stores share one initialized asynchronous OPFS surface under disjoint roots,
+which lets lazy build and package services start without reopening storage while
+the Git worker is active. Safe-mode entry records only the separate guarded
+recovery marker and does not rewrite the accepted product ref.
+A separate bounded role-continuity projection stores one visible compatibility
+draft and completed App, Preview App, and Shaper messages. Each internal
+projection retains at most 12 messages and eight activities. It is not
+interface history and can be discarded without
 touching revisions. Preview continuity is restored only for an exact candidate
 revision match; partial assistant streams, activities, credentials, auth
 events, Pi sessions, control grants, and provider state are excluded.
@@ -772,8 +790,8 @@ are in [`docs/recovery.md`](docs/recovery.md).
 - invalid interface state -> compiled recovery shell;
 - safe mode -> bypass customized state;
 - invalid Shaper output -> no proposal;
-- rejected preview -> active state unchanged;
-- accepted preview -> previous active state becomes last-known-good;
+- discarded external candidate -> active state unchanged;
+- activated external candidate -> previous active state becomes last-known-good;
 - rollback -> last-known-good becomes active;
 - rollback failure -> the protected kernel remains authoritative and may ask
   Guardian for a bounded, inert explanation;
@@ -787,9 +805,9 @@ are in [`docs/recovery.md`](docs/recovery.md).
 ## Performance boundary
 
 Flect measures production-browser startup, initial resources, protected
-composer interaction, candidate rebuilds, warm Use–Shape switches, Markdown,
-cancellation, and garbage-collected repeated-cycle heap growth without adding
-telemetry or another state owner. The one machine-readable release contract is
+composer interaction, local patches, external candidate rebuilds, Markdown,
+cancellation, and repeated-cycle heap growth without adding telemetry or
+another state owner. The one machine-readable release contract is
 `shared/performance-budgets.ts`; the measurement environment, variance policy,
 native-host complement, and rationale are documented in
 [`docs/performance.md`](docs/performance.md).

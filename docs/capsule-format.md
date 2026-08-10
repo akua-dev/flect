@@ -82,9 +82,9 @@ is recorded in
 Import opens a candidate; it never activates the capsule directly. The
 protected Flect shell shows the publisher, artifact version, source revision,
 signature count, contents, supported platforms, and every requested capability
-before Keep is available. A capability marked `required` is a hard activation
+before activation is available. A capability marked `required` is a hard activation
 precondition. Until a trusted broker reports that it can grant that capability,
-Flect leaves the isolated preview available for inspection but disables Keep at
+Flect leaves the isolated preview available for inspection but disables Activate at
 the UI boundary and rejects acceptance again in the controller. Optional
 capabilities remain ungranted unless a later explicit grant flow says otherwise.
 
@@ -113,7 +113,7 @@ shows package publisher/source/revision, declared roles, resource ceilings, and
 required versus optional authority. App Agent and Shaper start off
 independently. Each is enabled only by an explicit protected action, and
 optional authority is off by default. An enabled candidate must complete one
-bounded worker test before Keep; a failed candidate must be disabled or fixed
+bounded worker test before activation; a failed candidate must be disabled or fixed
 before acceptance. The controller repeats this check even if customized UI is
 bypassed.
 
@@ -208,7 +208,7 @@ browser or the install fails without changing accepted state.
 
 When the candidate and installed capsule IDs match, the protected review names
 the exact installed-to-candidate version transition. The installed archive and
-accepted revision remain authoritative until explicit Keep; Reject restores the
+accepted revision remain authoritative until explicit activation; Discard restores the
 installed presentation without mutation. A different capsule ID is presented
 as an explicit replacement rather than an update. Compatible three-way merging
 of a personalized capsule fork is not yet implemented; the separate sharing
@@ -242,7 +242,7 @@ required ones block activation. Multi-page routing, archive/Git inputs,
 content-aware secret scanning and a complete preserved/adapted/unsupported
 per-feature matrix remain open. Supported files
 are checkpointed first on the isolated `flect/authoring` branch and flow through
-the proposal into `flect/accepted` only on Keep; exported ordinary Git contains
+the proposal into `flect/accepted` only on Activate; exported ordinary Git contains
 the recognizable `project/` source tree.
 
 ## Prohibited state
