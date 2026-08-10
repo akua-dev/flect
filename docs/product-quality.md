@@ -54,9 +54,9 @@ applicable limitations. Sensitive values remain redacted.
 - **Every release:** every behavior currently advertised by that release must
   be proven. Security, credential isolation, deterministic recovery, data
   ownership, and honest boundaries are non-waivable.
-- **Public beta:** additionally requires the protected Shape–Use–recover loop,
-  trustworthy installation, responsive operation, and explicit compatibility
-  boundaries.
+- **Public beta:** additionally requires the protected continuous
+  create–use–edit–recover loop, trustworthy installation, responsive operation,
+  and explicit compatibility boundaries.
 - **Stable:** additionally requires every advertised portability, extension,
   adoption, collaboration, and supported-host promise to be proven.
 
@@ -89,11 +89,13 @@ identifier instead of silently reusing it for a different promise.
 
 - **FQ-02.1:** A first-time user can understand what Flect is and begin a
   meaningful task without reading external documentation.
-- **FQ-02.2:** Canvas, composer, candidate preview, and accepted interface are
-  distinguishable.
-- **FQ-02.3:** The active **Use** or **Shape** target is visible before send.
-- **FQ-02.4:** The user knows whether an action changes a candidate or uses the
-  accepted product.
+- **FQ-02.2:** The running canvas, continuous composer, bounded activity, and
+  protected recovery controls are understandable without an internal state
+  model.
+- **FQ-02.3:** The selected visible element or other active context is clear
+  before send without asking the user to select an agent role or mode.
+- **FQ-02.4:** The interface distinguishes an ordinary reversible local edit
+  from an operation that needs new authority or has an outside effect.
 - **FQ-02.5:** Model, workspace, capability, and permission state are
   discoverable without dominating the work surface.
 - **FQ-02.6:** Ordinary use does not require understanding an IDE, agent
@@ -111,38 +113,41 @@ identifier instead of silently reusing it for a different promise.
   changes.
 - **FQ-03.3:** Questions are answered without being mistaken for edit
   instructions.
-- **FQ-03.4:** Shaper can explain its intended or completed change in user
+- **FQ-03.4:** The agent explains its intended or completed change in user
   language.
-- **FQ-03.5:** Follow-up instructions retain the correct candidate, revision,
-  and conversation context.
+- **FQ-03.5:** Follow-up instructions retain the correct workspace revision,
+  selected context, and conversation.
 - **FQ-03.6:** Images, files, examples, and supported source projects can supply
   shaping context without bypassing validation.
 - **FQ-03.7:** Direct manipulation and conversational changes converge on the
   same revision model.
-- **FQ-03.8:** Explicitly approved Shaper extensions may extend authoring
+- **FQ-03.8:** Explicitly approved authoring extensions may extend agent
   behavior without extending their own authority.
 
-## FQ-04 Fast Shape–Use testing
+## FQ-04 Continuous live editing
 
 **Constituencies:** User, Maker, Extension author
 **Gate:** Public beta
 **Primary proof:** Contract, Browser, Experience, Performance evidence
 
-- **FQ-04.1:** Shape provides a live candidate product preview.
-- **FQ-04.2:** Preview App Agent and Shaper remain warm during an editing
-  session.
-- **FQ-04.3:** Switching **Use ↔ Shape** is immediate and does not require
-  repeated authorization within the active editing session.
-- **FQ-04.4:** Each target preserves its draft, conversation position, and
-  relevant context.
-- **FQ-04.5:** Candidate product extensions can be exercised before acceptance.
-- **FQ-04.6:** A request such as “fix what just happened” can attach the bounded
-  failure, operation trace, candidate revision, and relevant UI state to
-  Shaper.
-- **FQ-04.7:** Automatic target selection is visible and instantly
-  overridable.
-- **FQ-04.8:** An incorrect target prediction cannot accept, publish, or perform
-  an irreversible action.
+- **FQ-04.1:** The running product is the editing canvas; a valid UI-only change
+  appears directly without a separate preview screen.
+- **FQ-04.2:** The one visible composer, conversation, canvas, workspace, and
+  relevant agent sessions remain warm during editing.
+- **FQ-04.3:** Ten consecutive UI edits require no Use/Shape, App/Shaper,
+  candidate, Keep/Reject, Review, branch, or reset decision.
+- **FQ-04.4:** Draft, conversation position, selected element, focus, scroll,
+  and unaffected application state survive valid incremental updates.
+- **FQ-04.5:** Every valid visible edit creates an attributable automatic Git
+  checkpoint and remains immediately undoable.
+- **FQ-04.6:** A request such as “fix what just happened” carries the bounded
+  failure, operation trace, workspace revision, and relevant UI state to the
+  same visible agent.
+- **FQ-04.7:** Automatic intent and target routing is observable when useful and
+  instantly correctable without exposing internal agent roles.
+- **FQ-04.8:** Ambiguity, a failed build, stale context, or incorrect routing
+  cannot replace the last-known-good canvas, grant authority, publish, or
+  perform an irreversible action.
 
 ## FQ-05 Product usage
 
@@ -150,11 +155,11 @@ identifier instead of silently reusing it for a different promise.
 **Gate:** Every advertised product capability; complete pillar for public beta
 **Primary proof:** Contract, Browser, Adoption, Security
 
-- **FQ-05.1:** The accepted interface remains useful without invoking a model.
-- **FQ-05.2:** App Agent understands only the product capabilities and bounded
-  public context exposed to it.
-- **FQ-05.3:** App Agent can answer questions and perform approved product
-  actions through typed capabilities.
+- **FQ-05.1:** The running interface remains useful without invoking a model.
+- **FQ-05.2:** The agent's product-usage trust domain understands only the
+  capabilities and bounded public context exposed to it.
+- **FQ-05.3:** The same visible agent can answer questions and perform approved
+  product actions through typed capabilities.
 - **FQ-05.4:** Tool execution, status, and results appear coherently in the
   product experience.
 - **FQ-05.5:** A product adopting Flect does not need to ship a separate
@@ -164,24 +169,27 @@ identifier instead of silently reusing it for a different promise.
 - **FQ-05.7:** Product authentication and authorization remain authoritative
   regardless of model or interface customization.
 
-## FQ-06 Preview, acceptance, and recovery
+## FQ-06 History, authority, and recovery
 
 **Constituencies:** All
 **Gate:** Every release
 **Primary proof:** Contract, Browser, Native, Security
 
-- **FQ-06.1:** Every unaccepted interface change is visibly a candidate.
-- **FQ-06.2:** Users can inspect the meaningful change before acceptance.
-- **FQ-06.3:** Keep and Reject are deterministic protected actions.
-- **FQ-06.4:** History, comparison, undo, and rollback preserve attribution and
-  accepted-state integrity.
-- **FQ-06.5:** Accepted revisions record sufficient attribution for explanation
-  and recovery.
+- **FQ-06.1:** Every valid local UI edit activates automatically as an
+  attributable checkpoint; failed attempts never become visible history.
+- **FQ-06.2:** Users can understand, compare, undo, redo, and restore visible
+  changes without Git or proposal-state-machine terminology.
+- **FQ-06.3:** New capabilities, destructive outside actions, imported shared
+  artifacts, publication, and protected recovery remain explicit decisions.
+- **FQ-06.4:** History, comparison, undo, redo, restore, and rollback preserve
+  attribution and canonical-workspace integrity.
+- **FQ-06.5:** Visible checkpoints record sufficient attribution for
+  explanation and recovery.
 - **FQ-06.6:** Last-known-good recovery works without a model provider.
 - **FQ-06.7:** Shaped UI and extensions cannot remove or replace safe mode.
 - **FQ-06.8:** Broken extensions can be disabled through the protected shell.
-- **FQ-06.9:** A crash during shaping cannot destroy or silently replace the
-  accepted product.
+- **FQ-06.9:** A crash during editing cannot destroy or silently replace the
+  last-known-good product.
 
 ## FQ-07 Git-backed ownership
 
@@ -192,9 +200,10 @@ identifier instead of silently reusing it for a different promise.
 - **FQ-07.1:** A canonical Flect workspace is a real Git repository.
 - **FQ-07.2:** Browser and desktop hosts provide Git behavior without requiring
   system Git.
-- **FQ-07.3:** Shaper uses ordinary Git concepts rather than proprietary shadow
-  history.
-- **FQ-07.4:** Candidate changes are isolated from the accepted revision.
+- **FQ-07.3:** The agent and protected history use ordinary Git rather than
+  proprietary shadow state.
+- **FQ-07.4:** In-progress changes are isolated until they validate; each valid
+  visible result advances the canonical checkpoint automatically.
 - **FQ-07.5:** Users can inspect, export, and continue the repository outside
   Flect.
 - **FQ-07.6:** Conflicts and interrupted operations have understandable,
@@ -215,7 +224,7 @@ identifier instead of silently reusing it for a different promise.
 - **FQ-08.4:** Imported source remains recognizable and maintainable.
 - **FQ-08.5:** Users can export ordinary source and Git history.
 - **FQ-08.6:** Exported projects are not locked to a proprietary Flect service.
-- **FQ-08.7:** Failed import leaves the source project and accepted workspace
+- **FQ-08.7:** Failed import leaves the source project and canonical workspace
   recoverable.
 
 ## FQ-09 Portable `.flect` applications
@@ -306,7 +315,8 @@ identifier instead of silently reusing it for a different promise.
 **Gate:** Public beta
 **Primary proof:** Browser, Accessibility, Experience
 
-- **FQ-13.1:** The active agent and its authority are visible before send.
+- **FQ-13.1:** Available authority and selected context are discoverable before
+  send without exposing internal agent roles.
 - **FQ-13.2:** Tool calls are distinguishable from assistant prose.
 - **FQ-13.3:** Queued, running, completed, failed, and cancelled states are
   explicit.
@@ -335,7 +345,7 @@ identifier instead of silently reusing it for a different promise.
 - **FQ-14.5:** External agents can inspect bounded evidence, cancel work, and
   debug through public surfaces.
 - **FQ-14.6:** External control cannot bypass validation, permissions,
-  acceptance, or recovery.
+  checkpointing, last-known-good protection, or recovery.
 - **FQ-14.7:** Outside control is disabled by default and immediately
   revocable.
 - **FQ-14.8:** Browser Flect offers a portable in-app equivalent without
@@ -348,8 +358,8 @@ identifier instead of silently reusing it for a different promise.
 **Primary proof:** Browser, Native, Experience, measured performance evidence
 
 - **FQ-15.1:** Supported-host startup meets a documented interactive budget.
-- **FQ-15.2:** Warm **Use ↔ Shape** targeting meets a documented switch
-  budget.
+- **FQ-15.2:** Flect activation, composer reveal, element targeting, and warm
+  intent routing meet documented response budgets.
 - **FQ-15.3:** Typing remains responsive while agents, builds, and previews
   run.
 - **FQ-15.4:** Streaming remains visually smooth under representative output.
@@ -367,12 +377,13 @@ identifier instead of silently reusing it for a different promise.
 **Gate:** Public beta
 **Primary proof:** Contract, Browser, Native, Security
 
-- **FQ-16.1:** Refreshing or restarting preserves accepted work.
-- **FQ-16.2:** Applicable drafts, conversation state, and candidate state
-  recover consistently.
+- **FQ-16.1:** Refreshing or restarting preserves the latest valid work.
+- **FQ-16.2:** Applicable drafts, conversation, selected context, in-progress
+  diagnostics, and canvas state recover consistently.
 - **FQ-16.3:** Network interruption does not corrupt revision or conversation
   state.
-- **FQ-16.4:** Stale candidates cannot overwrite newer accepted work.
+- **FQ-16.4:** Stale edits and tool results cannot overwrite newer canonical
+  work.
 - **FQ-16.5:** Concurrent operations are rejected, serialized, or reconciled
   explicitly.
 - **FQ-16.6:** Runtime and shell version incompatibility is detected before
@@ -406,8 +417,8 @@ identifier instead of silently reusing it for a different promise.
 **Primary proof:** Accessibility, Browser, Native
 
 - **FQ-18.1:** The complete protected shell is keyboard operable.
-- **FQ-18.2:** Focus is visible, ordered, and restored across sheets, menus,
-  role changes, and recovery.
+- **FQ-18.2:** Focus is visible, ordered, and restored across canvas updates,
+  sheets, menus, history, capability decisions, and recovery.
 - **FQ-18.3:** Assistive technology receives meaningful agent, tool, validation,
   and status changes.
 - **FQ-18.4:** Color is never the only state signal.
@@ -541,7 +552,7 @@ identifier instead of silently reusing it for a different promise.
 
 ## Ultimate user outcome
 
-A Flect user can install it, understand it, shape something useful, test it
-immediately, trust what it does, recover from mistakes, own and export the
-result, and use it anywhere Flect claims to support—without becoming dependent
-on Flect or surrendering control of their data.
+A Flect user can install it, understand it, create something useful, keep using
+and editing the running result, trust what it does, recover from mistakes, own
+and export the work, and use it anywhere Flect claims to support—without
+becoming dependent on Flect or surrendering control of their data.

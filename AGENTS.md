@@ -84,10 +84,14 @@ Repository-wide constraints:
   Pi-session, cancellation, and browser-shell workspace state separate. Preview
   App may inherit App authority policy, but it receives only bounded candidate
   context and must not read accepted history or accepted workspace files.
-- Use explicit typed **Use** and **Shape** workbench transitions. Do not infer a
-  semantic target from arbitrary prompt text. App Agent may request shaping only
-  through the bounded typed edit-request tool; revision acceptance remains a
-  protected user/controller decision.
+- Present one continuous agent conversation. Keep App Agent, Shaper, Preview
+  App, and Guardian as internal trust domains, never as modes or identities the
+  user must select. Route intent through typed controller decisions informed by
+  the active canvas, selected semantic target, requested operation, and
+  available capabilities. A valid local UI-only change activates and
+  checkpoints automatically; capability expansion, destructive outside
+  effects, installation, sharing, and protected recovery remain explicit
+  decisions.
 - A shared Pi `ModelRuntime` may resolve models and provider authentication,
   but Guardian, App Agent, and Shaper sessions use separate
   `SessionManager`, `SettingsManager`, and `ResourceLoader` instances. An
