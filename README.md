@@ -284,6 +284,7 @@ dependencies enter the portable package graph.
 - [Current Astro/live-canvas performance verification](docs/verification/2026-08-10-astro-live-canvas-verification.md)
 - [Packaged macOS local verification](docs/verification/2026-08-10-packaged-macos-local-verification.md)
 - [Open-issue implementation audit](docs/verification/2026-08-10-open-issue-audit.md)
+- [Final delivery verification](docs/verification/2026-08-11-final-delivery-verification.md)
 - [Historical pre-migration performance baseline](docs/verification/2026-08-10-performance-and-native-feel-baseline.md)
 - [Astro activation-shell architecture decision](docs/decisions/0003-astro-activation-shell.md)
 - [Local agent control](docs/local-control.md)
@@ -308,9 +309,11 @@ Rust formatting and tests, and the native application build. The architecture
 gate rejects native promise fan-out everywhere and ad hoc Promise constructors
 or native Promise serialization tails outside tests. Concurrency, callback
 lifetimes, cancellation, and failure composition therefore stay explicit in
-Effect. The credential-free GitHub
-quality workflow runs this same command on every pull request and every change
-to `main`; it uploads only bounded Playwright failure evidence. `bun run
+Effect. The credential-free GitHub quality workflow runs this same command on
+every pull request and every change to `main`; branch protection requires its
+exact `Flect quality gate` context on a current revision, including for
+administrators. The workflow uploads only bounded Playwright failure evidence.
+`bun run
 test:pi-smoke` is separate
 because it makes one real private turn with the developer's existing Pi
 provider login.
