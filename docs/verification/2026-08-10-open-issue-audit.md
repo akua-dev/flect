@@ -20,6 +20,13 @@ Status meanings:
   unavailable to the PR workflow; and
 - **tracking**: an epic remains open while any required child gate remains.
 
+GitHub synchronization completed on 2026-08-10. All 24 open issues carry
+exactly one status marker and exactly one evidence comment: 14 are marked
+`status:implemented` and 10 are marked `status:external-gate`. Tracking epics
+carry the external-gate marker while their documented child evidence remains.
+No issue was closed merely to hide an unpublished implementation or an
+unresolved external authority.
+
 ## Scope consolidation
 
 No currently open issue is an unowned duplicate. The apparent overlaps have
