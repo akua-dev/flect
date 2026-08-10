@@ -508,7 +508,7 @@ describe("useAgentSession", () => {
     });
 
     expect(client.closeSession).not.toHaveBeenCalled();
-    expect(result.current.shaper.status).toBe("error");
+    await waitFor(() => expect(result.current.shaper.status).toBe("error"));
     expect(result.current.app.status).toBe("ready");
     unmount();
     await waitFor(() => expect(client.closeSession).toHaveBeenCalledOnce());
