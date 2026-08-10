@@ -40,8 +40,12 @@ invalid.
 - `provenance`: publisher label, source reference, source revision, and builder.
 - optional `build`: the exact source revision plus SHA-256 input, artifact, and
   optional verified dependency-graph digests for a restricted source build.
-- `signatures`: reserved detached-signature records (`ed25519`, key identifier,
-  signature). Presence does not itself establish trust.
+- optional `lineage`: a local-fork marker binding the parent signed-content
+  digest, source, and revision. Forking deliberately removes upstream
+  signatures.
+- `signatures`: detached Ed25519 records containing the publisher key ID,
+  canonical signed-content SHA-256, UTC signing time, and signature. Presence or
+  validity establishes provenance only; it never grants a capability.
 
 Every entrypoint must name a declared payload. Every payload byte count and hash
 is verified before a decoder returns a capsule.
@@ -101,8 +105,16 @@ request, workspace-bound context, or registered limits cannot widen an older
 decision. See [`docs/product-capabilities.md`](product-capabilities.md) for the
 adopter contract and complete lifecycle.
 
-The current review reports signature presence but does not verify publisher
-identity; unsigned and unverified capsules must not be presented as trusted.
+The host reconstructs the deterministic capsule with an empty signature array,
+hashes those canonical bytes, and verifies the signature over a versioned
+domain-separated payload containing that digest, key ID, and signing time.
+Protected review distinguishes unsigned, verified, unknown-key, revoked,
+expired, changed-after-signing, invalid, and locally-forked states. Host policy
+may allow unverified local artifacts, require a valid configured key, or limit
+installation to approved keys. Invalid/revoked/changed claims always fail
+closed. Key rotation is expressed by validity windows and an optional
+replacement key; revocation remains host policy, not mutable capsule state.
+The trust decision reports explicitly that permission authority is unchanged.
 The host also evaluates the declared semver range against Flect's package
 version and checks the actual browser/native platform. An incompatible range or
 unsupported host follows the same inspectable-preview, blocked-activation path.

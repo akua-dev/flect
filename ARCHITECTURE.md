@@ -369,6 +369,16 @@ when it is enabled; it is not treated as a security boundary. The isolation
 iframe, CSP, capability manifest, strict schemas, narrow command validation,
 and private process transport remain active.
 
+The first product-facing native adapter is deliberately narrower still. A
+fixed Swift function reads AppKit's real control accent and returns one packed
+RGBA value to a main-window-only Rust command. `NativePlatform` validates the
+closed projection. The Tauri composition root registers
+`native.appearance.current`, and the normal product-capability broker must
+reserve and validate an explicit grant before the operation reaches AppKit.
+Browser composition returns typed unavailability and keeps the capsule
+running. The reusable cross-platform pattern is documented in
+[`docs/native-platform-adapters.md`](docs/native-platform-adapters.md).
+
 The current local app bundle is ad-hoc signed so macOS can validate its public
 `flect` executable, private `flect-runtime` helper, and app resources during
 development. It contains no separately shipped CLI or MCP companion. It is not
@@ -498,16 +508,18 @@ independent from `ProductUserState`, so detaching a product retains personal
 Git/export references for protected continuation or export. Model/inference
 ownership is not an authorization input.
 
-The stock Flect distribution registers no product operations; adopters compose
-their policies and operations at the trusted runtime root. Browser and the
-current desktop WebView use these same provider-neutral service contracts.
+The stock Flect distribution registers no business-product operations;
+adopters compose their policies and operations at the trusted runtime root.
+The desktop composition registers only the optional brokered native-appearance
+read described above. Browser and the current desktop WebView use the same
+provider-neutral service contracts for product integrations.
 Ordinary HTTP/GraphQL uses CORS-aware fetch. Protected review offers once,
 session, workspace,
 persistent, deny, and revoke actions only when permitted by the host manifest;
 safe mode uses the same model-free protected projection. One-use consumption,
 expiry, and rate enforcement are implemented in the broker. Custom duration or
-rate editing in the protected UI and a privileged native credential/transport
-adapter are not yet shipped.
+rate editing in the protected UI and a privileged native credential transport
+are not yet shipped.
 
 The public-boundary reference set exercises offline state, browser-direct fixed
 GraphQL/events, a named authenticated broker, and a closure-private sharing
@@ -517,8 +529,10 @@ composes only the trusted source adapter. The Flect-owned harness supplies
 grants and protected state.
 
 Ed25519 publisher-signature verification is implemented for `.flect-share`
-manifests, while ordinary `.flect` capsule signature claims remain
-presence-only and non-authoritative. Guarded personal forks and two-parent
+manifests and canonical `.flect` capsule content. Capsule assessment separates
+verified, unknown, revoked, expired, changed, invalid, unsigned, and local-fork
+states; configurable publisher policy never alters capability authority.
+Guarded personal forks and two-parent
 merges are implemented by the sharing lifecycle, and standard single-entry
 Vite JavaScript, TypeScript, React, Vue, and Svelte source projects compile
 through the separate build adapter. Verified archive-local stylesheets, classic scripts, images,
@@ -579,8 +593,9 @@ the fallback is never presented as durable persistence.
 This capsule persistence contract currently supports compiled HTML entrypoints
 plus the bounded local asset classes above. Framework source builds and module
 graphs are compiled before capsule persistence and are not part of the runtime
-capsule format. Additional capability adapters, authoritative capsule signing,
-and capsule-level update/fork lineage remain open. Restored candidates can be
+capsule format. Additional capability adapters and capsule-level three-way
+update merging remain open. Canonical signing and explicit unsigned local-fork
+lineage are implemented. Restored candidates can be
 activated after worker restart; the guarded Wasm-Git transaction advances the
 accepted snapshot before the decision completes.
 

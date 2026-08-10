@@ -19,6 +19,7 @@ const diagnosticParameters = [
   "git-share-lifecycle-diagnostic",
   "storage-reset-diagnostic",
   "capsule-diagnostic",
+  "capsule-trust-diagnostic",
   "build-diagnostic",
   "package-diagnostic",
   "product-capability-diagnostic",

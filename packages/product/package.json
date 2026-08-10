@@ -31,6 +31,14 @@
     "./host": {
       "types": "./dist/host.d.ts",
       "import": "./dist/host.js"
+    },
+    "./capsule": {
+      "types": "./dist/capsule.d.ts",
+      "import": "./dist/capsule.js"
+    },
+    "./capsule-trust": {
+      "types": "./dist/capsule-trust.d.ts",
+      "import": "./dist/capsule-trust.js"
     }
   },
   "scripts": {

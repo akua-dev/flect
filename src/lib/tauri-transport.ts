@@ -142,6 +142,7 @@ export interface TauriNativeHostShape {
       | "shell_link_install"
       | "shell_link_remove"
       | "native_application_path"
+      | "native_system_accent_color"
       | "native_update_status"
       | "native_update_check"
       | "native_update_install"

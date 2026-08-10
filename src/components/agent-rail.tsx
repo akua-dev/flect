@@ -130,6 +130,27 @@ export interface AgentRailProps {
   };
 }
 
+const capsuleTrustLabel = (review: CapsuleReview) => {
+  switch (review.signature.status) {
+    case "unsigned":
+      return "Unsigned";
+    case "locally-forked":
+      return "Local fork · unsigned";
+    case "verified":
+      return `Verified · ${review.signature.keyIds.join(", ")}`;
+    case "unknown-key":
+      return `Unknown signer · ${review.signature.keyIds.join(", ")}`;
+    case "revoked":
+      return "Publisher key revoked";
+    case "expired":
+      return "Signature outside key validity";
+    case "changed-after-signing":
+      return "Changed after signing";
+    case "invalid":
+      return "Invalid signature";
+  }
+};
+
 function RuntimeState({
   status,
 }: {
@@ -1019,11 +1040,7 @@ export function AgentRail({
                   </div>
                   <div>
                     <dt>Trust</dt>
-                    <dd>
-                      {capsuleReview.signatureCount === 0
-                        ? "Unsigned"
-                        : `${capsuleReview.signatureCount} signature${capsuleReview.signatureCount === 1 ? "" : "s"}`}
-                    </dd>
+                    <dd>{capsuleTrustLabel(capsuleReview)}</dd>
                   </div>
                   <div>
                     <dt>Contents</dt>
@@ -1146,10 +1163,12 @@ export function AgentRail({
                   )}
                 {capsuleReview.activationBlocked && (
                   <p className="capsule-review__warning" role="alert">
-                    {!capsuleReview.flectCompatible ||
-                    !capsuleReview.platformCompatible
-                      ? "This app is incompatible with this Flect version or host. You can inspect it, but it cannot be activated."
-                      : "This app requires capabilities that are not granted. You can inspect it, but it cannot be activated."}
+                    {!capsuleReview.trustDecision.allowed
+                      ? "This app cannot be activated because its signature does not satisfy the configured publisher policy. Signatures never grant product capabilities."
+                      : !capsuleReview.flectCompatible ||
+                          !capsuleReview.platformCompatible
+                        ? "This app is incompatible with this Flect version or host. You can inspect it, but it cannot be activated."
+                        : "This app requires capabilities that are not granted. You can inspect it, but it cannot be activated."}
                   </p>
                 )}
                 {candidateExtensionBlocked && (

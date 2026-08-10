@@ -9,6 +9,7 @@ import type { NativeUpdateError } from "../../shared/native-update";
 import {
   AuthorizedProductOperation,
   ProductCapabilityManifest,
+  type ProductJson,
   ProductOperationFailure,
 } from "../../shared/product-capability";
 import type {
@@ -24,6 +25,10 @@ import {
   AgentCommandBusLive,
 } from "../axi/agent-command-bus";
 import { LazyProposalBuildLive } from "../build/lazy-proposal-build";
+import {
+  makeNativeAppearanceOperation,
+  NativeAppearanceCapabilityManifest,
+} from "../capabilities/native-appearance-capability";
 import { makeProductCapabilityBrokerLayer } from "../capabilities/product-capability-broker";
 import { makeProductCapabilityDecisionStoreLayer } from "../capabilities/product-capability-decision-store";
 import {
@@ -35,6 +40,10 @@ import {
   type CapsuleStoreError,
   CapsuleStoreLive,
 } from "../capsule/capsule-store";
+import {
+  type CapsuleTrustVerifier,
+  CapsuleTrustVerifierLive,
+} from "../capsule/capsule-trust-verifier";
 import {
   type ExtensionCatalog,
   makeExtensionCatalogLayer,
@@ -92,6 +101,11 @@ import {
 import { type Clipboard, ClipboardLive } from "./clipboard";
 import { makeGitInterfaceRepositoryLayer } from "./git-interface-repository";
 import { type InterfaceStorage, InterfaceStorageLive } from "./interface-store";
+import {
+  makeTauriNativePlatformLayer,
+  NativePlatform,
+  NativePlatformUnavailableLive,
+} from "./native-platform";
 import {
   type NativeUpdate,
   NativeUpdateUnavailableLive,
@@ -195,6 +209,7 @@ const runtimeWorkspaceId =
 const productCapabilityWorkflowEnabled =
   import.meta.env.VITE_FLECT_PRODUCT_CAPABILITY_DIAGNOSTIC === "1" &&
   runtimeQuery.get("product-capability-workflow") === "1";
+const nativePlatformAvailable = isTauri();
 const SharedGitWorkspaceLive = makeGitWorkspaceLayer({
   defaultWorkspaceId: runtimeWorkspaceId,
 });
@@ -248,7 +263,9 @@ export type FlectBrowserServices =
   | ExtensionCatalog
   | PortableExtensionHost
   | ProductCapabilityRegistry
+  | NativePlatform
   | CapsuleStore
+  | CapsuleTrustVerifier
   | InterfaceStorage
   | OperationJournal
   | RoleContinuityRepository
@@ -292,40 +309,58 @@ const ProductWorkflowManifest = ProductCapabilityManifest.make({
   maxRate: { maxInvocations: 20, intervalMs: 60_000 },
 });
 
+const NativePlatformForApplication = nativePlatformAvailable
+  ? makeTauriNativePlatformLayer().pipe(Layer.provide(TauriNativeHostLive))
+  : NativePlatformUnavailableLive;
+const NativeSystemAccentColor = Effect.flatMap(
+  NativePlatform,
+  (platform) => platform.systemAccentColor,
+).pipe(Effect.provide(NativePlatformForApplication));
+
+const ProductCapabilityManifests = [
+  ...(productCapabilityWorkflowEnabled ? [ProductWorkflowManifest] : []),
+  ...(nativePlatformAvailable ? [NativeAppearanceCapabilityManifest] : []),
+];
+
 const ProductCapabilityBrokerLive = makeProductCapabilityBrokerLayer({
-  manifests: productCapabilityWorkflowEnabled ? [ProductWorkflowManifest] : [],
+  manifests: ProductCapabilityManifests,
 }).pipe(Layer.provide(ProductCapabilityDecisionStoreLive));
 
 const ProductCapabilityRegistryLive = makeProductCapabilityRegistryLayer({
-  operations: productCapabilityWorkflowEnabled
-    ? [
-        {
-          id: "projects.list",
-          capabilityId: ProductWorkflowManifest.id,
-          authorize: (input) =>
-            typeof input === "object" &&
-            input !== null &&
-            Reflect.get(input, "productDenied") === true
-              ? Effect.fail(
-                  ProductOperationFailure.make({
-                    operationId: "projects.list",
-                    reason: "product-denied",
-                    message: "The product denied this operation.",
-                  }),
-                )
-              : Effect.succeed(
-                  AuthorizedProductOperation.make({
-                    version: 1,
-                    capabilityId: ProductWorkflowManifest.id,
-                    operationId: "projects.list",
-                    resourceIds: ["projects.workspace"],
-                    dataClassIds: ["projects.summary"],
-                  }),
-                ),
-          execute: () => Effect.succeed({ projects: ["one"] }),
-        },
-      ]
-    : [],
+  operations: [
+    ...(productCapabilityWorkflowEnabled
+      ? [
+          {
+            id: "projects.list",
+            capabilityId: ProductWorkflowManifest.id,
+            authorize: (input: ProductJson) =>
+              typeof input === "object" &&
+              input !== null &&
+              Reflect.get(input, "productDenied") === true
+                ? Effect.fail(
+                    ProductOperationFailure.make({
+                      operationId: "projects.list",
+                      reason: "product-denied",
+                      message: "The product denied this operation.",
+                    }),
+                  )
+                : Effect.succeed(
+                    AuthorizedProductOperation.make({
+                      version: 1,
+                      capabilityId: ProductWorkflowManifest.id,
+                      operationId: "projects.list",
+                      resourceIds: ["projects.workspace"],
+                      dataClassIds: ["projects.summary"],
+                    }),
+                  ),
+            execute: () => Effect.succeed({ projects: ["one"] }),
+          },
+        ]
+      : []),
+    ...(nativePlatformAvailable
+      ? [makeNativeAppearanceOperation(NativeSystemAccentColor)]
+      : []),
+  ],
 }).pipe(Layer.provide(ProductCapabilityBrokerLive));
 
 const safeMode = runtimeQuery.get("safe") === "1";
@@ -397,6 +432,8 @@ const ApplicationDependencies = Layer.mergeAll(
   ClipboardLive,
   SharedGitWorkspaceLive,
   CapsuleStoreLive,
+  CapsuleTrustVerifierLive,
+  NativePlatformForApplication,
   ProposalBuildWithDependencies,
   ProductCapabilityRegistryLive,
   PortableExtensionCatalogLive,

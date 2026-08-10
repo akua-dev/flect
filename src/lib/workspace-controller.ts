@@ -13,6 +13,12 @@ import {
 } from "effect";
 import { satisfies } from "semver";
 import packageMetadata from "../../package.json";
+import {
+  type CapsuleSignatureAssessment,
+  type CapsuleTrustDecision,
+  evaluateCapsuleTrustPolicy,
+  verifyCapsuleSignatures,
+} from "../../packages/product/src/capsule-trust";
 import type { PrivateShareSourceSummary } from "../../packages/product/src/host/share-source";
 import {
   ShareGitRepository,
@@ -107,6 +113,10 @@ import {
   CapsuleStore,
   type CapsuleStoreError,
 } from "../capsule/capsule-store";
+import {
+  CapsuleTrustVerifier,
+  type CapsuleTrustVerifierShape,
+} from "../capsule/capsule-trust-verifier";
 import {
   ExtensionCatalog,
   type PortableExtensionKey,
@@ -279,6 +289,8 @@ export interface CapsuleReview {
   readonly extensions: ReadonlyArray<PortableExtensionPackage>;
   readonly permissionContext: ProductCapabilityRequestContext;
   readonly signatureCount: number;
+  readonly signature: CapsuleSignatureAssessment;
+  readonly trustDecision: CapsuleTrustDecision;
   readonly fileCount: number;
   readonly totalBytes: number;
   readonly build?: {
@@ -323,6 +335,10 @@ const reviewCapsule = (
   archive: Uint8Array,
   permissionContext: ProductCapabilityRequestContext,
   capabilities: ReadonlyArray<ProductCapabilityProjection>,
+  trust: {
+    readonly assessment: CapsuleSignatureAssessment;
+    readonly decision: CapsuleTrustDecision;
+  },
 ): CapsuleReview => ({
   id: capsule.manifest.id,
   name: capsule.manifest.name,
@@ -346,6 +362,8 @@ const reviewCapsule = (
   extensions: [...(capsule.manifest.extensions ?? [])],
   permissionContext,
   signatureCount: capsule.manifest.signatures.length,
+  signature: trust.assessment,
+  trustDecision: trust.decision,
   fileCount: capsule.files.length,
   totalBytes: capsule.files.reduce(
     (total, file) => total + file.contents.byteLength,
@@ -371,6 +389,7 @@ const reviewCapsule = (
     return importReport === undefined ? {} : { importReport };
   })(),
   activationBlocked:
+    !trust.decision.allowed ||
     !satisfies(packageMetadata.version, capsule.manifest.compatibility.flect, {
       includePrerelease: true,
     }) ||
@@ -570,6 +589,8 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       Option.getOrUndefined(
         yield* Effect.serviceOption(ShareSignatureVerifier),
       );
+    const capsuleTrustVerifier: CapsuleTrustVerifierShape | undefined =
+      Option.getOrUndefined(yield* Effect.serviceOption(CapsuleTrustVerifier));
     const sandboxedShell = Option.getOrUndefined(
       yield* Effect.serviceOption(SandboxedShell),
     );
@@ -618,11 +639,23 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       "Flect.Workspace.reviewDecodedCapsule",
     )(function* (capsule: DecodedCapsule, archive: Uint8Array) {
       const context = yield* permissionContextFor(capsule, archive);
+      const trust =
+        capsuleTrustVerifier === undefined
+          ? yield* verifyCapsuleSignatures(archive, []).pipe(
+              Effect.map((assessment) => ({
+                assessment,
+                decision: evaluateCapsuleTrustPolicy(assessment, {
+                  mode: "allow-unverified",
+                }),
+              })),
+            )
+          : yield* capsuleTrustVerifier.verify(archive);
       return reviewCapsule(
         capsule,
         archive,
         context,
         yield* permissionsFor(context),
+        trust,
       );
     });
     const reviewWithProductPermissions = (

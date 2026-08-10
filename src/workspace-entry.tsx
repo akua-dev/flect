@@ -103,6 +103,16 @@ export async function mountWorkspace(
     reactRoot.render(<CapsuleFrameDiagnostic />);
   } else if (
     enabled(
+      import.meta.env.VITE_FLECT_CAPSULE_DIAGNOSTIC,
+      "capsule-trust-diagnostic",
+    )
+  ) {
+    const { CapsuleTrustDiagnostic } = await import(
+      "./capsule/capsule-trust-diagnostic"
+    );
+    reactRoot.render(<CapsuleTrustDiagnostic />);
+  } else if (
+    enabled(
       import.meta.env.VITE_FLECT_GIT_DIAGNOSTIC,
       "git-share-lifecycle-diagnostic",
     )

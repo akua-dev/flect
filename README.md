@@ -213,11 +213,22 @@ Flect now exports and imports verified declarative `.flect` capsules through a
 reviewable candidate flow. It also imports, isolates, persists, restores, and
 byte-preservingly re-exports compiled HTML capsules with verified local CSS,
 classic scripts, images, fonts, and media in supported browsers.
+Configured hosts can verify canonical Ed25519 publisher signatures, show
+unknown/revoked/expired/changed/invalid states, and require approved keys;
+signatures never grant capabilities. A local fork records its parent and is
+explicitly unsigned until its owner signs it again.
+
+The packaged macOS host also includes the first real native capability adapter:
+it reads AppKit's system accent color through a fixed Swift/Rust boundary. The
+operation is absent in browsers, remains optional to the running capsule, and
+cannot execute before an explicit, revocable broker grant. The reusable adapter
+contract is documented in
+[`docs/native-platform-adapters.md`](docs/native-platform-adapters.md).
 Arbitrary Vite plugins/config transforms, CSS modules/preprocessors and asset
 URL rewriting, multi-entry routing, capsule-level personal-fork merges
 outside the implemented `.flect-share` lifecycle, a public component registry,
 custom duration/rate editing in the protected permission UI, database adapters,
-privileged native product transport, remote runtimes, a published signed
+privileged native credential transport, remote runtimes, a published signed
 updater, notarization, a
 macOS App Sandbox entitlement, and Intel, Windows, and Linux packages are not
 yet shipped.

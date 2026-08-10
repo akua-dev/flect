@@ -21,6 +21,8 @@ describe("@flect/product packaging", () => {
             ".",
             "./contracts",
             "./host",
+            "./capsule",
+            "./capsule-trust",
           ]);
           assert.isTrue(
             evidence.files.every(

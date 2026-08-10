@@ -187,10 +187,15 @@ deletes a workspace, Git ref, capsule, or export.
 - `@flect/product` — complete supported surface;
 - `@flect/product/contracts` — schemas, public errors, and integration/adoption
   contracts; and
-- `@flect/product/host` — HTTP, GraphQL, and event services/Layers.
+- `@flect/product/host` — HTTP, GraphQL, and event services/Layers;
+- `@flect/product/capsule` — deterministic capsule codec and manifest
+  contracts; and
+- `@flect/product/capsule-trust` — canonical Ed25519 signing, verification,
+  local-fork lineage, key rotation/revocation assessment, and host policy.
 
 This package is a pre-1.0 developer-preview contract. See the repository
 [product-adoption guide](../../docs/product-capabilities.md),
 [trust model](../../docs/trust-model.md), and reference tests before
-distributing an integration. Native credential brokerage, registry publication,
-signing, and stable 1.0 compatibility are not claimed yet.
+distributing an integration. Capsule signing is a provenance signal and never a
+permission grant. Native credential brokerage, registry publication, public
+publisher-key distribution, and stable 1.0 compatibility are not claimed yet.

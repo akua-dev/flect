@@ -169,6 +169,14 @@ Platform adapters do not give a shared capsule native code execution. Swift,
 Kotlin, Rust, and TypeScript implementations remain protected host
 capabilities behind the same typed broker contract.
 
+The first implemented example reads macOS's real AppKit control accent. Its
+Swift function returns only packed RGBA to a main-window-only Rust command; a
+closed Effect schema validates the public color projection. The operation is
+registered only in Tauri and the capability broker denies it before approval
+and after revocation. Browser hosts return typed unavailability and the capsule
+keeps rendering. The adapter has no interface, Git, Pi, credential, or grant
+store access.
+
 `@flect/product` is the public description and trusted-adapter boundary, not an
 authority SDK. It exports strict product, recommended-experience,
 compatibility/migration, inference, and adoption schemas plus bounded
@@ -291,7 +299,9 @@ authorization.
 
 People and products may share complete experiences, components, themes, and
 workflows. Flect records publisher and build provenance where available and
-can present signatures or review status.
+verifies canonical Ed25519 capsule signatures against host-configured keys.
+Unknown, revoked, expired, invalid, changed, unsigned, and local-fork states
+remain explicit in protected review.
 
 Provenance answers who produced an artifact and whether it changed. It does not
 grant authority. A signed capsule still starts without ambient capabilities
@@ -374,17 +384,18 @@ state for one exact capsule request; unavailable host support remains a separate
 visible fact. It supports once, session, workspace, persistent, deny, and revoke
 choices, persists only durable decisions through the local interface store, and
 fails without changing live authority when storage is unavailable. Safe mode
-retains inspection and revocation without Pi. A privileged native product
-transport and user-authored custom duration/rate controls remain open, so the
-current desktop host uses the same CORS-aware WebView fetch behavior as the
-browser.
+retains inspection and revocation without Pi. A brokered AppKit appearance read
+is the first native product operation. Privileged native credential transport
+and user-authored custom duration/rate controls remain open, so HTTP product
+operations in the current desktop host use the same CORS-aware WebView fetch
+behavior as the browser.
 
 Arbitrary Vite plugin activation, capsule-carried Pi extensions, additional
-product/API adapters, privileged native brokerage, authoritative `.flect`
-capsule publisher-signature verification, real-time collaboration, mobile hosts,
-and remote runtimes remain future work. The current inactive sharing,
-Ed25519-verified publisher claims, guarded personal-fork, clean-merge,
-and explicit shared-conflict boundary is documented
+product/API adapters, additional privileged native brokerage, public publisher-key
+distribution, capsule-level three-way merges, real-time collaboration, mobile
+hosts, and remote runtimes remain future work. The current inactive sharing,
+Ed25519-verified publisher claims, guarded personal-fork, clean-merge, and
+explicit shared-conflict boundary is documented
 in [`docs/sharing.md`](sharing.md). See
 [`README.md`](../README.md) for the current user-facing status and
 [`VISION.md`](../VISION.md) for the complete destination.

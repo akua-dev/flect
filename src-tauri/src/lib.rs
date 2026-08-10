@@ -297,6 +297,62 @@ fn native_application_path(window: tauri::WebviewWindow) -> Result<String, Strin
     })
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeAccentColor {
+    version: u8,
+    platform: &'static str,
+    css: String,
+    contrast_text: &'static str,
+}
+
+fn native_accent_color_from_rgba(rgba: u32) -> NativeAccentColor {
+    let red = ((rgba >> 24) & 0xff) as u8;
+    let green = ((rgba >> 16) & 0xff) as u8;
+    let blue = ((rgba >> 8) & 0xff) as u8;
+    let linear = |channel: u8| {
+        let value = f64::from(channel) / 255.0;
+        if value <= 0.04045 {
+            value / 12.92
+        } else {
+            ((value + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
+    NativeAccentColor {
+        version: 1,
+        platform: "macos",
+        css: format!("#{red:02X}{green:02X}{blue:02X}"),
+        contrast_text: if luminance > 0.179 {
+            "#000000"
+        } else {
+            "#FFFFFF"
+        },
+    }
+}
+
+#[cfg(target_os = "macos")]
+unsafe extern "C" {
+    fn flect_macos_system_accent_rgba() -> u32;
+}
+
+#[tauri::command]
+fn native_system_accent_color(window: tauri::WebviewWindow) -> Result<NativeAccentColor, String> {
+    if window.label() != "main" {
+        return Err("Native appearance is available only to the main Flect window.".to_owned());
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // SAFETY: The symbol is compiled from the fixed Swift source in build.rs,
+        // takes no pointers, owns no resources, and returns one packed value.
+        return Ok(native_accent_color_from_rgba(unsafe {
+            flect_macos_system_accent_rgba()
+        }));
+    }
+    #[cfg(not(target_os = "macos"))]
+    Err("Native appearance is unavailable on this platform.".to_owned())
+}
+
 #[derive(Default)]
 struct RuntimeChild(Mutex<Option<CommandChild>>);
 
@@ -551,6 +607,7 @@ pub fn run() {
             shell_link_install,
             shell_link_remove,
             native_application_path,
+            native_system_accent_color,
             native_update::native_update_status,
             native_update::native_update_check,
             native_update::native_update_install,
@@ -595,12 +652,13 @@ pub fn run() {
 mod tests {
     use super::{
         application_bundle_at, capsule_document_response, decode_rpc_response, encode_rpc_request,
-        inspect_shell_link_at, install_shell_link_at, main_window_action, private_runtime_command,
-        register_capsule_document_at, release_capsule_document_at, remove_shell_link_at,
-        require_runtime_child, resolve_public_executable, runtime_unavailable_response,
-        select_launch_mode, valid_capsule_document, validate_rpc_request, CapsuleDocuments,
-        LaunchMode, MainWindowAction, ShellLinkState, MAX_CAPSULE_DOCUMENTS,
-        MAX_CAPSULE_DOCUMENT_BYTES, MAX_RPC_MESSAGE_BYTES,
+        inspect_shell_link_at, install_shell_link_at, main_window_action,
+        native_accent_color_from_rgba, private_runtime_command, register_capsule_document_at,
+        release_capsule_document_at, remove_shell_link_at, require_runtime_child,
+        resolve_public_executable, runtime_unavailable_response, select_launch_mode,
+        valid_capsule_document, validate_rpc_request, CapsuleDocuments, LaunchMode,
+        MainWindowAction, ShellLinkState, MAX_CAPSULE_DOCUMENTS, MAX_CAPSULE_DOCUMENT_BYTES,
+        MAX_RPC_MESSAGE_BYTES,
     };
     use serde_json::json;
     use std::fs;
@@ -639,6 +697,21 @@ mod tests {
             PathBuf::from("/Applications/Other.app/Contents/MacOS/flect").as_path()
         )
         .is_err());
+    }
+
+    #[test]
+    fn serializes_native_accents_with_readable_text() {
+        let black = native_accent_color_from_rgba(0x000000ff);
+        assert_eq!(black.css, "#000000");
+        assert_eq!(black.contrast_text, "#FFFFFF");
+
+        let white = native_accent_color_from_rgba(0xffffffff);
+        assert_eq!(white.css, "#FFFFFF");
+        assert_eq!(white.contrast_text, "#000000");
+
+        let blue = native_accent_color_from_rgba(0x0a84ffff);
+        assert_eq!(blue.css, "#0A84FF");
+        assert_eq!(blue.contrast_text, "#000000");
     }
 
     #[test]

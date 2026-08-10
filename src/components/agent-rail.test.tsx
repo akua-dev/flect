@@ -41,6 +41,21 @@ const permissionContext = ProductCapabilityRequestContext.make({
   ],
 });
 
+const unsignedTrust = {
+  signature: {
+    status: "unsigned" as const,
+    keyIds: [],
+    contentSha256:
+      "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    authoritative: false as const,
+  },
+  trustDecision: {
+    allowed: true,
+    reason: "accepted" as const,
+    permissionAuthorityChanged: false as const,
+  },
+};
+
 const capability = (options: {
   readonly id: string;
   readonly required: boolean;
@@ -193,6 +208,7 @@ const portableReview: CapsuleReview = {
     capabilities: [],
   }),
   signatureCount: 0,
+  ...unsignedTrust,
   fileCount: 2,
   totalBytes: 512,
   activationBlocked: false,
@@ -487,6 +503,7 @@ describe("AgentRail", () => {
           extensions: [],
           permissionContext,
           signatureCount: 0,
+          ...unsignedTrust,
           fileCount: 2,
           totalBytes: 512,
           build: {
@@ -552,6 +569,44 @@ describe("AgentRail", () => {
     expect(screen.getByRole("button", { name: "Discard" })).toBeEnabled();
   });
 
+  it("presents changed signature bytes as trust failure without granting authority", () => {
+    render(
+      <AgentRail
+        capsuleReview={{
+          ...portableReview,
+          extensions: [],
+          signatureCount: 1,
+          signature: {
+            status: "changed-after-signing",
+            keyIds: ["akua:release"],
+            contentSha256: "d".repeat(64),
+            authoritative: false,
+          },
+          trustDecision: {
+            allowed: false,
+            reason: "invalid-signature",
+            permissionAuthorityChanged: false,
+          },
+          activationBlocked: true,
+        }}
+        document={document}
+        mode="run"
+        onCollapse={vi.fn()}
+        onOpenSafeMode={vi.fn()}
+        onRestoreSafeMode={vi.fn(() => Promise.resolve())}
+        preferences={preferences}
+        shaping={{ ...shaping, status: "preview" }}
+        workspace={workspace}
+      />,
+    );
+
+    expect(screen.getByText("Changed after signing")).toBeVisible();
+    expect(
+      screen.getByText(/signatures never grant product capabilities/i),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Activate app" })).toBeDisabled();
+  });
+
   it("reports a capability grant that could not be saved", async () => {
     const decide = vi.fn(() => Promise.reject(new Error("storage failed")));
     render(
@@ -579,6 +634,7 @@ describe("AgentRail", () => {
           extensions: [],
           permissionContext,
           signatureCount: 0,
+          ...unsignedTrust,
           fileCount: 1,
           totalBytes: 128,
           activationBlocked: false,
@@ -642,6 +698,7 @@ describe("AgentRail", () => {
           extensions: [],
           permissionContext,
           signatureCount: 0,
+          ...unsignedTrust,
           fileCount: 1,
           totalBytes: 128,
           activationBlocked: false,

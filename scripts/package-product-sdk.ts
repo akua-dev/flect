@@ -42,6 +42,8 @@ const ProductPackageManifest = Schema.Struct({
     ".": Schema.Unknown,
     "./contracts": Schema.Unknown,
     "./host": Schema.Unknown,
+    "./capsule": Schema.Unknown,
+    "./capsule-trust": Schema.Unknown,
   }),
   scripts: Schema.Struct({ build: Schema.String }),
   peerDependencies: Schema.Struct({
@@ -164,7 +166,9 @@ export interface ProductSdkPackageEvidence {
   readonly sha256: string;
   readonly bytes: number;
   readonly files: ReadonlyArray<string>;
-  readonly exports: ReadonlyArray<"." | "./contracts" | "./host">;
+  readonly exports: ReadonlyArray<
+    "." | "./contracts" | "./host" | "./capsule" | "./capsule-trust"
+  >;
 }
 
 export interface ProductSdkConsumerEvidence {
@@ -243,7 +247,7 @@ export const packageProductSdk = Effect.fn("Flect.ProductSdk.package")(
       sha256: sha256(archive),
       bytes: metadata.size,
       files,
-      exports: [".", "./contracts", "./host"],
+      exports: [".", "./contracts", "./host", "./capsule", "./capsule-trust"],
     };
   },
 );
@@ -282,11 +286,13 @@ export const verifyProductSdkConsumer = Effect.fn(
         [
           'import { Effect } from "effect";',
           'import { AuthorizedProductOperation, defineProductIntegration, encodeCapsule, hashCapsuleArchive, ProductCapabilityManifest } from "@flect/product";',
+          'import { verifyCapsuleSignatures } from "@flect/product/capsule-trust";',
           "const program = Effect.gen(function* () {",
           '  const archive = yield* encodeCapsule({ manifest: { formatVersion: 1, id: "dev.example.offline", name: "Offline example", version: "1.0.0", entrypoints: [{ id: "main", path: "ui/index.html" }], capabilities: [{ id: "product.example.status", required: true }], compatibility: { flect: ">=0.2.0 <1.0.0", schemaVersion: 1, platforms: ["browser"] }, provenance: { publisher: "example", source: "https://example.test/flect", revision: "v1", builder: "example" }, signatures: [] }, files: [{ path: "ui/index.html", contents: new TextEncoder().encode("<!doctype html><title>Offline</title>") }] });',
           '  const capability = ProductCapabilityManifest.make({ version: 1, id: "product.example.status", name: "Read status", description: "Read one offline status.", operationIds: ["example.status"], resourceIds: ["example.workspace"], dataClassIds: ["example.status"], confirmationPolicies: ["session"] });',
           '  const operation = { id: "example.status", capabilityId: capability.id, authorize: () => Effect.succeed(AuthorizedProductOperation.make({ version: 1, capabilityId: capability.id, operationId: "example.status", resourceIds: ["example.workspace"], dataClassIds: ["example.status"] })), execute: () => Effect.succeed({ status: "offline-ready" }) };',
           '  const integration = yield* defineProductIntegration({ metadata: { version: 1, descriptor: { version: 1, id: "dev.example.offline", name: "Offline example", description: "Smallest Flect product.", integrationVersion: "1.0.0", revision: "v1", productApiVersion: 1, connection: "offline", authenticationOwner: "none", compatibility: { flect: ">=0.2.0 <1.0.0", platforms: ["browser"] }, inference: { allowedOwners: ["user"], defaultOwner: "user" } }, experience: { version: 1, capsuleId: "dev.example.offline", capsuleVersion: "1.0.0", archiveSha256: yield* hashCapsuleArchive(archive), provenanceRevision: "v1", appExtensionIds: [], shaperExtensionIds: [] }, capabilities: [capability], migrations: [] }, operations: [operation], events: [], selectedInferenceOwner: "user", loadRecommendedExperience: Effect.succeed(archive) });',
+          "  yield* verifyCapsuleSignatures(archive, []);",
           "  return yield* integration.operations[0]?.execute({});",
           "});",
           "const output = await Effect.runPromise(program);",

@@ -95,10 +95,26 @@ export class CapsuleManifest extends Schema.Class<CapsuleManifest>(
       dependencyGraphDigest: Schema.optionalKey(Hash),
     }),
   ),
+  lineage: Schema.optionalKey(
+    Schema.Struct({
+      kind: Schema.Literal("local-fork"),
+      parentContentSha256: Hash,
+      parentSource: Text(500),
+      parentRevision: Text(120),
+    }),
+  ),
   signatures: Schema.Array(
     Schema.Struct({
       algorithm: Schema.Literals(["ed25519"]),
       keyId: Text(200),
+      contentSha256: Schema.optionalKey(Hash),
+      signedAt: Schema.optionalKey(
+        Schema.String.check(
+          Schema.isPattern(
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/,
+          ),
+        ),
+      ),
       signature: Text(512),
     }),
   ).check(Schema.isMaxLength(16)),
