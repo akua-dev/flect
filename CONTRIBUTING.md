@@ -65,7 +65,7 @@ This runs:
 1. Biome;
 2. TypeScript project checking;
 3. Vitest unit and integration tests;
-4. Playwright against a production Vite build in real Chromium;
+4. Playwright against a production Astro-on-Vite build in real Chromium;
 5. Rust formatting and host tests; and
 6. a release-mode macOS application bundle build.
 

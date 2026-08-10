@@ -67,12 +67,15 @@ Astro-on-Vite activation shell. Imported apps, shared artifacts, and new
 capabilities still require an explicit **Activate app** or **Discard** decision
 because they can change authority.
 
-The static Astro document loads first. Focus or pointer intent prewarms only the
+The static Astro document loads first. Focus or pointer intent arms only the
 tiny activation bootstrap; sending a prompt, using the Flect shortcut, or
-opening an agent action loads the protected React/Effect workspace. Compiler,
-package, shell, Worker, and Wasm substrates remain on demand until a typed
-operation needs them. The measured production gates and exact budgets are
-documented below.
+opening an agent action hydrates the protected Effect workspace through the
+custom `client:flect` Astro island. Its stylesheet is rendered declaratively by
+the component. Compiler, package, shell, Worker, and Wasm substrates remain on
+demand until a typed operation needs them. Production Astro uses Preact's React
+compatibility renderer for the existing workspace components; the direct Vite
+SPA remains a React fallback. The measured production gates and exact budgets
+are documented below.
 
 Flect remains under active development. The published v0.2.0 macOS preview is
 older than the checked-out live-canvas implementation, and signed/notarized
@@ -298,11 +301,14 @@ bun install --frozen-lockfile
 bun run check:all
 ```
 
-`check:all` runs Effect preparation, lint, type checking, unit and contract
-tests, production Chromium workflows, Rust formatting and tests, and the native
-application build. The credential-free GitHub quality workflow runs this same
-command on every pull request and every change to `main`; it uploads only
-bounded Playwright failure evidence. `bun run test:pi-smoke` is separate
+`check:all` runs Effect preparation, the Effect-concurrency architecture gate,
+lint, type checking, unit and contract tests, production Chromium workflows,
+Rust formatting and tests, and the native application build. The architecture
+gate rejects native promise fan-out in owned TypeScript so concurrency,
+cancellation, and failure composition stay explicit in Effect. The
+credential-free GitHub quality workflow runs this same command on every pull
+request and every change to `main`; it uploads only bounded Playwright failure
+evidence. `bun run test:pi-smoke` is separate
 because it makes one real private turn with the developer's existing Pi
 provider login.
 

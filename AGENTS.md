@@ -31,6 +31,9 @@ Repository-wide constraints:
   `Ref`/`SubscriptionRef` for shared or observable state. Use Effect
   configuration, scheduling, retry, timeout, logging, and observability
   facilities instead of parallel ad hoc mechanisms.
+- Use `Effect.all` or `Effect.forEach` for concurrent fan-out. Do not use native
+  promise fan-out in owned TypeScript; `bun run check:effect-concurrency`
+  enforces this across application, tooling, release, and test code.
 - Name non-trivial workflows with `Effect.fn`, keep defects distinct from
   expected typed failures, and provide dependencies through Layers in tests.
   Use Effect test services such as `TestClock` when behavior depends on time.

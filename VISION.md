@@ -358,18 +358,22 @@ Keep/Reject ceremony, responsive protected controls, quiet Git-backed history,
 and deterministic last-known-good recovery. External capsules, shared code,
 and authority changes remain explicit Activate/Discard decisions.
 
-An Astro static document sits on Vite and loads the protected Flect workspace
-only after focus, pointer, keyboard, or an initial prompt activates it. The
-compiler, package resolver, shell, Workers, and Wasm runtimes are separately
-lazy. This makes the opened product useful without preloading its authoring
-system while preserving the existing typed boundaries.
+An Astro static document sits on Vite. Focus and pointer intent arm a tiny
+coordinator; submitting the first prompt, using the keyboard shortcut, or
+invoking an agent action hydrates a custom `client:flect` island. The protected
+Flect workspace and its declarative CSS resource do not load for a view-only
+visit. The compiler, package resolver, shell, Workers, and Wasm runtimes are
+separately lazy. This makes the opened product useful without preloading its
+authoring system while preserving the existing typed boundaries.
 
 Internally, Guardian, accepted App Agent, Shaper, and candidate Preview App
 Agent still use separate Pi sessions behind one private runtime boundary. The
 Effect workspace controller accepts visible UI actions and explicitly
 authorized local CLI, JSON/SSE, and MCP requests, publishes their changes
-reactively, and retains bounded redacted diagnostic evidence. Outside control
-remains off by default and cannot grant itself authority.
+reactively, and retains bounded redacted diagnostic evidence. Effect Layers
+own platform transports and optional native lifecycles; Effect concurrency
+combinators own fan-out and cancellation across product, tooling, and release
+code. Outside control remains off by default and cannot grant itself authority.
 
 The current foundation includes a canonical browser-portable Git repository in
 OPFS, capsule import and export, bounded source-project import, typed product

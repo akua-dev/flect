@@ -82,20 +82,20 @@ authoring payload.
 
 ### Flect activation
 
-Flect activates only after an explicit user signal such as:
+Flect arms its tiny coordinator after low-cost intent such as focus or pointer
+entry. It hydrates the protected workspace only after an explicit action such
+as:
 
-- focusing or opening the Flect composer;
-- focusing or opening the protected composer;
+- submitting the first Flect prompt;
 - using the Flect keyboard shortcut; or
 - invoking an operation that requires a Flect capability.
 
-The activation control acknowledges input in the same frame. It then performs
-an explicit dynamic import of the Flect client runtime and mounts the protected
-agent surface. Astro's built-in `client:load`, `client:idle`, and
-`client:visible` policies are useful for ordinary islands, but none represents
-"load only after this product action" exactly. The activation boundary must
-therefore use a small event-driven dynamic import or a reviewed custom client
-directive.
+The activation control acknowledges intent in the same frame. A reviewed
+custom `client:flect` directive then asks Astro to load and hydrate the island;
+the host does not imperatively mount the component or append its stylesheet.
+Astro's built-in `client:load`, `client:idle`, and `client:visible` policies are
+useful for ordinary islands, but none represents "load only after this product
+action" exactly.
 
 Loading the Flect client runtime still does not load every capability. Agent
 tools acquire compiler, shell, sandbox, package, Worker, and Wasm Layers only
@@ -224,8 +224,10 @@ with the same event-driven activation boundary. Both variants used Vite. The
 implemented Astro path includes:
 
 1. a static opened-interface route;
-2. focus, pointer, keyboard-shortcut, and initial-prompt activation;
-3. the existing React protected shell behind the activation boundary;
+2. focus/pointer arming plus prompt, keyboard-shortcut, and agent-action
+   activation through `client:flect`;
+3. the existing React-compatible protected shell rendered by Preact in the
+   Astro production build;
 4. the real typed Effect client Layer constructed only after activation;
 5. real compiler, package, shell, Worker, and Wasm Layers loaded only after a
    typed tool request;
@@ -236,13 +238,15 @@ implemented Astro path includes:
 8. static output compatible with the existing Tauri bundle and CSP boundary.
 
 The accepted build requests four view-only resources. Its activation bootstrap
-is 3,159 bytes gzip / 6,559 bytes decoded and its initial CSS is 1,094 bytes
+is 2,365 bytes gzip / 5,218 bytes decoded and its initial CSS is 1,094 bytes
 gzip / 2,976 bytes decoded. The view-only route requests no Flect workspace,
 Effect runtime, Git, compiler, shell, package, Worker, or Wasm code. The first
-workspace activation reaches 28 modules; shell, compiler, package, Worker, and
-Wasm boundaries remain independently on demand. Local production measurements
-record 241 ms cold activation, 219 ms warm activation, and 5 ms p95 composer
-acknowledgement. The full evidence is recorded in
+workspace activation is 190,325 bytes gzip / 611,858 bytes decoded across 40
+modules; shell, compiler, package, Worker, and Wasm boundaries remain
+independently on demand. Local production measurements record 216 ms cold
+activation, 218 ms warm activation, 510 ms warmed activation on Fast 4G with
+4× CPU throttling, and 4 ms p95 composer acknowledgement. The full evidence is
+recorded in
 [`2026-08-10-astro-live-canvas-verification.md`](../verification/2026-08-10-astro-live-canvas-verification.md).
 
 ## Consequences

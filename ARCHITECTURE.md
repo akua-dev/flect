@@ -2,8 +2,9 @@
 
 Flect is an agent-native interface shell with one shared TypeScript application
 kernel and two current hosts: a normal browser and a Tauri desktop app. Astro
-owns the static browser document above Vite; the protected React/Effect
-workspace activates only after an explicit user signal.
+owns the static browser document above Vite. Focus and pointer intent arm a
+small coordinator; prompt submission, the keyboard shortcut, or an agent action
+hydrates the protected Effect workspace through a custom `client:flect` island.
 
 This document describes the implementation that exists now. Future platform and
 remote-runtime work belongs in the design documents under `docs/superpowers/`.
@@ -11,7 +12,10 @@ remote-runtime work belongs in the design documents under `docs/superpowers/`.
 ## Runtime topology
 
 ```text
-Astro static document -- focus/pointer/Cmd-K/prompt --> React workspace entry
+Astro static document -- focus/pointer --> armed coordinator
+        |                                      |
+        | prompt/Cmd-K/agent action             v
+        | -- client:flect --> Preact-compatible workspace entry
         |                                      |
         | view-only: no Flect runtime          v
         |                            Effect application kernel
@@ -57,11 +61,13 @@ Browser or Tauri WebView ----------------------+
              Guardian/App/Shaper     Preview App (+ isolated managers)
 ```
 
-The browser never imports Pi. React never writes interface storage or revision
-state directly. The native host never interprets prompts or model responses.
-The static view-only route imports neither React nor Effect. Compiler, package,
-shell, Worker, and Wasm implementations are separate dynamic boundaries after
-workspace activation.
+The browser never imports Pi. React-compatible components never write interface
+storage or revision state directly. The native host never interprets prompts or
+model responses. The static view-only route fetches neither the Preact renderer
+nor Effect. Compiler, package, shell, Worker, and Wasm implementations are
+separate dynamic boundaries after workspace activation. Astro production uses
+Preact compatibility for the protected components; the direct Vite SPA remains
+a React fallback.
 
 ## Effect application kernel
 
@@ -78,6 +84,9 @@ Effect is the application architecture, not a utility wrapper:
 - `Scope`, `acquireRelease`, finalizers, fibers, queues, refs, and subscription
   refs own cancellation, worker lifetime, transport lifetime, and serialized
   state.
+- `Effect.all` and `Effect.forEach` own concurrent fan-out. A checked-in source
+  gate rejects native promise fan-out so interruption and failures remain in
+  the Effect runtime.
 - React owns rendering and ephemeral form state only. Event handlers are thin
   adapters into the managed Effect runtimes.
 
