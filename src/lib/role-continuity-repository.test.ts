@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
-import { Effect, Layer, Semaphore } from "effect";
+import { Deferred, Effect, Fiber, Layer, Semaphore } from "effect";
 import {
   ContinuityDrafts,
   emptyRoleContinuityRecord,
@@ -12,6 +12,7 @@ import {
 } from "./interface-store";
 import {
   ContinuityLock,
+  makeContinuityLockLayer,
   makeRoleContinuityRepositoryLayer,
   RoleContinuityRepository,
 } from "./role-continuity-repository";
@@ -71,6 +72,42 @@ const changed = (generation: number, text: string) =>
   });
 
 describe("RoleContinuityRepository", () => {
+  it.effect(
+    "serializes the Effect fallback when Web Locks are unavailable",
+    () =>
+      Effect.gen(function* () {
+        const lock = yield* ContinuityLock;
+        const firstStarted = yield* Deferred.make<void>();
+        const releaseFirst = yield* Deferred.make<void>();
+        const events: Array<string> = [];
+        const first = yield* lock
+          .exclusive(
+            Effect.gen(function* () {
+              events.push("first:start");
+              yield* Deferred.succeed(firstStarted, undefined);
+              yield* Deferred.await(releaseFirst);
+              events.push("first:end");
+            }),
+          )
+          .pipe(Effect.forkChild({ startImmediately: true }));
+        yield* Deferred.await(firstStarted);
+        const second = yield* lock
+          .exclusive(
+            Effect.sync(() => {
+              events.push("second");
+            }),
+          )
+          .pipe(Effect.forkChild({ startImmediately: true }));
+
+        yield* Effect.yieldNow;
+        expect(events).toEqual(["first:start"]);
+        yield* Deferred.succeed(releaseFirst, undefined);
+        yield* Fiber.join(first);
+        yield* Fiber.join(second);
+        expect(events).toEqual(["first:start", "first:end", "second"]);
+      }).pipe(Effect.provide(makeContinuityLockLayer(undefined))),
+  );
+
   it.effect("loads missing and valid records without inventing state", () => {
     const missing = harness();
     return Effect.gen(function* () {

@@ -244,12 +244,12 @@ The accepted build requests four view-only resources. Its activation bootstrap
 is 2,199 bytes gzip / 4,646 bytes decoded and its initial CSS is 1,094 bytes
 gzip / 2,976 bytes decoded. The view-only route requests no Flect workspace,
 Effect runtime, Git, compiler, shell, package, Worker, or Wasm code. The first
-protected JavaScript graph is 184,607 bytes gzip / 594,425 bytes decoded across
+protected JavaScript graph is 184,615 bytes gzip / 594,425 bytes decoded across
 41 modules; its separately gated deferred CSS is 12,018 bytes gzip / 64,796
 bytes decoded. Shell, compiler, package, Worker, and Wasm boundaries remain
-independently on demand. Local production measurements record 227 ms cold
-activation, 220 ms warm activation, 501 ms warmed activation on Fast 4G with
-4× CPU throttling, and 5 ms p95 composer acknowledgement. The full evidence is
+independently on demand. Local production measurements record 223 ms cold
+activation, 211 ms warm activation, 501 ms warmed activation on Fast 4G with
+4× CPU throttling, and 4 ms p95 composer acknowledgement. The full evidence is
 recorded in
 [`2026-08-10-astro-live-canvas-verification.md`](../verification/2026-08-10-astro-live-canvas-verification.md).
 

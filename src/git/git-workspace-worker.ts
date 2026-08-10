@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { Effect, Schema, type SchemaAST } from "effect";
+import { Effect, Schema, type SchemaAST, Semaphore } from "effect";
 import initializeWasmGit, {
   type WasmGitModule,
 } from "wasm-git/lg2_opfs_async.js";
@@ -1970,10 +1970,15 @@ const handle = (value: unknown) =>
     }),
   );
 
-let pending: Promise<void> = Promise.resolve();
+const operationPermit = Effect.runSync(Semaphore.make(1));
 worker.addEventListener("message", (event: MessageEvent<unknown>) => {
-  pending = pending.then(async () => {
-    const response = await Effect.runPromise(handle(event.data));
-    worker.postMessage(response);
-  });
+  Effect.runCallback(
+    operationPermit.withPermits(1)(
+      handle(event.data).pipe(
+        Effect.tap((response) =>
+          Effect.sync(() => worker.postMessage(response)),
+        ),
+      ),
+    ),
+  );
 });

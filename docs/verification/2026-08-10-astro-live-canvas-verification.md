@@ -38,11 +38,11 @@ activation.
 | Boundary                     |                                          Result |                         Budget |
 | ---------------------------- | ----------------------------------------------: | -----------------------------: |
 | View-only requests           |                                               4 |  no authoring/runtime requests |
-| View-only document           |                  2,921 B gzip / 6,849 B decoded |                     diagnostic |
+| View-only document           |                  2,919 B gzip / 6,849 B decoded |                     diagnostic |
 | Activation bootstrap         |                  2,199 B gzip / 4,646 B decoded |                    10 KiB gzip |
 | Initial CSS                  |                  1,094 B gzip / 2,976 B decoded |                    25 KiB gzip |
 | Deferred workspace CSS       |                12,018 B gzip / 64,796 B decoded |  16 KiB gzip / 80 KiB decoded |
-| First protected JS workspace | 184,607 B gzip / 594,425 B decoded / 41 modules | 200 KiB gzip / 600 KiB decoded |
+| First protected JS workspace | 184,615 B gzip / 594,425 B decoded / 41 modules | 200 KiB gzip / 600 KiB decoded |
 
 The complete first protected payload is 196,625 B gzip / 659,221 B decoded
 when the separately cached CSS and JavaScript graphs are combined.
@@ -58,18 +58,18 @@ The production Chromium performance gate records:
 
 | Metric                              |   Result |     Budget |
 | ----------------------------------- | -------: | ---------: |
-| View-only readiness                 |    25 ms | diagnostic |
-| Cold protected-workspace activation |   227 ms |   1,000 ms |
-| Warm activation                     |   220 ms |     300 ms |
+| View-only readiness                 |    18 ms | diagnostic |
+| Cold protected-workspace activation |   223 ms |   1,000 ms |
+| Warm activation                     |   211 ms |     300 ms |
 | Warm Fast 4G / 4× CPU activation    |   501 ms |   1,000 ms |
-| Fast 4G / 4× CPU LCP                |   361 ms |   1,000 ms |
-| Slow 4G / 4× CPU LCP                | 1,188 ms |   2,500 ms |
+| Fast 4G / 4× CPU LCP                |   371 ms |   1,000 ms |
+| Slow 4G / 4× CPU LCP                | 1,196 ms |   2,500 ms |
 | Fast/Slow 4G CLS                    |    0 / 0 |      < 0.1 |
-| Composer p95 acknowledgement        |     5 ms |      50 ms |
+| Composer p95 acknowledgement        |     4 ms |      50 ms |
 | View-only transfer                  |  4,188 B |    200 KiB |
 | View-only decoded bytes             |  7,622 B |    600 KiB |
 | Cancellation acknowledgement        |     0 ms |     250 ms |
-| Representative Markdown             |   166 ms |   1,000 ms |
+| Representative Markdown             |   157 ms |   1,000 ms |
 
 Activation is measured inside the page with `performance.now()` and a
 `MutationObserver`, avoiding remote-driver polling overhead. Model/provider
@@ -93,11 +93,11 @@ intermediate garbage collection:
 
 | Metric                          |       Result |                Budget |
 | ------------------------------- | -----------: | --------------------: |
-| Baseline used heap              | 15,248,080 B |                     — |
-| Retained growth after 50 cycles |  7,223,232 B |                 8 MiB |
-| Final heap including Markdown   | 24,385,560 B |                64 MiB |
-| Worst candidate rebuild request |        47 ms |              1,000 ms |
-| Worst complete cycle            |     1,813 ms | diagnostic end-to-end |
+| Baseline used heap              | 15,227,744 B |                     — |
+| Retained growth after 50 cycles |  7,278,924 B |                 8 MiB |
+| Final heap including Markdown   | 24,373,872 B |                64 MiB |
+| Worst candidate rebuild request |        56 ms |              1,000 ms |
+| Worst complete cycle            |     1,848 ms | diagnostic end-to-end |
 
 The hosted shared runner retained 7,229,072 B across the same 50-cycle gate,
 reported a 141 ms worst candidate rebuild and a diagnostic 4,453 ms worst
@@ -109,9 +109,11 @@ a bounded lease; concurrent operations choose the worker only after acquiring
 the Git semaphore, so a queued request cannot capture a terminated worker.
 Flect source, scripts, and tests use Effect concurrency combinators instead of
 native promise fan-out. Product TypeScript callback APIs use `Effect.callback`
-with interruption cleanup rather than ad hoc Promise constructors. `bun run
+with interruption cleanup rather than ad hoc Promise constructors. Git-worker
+requests, provider notifications, and continuity fallback writes use Effect
+semaphores or queues instead of native Promise serialization tails. `bun run
 check:effect-concurrency` scans every owned TypeScript source file and fails if
-either boundary regresses; test-only callback fixtures remain explicit
+any of these boundaries regress; test-only callback fixtures remain explicit
 exceptions. The isolated unbundled preview service worker stays a platform
 callback boundary so loading it never pulls the Effect runtime into that lazy
 worker.

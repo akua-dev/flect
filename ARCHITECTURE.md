@@ -86,10 +86,11 @@ Effect is the application architecture, not a utility wrapper:
   state.
 - `Effect.all` and `Effect.forEach` own concurrent fan-out. A checked-in source
   gate rejects native promise fan-out everywhere and ad hoc Promise
-  constructors outside tests. Callback hosts enter through `Effect.callback`
-  with interruption cleanup; Promise-returning platform APIs enter through
-  `Effect.tryPromise`; `runPromise` or `runCallback` appears only where a host
-  framework requires Effect to leave its runtime.
+  constructors or native Promise serialization tails outside tests. Callback
+  hosts enter through `Effect.callback` with interruption cleanup;
+  Promise-returning platform APIs enter through `Effect.tryPromise`;
+  `runPromise` or `runCallback` appears only where a host framework requires
+  Effect to leave its runtime.
 - React owns rendering and ephemeral form state only. Event handlers are thin
   adapters into the managed Effect runtimes.
 

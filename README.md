@@ -306,8 +306,9 @@ bun run check:all
 lint, type checking, unit and contract tests, production Chromium workflows,
 Rust formatting and tests, and the native application build. The architecture
 gate rejects native promise fan-out everywhere and ad hoc Promise constructors
-outside tests. Concurrency, callback lifetimes, cancellation, and failure
-composition therefore stay explicit in Effect. The credential-free GitHub
+or native Promise serialization tails outside tests. Concurrency, callback
+lifetimes, cancellation, and failure composition therefore stay explicit in
+Effect. The credential-free GitHub
 quality workflow runs this same command on every pull request and every change
 to `main`; it uploads only bounded Playwright failure evidence. `bun run
 test:pi-smoke` is separate

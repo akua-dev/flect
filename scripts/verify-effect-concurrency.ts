@@ -8,6 +8,8 @@ const sourceFiles = new Bun.Glob(
 );
 const forbiddenCall = ["Promise", "all"].join(".");
 const forbiddenPromiseWrapper = /new\s+Promise\s*(?:<|\()/u;
+const forbiddenPromiseTail =
+  /\b(?:let|var)\s+[A-Za-z0-9_]*(?:pending|tail)[A-Za-z0-9_]*\s*(?::\s*Promise\b|=\s*Promise\.(?:resolve|reject)\b)/iu;
 const isTestOnlySource = (path: string) =>
   path.startsWith("tests/") ||
   path.includes(".test.") ||
@@ -38,6 +40,8 @@ const verifyEffectConcurrency = Effect.gen(function* () {
             nativeFanOut: source.includes(forbiddenCall),
             adHocPromiseWrapper:
               !isTestOnlySource(path) && forbiddenPromiseWrapper.test(source),
+            nativePromiseTail:
+              !isTestOnlySource(path) && forbiddenPromiseTail.test(source),
           };
         },
         catch: () => new Error(`Flect source could not be read: ${path}`),
@@ -50,6 +54,9 @@ const verifyEffectConcurrency = Effect.gen(function* () {
   const pathsWithAdHocPromiseWrappers = inspections
     .filter((inspection) => inspection.adHocPromiseWrapper)
     .map((inspection) => inspection.path);
+  const pathsWithNativePromiseTails = inspections
+    .filter((inspection) => inspection.nativePromiseTail)
+    .map((inspection) => inspection.path);
   const violations = [
     ...(pathsWithNativeFanOut.length === 0
       ? []
@@ -58,6 +65,11 @@ const verifyEffectConcurrency = Effect.gen(function* () {
       ? []
       : [
           `ad hoc promise wrappers outside tests: ${pathsWithAdHocPromiseWrappers.join(", ")}`,
+        ]),
+    ...(pathsWithNativePromiseTails.length === 0
+      ? []
+      : [
+          `native promise serialization tails outside tests: ${pathsWithNativePromiseTails.join(", ")}`,
         ]),
   ];
   if (violations.length > 0) {

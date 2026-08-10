@@ -227,6 +227,16 @@ type ActiveLogin = {
   readonly fiber: Ref.Ref<Fiber.Fiber<void, never> | undefined>;
 };
 
+type AuthNotificationRequest =
+  | {
+      readonly type: "notify";
+      readonly event: PiAuthEvent;
+    }
+  | {
+      readonly type: "barrier";
+      readonly ready: Deferred.Deferred<void>;
+    };
+
 const promptUnavailable = () =>
   ProviderAuthPromptUnavailable.make({
     message: "The provider login prompt is no longer available.",
@@ -624,21 +634,38 @@ export const ProviderAuthenticationLive = Layer.effect(
             }),
           );
 
-          let notificationTail = Promise.resolve();
+          const notifications =
+            yield* Queue.unbounded<AuthNotificationRequest>();
+          const awaitNotifications = Effect.gen(function* () {
+            const ready = yield* Deferred.make<void>();
+            yield* Queue.offer(notifications, { type: "barrier", ready });
+            yield* Deferred.await(ready);
+          });
+          yield* Effect.forever(
+            Queue.take(notifications).pipe(
+              Effect.flatMap((notification) =>
+                notification.type === "notify"
+                  ? safeNotify(entry, notification.event)
+                  : Deferred.succeed(notification.ready, undefined),
+              ),
+            ),
+          ).pipe(Effect.forkScoped);
           const interaction: PiAuthInteraction = {
             signal: entry.controller.signal,
             notify: (event) => {
-              notificationTail = notificationTail.then(() =>
-                runPromise(safeNotify(entry, event)),
+              Effect.runSync(
+                Queue.offer(notifications, { type: "notify", event }),
               );
             },
             prompt: (input) =>
-              notificationTail.then(() => runPromise(prompt(entry, input))),
+              runPromise(
+                awaitNotifications.pipe(Effect.andThen(prompt(entry, input))),
+              ),
           };
           const operation = adapter
             .login(request.providerId, request.method, interaction)
             .pipe(
-              Effect.andThen(Effect.promise(() => notificationTail)),
+              Effect.andThen(awaitNotifications),
               Effect.flatMap(() => adapter.refresh),
               Effect.as("completed" as const),
               Effect.timeoutOrElse({

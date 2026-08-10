@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer, Schema, Semaphore } from "effect";
 import {
   type ContinuityRecoveryReason,
   decodeRoleContinuityRecord,
@@ -206,44 +206,41 @@ export const makeRoleContinuityRepositoryLayer = Layer.effect(
   }),
 );
 
-export const ContinuityLockLive = Layer.effect(
-  ContinuityLock,
-  Effect.sync(() => {
-    let fallbackTail: Promise<void> = Promise.resolve();
-    const fallback = <A, E>(effect: Effect.Effect<A, E>) =>
-      Effect.callback<A, E>((resume) => {
-        const started = fallbackTail.then(() => Effect.runPromiseExit(effect));
-        fallbackTail = started.then(
-          () => undefined,
-          () => undefined,
-        );
-        void started.then((exit) =>
-          resume(
-            exit._tag === "Success"
-              ? Effect.succeed(exit.value)
-              : Effect.failCause(exit.cause),
-          ),
-        );
-      });
+export const makeContinuityLockLayer = (locks: LockManager | undefined) =>
+  Layer.effect(
+    ContinuityLock,
+    Effect.gen(function* () {
+      const fallbackPermit = yield* Semaphore.make(1);
 
-    return {
-      exclusive: <A, E>(effect: Effect.Effect<A, E>) => {
-        const locks = globalThis.navigator?.locks;
-        if (locks === undefined) {
-          return fallback(effect);
-        }
-        return Effect.callback<A, E>((resume) => {
-          void locks
-            .request(ROLE_CONTINUITY_LOCK, () => Effect.runPromiseExit(effect))
-            .then((exit) =>
-              resume(
-                exit._tag === "Success"
-                  ? Effect.succeed(exit.value)
-                  : Effect.failCause(exit.cause),
+      return {
+        exclusive: <A, E>(effect: Effect.Effect<A, E>) => {
+          if (locks === undefined) {
+            return fallbackPermit.withPermits(1)(effect);
+          }
+          return Effect.tryPromise({
+            try: (signal) =>
+              locks.request(
+                ROLE_CONTINUITY_LOCK,
+                { mode: "exclusive", signal },
+                () => Effect.runPromiseExit(effect, { signal }),
               ),
-            );
-        });
-      },
-    };
-  }),
+            catch: (error) =>
+              error instanceof Error
+                ? error
+                : new Error("The role continuity lock failed."),
+          }).pipe(
+            Effect.orDie,
+            Effect.flatMap((exit) =>
+              exit._tag === "Success"
+                ? Effect.succeed(exit.value)
+                : Effect.failCause(exit.cause),
+            ),
+          );
+        },
+      };
+    }),
+  );
+
+export const ContinuityLockLive = makeContinuityLockLayer(
+  globalThis.navigator?.locks,
 );
