@@ -1,5 +1,12 @@
 import { Effect, Schema } from "effect";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import {
+  type FormEvent,
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import type { CanvasSelection } from "../../shared/canvas-selection";
 import type {
   ControlStateSnapshot,
@@ -29,25 +36,101 @@ import { isAgentSessionActive } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
 import { useStickyFollow } from "../hooks/use-sticky-follow";
 import { loadBrowserCapsuleArchiveFromUrl } from "../lib/browser-capsule-loader";
-import {
-  importWebProject,
-  shouldAvoidReadingWebProjectFile,
-  WebProjectImportFailure,
-  type WebProjectImportResult,
-} from "../lib/web-project-import";
+import type { WebProjectImportResult } from "../lib/web-project-import";
 import type { CapsuleReview } from "../lib/workspace-controller";
-import { ActivityCard } from "./activity-card";
 import { Composer } from "./composer";
-import {
-  DiagnosticsPanel,
-  type NativeSetupView,
-  type NativeUpdateView,
+import type {
+  DiagnosticsPanelProps,
+  NativeSetupView,
+  NativeUpdateView,
 } from "./diagnostics-panel";
-import { ExtensionReview, type ExtensionReviewKey } from "./extension-review";
+import type { ExtensionReviewKey } from "./extension-review";
 import { PanelCloseIcon, RefreshIcon } from "./icons";
-import { MessageContent } from "./message-content";
-import { ProviderAuthPanel } from "./provider-auth-panel";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
+
+const ActivityCard = lazy(() =>
+  import("./activity-card").then((module) => ({
+    default: module.ActivityCard,
+  })),
+);
+const DiagnosticsPanel = lazy(() =>
+  import("./diagnostics-panel").then((module) => ({
+    default: module.DiagnosticsPanel,
+  })),
+);
+const ExtensionReview = lazy(() =>
+  import("./extension-review").then((module) => ({
+    default: module.ExtensionReview,
+  })),
+);
+const MessageContent = lazy(() =>
+  import("./message-content").then((module) => ({
+    default: module.MessageContent,
+  })),
+);
+const ProviderAuthPanel = lazy(() =>
+  import("./provider-auth-panel").then((module) => ({
+    default: module.ProviderAuthPanel,
+  })),
+);
+
+const SurfaceFallback = ({ label }: { readonly label: string }) => (
+  <span className="sr-only" role="status">
+    {label}
+  </span>
+);
+
+const diagnosticsLabel = (
+  control: DiagnosticsPanelProps["control"],
+  persistence: DiagnosticsPanelProps["persistence"],
+) =>
+  persistence?.source !== "durable"
+    ? "Storage unavailable"
+    : persistence.capsule === "session"
+      ? "Session-only storage"
+      : persistence.capsule === "unavailable"
+        ? "Storage degraded"
+        : control.enabled
+          ? `${control.clients.length} client${control.clients.length === 1 ? "" : "s"}`
+          : "Local control off";
+
+function DeferredDiagnosticsPanel(props: DiagnosticsPanelProps) {
+  const [requested, setRequested] = useState(false);
+  if (requested) {
+    return (
+      <Suspense
+        fallback={
+          <details className="diagnostics-panel" open>
+            {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
+            <summary aria-label="Diagnostics" role="button">
+              <span>Diagnostics</span>
+              <small>
+                {diagnosticsLabel(props.control, props.persistence)}
+              </small>
+            </summary>
+            <SurfaceFallback label="Opening diagnostics" />
+          </details>
+        }
+      >
+        <DiagnosticsPanel {...props} defaultOpen />
+      </Suspense>
+    );
+  }
+  return (
+    <details
+      className="diagnostics-panel"
+      onToggle={(event) => {
+        if (event.currentTarget.open) setRequested(true);
+      }}
+    >
+      {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
+      <summary aria-label="Diagnostics" role="button">
+        <span>Diagnostics</span>
+        <small>{diagnosticsLabel(props.control, props.persistence)}</small>
+      </summary>
+    </details>
+  );
+}
 
 export interface ShapingController {
   readonly status: "idle" | "shaping" | "preview" | "error";
@@ -455,15 +538,17 @@ function Conversation({
                   : label}
             </span>
             {message.content ? (
-              <MessageContent
-                content={message.content}
-                messageRole={message.role}
-                streaming={
-                  message.role === "assistant" &&
-                  isLatest &&
-                  status === "streaming"
-                }
-              />
+              <Suspense fallback={<span>{message.content}</span>}>
+                <MessageContent
+                  content={message.content}
+                  messageRole={message.role}
+                  streaming={
+                    message.role === "assistant" &&
+                    isLatest &&
+                    status === "streaming"
+                  }
+                />
+              </Suspense>
             ) : (
               isLatest &&
               (status === "submitting" || status === "streaming") && (
@@ -479,13 +564,17 @@ function Conversation({
         );
       })}
       {activities.map((activity) => (
-        <ActivityCard
-          activity={activity}
+        <Suspense
+          fallback={<SurfaceFallback label="Opening activity details" />}
           key={activity.id}
-          {...(onFixFailure === undefined
-            ? {}
-            : { onFixInShape: onFixFailure })}
-        />
+        >
+          <ActivityCard
+            activity={activity}
+            {...(onFixFailure === undefined
+              ? {}
+              : { onFixInShape: onFixFailure })}
+          />
+        </Suspense>
       ))}
       {!follow.following && (
         <button
@@ -719,8 +808,11 @@ export function AgentRail({
     );
   };
   const projectImportFailureMessage = (error: unknown) =>
-    Schema.is(WebProjectImportFailure)(error)
-      ? error.message
+    typeof error === "object" &&
+    error !== null &&
+    Reflect.get(error, "_tag") === "WebProjectImportFailure" &&
+    typeof Reflect.get(error, "message") === "string"
+      ? Reflect.get(error, "message")
       : Schema.is(OperationFailedSchema)(error)
         ? error.message
         : "App project import failed safely. Choose one source with a root index.html.";
@@ -734,26 +826,29 @@ export function AgentRail({
       const files = [...(input.files ?? [])];
       if (files.length === 0) return;
       setCapsuleNotice("Checking app project…");
-      void Effect.runPromise(
-        Effect.tryPromise({
-          try: async () =>
-            Promise.all(
-              files.map(async (file) => {
-                const path = file.webkitRelativePath || file.name;
-                const ignored = shouldAvoidReadingWebProjectFile(path);
-                return {
-                  path,
-                  contents: ignored
-                    ? new Uint8Array()
-                    : new Uint8Array(await file.arrayBuffer()),
-                };
-              }),
+      void import("../lib/web-project-import")
+        .then(({ importWebProject, shouldAvoidReadingWebProjectFile }) =>
+          Effect.runPromise(
+            Effect.tryPromise({
+              try: async () =>
+                Promise.all(
+                  files.map(async (file) => {
+                    const path = file.webkitRelativePath || file.name;
+                    const ignored = shouldAvoidReadingWebProjectFile(path);
+                    return {
+                      path,
+                      contents: ignored
+                        ? new Uint8Array()
+                        : new Uint8Array(await file.arrayBuffer()),
+                    };
+                  }),
+                ),
+              catch: () => new Error("project files could not be read"),
+            }).pipe(
+              Effect.flatMap((projectFiles) => importWebProject(projectFiles)),
             ),
-          catch: () => new Error("project files could not be read"),
-        }).pipe(
-          Effect.flatMap((projectFiles) => importWebProject(projectFiles)),
-        ),
-      )
+          ),
+        )
         .then(finishProjectImport)
         .catch((error: unknown) => {
           setCapsuleNotice(projectImportFailureMessage(error));
@@ -985,13 +1080,19 @@ export function AgentRail({
           portableExtensionActions !== undefined && (
             <details className="capsule-review">
               <summary>Portable extensions</summary>
-              <ExtensionReview
-                binding="accepted"
-                capsuleId={acceptedCapsuleReview.id}
-                entries={extensions.entries}
-                packages={acceptedCapsuleReview.extensions}
-                {...portableExtensionActions}
-              />
+              <Suspense
+                fallback={
+                  <SurfaceFallback label="Opening portable extensions" />
+                }
+              >
+                <ExtensionReview
+                  binding="accepted"
+                  capsuleId={acceptedCapsuleReview.id}
+                  entries={extensions.entries}
+                  packages={acceptedCapsuleReview.extensions}
+                  {...portableExtensionActions}
+                />
+              </Suspense>
             </details>
           )}
 
@@ -1153,14 +1254,20 @@ export function AgentRail({
                 {capsuleReview.extensions.length > 0 &&
                   extensions !== undefined &&
                   portableExtensionActions !== undefined && (
-                    <ExtensionReview
-                      binding="candidate"
-                      capsuleId={capsuleReview.id}
-                      disabled={operationActive}
-                      entries={extensions.entries}
-                      packages={capsuleReview.extensions}
-                      {...portableExtensionActions}
-                    />
+                    <Suspense
+                      fallback={
+                        <SurfaceFallback label="Opening portable extensions" />
+                      }
+                    >
+                      <ExtensionReview
+                        binding="candidate"
+                        capsuleId={capsuleReview.id}
+                        disabled={operationActive}
+                        entries={extensions.entries}
+                        packages={capsuleReview.extensions}
+                        {...portableExtensionActions}
+                      />
+                    </Suspense>
                   )}
                 {capsuleReview.activationBlocked && (
                   <p className="capsule-review__warning" role="alert">
@@ -1217,17 +1324,21 @@ export function AgentRail({
                 message now; Flect keeps it private until sign-in succeeds.
               </p>
             </div>
-            <ProviderAuthPanel
-              authEvent={workspace.authEvent}
-              compact
-              disabled={operationActive}
-              onCancel={workspace.cancelProviderAuth}
-              onLogin={workspace.loginProvider}
-              onLogout={workspace.logoutProvider}
-              onRefresh={workspace.refreshProviderAuth}
-              onReply={workspace.replyProviderAuth}
-              providers={workspace.providers}
-            />
+            <Suspense
+              fallback={<SurfaceFallback label="Opening provider setup" />}
+            >
+              <ProviderAuthPanel
+                authEvent={workspace.authEvent}
+                compact
+                disabled={operationActive}
+                onCancel={workspace.cancelProviderAuth}
+                onLogin={workspace.loginProvider}
+                onLogout={workspace.logoutProvider}
+                onRefresh={workspace.refreshProviderAuth}
+                onReply={workspace.replyProviderAuth}
+                providers={workspace.providers}
+              />
+            </Suspense>
           </div>
         )}
 
@@ -1266,7 +1377,7 @@ export function AgentRail({
         )}
 
         {diagnostics !== undefined && (
-          <DiagnosticsPanel
+          <DeferredDiagnosticsPanel
             control={diagnostics.control}
             onToggleControl={diagnostics.onToggleControl}
             operations={diagnostics.operations}

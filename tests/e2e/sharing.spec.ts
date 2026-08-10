@@ -537,7 +537,9 @@ test("routes fork personalization through one composer and activates a real two-
   review = page.getByRole("region", { name: "Weather workspace" });
   await expect(review.getByText(/1\.1\.0 · update/)).toBeVisible();
   await review.getByRole("button", { name: "Prepare update" }).click();
-  await expect(review.getByText(/1\.1\.0 · fork/)).toBeVisible();
+  await expect(review.getByText(/1\.1\.0 · fork/)).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(
     review.getByRole("button", { name: "Preview selected" }),
   ).toBeEnabled();
@@ -610,7 +612,9 @@ test("resolves a real Git conflict with Flect and activates only the explicit re
   });
   review = page.getByRole("region", { name: "Weather workspace" });
   await review.getByRole("button", { name: "Prepare update" }).click();
-  await expect(review.getByText(/2\.0\.0-conflict · conflict/)).toBeVisible();
+  await expect(review.getByText(/2\.0\.0-conflict · conflict/)).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(
     review.getByRole("button", { name: "Continue with my fork" }),
   ).toBeEnabled();

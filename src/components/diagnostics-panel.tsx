@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   ControlStateSnapshot,
   OperationRecord,
@@ -77,6 +78,16 @@ const updateSize = (bytes: number | undefined) =>
     ? "Size reported during download"
     : `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(bytes / 1024)} KB`;
 
+export interface DiagnosticsPanelProps {
+  readonly control: ControlStateSnapshot;
+  readonly operations: ReadonlyArray<OperationRecord>;
+  readonly onToggleControl: () => Promise<void>;
+  readonly persistence?: WorkspacePersistenceSnapshot;
+  readonly setup?: NativeSetupView;
+  readonly update?: NativeUpdateView;
+  readonly defaultOpen?: boolean;
+}
+
 export function DiagnosticsPanel({
   control,
   operations,
@@ -84,14 +95,9 @@ export function DiagnosticsPanel({
   persistence,
   setup,
   update,
-}: {
-  readonly control: ControlStateSnapshot;
-  readonly operations: ReadonlyArray<OperationRecord>;
-  readonly onToggleControl: () => Promise<void>;
-  readonly persistence?: WorkspacePersistenceSnapshot;
-  readonly setup?: NativeSetupView;
-  readonly update?: NativeUpdateView;
-}) {
+  defaultOpen = false,
+}: DiagnosticsPanelProps) {
+  const [open, setOpen] = useState(defaultOpen);
   const nativeAvailable = setup?.available === true;
   const shell = setup?.shell;
   const storageDegraded =
@@ -167,7 +173,11 @@ export function DiagnosticsPanel({
   };
 
   return (
-    <details className="diagnostics-panel">
+    <details
+      className="diagnostics-panel"
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+      open={open}
+    >
       {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
       <summary aria-label="Diagnostics" role="button">
         <span>Diagnostics</span>

@@ -347,7 +347,9 @@ describe("AgentRail", () => {
       screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeEnabled();
     await userEvent.click(
-      screen.getByRole("button", { name: "OpenAI (ChatGPT Plus/Pro)" }),
+      await screen.findByRole("button", {
+        name: "OpenAI (ChatGPT Plus/Pro)",
+      }),
     );
     expect(loginProvider).toHaveBeenCalledWith({
       providerId: "openai-codex",
@@ -355,7 +357,7 @@ describe("AgentRail", () => {
     });
   });
 
-  it("passes each message role into semantic Markdown rendering", () => {
+  it("passes each message role into semantic Markdown rendering", async () => {
     const roleWorkspace: AgentWorkspaceController = {
       ...workspace,
       app: {
@@ -389,9 +391,12 @@ describe("AgentRail", () => {
       />,
     );
 
-    const assistant = screen
-      .getByRole("heading", { level: 1, name: "Release notes" })
-      .closest(".message-content");
+    const assistant = (
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Release notes",
+      })
+    ).closest(".message-content");
     expect(assistant).toHaveAttribute("data-message-role", "assistant");
     expect(assistant?.querySelectorAll("br")).toHaveLength(0);
 
@@ -511,7 +516,7 @@ describe("AgentRail", () => {
       ),
     ).toBeVisible();
     await userEvent.click(
-      screen.getByRole("button", { name: "Test for App Agent" }),
+      await screen.findByRole("button", { name: "Test for App Agent" }),
     );
     expect(testExtension).toHaveBeenCalledWith(
       expect.objectContaining({

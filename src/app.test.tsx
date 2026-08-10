@@ -293,7 +293,7 @@ describe("App", () => {
 
     await user.click(screen.getByRole("button", { name: "Diagnostics" }));
     await user.click(
-      screen.getByRole("button", { name: "Enable local control" }),
+      await screen.findByRole("button", { name: "Enable local control" }),
     );
     await waitFor(() =>
       expect(

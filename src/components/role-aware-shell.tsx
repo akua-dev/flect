@@ -1,7 +1,9 @@
 import {
   type CSSProperties,
   type KeyboardEvent,
+  lazy,
   type PointerEvent,
+  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -33,9 +35,28 @@ import { CapsuleFrame } from "./capsule-frame";
 import { PanelOpenIcon } from "./icons";
 import { type InterfaceAction, InterfaceRenderer } from "./interface-renderer";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
-import { ShareLibrary } from "./share-library";
-import { ShareReview } from "./share-review";
-import { ShareSourceDialog } from "./share-source-dialog";
+
+const ShareLibrary = lazy(() =>
+  import("./share-library").then((module) => ({
+    default: module.ShareLibrary,
+  })),
+);
+const ShareReview = lazy(() =>
+  import("./share-review").then((module) => ({
+    default: module.ShareReview,
+  })),
+);
+const ShareSourceDialog = lazy(() =>
+  import("./share-source-dialog").then((module) => ({
+    default: module.ShareSourceDialog,
+  })),
+);
+
+const ShareSurfaceFallback = () => (
+  <span className="sr-only" role="status">
+    Opening sharing controls
+  </span>
+);
 
 export type { ShellMode } from "./role-switcher";
 
@@ -573,19 +594,23 @@ export function RoleAwareShell({
         </div>
       </header>
 
-      {onOpenShareUrl !== undefined && onOpenShareGit !== undefined && (
-        <ShareSourceDialog
-          candidateOpen={shareReview !== undefined}
-          onClose={() => setShareDialogOpen(false)}
-          onOpenGit={onOpenShareGit}
-          {...(onOpenSharePrivate === undefined
-            ? {}
-            : { onOpenPrivate: onOpenSharePrivate })}
-          onOpenUrl={onOpenShareUrl}
-          open={shareDialogOpen}
-          privateSources={privateShareSources}
-        />
-      )}
+      {shareDialogOpen &&
+        onOpenShareUrl !== undefined &&
+        onOpenShareGit !== undefined && (
+          <Suspense fallback={<ShareSurfaceFallback />}>
+            <ShareSourceDialog
+              candidateOpen={shareReview !== undefined}
+              onClose={() => setShareDialogOpen(false)}
+              onOpenGit={onOpenShareGit}
+              {...(onOpenSharePrivate === undefined
+                ? {}
+                : { onOpenPrivate: onOpenSharePrivate })}
+              onOpenUrl={onOpenShareUrl}
+              open={shareDialogOpen}
+              privateSources={privateShareSources}
+            />
+          </Suspense>
+        )}
       {onOpenShareFile !== undefined && (
         <input
           accept=".flect-share,application/octet-stream"
@@ -624,17 +649,20 @@ export function RoleAwareShell({
           </button>
         </div>
       )}
-      {onExportShare !== undefined &&
+      {shareLibraryOpen &&
+        onExportShare !== undefined &&
         onRemoveShare !== undefined &&
         onDeleteShare !== undefined && (
-          <ShareLibrary
-            entries={shareInstallations}
-            onClose={() => setShareLibraryOpen(false)}
-            onDelete={onDeleteShare}
-            onExport={onExportShare}
-            onRemove={onRemoveShare}
-            open={shareLibraryOpen}
-          />
+          <Suspense fallback={<ShareSurfaceFallback />}>
+            <ShareLibrary
+              entries={shareInstallations}
+              onClose={() => setShareLibraryOpen(false)}
+              onDelete={onDeleteShare}
+              onExport={onExportShare}
+              onRemove={onRemoveShare}
+              open={shareLibraryOpen}
+            />
+          </Suspense>
         )}
 
       <main className="workspace-canvas">
@@ -721,27 +749,30 @@ export function RoleAwareShell({
           onPrepareShareUpdate !== undefined &&
           onActivateShare !== undefined &&
           onRejectShare !== undefined && (
-            <ShareReview
-              busy={operationActive}
-              {...(shareInstallation === undefined
-                ? {}
-                : { installedVersion: shareInstallation.version })}
-              onActivate={onActivateShare}
-              onContinueFork={onContinueShareFork}
-              onOpenConflictInShape={onOpenShareConflictInShape}
-              {...(onOpenShareUrl === undefined || onOpenShareGit === undefined
-                ? {}
-                : { onOpenSource: () => setShareDialogOpen(true) })}
-              {...(onOpenShareFile === undefined
-                ? {}
-                : { onOpenFile: () => shareFileRef.current?.click() })}
-              onPrepareUpdate={onPrepareShareUpdate}
-              onReject={onRejectShare}
-              onRetain={onRetainShare}
-              pending={shareInstallation?.pending !== undefined}
-              retained={shareInstallation !== undefined}
-              review={shareReview}
-            />
+            <Suspense fallback={<ShareSurfaceFallback />}>
+              <ShareReview
+                busy={operationActive}
+                {...(shareInstallation === undefined
+                  ? {}
+                  : { installedVersion: shareInstallation.version })}
+                onActivate={onActivateShare}
+                onContinueFork={onContinueShareFork}
+                onOpenConflictInShape={onOpenShareConflictInShape}
+                {...(onOpenShareUrl === undefined ||
+                onOpenShareGit === undefined
+                  ? {}
+                  : { onOpenSource: () => setShareDialogOpen(true) })}
+                {...(onOpenShareFile === undefined
+                  ? {}
+                  : { onOpenFile: () => shareFileRef.current?.click() })}
+                onPrepareUpdate={onPrepareShareUpdate}
+                onReject={onRejectShare}
+                onRetain={onRetainShare}
+                pending={shareInstallation?.pending !== undefined}
+                retained={shareInstallation !== undefined}
+                review={shareReview}
+              />
+            </Suspense>
           )}
         {!docked ? (
           <section className="blank-invitation">
