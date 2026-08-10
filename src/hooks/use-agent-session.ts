@@ -221,9 +221,11 @@ export function useAgentSession(
       yield* Effect.all(
         [
           workspace.changes.pipe(
+            Stream.buffer({ capacity: 1, strategy: "sliding" }),
             Stream.runForEach((next) => Effect.sync(() => setSnapshot(next))),
           ),
           workspace.providerAuthChanges.pipe(
+            Stream.buffer({ capacity: 1, strategy: "sliding" }),
             Stream.runForEach((next) =>
               Effect.sync(() => setProviderAuth(next)),
             ),

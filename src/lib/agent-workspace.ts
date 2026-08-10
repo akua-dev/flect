@@ -316,12 +316,12 @@ const withConversation = (
 const boundedMessages = (
   messages: ReadonlyArray<ConversationMessage>,
   next: ReadonlyArray<ConversationMessage>,
-) => [...messages, ...next].slice(-500);
+) => [...messages, ...next].slice(-12);
 
 const boundedActivities = (
   activities: ReadonlyArray<ToolActivity>,
   next: ToolActivity,
-) => [...activities, next].slice(-100);
+) => [...activities, next].slice(-8);
 
 const message = (
   role: "user" | "assistant",
@@ -1669,7 +1669,7 @@ export const AgentWorkspaceLive = Layer.effect(
             messages: boundedMessages(current.messages, [
               message(
                 "assistant",
-                `Preview ready: ${candidate.name}`,
+                `Change complete: ${candidate.name}`,
                 operation.source,
                 now,
               ),

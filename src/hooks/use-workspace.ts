@@ -126,6 +126,7 @@ export function useWorkspace(
       yield* Effect.all(
         [
           controller.changes.pipe(
+            Stream.buffer({ capacity: 1, strategy: "sliding" }),
             Stream.runForEach((next) =>
               Effect.sync(() => {
                 snapshotRef.current = next;
@@ -134,17 +135,20 @@ export function useWorkspace(
             ),
           ),
           controller.providerAuthChanges.pipe(
+            Stream.buffer({ capacity: 1, strategy: "sliding" }),
             Stream.runForEach((next) =>
               Effect.sync(() => setProviderAuth(next)),
             ),
           ),
           controller.continuityChanges.pipe(
+            Stream.buffer({ capacity: 1, strategy: "sliding" }),
             Stream.runForEach((next) => Effect.sync(() => setContinuity(next))),
           ),
           ...(controller.capsulePresentationChanges === undefined
             ? []
             : [
                 controller.capsulePresentationChanges.pipe(
+                  Stream.buffer({ capacity: 1, strategy: "sliding" }),
                   Stream.runForEach((next) =>
                     Effect.sync(() => setCapsulePresentation(next)),
                   ),

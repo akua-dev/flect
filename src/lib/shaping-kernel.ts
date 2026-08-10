@@ -73,6 +73,13 @@ export interface ShapingKernelShape {
     InterfaceRevision,
     InvalidInterfaceDocument | InvalidRevisionTransition | InterfaceStorageError
   >;
+  readonly applyLocalRevision: (
+    document: unknown,
+    source: "user" | "shaper",
+  ) => Effect.Effect<
+    InterfaceRevision,
+    InvalidInterfaceDocument | InvalidRevisionTransition | InterfaceStorageError
+  >;
   readonly applyExtensionIntents: (
     context: ExtensionIntentContext,
     intents: ReadonlyArray<CapabilityIntent>,
@@ -343,6 +350,48 @@ const makeShapingKernel = (
             next,
           ];
           return persist(next).pipe(Effect.as(transition));
+        },
+      );
+    });
+
+    const applyLocalRevision = Effect.fn(
+      "Flect.ShapingKernel.applyLocalRevision",
+    )(function* (input: unknown, source: "user" | "shaper") {
+      const document = yield* validateInterfaceDocument(input);
+      return yield* SubscriptionRef.modifyEffect(
+        stateRef,
+        (
+          state,
+        ): Effect.Effect<
+          readonly [InterfaceRevision, KernelState],
+          InvalidRevisionTransition | InterfaceStorageError
+        > => {
+          const id = RevisionId.make(nextId());
+          if (state.safeMode || state.proposal !== undefined) {
+            return Effect.fail(invalidTransition(id));
+          }
+          const accepted = InterfaceRevision.make({
+            version: 1,
+            id,
+            parentId: state.active.id,
+            status: "accepted",
+            source,
+            document,
+            createdAt: now(),
+          });
+          const next: KernelState = {
+            ...state,
+            active: accepted,
+            lastKnownGood: state.active,
+            proposal: undefined,
+            safeMode: false,
+            failureCounts: new Map(),
+            sequence: state.sequence + 1,
+            lastEvent: eventFor(state, "revision-accepted", {
+              revisionId: accepted.id,
+            }),
+          };
+          return persist(next).pipe(Effect.as([accepted, next] as const));
         },
       );
     });
@@ -814,6 +863,7 @@ const makeShapingKernel = (
         Stream.map(snapshotFromState),
       ),
       propose,
+      applyLocalRevision,
       applyExtensionIntents,
       preview,
       supersede,

@@ -122,7 +122,7 @@ export function ShareReview({
           <p className="share-review__state">
             {alreadyCurrent
               ? "No changes to apply"
-              : "Inactive until you keep it"}
+              : "Inactive until you activate it"}
           </p>
           <h2 id="share-review-title">{review.name}</h2>
           <p className="share-review__provenance">
@@ -284,7 +284,7 @@ export function ShareReview({
               onClick={() => void onOpenConflictInShape?.()}
               type="button"
             >
-              Open conflict in Shape
+              Resolve conflict with Flect
             </button>
             <button
               className="decision-button"
@@ -292,7 +292,7 @@ export function ShareReview({
               onClick={() => void onReject()}
               type="button"
             >
-              Reject update
+              Discard update
             </button>
           </>
         ) : (
@@ -317,7 +317,7 @@ export function ShareReview({
               onClick={() => void onReject()}
               type="button"
             >
-              Reject shared source
+              Discard shared source
             </button>
           </>
         )}

@@ -125,7 +125,7 @@ describe("GitHub quality workflow", () => {
     );
   });
 
-  it("pins the local toolchains and includes Rust formatting in check:all", async () => {
+  it("pins the local toolchains and builds the Rust sidecar in check:all", async () => {
     const packageJson = record(
       JSON.parse(await readFile("package.json", "utf8")),
       "package.json",
@@ -134,7 +134,7 @@ describe("GitHub quality workflow", () => {
     const scripts = record(packageJson.scripts, "package scripts");
     assert.strictEqual(
       scripts["check:rust"],
-      "cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo test --manifest-path src-tauri/Cargo.toml",
+      "bun run build:sidecar && cargo fmt --manifest-path src-tauri/Cargo.toml --check && cargo test --manifest-path src-tauri/Cargo.toml",
     );
     assert.match(String(scripts["check:all"]), /bun run check:rust/);
   });

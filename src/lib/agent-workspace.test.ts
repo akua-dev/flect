@@ -498,7 +498,7 @@ describe("AgentWorkspace", () => {
         );
         assert.deepStrictEqual(
           snapshot.shaper.messages.map((message) => message.content),
-          ["Change the interface", `Preview ready: ${document.name}`],
+          ["Change the interface", `Change complete: ${document.name}`],
         );
         assert.strictEqual(snapshot.app.status, "ready");
         assert.strictEqual(snapshot.shaper.status, "ready");

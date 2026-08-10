@@ -102,6 +102,27 @@ const makeFailingRepairHarness = (initial: string) => {
 
 describe("ShapingKernel", () => {
   it.layer(makeShapingKernelTestLayer())((it) => {
+    it.effect("commits a local edit in one accepted transition", () =>
+      Effect.gen(function* () {
+        const kernel = yield* ShapingKernel;
+        const document = customizedDocument("Continuous live canvas");
+        const accepted = yield* kernel.applyLocalRevision(document, "shaper");
+        const snapshot = yield* kernel.snapshot;
+
+        assert.strictEqual(accepted.status, "accepted");
+        assert.deepStrictEqual(snapshot.active.document, document);
+        assert.deepStrictEqual(
+          snapshot.lastKnownGood.document,
+          defaultInterfaceDocument,
+        );
+        assert.isUndefined(snapshot.proposal);
+        assert.strictEqual(snapshot.lastEvent.type, "revision-accepted");
+        assert.strictEqual(snapshot.lastEvent.sequence, 1);
+      }),
+    );
+  });
+
+  it.layer(makeShapingKernelTestLayer())((it) => {
     it.effect("proposes without changing the active interface", () =>
       Effect.gen(function* () {
         const kernel = yield* ShapingKernel;

@@ -133,8 +133,9 @@ test.beforeEach(async ({ page }) => {
   });
 
   await resetBrowserWorkspace(page);
+  await expect(page.locator(".role-shell")).toBeVisible();
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
 });
 
@@ -162,7 +163,7 @@ test.afterEach(async ({ page }) => {
 });
 
 const shapeFirstInterface = async (page: Page) => {
-  const input = page.getByRole("textbox", { name: "Message Shaper" });
+  const input = page.getByRole("textbox", { name: "Message Flect" });
   await input.evaluate((element) => {
     element.dataset.composerIdentity = "original";
   });
@@ -175,11 +176,26 @@ const shapeFirstInterface = async (page: Page) => {
     page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("textbox", { name: "Message Preview App Agent" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toHaveAttribute("data-composer-identity", "original");
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("status", { name: "Workbench status" }),
+  ).toContainText("Flect is ready");
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-phase",
+    "accepted",
+  );
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-target",
+    "use",
+  );
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-use-disabled",
+    "false",
+  );
 };
 
 const compiledFixtureArchive = (
@@ -274,29 +290,22 @@ const assetFixtureArchive = (version = "1.0.0") =>
     }),
   );
 
-test("shapes a blank workspace and moves the same composer into candidate Use", async ({
+test("shapes a blank workspace in one continuous live canvas", async ({
   page,
 }) => {
   await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
+    page.getByRole("heading", { name: "What do you want to make?" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Shape · Shaper" }),
-  ).toHaveAttribute("aria-pressed", "true");
 
   await shapeFirstInterface(page);
 
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
-  ).toContainText("Validated preview");
-  await expect(page.getByRole("button", { name: "Keep change" })).toBeFocused();
-  await expect(
-    page.getByRole("button", { name: "Use · App Agent" }),
-  ).toHaveAttribute("aria-pressed", "true");
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
   await expect(page.getByText("Shaper used its sandbox.")).toHaveCount(0);
   await expect(
-    page.getByRole("textbox", { name: "Message Preview App Agent" }),
-  ).toBeVisible();
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toBeFocused();
   await expect(page.locator(".composer")).toHaveCount(1);
 });
 
@@ -305,7 +314,7 @@ test("exports the shaped source and complete Git history", async ({ page }) => {
   await page.getByRole("button", { name: "Actions" }).click();
   await expect(
     page.getByRole("dialog", { name: "Flect actions" }).getByRole("status"),
-  ).toContainText(/Accepted [0-9a-f]{7} · Candidate [0-9a-f]{7} isolated/);
+  ).toContainText("Current version saved");
   const downloadPromise = page.waitForEvent("download");
   await page
     .getByRole("menuitem", { name: "Export source and history" })
@@ -326,19 +335,15 @@ test("exports the shaped source and complete Git history", async ({ page }) => {
   const { stdout: refs } = await runFile("git", ["-C", repository, "show-ref"]);
   expect(refs).toContain("refs/heads/flect/accepted");
   expect(refs).toContain("refs/heads/flect/last-known-good");
-  expect(refs).toContain("refs/heads/flect/proposal/");
+  expect(refs).not.toContain("refs/heads/flect/proposal/");
 });
 
 test("round-trips an accepted app through a verified .flect capsule", async ({
   page,
 }) => {
   await shapeFirstInterface(page);
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await expect(page.getByRole("button", { name: "Keep change" })).toHaveCount(
-    0,
-  );
   await expect(
-    page.getByRole("textbox", { name: "Message App Agent" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Actions" }).click();
@@ -357,11 +362,13 @@ test("round-trips an accepted app through a verified .flect capsule", async ({
   await chooser.setFiles(capsule);
 
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
-  ).toContainText("Validated preview");
-  await expect(page.getByRole("button", { name: "Keep change" })).toBeFocused();
+    page.getByRole("region", { name: "Import decision" }),
+  ).toContainText("Imported app ready");
   await expect(
-    page.getByRole("textbox", { name: "Message Preview App Agent" }),
+    page.getByRole("button", { name: "Activate app" }),
+  ).toBeFocused();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
 });
 
@@ -383,7 +390,7 @@ test("rejects a malformed capsule without replacing the accepted app", async ({
     page.getByText("Flect app import failed safely.", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
   expect(await page.getByRole("main").textContent()).toBe(before);
 });
@@ -405,7 +412,7 @@ test("reviews imported provenance and blocks unavailable required capabilities",
     buffer: Buffer.from(archive),
   });
 
-  const decision = page.getByRole("region", { name: "Revision decision" });
+  const decision = page.getByRole("region", { name: "Import decision" });
   await expect(decision.getByText("fixture · 1.0.0")).toBeVisible();
   await expect(decision.getByText("Unsigned")).toBeVisible();
   await expect(decision.getByText("product:projects:read")).toBeVisible();
@@ -413,16 +420,16 @@ test("reviews imported provenance and blocks unavailable required capabilities",
     decision.getByText("Required · Unavailable on this host"),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Keep change" }),
+    page.getByRole("button", { name: "Activate app" }),
   ).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Reject" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Discard" })).toBeFocused();
   await expect(
     page
       .frameLocator('iframe[title="Compiled fixture"]')
       .getByRole("heading", { name: "Compiled product" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByRole("button", { name: "Discard" }).click();
   await expect(page.locator('iframe[title="Compiled fixture"]')).toHaveCount(0);
 });
 
@@ -440,16 +447,16 @@ test("blocks a capsule outside its declared Flect compatibility range", async ({
     buffer: Buffer.from(archive),
   });
 
-  const decision = page.getByRole("region", { name: "Revision decision" });
+  const decision = page.getByRole("region", { name: "Import decision" });
   await expect(decision.getByText("<0.2.0 · incompatible")).toBeVisible();
   await expect(decision.getByText("browser · supported")).toBeVisible();
   await expect(
     decision.getByText(/incompatible with this Flect version or host/),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Keep change" }),
+    page.getByRole("button", { name: "Activate app" }),
   ).toBeDisabled();
-  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByRole("button", { name: "Discard" }).click();
 });
 
 test("projects verified capsule assets into the network-denied frame", async ({
@@ -502,17 +509,15 @@ test("imports an ordinary static HTML project as a reviewable Flect app", async 
   ).toBeVisible();
   await expect(
     page
-      .getByRole("region", { name: "Revision decision" })
+      .getByRole("region", { name: "Import decision" })
       .getByText("local-user · 1.0.0"),
   ).toBeVisible();
   await expect(
-    page.getByText(
-      "Static app packaged · 4 source files · 1 ignored. Review the preview.",
-    ),
+    page.getByText("Static app packaged · 4 source files. Ready to activate."),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await expect(page.getByRole("button", { name: "Keep change" })).toHaveCount(
+  await page.getByRole("button", { name: "Activate app" }).click();
+  await expect(page.getByRole("button", { name: "Activate app" })).toHaveCount(
     0,
   );
   await page.getByRole("button", { name: "Actions" }).click();
@@ -580,7 +585,7 @@ test("imports, builds, reviews, keeps, and exports a Vite source project", async
 
   await expect(
     page.getByText(
-      "Portable build verified · 3 source files. Review the preview.",
+      "Portable build verified · 3 source files. Ready to activate.",
     ),
   ).toBeVisible({ timeout: 30_000 });
   const frame = page.frameLocator('iframe[title="vite-typescript"]');
@@ -592,7 +597,7 @@ test("imports, builds, reviews, keeps, and exports a Vite source project", async
     frame.getByRole("button", { name: "Vite app used" }),
   ).toBeVisible();
 
-  const decision = page.getByRole("region", { name: "Revision decision" });
+  const decision = page.getByRole("region", { name: "Import decision" });
   await expect(decision.getByText("Vite · src/main.ts")).toBeVisible();
   await expect(decision.getByText(/artifact [0-9a-f]{7}/)).toBeVisible();
   await expect(
@@ -601,8 +606,8 @@ test("imports, builds, reviews, keeps, and exports a Vite source project", async
     ),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await expect(page.getByRole("button", { name: "Keep change" })).toHaveCount(
+  await page.getByRole("button", { name: "Activate app" }).click();
+  await expect(page.getByRole("button", { name: "Activate app" })).toHaveCount(
     0,
   );
   await page.reload();
@@ -643,7 +648,7 @@ test("imports a Vite React project and rebuilds it with the registry offline", a
     await chooser.setFiles(resolve("tests/fixtures/vite-react"));
     await expect(
       page.getByText(
-        "Portable build verified · 4 source files. Review the preview.",
+        "Portable build verified · 4 source files. Ready to activate.",
       ),
     ).toBeVisible({ timeout: 45_000 });
   };
@@ -657,14 +662,14 @@ test("imports a Vite React project and rebuilds it with the registry offline", a
   await expect(
     candidate.getByRole("button", { name: "React app used" }),
   ).toBeVisible();
-  const decision = page.getByRole("region", { name: "Revision decision" });
+  const decision = page.getByRole("region", { name: "Import decision" });
   await expect(decision.getByText("Vite React · src/main.jsx")).toBeVisible();
   await expect(decision.getByText(/artifact [0-9a-f]{7}/)).toBeVisible();
   await expect(
     decision.getByText(/Locked in source Git · graph [0-9a-f]{7}/),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await expect(page.getByRole("button", { name: "Keep change" })).toHaveCount(
+  await page.getByRole("button", { name: "Activate app" }).click();
+  await expect(page.getByRole("button", { name: "Activate app" })).toHaveCount(
     0,
   );
 
@@ -710,7 +715,7 @@ test("imports a Vite React project and rebuilds it with the registry offline", a
       .getByRole("heading", { name: "React project imported" }),
   ).toBeVisible();
   expect(blockedRegistryRequests).toBe(0);
-  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByRole("button", { name: "Discard" }).click();
 });
 
 test("downloads a capsule URL without credentials and opens verified review", async ({
@@ -749,7 +754,7 @@ test("downloads a capsule URL without credentials and opens verified review", as
   ).toBeVisible();
   await expect(
     page
-      .getByRole("region", { name: "Revision decision" })
+      .getByRole("region", { name: "Import decision" })
       .getByText("fixture · 1.0.0"),
   ).toBeVisible();
   expect(credentialsHeader).toBeUndefined();
@@ -786,8 +791,8 @@ test("compares an installed capsule update and never overwrites it silently", as
   );
 
   await install("https://capsules.example/v1.flect");
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await expect(page.getByRole("button", { name: "Keep change" })).toHaveCount(
+  await page.getByRole("button", { name: "Activate app" }).click();
+  await expect(page.getByRole("button", { name: "Activate app" })).toHaveCount(
     0,
   );
   await expect(
@@ -800,10 +805,10 @@ test("compares an installed capsule update and never overwrites it silently", as
   await expect(page.getByText("Review update 1.0.0 → 1.1.0")).toBeVisible();
   await expect(
     page.getByText(
-      "The installed app stays active until you explicitly keep this version.",
+      "The installed app stays active until you explicitly activate this version.",
     ),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByRole("button", { name: "Discard" }).click();
   await expect(
     page
       .frameLocator('iframe[title="Asset fixture"]')
@@ -832,8 +837,8 @@ test("previews and accepts compiled UI only inside the isolated capsule frame", 
   await frame.getByRole("button", { name: "Use product" }).click();
   await expect(frame.getByRole("button", { name: "Used" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await expect(page.getByRole("button", { name: "Keep change" })).toHaveCount(
+  await page.getByRole("button", { name: "Activate app" }).click();
+  await expect(page.getByRole("button", { name: "Activate app" })).toHaveCount(
     0,
   );
 
@@ -885,7 +890,7 @@ test("restores a compiled candidate for review without replacing accepted state"
       .getByRole("heading", { name: "Compiled product" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page.getByRole("region", { name: "Import decision" }),
   ).toBeVisible();
   await page.reload();
   const restored = page.frameLocator('iframe[title="Compiled fixture"]');
@@ -893,62 +898,29 @@ test("restores a compiled candidate for review without replacing accepted state"
     restored.getByRole("heading", { name: "Compiled product" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page.getByRole("region", { name: "Import decision" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByRole("button", { name: "Discard" }).click();
   await expect(page.locator('iframe[title="Compiled fixture"]')).toHaveCount(0);
 });
 
-test("tests a candidate, returns to Shape, and supersedes it without losing accepted state", async ({
+test("keeps one draft and one conversation while Flect routes product and edit work", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 900, height: 620 });
-  let modelRequests = 0;
-  page.on("request", (request) => {
-    if (/\/api\/sessions\/[^/]+\/(?:prompts|shape)$/.test(request.url())) {
-      modelRequests += 1;
-    }
-  });
   await shapeFirstInterface(page);
 
-  const candidateDraft = page.getByRole("textbox", {
-    name: "Message Preview App Agent",
-  });
-  await candidateDraft.fill("candidate draft stays here");
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  const shapeDraft = page.getByRole("textbox", { name: "Message Shaper" });
-  await shapeDraft.fill("shape draft stays here");
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
-  await expect(candidateDraft).toHaveValue("candidate draft stays here");
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  await expect(shapeDraft).toHaveValue("shape draft stays here");
-  await shapeDraft.fill("");
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
-  await candidateDraft.fill("");
-
-  const requestsBeforeSwitch = modelRequests;
-  const switchStartedAt = Date.now();
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
-  await expect(
-    page.getByRole("textbox", { name: "Message Preview App Agent" }),
-  ).toBeVisible();
-  expect(modelRequests).toBe(requestsBeforeSwitch);
-  expect(Date.now() - switchStartedAt).toBeLessThan(350);
-
-  const previewInput = page.getByRole("textbox", {
-    name: "Message Preview App Agent",
-  });
-  await previewInput.fill("Show the Markdown showcase");
-  await previewInput.press("Enter");
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  await composer.fill("this one draft stays here");
+  await expect(composer).toHaveValue("this one draft stays here");
+  await expect(page.locator(".composer")).toHaveCount(1);
+  await composer.fill("Show the Markdown showcase");
+  await composer.press("Enter");
   await expect(
     page.getByRole("heading", { level: 1, name: "Markdown showcase" }),
   ).toBeVisible();
   const previewConversation = page.getByRole("log", {
-    name: "Preview App Agent conversation",
+    name: "Flect conversation",
   });
   await expect
     .poll(() =>
@@ -961,8 +933,6 @@ test("tests a candidate, returns to Shape, and supersedes it without losing acce
     element.scrollTop = 0;
     element.dispatchEvent(new Event("scroll"));
   });
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
   expect(
     await previewConversation.evaluate((element) => element.scrollTop),
   ).toBeLessThan(50);
@@ -971,8 +941,8 @@ test("tests a candidate, returns to Shape, and supersedes it without losing acce
   await page
     .getByRole("menuitem", { name: "Enable trusted Pi extensions" })
     .click();
-  await previewInput.fill("Fail candidate extension");
-  await previewInput.press("Enter");
+  await composer.fill("Fail candidate extension");
+  await composer.press("Enter");
   const failedActivity = page.getByRole("button", {
     name: "Trusted Pi extension details",
   });
@@ -985,174 +955,139 @@ test("tests a candidate, returns to Shape, and supersedes it without losing acce
     page.getByText("FLECT_PRIVATE_EXTENSION_FIXTURE_FAILURE"),
   ).toHaveCount(0);
   await expect(page.getByText(/fail-on-agent-start\.ts/)).toHaveCount(0);
-  const fix = page.getByRole("button", { name: "Fix in Shape" });
+  const fix = page.getByRole("button", { name: "Fix with Flect" }).last();
   await expect(fix).toBeVisible();
   await fix.click();
-  await expect(
-    page.getByRole("button", { name: "Shape · Shaper" }),
-  ).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Actions" }).click();
   await expect(
-    page.getByRole("menuitem", { name: "Enable trusted Pi extensions" }),
+    page.getByRole("menuitem", { name: "Disable trusted Pi extensions" }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Open App Agent" }).click();
-
-  await expect(
-    page.getByRole("button", { name: "Use · App Agent" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(
-    page.getByRole("textbox", { name: "Message Preview App Agent" }),
-  ).toBeVisible();
   await expect(page.getByText("Fail candidate extension")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Fix in Shape" }),
+    page.getByRole("button", { name: "Fix with Flect" }).last(),
   ).toBeVisible();
   await page.getByRole("button", { name: "Actions" }).click();
   await page
     .getByRole("menuitem", { name: "Disable trusted Pi extensions" })
     .click();
-  await previewInput.fill("Fail candidate extension");
-  await previewInput.press("Enter");
+  await composer.fill("Fail candidate extension");
+  await composer.press("Enter");
   await expect(
     page.getByText(
       "Trusted Pi extensions are disabled. The corrected candidate completed safely.",
     ),
-  ).toBeVisible();
+  ).toHaveCount(1);
   await expect(page.locator(".composer")).toHaveCount(1);
 });
 
-test("keeps product questions in Use and enters Shape only through the typed edit tool", async ({
+test("routes product questions and typed edit requests without exposing agent modes", async ({
   page,
 }) => {
   await shapeFirstInterface(page);
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
-
-  const appInput = page.getByRole("textbox", { name: "Message App Agent" });
+  const appInput = page.getByRole("textbox", { name: "Message Flect" });
   await appInput.fill("Which interface is active?");
   await appInput.press("Enter");
   await expect(page.getByText("The product action completed.")).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Use · App Agent" }),
-  ).toHaveAttribute("aria-pressed", "true");
 
   await appInput.fill("Explicitly change the interface");
   await appInput.press("Enter");
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Use · App Agent" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(
-    page.getByRole("textbox", { name: "Message Preview App Agent" }),
-  ).toBeVisible();
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
+  await expect(appInput).toBeEnabled();
+  await expect(page.getByText("Explicitly change the interface")).toBeVisible();
 });
 
 test("keeps essential composer qualifiers at AA contrast", async ({ page }) => {
   expect(
-    await renderedContrastRatio(page, ".role-switcher__agent", ".composer"),
+    await renderedContrastRatio(page, ".runtime-state", ".composer"),
   ).toBeGreaterThanOrEqual(4.5);
   expect(
     await renderedContrastRatio(page, ".model-menu__source", ".composer"),
   ).toBeGreaterThanOrEqual(4.5);
 });
 
-test("keeps a revision, enters Run, and separates App and Shaper history", async ({
+test("keeps one chronological conversation across internal routing and reload", async ({
   page,
 }) => {
   await shapeFirstInterface(page);
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
 
-  const appInput = page.getByRole("textbox", { name: "Message App Agent" });
+  const appInput = page.getByRole("textbox", { name: "Message Flect" });
   await appInput.fill("Open the latest project");
   await appInput.press("Enter");
   await expect(page.getByText("The product action completed.")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Bash details" }),
+    page.getByRole("button", { name: "Bash details" }).first(),
   ).toContainText("Completed");
   completedPromptPages.add(page);
-
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
   await expect(
-    page.getByText("Preview ready: Focused project overview"),
+    page.getByText("Change complete: Focused project overview"),
   ).toBeVisible();
-  await expect(page.getByText("The product action completed.")).toHaveCount(0);
+  const conversation = page.getByRole("log", { name: "Flect conversation" });
+  await expect(conversation).toContainText("Create a focused project overview");
+  await expect(conversation).toContainText("Open the latest project");
 
   await page.reload();
   await expect(
-    page.getByRole("textbox", { name: "Message App Agent" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Use · App Agent" }),
-  ).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("The product action completed.")).toBeVisible();
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
   await expect(
-    page.getByText("Preview ready: Focused project overview"),
+    page.getByText("Change complete: Focused project overview"),
   ).toBeVisible();
-  await expect(page.getByText("The product action completed.")).toHaveCount(0);
 });
 
-test("restores isolated drafts through candidate refresh and clears rejected candidate state", async ({
+test("restores the one visible draft through refresh and clears it after send", async ({
   page,
 }) => {
   await shapeFirstInterface(page);
-  const candidate = page.getByRole("textbox", {
-    name: "Message Preview App Agent",
+  const composer = page.getByRole("textbox", {
+    name: "Message Flect",
   });
-  await candidate.fill("Candidate draft survives refresh");
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  await page
-    .getByRole("textbox", { name: "Message Shaper" })
-    .fill("Shape draft survives refresh");
+  await composer.fill("One draft survives refresh");
 
   await page.reload();
   await expect(
-    page.getByRole("textbox", { name: "Message Preview App Agent" }),
-  ).toHaveValue("Candidate draft survives refresh");
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toHaveValue("One draft survives refresh");
+  await page.getByRole("textbox", { name: "Message Flect" }).press("Enter");
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
-  ).toHaveValue("Shape draft survives refresh");
-
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
-  await page.getByRole("button", { name: "Reject" }).click();
-  await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
-  ).toBeVisible();
-  await page.reload();
-  await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
-  ).toHaveValue("Shape draft survives refresh");
-  expect(
-    await page.evaluate(() => localStorage.getItem("flect.role-continuity.v1")),
-  ).not.toContain("Candidate draft survives refresh");
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toHaveValue("");
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const encoded = localStorage.getItem("flect.role-continuity.v1");
+        if (encoded === null) return undefined;
+        return (JSON.parse(encoded) as { drafts?: Record<string, string> })
+          .drafts;
+      }),
+    )
+    .toEqual({ acceptedUse: "", candidateUse: "", shape: "" });
 });
 
 test("normalizes an interrupted Shaper turn without restoring partial output", async ({
   page,
 }) => {
-  const input = page.getByRole("textbox", { name: "Message Shaper" });
+  const input = page.getByRole("textbox", { name: "Message Flect" });
   await input.fill("Create a candidate that will be cancelled");
   completedShapePages.add(page);
   await input.press("Enter");
-  await expect(page.getByRole("button", { name: "Stop Shaper" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Stop Flect" })).toBeVisible();
 
   await page.reload();
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
   await expect(
     page.getByText("Create a candidate that will be cancelled"),
   ).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
 });
 
@@ -1163,11 +1098,15 @@ test("rejects a stale draft writer across two real same-origin tabs", async ({
   const second = await context.newPage();
   await second.goto(page.url());
   await expect(
-    second.getByRole("textbox", { name: "Message Shaper" }),
+    second.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
+  await expect(second.locator(".role-shell")).toBeVisible();
+  await expect(
+    second.getByRole("status", { name: "Workbench status" }),
+  ).toContainText("Flect is ready");
 
   await page
-    .getByRole("textbox", { name: "Message Shaper" })
+    .getByRole("textbox", { name: "Message Flect" })
     .fill("Newer draft from the first tab");
   await expect
     .poll(() =>
@@ -1176,7 +1115,7 @@ test("rejects a stale draft writer across two real same-origin tabs", async ({
     .toContain("Newer draft from the first tab");
 
   await second
-    .getByRole("textbox", { name: "Message Shaper" })
+    .getByRole("textbox", { name: "Message Flect" })
     .fill("Stale draft from the second tab");
   expect(
     await page.evaluate(() => localStorage.getItem("flect.role-continuity.v1")),
@@ -1194,7 +1133,7 @@ test("preserves the prior continuity record when browser quota rejects a write",
   page,
 }) => {
   await page
-    .getByRole("textbox", { name: "Message Shaper" })
+    .getByRole("textbox", { name: "Message Flect" })
     .fill("Last durable draft");
   await expect
     .poll(() =>
@@ -1215,7 +1154,7 @@ test("preserves the prior continuity record when browser quota rejects a write",
     };
   });
   await page.reload();
-  const input = page.getByRole("textbox", { name: "Message Shaper" });
+  const input = page.getByRole("textbox", { name: "Message Flect" });
   await expect(input).toHaveValue("Last durable draft");
   await input.fill("This write exceeds quota");
   await page.getByRole("button", { name: "Safe mode" }).click();
@@ -1233,10 +1172,8 @@ test("renders complete Markdown as a contained chat instrument", async ({
     origin: "http://127.0.0.1:5173",
   });
   await shapeFirstInterface(page);
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
 
-  const input = page.getByRole("textbox", { name: "Message App Agent" });
+  const input = page.getByRole("textbox", { name: "Message Flect" });
   await input.fill("Show the Markdown showcase");
   await input.press("Enter");
 
@@ -1330,10 +1267,8 @@ test("keeps a reader's position until they choose to jump to new activity", asyn
 }) => {
   await page.setViewportSize({ width: 900, height: 620 });
   await shapeFirstInterface(page);
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
 
-  const input = page.getByRole("textbox", { name: "Message App Agent" });
+  const input = page.getByRole("textbox", { name: "Message Flect" });
   await input.fill("Show the Markdown showcase");
   await input.press("Enter");
   await expect(
@@ -1341,7 +1276,7 @@ test("keeps a reader's position until they choose to jump to new activity", asyn
   ).toBeVisible();
 
   const conversation = page.getByRole("log", {
-    name: "App Agent conversation",
+    name: "Flect conversation",
   });
   await expect
     .poll(() =>
@@ -1375,36 +1310,36 @@ test("keeps a reader's position until they choose to jump to new activity", asyn
     .toBeLessThanOrEqual(48);
 });
 
-test("rejects and rolls back revisions without replacing accepted state early", async ({
+test("rolls back accepted local changes without exposing proposal ceremony", async ({
   page,
 }) => {
   await shapeFirstInterface(page);
-  await page.getByRole("button", { name: "Reject" }).click();
-  await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
-  ).toBeVisible();
 
   await page
-    .getByRole("textbox", { name: "Message Shaper" })
+    .getByRole("textbox", { name: "Message Flect" })
     .fill("Create it again");
-  await page.getByRole("button", { name: "Send to Shaper" }).click();
+  await page.getByRole("button", { name: "Send to Flect" }).click();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Keep change" }).click();
+    page.getByRole("status", { name: "Workbench status" }),
+  ).toContainText("Flect is ready");
+  await expect(
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Actions" }).click();
-  await page.getByRole("menuitem", { name: "Roll back last change" }).click();
+  await page.getByRole("menuitem", { name: "Undo last change" }).click();
 
   await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
+    page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
 });
 
 test("supports model search, keyboard resizing, collapse, and focus restoration", async ({
   page,
 }) => {
   await shapeFirstInterface(page);
-  await page.getByRole("button", { name: "Keep change" }).click();
   await page.getByRole("button", { name: "Model: Auto via Pi" }).click();
   await expect
     .poll(() =>
@@ -1474,7 +1409,7 @@ test("connects a Pi provider and selects reasoning entirely inside Flect", async
     "true",
   );
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
 
   await page.keyboard.press("Escape");
@@ -1529,13 +1464,9 @@ test("uses right and full-height sheets at compact breakpoints", async ({
 
   for (const name of [
     "Collapse agent",
-    "Keep change",
-    "Reject",
     "Actions",
-    "Shape · Shaper",
-    "Use · App Agent",
     "Model: Auto via Pi",
-    "Send to Preview App Agent",
+    "Send to Flect",
   ]) {
     const box = await page.getByRole("button", { name }).boundingBox();
     expect(box, `${name} should be rendered`).not.toBeNull();
@@ -1613,10 +1544,10 @@ test("keeps safe mode and promptless products inside the protected shell", async
     page.getByRole("complementary", { name: "Flect agent" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("textbox", { name: "Message App Agent" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
   await page
-    .getByRole("textbox", { name: "Message App Agent" })
+    .getByRole("textbox", { name: "Message Flect" })
     .fill("Unsent continuity to inspect");
   await expect
     .poll(() =>
@@ -1632,10 +1563,10 @@ test("keeps safe mode and promptless products inside the protected shell", async
     page.getByText("Custom interface state is bypassed."),
   ).toBeVisible();
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeDisabled();
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toHaveValue("");
   await expect(
     page.getByRole("button", { name: "Restore interface" }),
@@ -1674,7 +1605,7 @@ test("supports keyboard shaping and reduced motion", async ({ page }) => {
     "true",
   );
 
-  const input = page.getByRole("textbox", { name: "Message Shaper" });
+  const input = page.getByRole("textbox", { name: "Message Flect" });
   await input.fill("Use the keyboard");
   completedShapePages.add(page);
   await input.press("Enter");
@@ -1682,7 +1613,10 @@ test("supports keyboard shaping and reduced motion", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Keep change" })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
+  await expect(input).toBeEnabled();
 });
 
 test("lets an outside agent drive the same reactive workspace through flect", async ({
@@ -1712,7 +1646,6 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   await expect(
     page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
   await expect(
     page.getByRole("button", { name: "Bash details" }).first(),
   ).toContainText("Completed");
@@ -1723,20 +1656,14 @@ test("lets an outside agent drive the same reactive workspace through flect", as
     readonly dirty?: boolean;
   };
   expect(repository.acceptedCommit).toMatch(/^[0-9a-f]{40}$/);
-  expect(repository.proposalCommit).toMatch(/^[0-9a-f]{40}$/);
+  expect(repository.proposalCommit).toBeUndefined();
   expect(repository.dirty).toBe(false);
-
-  await runFlect("proposal", "accept");
-  await runFlect("target", "use");
-  await expect(
-    page.getByRole("button", { name: "Use · App Agent" }),
-  ).toHaveAttribute("aria-pressed", "true");
 
   await runFlect("prompt", "Open the latest project");
   completedPromptPages.add(page);
   await expect(page.getByText("The product action completed.")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Bash details" }),
+    page.getByRole("button", { name: "Bash details" }).first(),
   ).toContainText("Completed");
 
   const logs = (await runFlect("logs")) as {
@@ -1763,18 +1690,18 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   const enteredSafeMode = (await runFlect("repository", "status")) as {
     readonly acceptedCommit?: string;
   };
-  expect(enteredSafeMode.acceptedCommit).not.toBe(
-    beforeSafeMode.acceptedCommit,
-  );
+  expect(enteredSafeMode.acceptedCommit).toBe(beforeSafeMode.acceptedCommit);
   await runFlect("safe", "restore");
   await expect(page.locator(".topbar .safe-mode")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Safe mode" })).toBeVisible();
-  const restoredSafeMode = (await runFlect("repository", "status")) as {
-    readonly acceptedCommit?: string;
-  };
-  expect(restoredSafeMode.acceptedCommit).not.toBe(
-    enteredSafeMode.acceptedCommit,
-  );
+  await expect
+    .poll(async () => {
+      const restored = (await runFlect("repository", "status")) as {
+        readonly acceptedCommit?: string;
+      };
+      return restored.acceptedCommit;
+    })
+    .not.toBe(enteredSafeMode.acceptedCommit);
   await runFlect("control", "disable");
   await expect(
     page.getByRole("button", { name: "Enable local control" }),
@@ -1782,6 +1709,6 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   await page.reload();
   await expect(page.locator(".topbar .safe-mode")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
+    page.getByRole("heading", { name: "What do you want to make?" }),
   ).toBeVisible();
 });

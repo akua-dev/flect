@@ -132,7 +132,7 @@ test.beforeEach(async ({ page }) => {
   const workspace = `permission-${randomUUID().replaceAll("-", "")}`;
   await page.goto(`/?workspace=${workspace}&product-capability-workflow=1`);
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
   await page.getByRole("button", { name: "Diagnostics" }).click();
   await page.getByRole("button", { name: "Enable local control" }).click();
@@ -153,7 +153,7 @@ test("drives digest-bound permission lifecycle through protected UI, controller,
   const projects = await capsule("dev.akua.projects", "Projects product");
   await importCapsule(page, projects, "projects.flect");
 
-  const decision = page.getByRole("region", { name: "Revision decision" });
+  const decision = page.getByRole("region", { name: "Import decision" });
   await expect(
     decision.getByText("Required · Awaiting decision"),
   ).toBeVisible();
@@ -165,8 +165,8 @@ test("drives digest-bound permission lifecycle through protected UI, controller,
   await expect(
     decision.getByText("Required · Granted · This session"),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await expect(page.getByRole("button", { name: "Keep change" })).toHaveCount(
+  await page.getByRole("button", { name: "Activate app" }).click();
+  await expect(page.getByRole("button", { name: "Activate app" })).toHaveCount(
     0,
   );
   await expect
@@ -220,12 +220,12 @@ test("drives digest-bound permission lifecycle through protected UI, controller,
   await importCapsule(page, reports, "reports.flect");
   await expect(
     page
-      .getByRole("region", { name: "Revision decision" })
+      .getByRole("region", { name: "Import decision" })
       .getByText("Required · Awaiting decision"),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByRole("button", { name: "Discard" }).click();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
 
   await page.reload();

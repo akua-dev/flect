@@ -37,7 +37,7 @@ test.beforeEach(async ({ page }) => {
 
   await resetBrowserWorkspace(page);
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
 });
 
@@ -55,36 +55,42 @@ test.afterEach(async ({ page }) => {
 });
 
 const shape = async (page: Page) => {
-  const composer = page.getByRole("textbox", { name: "Message Shaper" });
-  await composer.fill("Exercise embedded Shaper AXI");
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  await composer.fill("Exercise embedded Flect AXI");
   await composer.press("Enter");
   await expect(
     page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
-  ).toBeVisible();
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-phase",
+    "accepted",
+  );
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-target",
+    "use",
+  );
+  await expect(composer).toBeEnabled();
 };
 
 const acceptAndRun = async (page: Page) => {
   await shape(page);
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
 };
 
-test("Shaper validates and proposes through embedded flect but cannot accept", async ({
+const bashForCommand = (page: Page, command: string) =>
+  page.locator("article.activity-card").filter({ hasText: command });
+
+test("Flect validates and applies local edits while protected authority stays internal", async ({
   page,
 }) => {
   await shape(page);
 
-  await expect(page.getByRole("button", { name: "Keep change" })).toBeFocused();
   await expect(
-    page.getByRole("button", { name: "Use · App Agent" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(
-    page.getByRole("textbox", { name: "Message Preview App Agent" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
+  await expect(page.locator(".role-switcher")).toHaveCount(0);
 
   const activities = page.getByRole("button", { name: "Bash details" });
   await expect(activities).toHaveCount(2);
@@ -105,45 +111,38 @@ test("Shaper validates and proposes through embedded flect but cannot accept", a
   ).toContainText("code: unauthorized");
 });
 
-test("Shaper inspects its real proposal ref through reserved embedded Git", async ({
+test("Flect inspects its accepted live-canvas ref through reserved embedded Git", async ({
   page,
 }) => {
   await shape(page);
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  const composer = page.getByRole("textbox", { name: "Message Shaper" });
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill("Inspect embedded Git");
   await composer.press("Enter");
 
-  const activity = page.getByRole("button", { name: "Bash details" }).nth(2);
+  const activity = bashForCommand(page, "alias git=false");
   await expect(activity).toContainText("Completed");
-  await activity.click();
-  const output = page.locator(".activity-card__details pre").nth(2);
-  await expect(output).toContainText("flect/proposal/");
+  await activity.getByRole("button", { name: "Bash details" }).click();
+  const output = activity.locator(".activity-card__details pre");
+  await expect(output).toContainText("flect/accepted");
   await expect(output).toContainText(/[0-9a-f]{40}/);
 });
 
-test("Shaper checkpoints staged source through embedded Wasm Git", async ({
+test("Flect checkpoints staged source through embedded Wasm Git", async ({
   page,
 }) => {
   await shape(page);
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  const composer = page.getByRole("textbox", { name: "Message Shaper" });
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill("Commit Shaper source");
   await composer.press("Enter");
 
-  await expect(
-    page.getByRole("button", { name: "Use · App Agent" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  const activity = page.getByRole("button", { name: "Bash details" }).nth(2);
+  const activity = bashForCommand(page, "git commit -m 'Shape source'");
   await expect(activity).toContainText("Completed");
-  await activity.click();
-  const output = page.locator(".activity-card__details pre").nth(2);
+  await activity.getByRole("button", { name: "Bash details" }).click();
+  const output = activity.locator(".activity-card__details pre");
   await expect(output).toContainText("[flect/authoring");
   await expect(output).toContainText("flect/authoring");
   await expect(output).toContainText(/[0-9a-f]{40}/);
 
-  await page.getByRole("button", { name: "Keep change" }).click();
   await page.getByRole("button", { name: "Actions" }).click();
   const downloadPromise = page.waitForEvent("download");
   await page
@@ -176,60 +175,56 @@ test("Shaper checkpoints staged source through embedded Wasm Git", async ({
   expect(authoring).toBe(accepted);
 });
 
-test("App Agent lists and invokes a visible product action through embedded flect", async ({
+test("Flect lists and invokes a visible product action through embedded flect", async ({
   page,
 }) => {
   await acceptAndRun(page);
 
-  const composer = page.getByRole("textbox", { name: "Message App Agent" });
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill("Invoke the visible interface action");
   await composer.press("Enter");
 
   await expect(
-    page.getByRole("button", { name: "Shape · Shaper" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(
     page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
-  const activity = page.getByRole("button", { name: "Bash details" });
+  const activity = bashForCommand(page, "flect action list");
   await expect(activity).toContainText("Completed");
-  await activity.click();
+  await activity.getByRole("button", { name: "Bash details" }).click();
   await expect(
-    page.locator(".activity-card__details code").first(),
+    activity.locator(".activity-card__details code").first(),
   ).toContainText("flect action list");
-  await expect(page.locator(".activity-card__details pre")).toContainText(
+  await expect(activity.locator(".activity-card__details pre")).toContainText(
     "shape-interface",
   );
-  await expect(page.locator(".activity-card__details pre")).toContainText(
+  await expect(activity.locator(".activity-card__details pre")).toContainText(
     "status: completed",
   );
   completedPromptPages.add(page);
 });
 
-test("App Agent authority and reserved-command identity fail closed", async ({
+test("Flect authority and reserved-command identity fail closed", async ({
   page,
 }) => {
   await acceptAndRun(page);
-  const composer = page.getByRole("textbox", { name: "Message App Agent" });
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
 
   await composer.fill("Verify App Agent authority");
   await composer.press("Enter");
-  let activity = page.getByRole("button", { name: "Bash details" }).last();
+  let activity = bashForCommand(page, "flect shape 'App must not shape'");
   await expect(activity).toContainText("Completed");
-  await activity.click();
-  await expect(
-    page.locator(".activity-card__details pre").last(),
-  ).toContainText("code: unauthorized");
+  await activity.getByRole("button", { name: "Bash details" }).click();
+  await expect(activity.locator(".activity-card__details pre")).toContainText(
+    "code: unauthorized",
+  );
   await expect(page.locator(".topbar .safe-mode")).toHaveCount(0);
 
   await composer.fill("Verify embedded shell composition");
   await composer.press("Enter");
-  activity = page.getByRole("button", { name: "Bash details" }).last();
+  activity = bashForCommand(page, "FLECT_ROLE=shaper");
   await expect(activity).toContainText("Completed");
-  await activity.click();
-  const output = page.locator(".activity-card__details pre").last();
+  await activity.getByRole("button", { name: "Bash details" }).click();
+  const output = activity.locator(".activity-card__details pre");
   await expect(output).toContainText("browser-embedded");
   await expect(output).not.toContainText("shaper");
   completedPromptPages.add(page);
@@ -239,7 +234,7 @@ test("role workspace source persists through OPFS across a page restart", async 
   page,
 }) => {
   await acceptAndRun(page);
-  let composer = page.getByRole("textbox", { name: "Message App Agent" });
+  let composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill("Write persistent workspace marker");
   await composer.press("Enter");
   await expect(
@@ -247,8 +242,8 @@ test("role workspace source persists through OPFS across a page restart", async 
   ).toContainText("Completed");
 
   await page.reload();
-  await page.getByRole("button", { name: "Use · App Agent" }).click();
-  composer = page.getByRole("textbox", { name: "Message App Agent" });
+  await expect(page.locator(".role-shell")).toBeVisible();
+  composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill("Read persistent workspace marker");
   await composer.press("Enter");
   const activity = page.getByRole("button", { name: "Bash details" }).last();
@@ -265,7 +260,7 @@ test("streamed embedded CLI activity does not steal manual scroll position", asy
 }) => {
   await page.setViewportSize({ width: 900, height: 620 });
   await acceptAndRun(page);
-  const composer = page.getByRole("textbox", { name: "Message App Agent" });
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
 
   await composer.fill("Show the Markdown showcase");
   await composer.press("Enter");
@@ -273,7 +268,7 @@ test("streamed embedded CLI activity does not steal manual scroll position", asy
     page.getByRole("heading", { level: 1, name: "Markdown showcase" }),
   ).toBeVisible();
   const conversation = page.getByRole("log", {
-    name: "App Agent conversation",
+    name: "Flect conversation",
   });
   await expect
     .poll(() =>

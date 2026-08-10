@@ -57,6 +57,7 @@ export interface RoleAwareShellProps {
   readonly controlledTarget?: ConversationTarget;
   readonly onTargetChange?: (target: ConversationTarget) => Promise<void>;
   readonly useDisabled?: boolean;
+  readonly activeRevisionId?: import("../../shared/revisions").RevisionId;
   readonly candidateRevisionId?: import("../../shared/revisions").RevisionId;
   readonly onInterfaceAction?: (nodeId: string) => Promise<void>;
   readonly onCapsuleIntent?: (
@@ -133,6 +134,7 @@ export function RoleAwareShell({
   controlledTarget,
   onTargetChange,
   useDisabled = false,
+  activeRevisionId,
   candidateRevisionId,
   onInterfaceAction,
   onCapsuleIntent,
@@ -248,6 +250,12 @@ export function RoleAwareShell({
   }, []);
 
   useEffect(() => {
+    if (collapsed) {
+      reopenRef.current?.focus();
+    }
+  }, [collapsed]);
+
+  useEffect(() => {
     if (!collapsed && shouldFocusRailRef.current) {
       shouldFocusRailRef.current = false;
       queueMicrotask(() => {
@@ -276,6 +284,7 @@ export function RoleAwareShell({
       false;
     if (
       previous === undefined ||
+      compactViewport ||
       reduced ||
       typeof composer.animate !== "function" ||
       (previous.x === next.x &&
@@ -300,7 +309,7 @@ export function RoleAwareShell({
         easing: "cubic-bezier(0.22, 1, 0.36, 1)",
       },
     );
-  }, [collapsed, docked]);
+  }, [collapsed, compactViewport, docked]);
 
   const selectMode = useCallback(
     (next: Exclude<ShellMode, "safe">) => {
@@ -339,9 +348,7 @@ export function RoleAwareShell({
   );
 
   const collapse = useCallback(() => {
-    void preferences.setRailCollapsed(true).then(() => {
-      queueMicrotask(() => reopenRef.current?.focus());
-    });
+    void preferences.setRailCollapsed(true);
   }, [preferences]);
 
   const expand = useCallback(() => {
@@ -475,11 +482,15 @@ export function RoleAwareShell({
     <div
       className={`role-shell${docked ? " role-shell--split" : " role-shell--centered"}${collapsed ? " role-shell--collapsed" : ""}${preview ? " role-shell--preview" : ""}`}
       data-mode={mode}
+      data-phase={phase}
+      data-active-revision={activeRevisionId}
       data-reduced-motion={
         globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches
           ? "true"
           : "false"
       }
+      data-target={target}
+      data-use-disabled={useDisabled || phase === "blank" ? "true" : "false"}
       ref={shellRef}
       style={shellStyle}
     >

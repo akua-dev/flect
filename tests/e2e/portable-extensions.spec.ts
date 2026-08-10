@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
   });
   await resetBrowserWorkspace(page);
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
 });
 
@@ -43,7 +43,7 @@ const importCapsule = async (
     mimeType: "application/vnd.flect",
     buffer: Buffer.from(archive),
   });
-  const decision = page.getByRole("region", { name: "Revision decision" });
+  const decision = page.getByRole("region", { name: "Import decision" });
   await expect(decision).toBeVisible();
   return decision;
 };
@@ -60,7 +60,7 @@ const promptFinished = (page: Page) =>
       /\/api\/sessions\/[^/]+\/prompts$/.test(request.url()),
   });
 
-test("reviews, tests, keeps, discovers, disables, and removes role-scoped packages", async ({
+test("reviews, tests, activates, discovers, disables, and removes role-scoped packages", async ({
   page,
 }, testInfo) => {
   test.setTimeout(120_000);
@@ -101,15 +101,17 @@ test("reviews, tests, keeps, discovers, disables, and removes role-scoped packag
     app.getByRole("button", { name: "Test for App Agent" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Keep change" }),
+    page.getByRole("button", { name: "Activate app" }),
   ).toBeDisabled();
   await app.getByRole("button", { name: "Test for App Agent" }).click();
   await expect(app.getByText("Testing App Agent complete.")).toBeVisible({
     timeout: 30_000,
   });
-  await expect(page.getByRole("button", { name: "Keep change" })).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Activate app" }),
+  ).toBeEnabled();
   const previewComposer = page.getByRole("textbox", {
-    name: "Message Preview App Agent",
+    name: "Message Flect",
   });
   await previewComposer.fill("Inspect portable extensions");
   const candidatePromptFinished = promptFinished(page);
@@ -128,9 +130,9 @@ test("reviews, tests, keeps, discovers, disables, and removes role-scoped packag
     page.locator("form.composer").filter({ has: previewComposer }),
   ).toHaveAttribute("aria-busy", "false");
   await candidatePromptFinished;
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
 
-  const composer = page.getByRole("textbox", { name: "Message App Agent" });
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill("Inspect portable extensions");
   const acceptedPromptFinished = promptFinished(page);
   await composer.press("Enter");
@@ -180,10 +182,11 @@ test("restores an accepted portable extension capsule after reload", async ({
   await expect(app.getByText("Testing App Agent complete.")).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
   await expect(
-    page.getByRole("textbox", { name: "Message App Agent" }),
-  ).toBeVisible();
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
+  await expect(acceptedExtensionSummary(page)).toBeVisible();
 
   await page.reload();
   await expect(
@@ -211,7 +214,7 @@ test("keeps the accepted baseline when a pinned update fails in its worker", asy
   await expect(app.getByText("Testing App Agent complete.")).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
 
   await acceptedExtensionSummary(page).click();
   app = page.getByRole("group", { name: "App Agent" });
@@ -241,14 +244,14 @@ test("keeps the accepted baseline when a pinned update fails in its worker", asy
   await app.getByRole("button", { name: "Enable for App Agent" }).click();
   await app.getByRole("button", { name: "Test for App Agent" }).click();
   await expect(app.getByRole("alert")).toContainText(
-    "The portable extension failed safely. Disable the extension or fix it in Shape.",
+    "The portable extension failed safely. Disable the extension or ask Flect to fix it.",
     { timeout: 30_000 },
   );
   await expect(page.getByText("fixture-private-detail")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Keep change" }),
+    page.getByRole("button", { name: "Activate app" }),
   ).toBeDisabled();
-  await page.getByRole("button", { name: "Reject" }).click();
+  await page.getByRole("button", { name: "Discard" }).click();
   await expect(
     page
       .frameLocator('iframe[title="Portable product"]')
@@ -288,9 +291,9 @@ test("fails network, storage, credential, flood, loop, memory, and oversized pro
       { timeout: 30_000 },
     );
     await expect(
-      page.getByRole("button", { name: "Keep change" }),
+      page.getByRole("button", { name: "Activate app" }),
     ).toBeDisabled();
-    await page.getByRole("button", { name: "Reject" }).click();
+    await page.getByRole("button", { name: "Discard" }).click();
     await expect(decision).toHaveCount(0);
   }
 

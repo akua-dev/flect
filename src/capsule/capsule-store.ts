@@ -1,5 +1,6 @@
-import { MemoryVfs, OpfsVfs, type Vfs } from "@riftydev/vfs";
+import type { Vfs } from "@riftydev/vfs";
 import { Context, Effect, Layer, Schema } from "effect";
+import { browserPersistentStorage } from "../lib/browser-persistent-vfs";
 
 const ROOT = "/flect-capsules/default";
 const OBJECTS = `${ROOT}/objects`;
@@ -125,14 +126,9 @@ export const makeCapsuleStoreLayer = (
 
 export const CapsuleStoreLive = Layer.effect(
   CapsuleStore,
-  Effect.promise(async () => {
-    if (OpfsVfs.isSupported()) {
-      try {
-        const vfs = new OpfsVfs();
-        await vfs.init();
-        return makeCapsuleStore(vfs, "durable");
-      } catch {}
-    }
-    return makeCapsuleStore(new MemoryVfs(), "session");
-  }),
+  Effect.promise(() =>
+    browserPersistentStorage().then(({ vfs, persistence }) =>
+      makeCapsuleStore(vfs, persistence),
+    ),
+  ),
 );

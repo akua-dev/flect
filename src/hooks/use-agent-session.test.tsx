@@ -259,7 +259,7 @@ describe("useAgentSession", () => {
         {
           id: expect.any(String),
           role: "assistant",
-          content: `Preview ready: ${defaultInterfaceDocument.name}`,
+          content: `Change complete: ${defaultInterfaceDocument.name}`,
           createdAt: expect.any(Number),
         },
         {

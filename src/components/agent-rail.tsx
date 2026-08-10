@@ -656,7 +656,7 @@ export function AgentRail({
       void file
         .arrayBuffer()
         .then((buffer) => workspace.importCapsule?.(new Uint8Array(buffer)))
-        .then(() => setCapsuleNotice("Flect app verified. Review the preview."))
+        .then(() => setCapsuleNotice("Flect app verified. Ready to activate."))
         .catch(() => setCapsuleNotice("Flect app import failed safely."));
     });
     input.click();
@@ -697,7 +697,7 @@ export function AgentRail({
           );
           await workspace.importCapsule?.(archive);
           setCapsuleNotice(
-            `${report.kind === "static-html" ? "Static app packaged" : "Portable build verified"} · ${report.includedFiles} source files${report.ignoredFiles.length === 0 ? "" : ` · ${report.ignoredFiles.length} ignored`}. Review the preview.`,
+            `${report.kind === "static-html" ? "Static app packaged" : "Portable build verified"} · ${report.includedFiles} source files${report.ignoredFiles.length === 0 ? "" : ` · ${report.ignoredFiles.length} ignored`}. Ready to activate.`,
           );
         })
         .catch((error: unknown) => {
@@ -722,7 +722,7 @@ export function AgentRail({
         loadBrowserCapsuleArchiveFromUrl(installUrl),
       );
       await workspace.importCapsule?.(archive);
-      setCapsuleNotice("Flect app verified. Review the preview.");
+      setCapsuleNotice("Flect app verified. Ready to activate.");
       setInstallOpen(false);
       setInstallUrl("");
     } catch {

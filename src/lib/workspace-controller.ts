@@ -99,7 +99,7 @@ import {
 } from "../../shared/share-installation";
 import { ShellPreferencesValue } from "../../shared/shell-preferences";
 import { buildFrameworkCapsule } from "../build/framework-capsule";
-import { ProposalBuild } from "../build/proposal-build";
+import { ProposalBuild } from "../build/proposal-build-service";
 import { ProductCapabilityRegistry } from "../capabilities/product-capability-registry";
 import {
   type CapsuleArchiveBindings,
@@ -451,6 +451,20 @@ type Claim =
 
 const systemSource = UserCommandSource.make({ kind: "user" });
 
+// Workspace snapshots are already made entirely from validated schema values.
+// Evolving that trusted projection shallowly preserves nested class instances;
+// running the recursive schema constructor for every transient UI update would
+// clone the whole bounded journal and conversation on every frame.
+const evolveWorkspaceSnapshot = (
+  current: FlectWorkspaceSnapshot,
+  patch: Partial<FlectWorkspaceSnapshot>,
+): FlectWorkspaceSnapshot =>
+  Object.assign(
+    Object.create(FlectWorkspaceSnapshot.prototype) as FlectWorkspaceSnapshot,
+    current,
+    patch,
+  );
+
 const phaseFrom = (shaping: ShapingSnapshot) =>
   shaping.safeMode
     ? "safe-mode"
@@ -676,7 +690,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         capsule: capsuleStore?.persistence ?? "unavailable",
       }),
       permissions: [],
-      operations,
+      operations: operations.slice(-12),
       ...(initialExtensions === undefined
         ? {}
         : { extensions: initialExtensions }),
@@ -717,7 +731,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         yield* SubscriptionRef.update(state, (current) =>
           FlectWorkspaceSnapshot.make({
             ...current,
-            operations: [...current.operations, ...appended].slice(-500),
+            operations: [...current.operations, ...appended].slice(-12),
           }),
         );
       }
@@ -1140,10 +1154,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       const event = yield* SubscriptionRef.modify(state, (current) => {
         const sequence = current.sequence + 1;
         const updated = update(current);
-        const next = FlectWorkspaceSnapshot.make({
-          ...updated,
-          sequence,
-        });
+        const next = evolveWorkspaceSnapshot(updated, { sequence });
         return [
           FlectWorkspaceEvent.make({
             version: 1,
@@ -1172,7 +1183,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       transition(
         envelope.source,
         "build-progress",
-        (current) => FlectWorkspaceSnapshot.make({ ...current, build }),
+        (current) => evolveWorkspaceSnapshot(current, { build }),
         {
           operationId,
           commandId: envelope.commandId,
@@ -1392,8 +1403,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           current.workbench ?? initialWorkbenchState(current.shaping),
           shaping,
         );
-        return FlectWorkspaceSnapshot.make({
-          ...current,
+        return evolveWorkspaceSnapshot(current, {
           phase: phaseFrom(shaping),
           mode: modeFromWorkbench(workbench, shaping),
           document: documentFrom(shaping),
@@ -1476,7 +1486,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         )) === undefined
       ) {
         return yield* Effect.fail(
-          commandRejected("Review the shared candidate again before Keep."),
+          commandRejected(
+            "Review the shared candidate again before activation.",
+          ),
         );
       }
       const signature = yield* shareSignatureVerifier.verify(
@@ -1485,7 +1497,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       );
       if (signature.status === "invalid") {
         return yield* Effect.fail(
-          commandRejected("Review the shared candidate again before Keep."),
+          commandRejected(
+            "Review the shared candidate again before activation.",
+          ),
         );
       }
     });
@@ -1520,7 +1534,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         review.blockers.includes("migration-review-required")
       ) {
         return yield* Effect.fail(
-          commandRejected("Review the shared candidate again before Keep."),
+          commandRejected(
+            "Review the shared candidate again before activation.",
+          ),
         );
       }
       const declaredIds = candidate.material.manifest.artifacts.map(
@@ -1533,7 +1549,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         activation.artifactIds.some((id) => !declaredIds.includes(id))
       ) {
         return yield* Effect.fail(
-          commandRejected("Review the shared candidate again before Keep."),
+          commandRejected(
+            "Review the shared candidate again before activation.",
+          ),
         );
       }
       const stored = yield* shareCandidateStore.load(
@@ -1541,7 +1559,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       );
       if (stored === undefined) {
         return yield* Effect.fail(
-          commandRejected("Review the shared candidate again before Keep."),
+          commandRejected(
+            "Review the shared candidate again before activation.",
+          ),
         );
       }
       const signature = yield* shareSignatureVerifier.verify(
@@ -1550,7 +1570,9 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       );
       if (signature.status === "invalid") {
         return yield* Effect.fail(
-          commandRejected("Review the shared candidate again before Keep."),
+          commandRejected(
+            "Review the shared candidate again before activation.",
+          ),
         );
       }
       let refs = ShareInstallationRefs.make({
@@ -1609,7 +1631,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
                 Effect.andThen(
                   Effect.fail(
                     commandRejected(
-                      "The shared candidate changed before Keep.",
+                      "The shared candidate changed before activation.",
                     ),
                   ),
                 ),
@@ -1672,7 +1694,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       } satisfies FinalizedShareActivation;
       yield* shareInstallationStore.save(acceptedInstallation).pipe(
         Effect.mapError(() =>
-          commandRejected("The shared Keep state could not be saved."),
+          commandRejected("The shared activation state could not be saved."),
         ),
         Effect.catch((error) =>
           restoreGit.pipe(Effect.andThen(Effect.fail(error))),
@@ -1868,8 +1890,8 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           return yield* Effect.fail(
             commandRejected(
               incompatible
-                ? "This capsule is incompatible with this Flect version or host. Reject this candidate or use a compatible host."
-                : "Required capsule capabilities are unavailable. Reject this candidate or install it in a host that can grant them.",
+                ? "This capsule is incompatible with this Flect version or host. Discard this candidate or use a compatible host."
+                : "Required capsule capabilities are unavailable. Discard this candidate or install it in a host that can grant them.",
             ),
           );
         }
@@ -2292,8 +2314,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           envelope.source,
           "turn-started",
           (snapshot) =>
-            FlectWorkspaceSnapshot.make({
-              ...snapshot,
+            evolveWorkspaceSnapshot(snapshot, {
               phase: "shaping",
               mode: "edit",
               workbench,
@@ -2334,18 +2355,30 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             ? {}
             : { lastKnownGoodReview: current.lastKnownGoodReview }),
         }));
-        yield* shaping.proposal === undefined
-          ? kernel
-              .propose(candidate, "shaper")
-              .pipe(Effect.flatMap((proposal) => kernel.preview(proposal.id)))
-          : kernel.supersede(shaping.proposal.id, candidate, "shaper");
-
-        // A Shaper result is a typed, local InterfaceDocument. It cannot add
-        // host capabilities or install external code, so making the user
-        // approve it again only duplicates the instruction they just gave.
-        // Imported capsules, shares, and capability changes still enter via
-        // their explicit candidate flows and retain their authority review.
-        yield* acceptProposal(envelope, operationId);
+        if (shaping.proposal === undefined) {
+          // A typed local edit cannot add host authority. Commit it as one
+          // accepted Git transition so the live canvas stays fast and its
+          // history contains only meaningful user-visible states.
+          const accepted = yield* kernel.applyLocalRevision(
+            candidate,
+            "shaper",
+          );
+          yield* agent.releasePreview;
+          const next = yield* kernel.snapshot;
+          yield* transitionShaping(
+            envelope,
+            operationId,
+            "revision-accepted",
+            next,
+            accepted.id,
+          );
+        } else {
+          yield* kernel.supersede(shaping.proposal.id, candidate, "shaper");
+          // Imported capsules, shares, and capability changes retain their
+          // explicit authority review; a local correction of an open
+          // candidate still uses the guarded acceptance transaction.
+          yield* acceptProposal(envelope, operationId);
+        }
       },
     );
 
@@ -2629,7 +2662,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           Effect.mapError((error) =>
             commandRejected(
               error.reason === "stale-ref"
-                ? `${error.message} Open it in Shape again.`
+                ? `${error.message} Resolve it with Flect again.`
                 : "The shared conflict could not be resolved safely.",
             ),
           ),
@@ -3433,7 +3466,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             sandboxedShell === undefined
           ) {
             return yield* Effect.fail(
-              commandRejected("Shape conflict resolution is unavailable."),
+              commandRejected("Agent conflict resolution is unavailable."),
             );
           }
           const installation = yield* shareInstallationStore.get(
@@ -3493,7 +3526,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             .pipe(
               Effect.mapError(() =>
                 commandRejected(
-                  "The Shaper conflict workspace could not be prepared safely.",
+                  "The conflict workspace could not be prepared safely.",
                 ),
               ),
             );
@@ -3501,7 +3534,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             "Resolve the shared Git conflict the user explicitly opened.",
             `Inspect ${root}/conflicts.txt and the base, fork, and upstream files below that directory. A missing version means that side deleted the file.`,
             `Write every final conflict path below ${root}/resolved, then run flect share resolve with the exact base, upstream, and fork commits from conflicts.txt, one --write <share-path> <workspace-path> or --remove <share-path> per conflict, and a short --message.`,
-            "Do not Keep the result. Flect will present the inactive resolved candidate to the user.",
+            "Do not activate the result. Flect will present the inactive resolved candidate to the user.",
           ].join("\n");
           yield* runShareConflictShaper(envelope, operationId, instruction);
           return {
@@ -3530,7 +3563,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           ) {
             return yield* Effect.fail(
               commandRejected(
-                "The shared conflict references changed. Open it in Shape again.",
+                "The shared conflict references changed. Resolve it with Flect again.",
               ),
             );
           }
@@ -3681,7 +3714,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               commandRejected(
                 shaping.safeMode
                   ? "Restore the interface before activating shared source."
-                  : "Keep or reject the current candidate before activating shared source.",
+                  : "Activate or discard the current candidate before activating shared source.",
               ),
             );
           }
@@ -4432,7 +4465,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           if (current.proposal !== undefined) {
             return yield* Effect.fail(
               commandRejected(
-                "Keep or discard the current candidate before importing.",
+                "Activate or discard the current candidate before importing.",
               ),
             );
           }
@@ -5398,11 +5431,12 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       );
     }
     yield* agent.changes.pipe(
+      Stream.buffer({ capacity: 1, strategy: "sliding" }),
       Stream.drop(1),
       Stream.runForEach((next) =>
         Effect.gen(function* () {
           yield* transition(systemSource, "state-changed", (current) =>
-            FlectWorkspaceSnapshot.make({ ...current, agent: next }),
+            evolveWorkspaceSnapshot(current, { agent: next }),
           );
           const current = yield* SubscriptionRef.get(state);
           yield* persistContinuity(next, current.shaping);
@@ -5411,6 +5445,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       Effect.forkScoped,
     );
     yield* kernel.changes.pipe(
+      Stream.buffer({ capacity: 1, strategy: "sliding" }),
       Stream.drop(1),
       Stream.runForEach((next) =>
         Effect.gen(function* () {
@@ -5431,8 +5466,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               .pipe(Effect.option);
             if (Option.isSome(repository)) {
               yield* SubscriptionRef.update(state, (current) =>
-                FlectWorkspaceSnapshot.make({
-                  ...current,
+                evolveWorkspaceSnapshot(current, {
                   repository: repository.value,
                 }),
               );
@@ -5445,13 +5479,11 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       Effect.forkScoped,
     );
     yield* journal.changes.pipe(
+      Stream.buffer({ capacity: 1, strategy: "sliding" }),
       Stream.drop(1),
       Stream.runForEach((next) =>
         SubscriptionRef.update(state, (current) =>
-          FlectWorkspaceSnapshot.make({
-            ...current,
-            operations: next,
-          }),
+          evolveWorkspaceSnapshot(current, { operations: next.slice(-12) }),
         ),
       ),
       Effect.forkScoped,

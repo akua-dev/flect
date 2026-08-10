@@ -172,7 +172,7 @@ export class PortableExtensionFailure extends Schema.Class<PortableExtensionFail
     "startup",
   ]),
   message: Schema.Literal("The portable extension failed safely."),
-  recovery: Schema.Literal("Disable the extension or fix it in Shape."),
+  recovery: Schema.Literal("Disable the extension or ask Flect to fix it."),
 }) {}
 
 export class PortableExtensionRoleState extends Schema.Class<PortableExtensionRoleState>(

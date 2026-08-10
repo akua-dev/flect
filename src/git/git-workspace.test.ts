@@ -27,7 +27,107 @@ class HangingWorker implements GitWorkspaceWorker {
   }
 }
 
+class RespondingWorker implements GitWorkspaceWorker {
+  terminated = false;
+  private readonly messageListeners =
+    new Set<EventListenerOrEventListenerObject>();
+
+  addEventListener(type: string, listener: EventListenerOrEventListenerObject) {
+    if (type === "message") this.messageListeners.add(listener);
+  }
+
+  removeEventListener(
+    type: string,
+    listener: EventListenerOrEventListenerObject,
+  ) {
+    if (type === "message") this.messageListeners.delete(listener);
+  }
+
+  postMessage(message: unknown) {
+    const request = message as { readonly id: string };
+    const event = new MessageEvent("message", {
+      data: {
+        type: "success",
+        id: request.id,
+        result: { type: "opened", variant: "asyncify", existed: true },
+      },
+    });
+    queueMicrotask(() => {
+      for (const listener of this.messageListeners) {
+        if (typeof listener === "function") listener(event);
+        else listener.handleEvent(event);
+      }
+    });
+  }
+
+  terminate() {
+    this.terminated = true;
+  }
+}
+
 describe("GitWorkspace worker lifecycle", () => {
+  it.effect("recycles the Wasm worker before long sessions exhaust it", () =>
+    Effect.gen(function* () {
+      const workers: Array<RespondingWorker> = [];
+      const git = yield* makeGitWorkspace({
+        maxWorkerOperations: 2,
+        lockManager: {
+          request: async <A>(
+            _name: string,
+            _options: LockOptions,
+            callback: (lock: Lock | null) => Promise<A>,
+          ): Promise<Awaited<A>> => await callback(null),
+        },
+        makeWorker: () => {
+          const worker = new RespondingWorker();
+          workers.push(worker);
+          return worker;
+        },
+      });
+
+      yield* git.open({ workspaceId: "rotation" });
+      yield* git.open({ workspaceId: "rotation" });
+      assert.strictEqual(workers.length, 1);
+      assert.isTrue(workers[0]?.terminated === true);
+
+      yield* git.open({ workspaceId: "rotation" });
+      assert.strictEqual(workers.length, 2);
+      assert.isFalse(workers[1]?.terminated === true);
+    }),
+  );
+
+  it.effect("never hands a queued concurrent request a recycled worker", () =>
+    Effect.gen(function* () {
+      const workers: Array<RespondingWorker> = [];
+      const git = yield* makeGitWorkspace({
+        maxWorkerOperations: 1,
+        lockManager: {
+          request: async <A>(
+            _name: string,
+            _options: LockOptions,
+            callback: (lock: Lock | null) => Promise<A>,
+          ): Promise<Awaited<A>> => await callback(null),
+        },
+        makeWorker: () => {
+          const worker = new RespondingWorker();
+          workers.push(worker);
+          return worker;
+        },
+      });
+
+      yield* Effect.all(
+        [
+          git.open({ workspaceId: "rotation" }),
+          git.open({ workspaceId: "rotation" }),
+        ],
+        { concurrency: "unbounded" },
+      );
+
+      assert.strictEqual(workers.length, 2);
+      assert.isTrue(workers.every((worker) => worker.terminated));
+    }),
+  );
+
   it.effect("terminates before releasing the lock after a timeout", () =>
     Effect.gen(function* () {
       const workers: Array<HangingWorker> = [];

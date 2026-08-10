@@ -319,7 +319,7 @@ test.beforeEach(async ({ page }) => {
   });
   await resetBrowserWorkspace(page);
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
 });
 
@@ -345,7 +345,9 @@ test("retains, previews, exports, removes, and explicitly deletes a real Git sha
   await expect(review).toBeVisible();
   await expect(review).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(initialScroll);
-  await expect(review.getByText("Inactive until you keep it")).toBeVisible();
+  await expect(
+    review.getByText("Inactive until you activate it"),
+  ).toBeVisible();
   await expect(review.getByText("0 authority-affecting changes")).toBeVisible();
   await expect(page.locator(".agent-rail-container")).toHaveAttribute(
     "inert",
@@ -368,10 +370,10 @@ test("retains, previews, exports, removes, and explicitly deletes a real Git sha
   await review.getByRole("button", { name: "Retain selected" }).click();
   await review.getByRole("button", { name: "Preview selected" }).click();
   // The decision can render while staging is finishing. The controller must
-  // serialize this immediate Keep behind activation instead of racing Git.
-  await page.getByRole("button", { name: "Keep change" }).click();
+  // serialize this immediate decision behind activation instead of racing Git.
+  await page.getByRole("button", { name: "Activate app" }).click();
   await expect(
-    page.getByRole("textbox", { name: "Message App Agent" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Actions" }).click();
@@ -437,7 +439,7 @@ test("retains, previews, exports, removes, and explicitly deletes a real Git sha
   );
 });
 
-test("prepares and keeps an exact fast-forward update from real Git history", async ({
+test("prepares and activates an exact fast-forward update from real Git history", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -453,9 +455,9 @@ test("prepares and keeps an exact fast-forward update from real Git history", as
   let review = page.getByRole("region", { name: "Weather workspace" });
   await review.getByRole("button", { name: "Retain selected" }).click();
   await review.getByRole("button", { name: "Preview selected" }).click();
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
   await expect(
-    page.getByRole("textbox", { name: "Message App Agent" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
 
   await fileInput.setInputFiles({
@@ -472,7 +474,7 @@ test("prepares and keeps an exact fast-forward update from real Git history", as
     review.getByRole("button", { name: "Preview selected" }),
   ).toBeEnabled();
   await review.getByRole("button", { name: "Preview selected" }).click();
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
 
   await page.getByRole("button", { name: "Actions" }).click();
   await page.getByRole("menuitem", { name: "Manage shared sources" }).click();
@@ -492,7 +494,7 @@ test("prepares and keeps an exact fast-forward update from real Git history", as
   );
 });
 
-test("prompts Shaper to personalize a fork and keeps a real two-parent merge", async ({
+test("routes fork personalization through one composer and activates a real two-parent merge", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -508,16 +510,24 @@ test("prompts Shaper to personalize a fork and keeps a real two-parent merge", a
   let review = page.getByRole("region", { name: "Weather workspace" });
   await review.getByRole("button", { name: "Retain selected" }).click();
   await review.getByRole("button", { name: "Preview selected" }).click();
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
 
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  const shaper = page.getByRole("textbox", { name: "Message Shaper" });
-  await shaper.fill(`Personalize shared fork ${fixtures.initial.commit}`);
-  await shaper.press("Enter");
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  await composer.fill(`Personalize shared fork ${fixtures.initial.commit}`);
+  await composer.press("Enter");
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page
+      .getByRole("button", { name: "Bash details" })
+      .filter({ hasText: "Completed" })
+      .last(),
   ).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(page.locator("form.composer")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  await expect(
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
 
   await fileInput.setInputFiles({
     name: fixtures.compatibleUpdate.fileName,
@@ -532,7 +542,7 @@ test("prompts Shaper to personalize a fork and keeps a real two-parent merge", a
     review.getByRole("button", { name: "Preview selected" }),
   ).toBeEnabled();
   await review.getByRole("button", { name: "Preview selected" }).click();
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
 
   await page.getByRole("button", { name: "Actions" }).click();
   await page.getByRole("menuitem", { name: "Manage shared sources" }).click();
@@ -556,7 +566,7 @@ test("prompts Shaper to personalize a fork and keeps a real two-parent merge", a
   );
 });
 
-test("opens a real Git conflict in Shape and keeps only the explicit resolution", async ({
+test("resolves a real Git conflict with Flect and activates only the explicit resolution", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -572,18 +582,26 @@ test("opens a real Git conflict in Shape and keeps only the explicit resolution"
   let review = page.getByRole("region", { name: "Weather workspace" });
   await review.getByRole("button", { name: "Retain selected" }).click();
   await review.getByRole("button", { name: "Preview selected" }).click();
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
 
-  await page.getByRole("button", { name: "Shape · Shaper" }).click();
-  const shaper = page.getByRole("textbox", { name: "Message Shaper" });
-  await shaper.fill(
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
+  await composer.fill(
     `Personalize shared conflict fork ${fixtures.initial.commit}`,
   );
-  await shaper.press("Enter");
+  await composer.press("Enter");
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page
+      .getByRole("button", { name: "Bash details" })
+      .filter({ hasText: "Completed" })
+      .last(),
   ).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Reject" }).click();
+  await expect(page.locator("form.composer")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  await expect(
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
 
   await fileInput.setInputFiles({
     name: fixtures.conflictingUpdate.fileName,
@@ -597,17 +615,19 @@ test("opens a real Git conflict in Shape and keeps only the explicit resolution"
     review.getByRole("button", { name: "Continue with my fork" }),
   ).toBeEnabled();
   await expect(
-    review.getByRole("button", { name: "Open conflict in Shape" }),
+    review.getByRole("button", { name: "Resolve conflict with Flect" }),
   ).toBeEnabled();
   await expect(
-    review.getByRole("button", { name: "Reject update" }),
+    review.getByRole("button", { name: "Discard update" }),
   ).toBeEnabled();
   await expect(
     review.getByRole("button", { name: "Preview selected" }),
   ).toHaveCount(0);
   await expectAccessible(page, ".share-review");
 
-  await review.getByRole("button", { name: "Open conflict in Shape" }).click();
+  await review
+    .getByRole("button", { name: "Resolve conflict with Flect" })
+    .click();
   await expect(page.locator(".agent-rail-container")).not.toHaveAttribute(
     "inert",
     "",
@@ -616,13 +636,13 @@ test("opens a real Git conflict in Shape and keeps only the explicit resolution"
     timeout: 30_000,
   });
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
   await expect(
     review.getByRole("button", { name: "Preview selected" }),
   ).toBeEnabled();
   await review.getByRole("button", { name: "Preview selected" }).click();
-  await page.getByRole("button", { name: "Keep change" }).click();
+  await page.getByRole("button", { name: "Activate app" }).click();
 
   await page.getByRole("button", { name: "Actions" }).click();
   await page.getByRole("menuitem", { name: "Manage shared sources" }).click();
@@ -679,8 +699,10 @@ test("reviews a credential-free HTTPS share through the same inactive boundary",
   ).toBeVisible();
   expect(requestHeaders?.authorization).toBeUndefined();
   expect(requestHeaders?.cookie).toBeUndefined();
-  await expect(review.getByText("Inactive until you keep it")).toBeVisible();
-  await review.getByRole("button", { name: "Reject shared source" }).click();
+  await expect(
+    review.getByText("Inactive until you activate it"),
+  ).toBeVisible();
+  await review.getByRole("button", { name: "Discard shared source" }).click();
   await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
     "Local control off",
   );
@@ -750,7 +772,7 @@ test("clones and reviews an exact public Git descriptor through wasm-git", async
           request.includes("/objects/") || request.includes("/git-upload-pack"),
       ),
     ).toBe(true);
-    await review.getByRole("button", { name: "Reject shared source" }).click();
+    await review.getByRole("button", { name: "Discard shared source" }).click();
   } finally {
     await page.unroute(pattern);
     await rm(root, { force: true, recursive: true });
@@ -784,7 +806,7 @@ test("opens a host-composed private adapter without exposing its credential clos
   );
   await page.reload();
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
   await page.getByRole("button", { name: "Actions" }).click();
   await page.getByRole("menuitem", { name: "Review shared source" }).click();
@@ -810,7 +832,7 @@ test("opens a host-composed private adapter without exposing its credential clos
       Reflect.has(globalThis, "__flectPrivateShareDiagnostic"),
     ),
   ).toBe(false);
-  await review.getByRole("button", { name: "Reject shared source" }).click();
+  await review.getByRole("button", { name: "Discard shared source" }).click();
   await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
     "Local control off",
   );
@@ -837,7 +859,7 @@ test("sharing review and source library remain contained at 320px and 200 percen
       buffer: Buffer.from(fixture.archive),
     });
   await expect(
-    page.getByRole("button", { name: "Reject shared source" }),
+    page.getByRole("button", { name: "Discard shared source" }),
   ).toBeVisible();
   const geometry = await page.evaluate(() => {
     const review = document.querySelector(".share-review");
@@ -854,7 +876,7 @@ test("sharing review and source library remain contained at 320px and 200 percen
   expect(geometry.left).toBeGreaterThanOrEqual(0);
   expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth);
   await expectAccessible(page, ".share-review");
-  await page.getByRole("button", { name: "Reject shared source" }).click();
+  await page.getByRole("button", { name: "Discard shared source" }).click();
 });
 
 test("inspects every artifact kind inertly and contains a malicious local archive", async ({
@@ -885,9 +907,11 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
   ]) {
     await expect(review.getByText(kind, { exact: true })).toBeVisible();
   }
-  await expect(review.getByText("Inactive until you keep it")).toBeVisible();
   await expect(
-    page.getByRole("textbox", { name: "Message App Agent" }),
+    review.getByText("Inactive until you activate it"),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).not.toBeVisible();
   await expectAccessible(page, ".share-review");
   await page.screenshot({
@@ -898,9 +922,9 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
   await expect(
     review.getByRole("button", { name: "Preview selected" }),
   ).toBeEnabled();
-  await review.getByRole("button", { name: "Reject shared source" }).click();
+  await review.getByRole("button", { name: "Discard shared source" }).click();
   await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
+    page.getByRole("heading", { name: "What do you want to make?" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Actions" }).click();
@@ -919,7 +943,7 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
     /The shared file could not be reviewed safely/,
   );
   await expect(
-    page.getByRole("heading", { name: "What should we shape?" }),
+    page.getByRole("heading", { name: "What do you want to make?" }),
   ).toBeVisible();
   await expect(page.getByText("private archive detail")).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText(
@@ -935,7 +959,7 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
     page.getByRole("region", { name: "Weather workspace" }),
   ).toBeVisible();
   await expect(failure).not.toBeVisible();
-  await page.getByRole("button", { name: "Reject shared source" }).click();
+  await page.getByRole("button", { name: "Discard shared source" }).click();
   await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
     "Local control off",
   );

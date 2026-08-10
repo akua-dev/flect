@@ -2,7 +2,9 @@
 .worktrees/
 .repos/
 node_modules/
+.astro/
 dist/
+dist-spa/
 dist-product-sdk/
 dist-release/
 coverage/

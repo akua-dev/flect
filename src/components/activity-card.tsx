@@ -93,7 +93,7 @@ export function ActivityCard({
           onClick={() => onFixInShape(activity)}
           type="button"
         >
-          Fix in Shape
+          Fix with Flect
         </button>
       )}
     </article>

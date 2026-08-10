@@ -204,30 +204,32 @@ describe("OperationJournal", () => {
         }),
     );
 
-    it.effect("evicts the oldest records beyond the 500-record bound", () =>
-      Effect.gen(function* () {
-        const journal = yield* OperationJournal;
-        yield* Effect.forEach(
-          Array.from({ length: 501 }, (_, index) => index + 1),
-          (index) => journal.append(input(index)),
-          { discard: true },
-        );
-        const records = yield* journal.snapshot;
+    it.effect(
+      "evicts the oldest records beyond the recent 128-record bound",
+      () =>
+        Effect.gen(function* () {
+          const journal = yield* OperationJournal;
+          yield* Effect.forEach(
+            Array.from({ length: 501 }, (_, index) => index + 1),
+            (index) => journal.append(input(index)),
+            { discard: true },
+          );
+          const records = yield* journal.snapshot;
 
-        assert.strictEqual(records.length, 500);
-        assert.strictEqual(
-          records[0]?.sequence,
-          (records.at(-1)?.sequence ?? 0) - 499,
-        );
-        assert.strictEqual(records[0]?.operationId, "operation-journal-2");
-        assert.strictEqual(
-          records.at(-1)?.operationId,
-          "operation-journal-501",
-        );
-      }),
+          assert.strictEqual(records.length, 128);
+          assert.strictEqual(
+            records[0]?.sequence,
+            (records.at(-1)?.sequence ?? 0) - 127,
+          );
+          assert.strictEqual(records[0]?.operationId, "operation-journal-374");
+          assert.strictEqual(
+            records.at(-1)?.operationId,
+            "operation-journal-501",
+          );
+        }),
     );
 
-    it.effect("evicts records before encoded state exceeds two MiB", () =>
+    it.effect("evicts records before encoded state exceeds 512 KiB", () =>
       Effect.gen(function* () {
         const journal = yield* OperationJournal;
         const output = "x".repeat(8_000);
@@ -262,8 +264,8 @@ describe("OperationJournal", () => {
           ),
         ).byteLength;
 
-        assert.isBelow(records.length, 300);
-        assert.isAtMost(encodedBytes, 2 * 1024 * 1024);
+        assert.isBelow(records.length, 128);
+        assert.isAtMost(encodedBytes, 512 * 1024);
         assert.strictEqual(
           records.at(-1)?.operationId,
           "operation-journal-300",

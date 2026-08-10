@@ -40,7 +40,7 @@ describe("ActivityCard", () => {
     expect(screen.getByText("bun test")).toBeVisible();
     expect(screen.getByText("1 test failed")).toBeVisible();
     expect(screen.getByText("Exit 1")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Fix in Shape" }));
+    await user.click(screen.getByRole("button", { name: "Fix with Flect" }));
     expect(onFixInShape).toHaveBeenCalledOnce();
   });
 });

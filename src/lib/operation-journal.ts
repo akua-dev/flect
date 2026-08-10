@@ -10,8 +10,8 @@ import {
 import { OperationRecord, ToolActivity } from "../../shared/control";
 import { ProductCapabilityId } from "../../shared/product-capability";
 
-const MAX_RECORDS = 500;
-const MAX_ENCODED_BYTES = 2 * 1024 * 1024;
+const MAX_RECORDS = 128;
+const MAX_ENCODED_BYTES = 512 * 1024;
 
 export class OperationJournalInput extends Schema.Class<OperationJournalInput>(
   "OperationJournalInput",

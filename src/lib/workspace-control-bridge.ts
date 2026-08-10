@@ -244,7 +244,9 @@ export const WorkspaceControlBridgeLive = Layer.effect(
     );
 
     yield* reconcileObserved;
-    yield* controller.changes.pipe(
+    // A semantic event is sufficient to trigger reconciliation. The event
+    // stream is bounded and does not retain obsolete full workspace snapshots.
+    yield* controller.events.pipe(
       Stream.runForEach(() => reconcileObserved),
       Effect.forkScoped,
     );

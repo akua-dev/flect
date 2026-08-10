@@ -58,7 +58,7 @@ export class ExtensionCatalogFailure extends Schema.TaggedErrorClass<ExtensionCa
       "The portable extension is unavailable.",
       "The portable extension transition is unavailable.",
       "A required portable extension capability is not granted.",
-      "An enabled candidate extension must pass its test before Keep.",
+      "An enabled candidate extension must pass its test before activation.",
       "Portable extension state could not be saved.",
     ]),
   },
@@ -77,7 +77,7 @@ const failure = (
           : reason === "required-capability"
             ? "A required portable extension capability is not granted."
             : reason === "untested-candidate"
-              ? "An enabled candidate extension must pass its test before Keep."
+              ? "An enabled candidate extension must pass its test before activation."
               : "Portable extension state could not be saved.",
   });
 
@@ -499,7 +499,7 @@ export const makeExtensionCatalogLayer = () =>
                   version: 1,
                   reason,
                   message: "The portable extension failed safely.",
-                  recovery: "Disable the extension or fix it in Shape.",
+                  recovery: "Disable the extension or ask Flect to fix it.",
                 }),
               }),
             ] as const),

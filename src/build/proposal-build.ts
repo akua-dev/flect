@@ -1,6 +1,5 @@
-import { Context, Effect, Layer } from "effect";
+import { Effect, Layer } from "effect";
 import {
-  type BrowserBuildArtifact,
   BrowserBuildRequest,
   ProposalBuildFailure,
   type ProposalBuildRequest,
@@ -10,27 +9,17 @@ import { GitWorkspace } from "../git/git-workspace";
 import { BrowserBuild } from "./browser-build";
 import { BrowserPackageResolver } from "./browser-package-resolver";
 import { portablePackageManifest } from "./portable-package-manifest";
+import {
+  ProposalBuild,
+  type ProposalBuildShape,
+} from "./proposal-build-service";
+
+export {
+  ProposalBuild,
+  type ProposalBuildShape,
+} from "./proposal-build-service";
 
 const PROJECT_ROOT = "project/";
-
-export interface ProposalBuildShape {
-  readonly resolvePackageLock: (request: ProposalBuildRequest) => Effect.Effect<
-    | {
-        readonly contents: Uint8Array;
-        readonly needsCheckpoint: boolean;
-      }
-    | undefined,
-    ProposalBuildFailure
-  >;
-  readonly compile: (
-    request: ProposalBuildRequest,
-  ) => Effect.Effect<BrowserBuildArtifact, ProposalBuildFailure>;
-}
-
-export class ProposalBuild extends Context.Service<
-  ProposalBuild,
-  ProposalBuildShape
->()("flect/ProposalBuild") {}
 
 const failure = (reason: ProposalBuildFailure["reason"], message: string) =>
   ProposalBuildFailure.make({ reason, message });

@@ -23,10 +23,7 @@ import {
   type AgentCommandBus,
   AgentCommandBusLive,
 } from "../axi/agent-command-bus";
-import { BrowserBuild, BrowserBuildLive } from "../build/browser-build";
-import { BrowserPackageCacheLive } from "../build/browser-package-cache";
-import { BrowserPackageResolverLive } from "../build/browser-package-resolver";
-import { ProposalBuildLive } from "../build/proposal-build";
+import { LazyProposalBuildLive } from "../build/lazy-proposal-build";
 import { makeProductCapabilityBrokerLayer } from "../capabilities/product-capability-broker";
 import { makeProductCapabilityDecisionStoreLayer } from "../capabilities/product-capability-decision-store";
 import {
@@ -38,11 +35,6 @@ import {
   type CapsuleStoreError,
   CapsuleStoreLive,
 } from "../capsule/capsule-store";
-import { makeBunPackageMutationLayer } from "../execution/bun-package-mutation";
-import {
-  NPM_REGISTRY_ORIGIN,
-  trustedNpmRegistryFetch,
-} from "../execution/npm-registry";
 import {
   type ExtensionCatalog,
   makeExtensionCatalogLayer,
@@ -88,10 +80,8 @@ import {
   ShareHttpClientLive,
   type ShareSourceResolver,
 } from "../sharing/share-source-resolver";
-import {
-  makeLiveRoleSandboxedShellLayer,
-  type SandboxedShell,
-} from "../shell/sandboxed-shell";
+import { LazyRoleSandboxedShellLive } from "../shell/lazy-sandboxed-shell";
+import type { SandboxedShell } from "../shell/sandboxed-shell-service";
 import type { AgentIntegration } from "./agent-integration";
 import { type AgentWorkspace, AgentWorkspaceLive } from "./agent-workspace";
 import {
@@ -213,34 +203,7 @@ const ClientLive = isTauri()
   ? makeTauriFlectClientLayer().pipe(Layer.provide(TauriBridgeLive))
   : makeFlectClientLayer().pipe(Layer.provide(BrowserHttpClient.layerFetch));
 
-const AgentShellBaseLive = makeLiveRoleSandboxedShellLayer({
-  app: {
-    files: {
-      "/workspace/package.json":
-        '{\n  "name": "flect-app-workspace",\n  "private": true,\n  "type": "module",\n  "dependencies": {}\n}\n',
-      "/workspace/src/index.ts":
-        'console.log("Flect app workspace is ready.");\n',
-    },
-  },
-  previewApp: {
-    files: {
-      "/workspace/package.json":
-        '{\n  "name": "flect-preview-app-workspace",\n  "private": true,\n  "type": "module",\n  "dependencies": {}\n}\n',
-      "/workspace/src/index.ts":
-        'console.log("Flect candidate workspace is ready.");\n',
-    },
-  },
-  shaper: {
-    files: {
-      "/workspace/package.json":
-        '{\n  "name": "flect-shaper-workspace",\n  "private": true,\n  "type": "module",\n  "dependencies": {}\n}\n',
-      "/workspace/src/index.ts":
-        'console.log("Flect browser workspace is ready.");\n',
-    },
-  },
-});
-
-const AgentShellLive = AgentShellBaseLive.pipe(
+const AgentShellLive = LazyRoleSandboxedShellLive.pipe(
   Layer.provideMerge(AgentCommandBusLive),
   Layer.provideMerge(SharedGitWorkspaceLive),
 );
@@ -422,34 +385,8 @@ const PortableExtensionHostForApplication = PortableExtensionHostLive.pipe(
   ),
 );
 
-const BrowserPackageMutationLive = makeBunPackageMutationLayer({
-  fetch: trustedNpmRegistryFetch,
-  registryBaseUrl: NPM_REGISTRY_ORIGIN,
-});
-
-const BrowserPackageResolverWithDependencies = BrowserPackageResolverLive.pipe(
-  Layer.provideMerge(
-    Layer.merge(BrowserPackageMutationLive, BrowserPackageCacheLive),
-  ),
-);
-
-const BrowserBuildForApplication = BrowserBuildLive.pipe(
-  Layer.catch((error) =>
-    Layer.succeed(BrowserBuild)({
-      compile: () => Effect.fail(error),
-      lastSuccessful: Effect.succeed(undefined),
-    }),
-  ),
-);
-
-const ProposalBuildWithDependencies = ProposalBuildLive.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      SharedGitWorkspaceLive,
-      BrowserBuildForApplication,
-      BrowserPackageResolverWithDependencies,
-    ),
-  ),
+const ProposalBuildWithDependencies = LazyProposalBuildLive.pipe(
+  Layer.provideMerge(SharedGitWorkspaceLive),
 );
 
 const ApplicationDependencies = Layer.mergeAll(

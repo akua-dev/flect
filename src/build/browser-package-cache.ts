@@ -1,9 +1,10 @@
-import { MemoryVfs, OpfsVfs, type Vfs } from "@riftydev/vfs";
+import type { Vfs } from "@riftydev/vfs";
 import { Context, Effect, Layer, Schema, type SchemaAST } from "effect";
 import {
   BrowserPackageFile,
   BrowserPackageResolution,
 } from "../../shared/browser-package";
+import { browserPersistentStorage } from "../lib/browser-persistent-vfs";
 import { digestBuildBytes, digestBuildEntries } from "./browser-build-digest";
 
 const MAX_FILES = 2_048;
@@ -294,14 +295,9 @@ export const makeBrowserPackageCacheLayer = (
 
 export const BrowserPackageCacheLive = Layer.effect(
   BrowserPackageCache,
-  Effect.promise(async () => {
-    if (OpfsVfs.isSupported()) {
-      try {
-        const vfs = new OpfsVfs();
-        await vfs.init();
-        return makeCache(vfs, "/flect-packages/default");
-      } catch {}
-    }
-    return makeCache(new MemoryVfs(), "/flect-packages/default");
-  }),
+  Effect.promise(() =>
+    browserPersistentStorage().then(({ vfs }) =>
+      makeCache(vfs, "/flect-packages/default"),
+    ),
+  ),
 );

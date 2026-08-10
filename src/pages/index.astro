@@ -1,3 +1,7 @@
+---
+import "../activation-shell.css";
+---
+
 <!doctype html>
 <html lang="en" data-flect-state="inactive">
   <head>
@@ -30,8 +34,7 @@
             name="prompt"
             placeholder="Describe what you want to make or change…"
             required
-            rows="3"
-          ></textarea>
+            rows="3"></textarea>
           <button data-flect-activate type="submit">Send to Flect</button>
           <p
             aria-live="polite"
@@ -45,9 +48,8 @@
     </div>
     <div id="root" hidden></div>
     <noscript>Flect needs JavaScript only after you open the workspace.</noscript>
-    <script type="module">
-      import "/src/activation-shell.css";
-      import { installFlectActivation } from "/src/activation/activate-flect";
+    <script>
+      import { installFlectActivation } from "../activation/activate-flect";
 
       installFlectActivation();
     </script>

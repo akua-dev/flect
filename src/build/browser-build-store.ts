@@ -1,9 +1,10 @@
-import { MemoryVfs, OpfsVfs, type Vfs } from "@riftydev/vfs";
+import type { Vfs } from "@riftydev/vfs";
 import { Context, Effect, Layer, Schema, type SchemaAST } from "effect";
 import {
   BrowserBuildArtifact,
   BrowserBuildOutput,
 } from "../../shared/browser-build";
+import { browserPersistentStorage } from "../lib/browser-persistent-vfs";
 import { digestBuildBytes, digestBuildEntries } from "./browser-build-digest";
 
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -249,14 +250,9 @@ export const makeBrowserBuildStoreLayer = (
 
 export const BrowserBuildStoreLive = Layer.effect(
   BrowserBuildStore,
-  Effect.promise(async () => {
-    if (OpfsVfs.isSupported()) {
-      try {
-        const vfs = new OpfsVfs();
-        await vfs.init();
-        return makeStore(vfs, "/flect-builds/default");
-      } catch {}
-    }
-    return makeStore(new MemoryVfs(), "/flect-builds/default");
-  }),
+  Effect.promise(() =>
+    browserPersistentStorage().then(({ vfs }) =>
+      makeStore(vfs, "/flect-builds/default"),
+    ),
+  ),
 );

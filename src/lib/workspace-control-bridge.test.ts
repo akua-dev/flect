@@ -15,10 +15,12 @@ import {
   DisableControl,
   FlectCommandEnvelope,
   FlectCommandReceipt,
+  FlectWorkspaceEvent,
   FlectWorkspaceSnapshot,
   RailStateSnapshot,
   SetMode,
   SubmitAppPrompt,
+  UserCommandSource,
 } from "../../shared/control";
 import { ControlBrokerStatus } from "../../shared/control-channel";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
@@ -229,7 +231,19 @@ const makeHarness = () => {
       return {
         snapshot: SubscriptionRef.get(state),
         changes: SubscriptionRef.changes(state),
-        events: Stream.empty,
+        events: SubscriptionRef.changes(state).pipe(
+          Stream.map((snapshot) =>
+            FlectWorkspaceEvent.make({
+              version: 1,
+              id: `event-control-bridge-${snapshot.sequence}`,
+              sequence: snapshot.sequence,
+              timestamp: snapshot.sequence,
+              workspaceId: snapshot.workspaceId,
+              source: UserCommandSource.make({ kind: "user" }),
+              type: "state-changed",
+            }),
+          ),
+        ),
         providerAuth: Effect.succeed({ providers: [] }),
         providerAuthChanges: Stream.empty,
         continuity: Effect.succeed({

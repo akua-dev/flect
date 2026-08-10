@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
   });
   await resetBrowserWorkspace(page);
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
 });
 

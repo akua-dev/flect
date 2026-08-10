@@ -254,7 +254,7 @@ function ExtensionRoleReview({
         <div className="extension-review__conflict">
           <strong>This update conflicts with the current fork or pin.</strong>
           <span>
-            Use upstream to replace it, or reject this app update to keep the
+            Use upstream to replace it, or discard this app update to keep the
             current package.
           </span>
           <div className="extension-review__actions">

@@ -325,6 +325,7 @@ const unexpectedResult = (operation: GitWorkspaceFailure["operation"]) =>
 export const makeGitWorkspace = (options?: {
   readonly defaultWorkspaceId?: string;
   readonly deadline?: Duration.Input;
+  readonly maxWorkerOperations?: number;
   readonly lockManager?: GitWorkspaceLockManager;
   readonly makeWorker?: () => GitWorkspaceWorker;
 }) =>
@@ -374,6 +375,8 @@ export const makeGitWorkspace = (options?: {
     const semaphore = yield* Semaphore.make(1);
     let activeWorkspaceId: string | undefined;
     let workerWorkspaceId: string | undefined;
+    let workerOperationCount = 0;
+    const maxWorkerOperations = Math.max(1, options?.maxWorkerOperations ?? 16);
     const locks = options?.lockManager ?? globalThis.navigator?.locks;
     const invalidateWorkerSync = (worker: GitWorkspaceWorker) => {
       worker.terminate();
@@ -382,68 +385,90 @@ export const makeGitWorkspace = (options?: {
         activeWorker = undefined;
       }
       workerWorkspaceId = undefined;
+      workerOperationCount = 0;
     };
     const invalidateWorker = (worker: GitWorkspaceWorker) =>
       Effect.sync(() => invalidateWorkerSync(worker));
     const request = Effect.fn("Flect.GitWorkspace.request")(
       (operation: GitWorkspaceOperation) =>
-        Effect.gen(function* () {
-          const worker = activeWorker ?? (yield* createWorker(operation));
-          const lockName = `flect-git-${
-            operation.type === "open"
-              ? operation.workspaceId
-              : (activeWorkspaceId ?? "unopened")
-          }`;
-          const operationEffect = Effect.gen(function* () {
-            const workspaceId = activeWorkspaceId;
-            if (
-              operation.type !== "open" &&
-              workspaceId !== undefined &&
-              workerWorkspaceId !== workspaceId
-            ) {
-              const reopened = yield* makeWorkerRequest(
-                worker,
-                GitOpenRequest.make({
-                  type: "open",
-                  workspaceId,
-                  reset: false,
-                }),
-                () => invalidateWorkerSync(worker),
-              );
-              if (reopened.type !== "opened") {
-                return yield* unexpectedResult("open");
-              }
-              workerWorkspaceId = workspaceId;
-            }
-            const result = yield* makeWorkerRequest(worker, operation, () =>
-              invalidateWorkerSync(worker),
-            );
-            if (operation.type === "open" && result.type === "opened") {
-              workerWorkspaceId = operation.workspaceId;
-            }
-            return result;
-          }).pipe(
-            Effect.timeoutOrElse({
-              duration: options?.deadline ?? "60 seconds",
-              orElse: () =>
-                Effect.fail(
-                  failure(
-                    operationName(operation),
-                    "interrupted",
-                    "The embedded Git operation exceeded its deadline.",
-                  ),
+        semaphore.withPermits(1)(
+          Effect.gen(function* () {
+            // Resolve the active worker only after entering the semaphore.
+            // A queued sibling may have just completed the worker's bounded
+            // lease; capturing it earlier would post to a terminated worker.
+            const worker =
+              activeWorker ??
+              (yield* createWorker(operation).pipe(
+                Effect.tap((created) =>
+                  Effect.sync(() => {
+                    activeWorker = created;
+                    workerOperationCount = 0;
+                  }),
                 ),
-            }),
-            Effect.tapError((error) =>
-              error.reason === "interrupted" || error.reason === "worker"
-                ? invalidateWorker(worker)
-                : Effect.void,
-            ),
-          );
-          return yield* semaphore.withPermits(1)(
-            withCrossContextLock(locks, lockName, operation, operationEffect),
-          );
-        }),
+              ));
+            const lockName = `flect-git-${
+              operation.type === "open"
+                ? operation.workspaceId
+                : (activeWorkspaceId ?? "unopened")
+            }`;
+            const operationEffect = Effect.gen(function* () {
+              const workspaceId = activeWorkspaceId;
+              if (
+                operation.type !== "open" &&
+                workspaceId !== undefined &&
+                workerWorkspaceId !== workspaceId
+              ) {
+                const reopened = yield* makeWorkerRequest(
+                  worker,
+                  GitOpenRequest.make({
+                    type: "open",
+                    workspaceId,
+                    reset: false,
+                  }),
+                  () => invalidateWorkerSync(worker),
+                );
+                if (reopened.type !== "opened") {
+                  return yield* unexpectedResult("open");
+                }
+                workerWorkspaceId = workspaceId;
+              }
+              const result = yield* makeWorkerRequest(worker, operation, () =>
+                invalidateWorkerSync(worker),
+              );
+              if (operation.type === "open" && result.type === "opened") {
+                workerWorkspaceId = operation.workspaceId;
+              }
+              workerOperationCount += 1;
+              if (workerOperationCount >= maxWorkerOperations) {
+                invalidateWorkerSync(worker);
+              }
+              return result;
+            }).pipe(
+              Effect.timeoutOrElse({
+                duration: options?.deadline ?? "60 seconds",
+                orElse: () =>
+                  Effect.fail(
+                    failure(
+                      operationName(operation),
+                      "interrupted",
+                      "The embedded Git operation exceeded its deadline.",
+                    ),
+                  ),
+              }),
+              Effect.tapError((error) =>
+                error.reason === "interrupted" || error.reason === "worker"
+                  ? invalidateWorker(worker)
+                  : Effect.void,
+              ),
+            );
+            return yield* withCrossContextLock(
+              locks,
+              lockName,
+              operation,
+              operationEffect,
+            );
+          }),
+        ),
     );
 
     return {

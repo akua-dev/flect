@@ -512,6 +512,47 @@ describe("GitInterfaceRepository", () => {
       }),
   );
 
+  it.effect("carries authoring source through an atomic local acceptance", () =>
+    Effect.gen(function* () {
+      const storage = makeStorage();
+      const git = makeGit();
+      const layer = makeGitInterfaceRepositoryLayer({
+        safeMode: false,
+        workspaceId: "default",
+      }).pipe(
+        Layer.provide(
+          Layer.merge(storage.layer, Layer.succeed(GitWorkspace)(git.service)),
+        ),
+      );
+
+      yield* Effect.gen(function* () {
+        const repository = yield* InterfaceRepository;
+        yield* repository.load;
+        git.heads.set("flect/authoring", "e".repeat(40));
+        git.branches.set(
+          "flect/authoring",
+          new Map(git.branches.get("flect/accepted")),
+        );
+        git.branches
+          .get("flect/authoring")
+          ?.set("src/shaped.ts", new TextEncoder().encode("export {};\n"));
+
+        yield* repository.save(acceptedSnapshot);
+
+        assert.strictEqual(
+          new TextDecoder().decode(
+            git.branches.get("flect/accepted")?.get("src/shaped.ts"),
+          ),
+          "export {};\n",
+        );
+        assert.strictEqual(
+          git.heads.get("flect/authoring"),
+          git.heads.get("flect/accepted"),
+        );
+      }).pipe(Effect.provide(layer));
+    }),
+  );
+
   it.effect(
     "keeps the accepted commit protected while a proposal branch advances",
     () =>
@@ -846,6 +887,49 @@ describe("GitInterfaceRepository", () => {
           assert.strictEqual(reopened.snapshot?.safeMode, false);
         }).pipe(Effect.provide(normalLayer));
       }),
+  );
+
+  it.effect("records safe mode without rewriting the accepted product", () =>
+    Effect.gen(function* () {
+      const storage = makeStorage();
+      const git = makeGit();
+      const layer = makeGitInterfaceRepositoryLayer({
+        safeMode: false,
+        workspaceId: "default",
+      }).pipe(
+        Layer.provide(
+          Layer.merge(storage.layer, Layer.succeed(GitWorkspace)(git.service)),
+        ),
+      );
+
+      yield* Effect.gen(function* () {
+        const repository = yield* InterfaceRepository;
+        const opened = yield* repository.load;
+        const snapshot = opened.snapshot;
+        assert.isDefined(snapshot);
+        const before = yield* git.service.status();
+
+        yield* repository.markRecovery ?? Effect.void;
+        yield* repository.save(
+          ShapingSnapshot.make({
+            ...snapshot,
+            safeMode: true,
+            lastEvent: ShapingEvent.make({
+              version: 1,
+              sequence: snapshot.lastEvent.sequence + 1,
+              type: "safe-mode-entered",
+              revisionId: snapshot.active.id,
+            }),
+          }),
+        );
+
+        const after = yield* git.service.status({
+          proposalBranch: "flect/shared/recovery",
+        });
+        assert.strictEqual(after.acceptedCommit, before.acceptedCommit);
+        assert.notStrictEqual(after.proposalCommit, undefined);
+      }).pipe(Effect.provide(layer));
+    }),
   );
 
   it.effect(

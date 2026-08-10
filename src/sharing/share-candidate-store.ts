@@ -1,6 +1,7 @@
-import { MemoryVfs, OpfsVfs, type Vfs } from "@riftydev/vfs";
+import type { Vfs } from "@riftydev/vfs";
 import { Context, Effect, Layer, Schema } from "effect";
 import { MAX_SHARE_ARCHIVE_BYTES } from "../../packages/product/src/share";
+import { browserPersistentStorage } from "../lib/browser-persistent-vfs";
 
 const OBJECTS = "/flect-shares/default/objects";
 const Digest = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
@@ -134,14 +135,9 @@ export const makeShareCandidateStoreLayer = (
 
 export const ShareCandidateStoreLive = Layer.effect(
   ShareCandidateStore,
-  Effect.promise(async () => {
-    if (OpfsVfs.isSupported()) {
-      try {
-        const vfs = new OpfsVfs();
-        await vfs.init();
-        return makeShareCandidateStore(vfs, "durable");
-      } catch {}
-    }
-    return makeShareCandidateStore(new MemoryVfs(), "session");
-  }),
+  Effect.promise(() =>
+    browserPersistentStorage().then(({ vfs, persistence }) =>
+      makeShareCandidateStore(vfs, persistence),
+    ),
+  ),
 );

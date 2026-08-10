@@ -186,15 +186,15 @@ export function ComposerActionsMenu({
           style={position}
         >
           <div className="composer-popover__context" role="status">
-            <span>Git source history</span>
+            <span>History</span>
             <small>
               {repository?.acceptedCommit === undefined
-                ? "Opening canonical repository"
+                ? "Preparing version history"
                 : repository.conflictPaths.length > 0
                   ? `${repository.conflictPaths.length} conflict${repository.conflictPaths.length === 1 ? "" : "s"} need recovery`
                   : repository.proposalCommit === undefined
-                    ? `Accepted ${repository.acceptedCommit.slice(0, 7)}`
-                    : `Accepted ${repository.acceptedCommit.slice(0, 7)} · Candidate ${repository.proposalCommit.slice(0, 7)} isolated`}
+                    ? "Current version saved"
+                    : "External change waiting for activation"}
             </small>
           </div>
           <div
@@ -205,7 +205,7 @@ export function ComposerActionsMenu({
             role="menu"
           >
             <button
-              aria-label="Roll back last change"
+              aria-label="Undo last change"
               className="composer-popover__item"
               disabled={!rollbackAvailable || rollbackDisabled}
               onClick={() => {
@@ -215,7 +215,7 @@ export function ComposerActionsMenu({
               role="menuitem"
               type="button"
             >
-              <span>Roll back last change</span>
+              <span>Undo last change</span>
               <small>
                 {rollbackAvailable
                   ? "Restore the previous interface"

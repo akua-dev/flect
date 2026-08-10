@@ -28,18 +28,23 @@ const expectAccessible = async (page: Page, state: string) => {
 };
 
 const shapeCandidate = async (page: Page) => {
-  const composer = page.getByRole("textbox", { name: "Message Shaper" });
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-flect-state",
+    "active",
+  );
+  const composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill("Create an accessible project overview");
   await composer.press("Enter");
   await expect(
-    page.getByRole("region", { name: "Revision decision" }),
+    page.getByRole("region", { name: "Focused project overview" }),
   ).toBeVisible();
+  await expect(composer).toBeEnabled();
 };
 
 test.beforeEach(async ({ page }) => {
   await resetBrowserWorkspace(page);
   await expect(
-    page.getByRole("textbox", { name: "Message Shaper" }),
+    page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
 });
 
@@ -49,7 +54,7 @@ test("gates blank, candidate, accepted, Diagnostics, model, and safe states", as
   await expectAccessible(page, "blank Shape workbench");
 
   await shapeCandidate(page);
-  await expectAccessible(page, "candidate Use workbench");
+  await expectAccessible(page, "live canvas workbench");
 
   await page.getByRole("button", { name: "Actions" }).click();
   await expectAccessible(page, "extension and recovery actions menu");
@@ -69,9 +74,6 @@ test("gates blank, candidate, accepted, Diagnostics, model, and safe states", as
   await expectAccessible(page, "model chooser dialog");
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "Keep change" }).click();
-  await expectAccessible(page, "accepted Use workbench");
-
   await page.getByRole("button", { name: "Safe mode" }).click();
   await expectAccessible(page, "protected recovery");
 });
@@ -84,7 +86,7 @@ test.describe("adaptive appearances", () => {
       await page.emulateMedia({ colorScheme });
       await page.reload();
       await shapeCandidate(page);
-      await expectAccessible(page, `${colorScheme} candidate workbench`);
+      await expectAccessible(page, `${colorScheme} live canvas workbench`);
 
       const geometry = await page.evaluate(() => ({
         colorScheme: getComputedStyle(document.documentElement).colorScheme,
@@ -115,7 +117,9 @@ test("reflows at the 200 percent page-zoom viewport equivalent", async ({
   expect(geometry.documentWidth).toBe(geometry.viewportWidth);
   expect(geometry.shellWidth).toBe(geometry.viewportWidth);
   expect(geometry.composerCount).toBe(1);
-  await expect(page.getByRole("button", { name: "Keep change" })).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toBeVisible();
   await expectAccessible(page, "200 percent page-zoom equivalent workbench");
 });
 
@@ -154,7 +158,9 @@ test("reflows at 320 px, 200 percent text, reduced motion, and forced colors", a
   expect(geometry.composerLeft).toBeGreaterThanOrEqual(0);
   expect(geometry.composerRight).toBeLessThanOrEqual(geometry.viewportWidth);
   await expect(page.locator(".composer")).toHaveCount(1);
-  await expect(page.getByRole("button", { name: "Keep change" })).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Actions" }).click();
   await expect(

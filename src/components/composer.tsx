@@ -124,6 +124,7 @@ export function Composer({
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const composingRef = useRef(false);
+  const initialFocusAttemptedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const helpId = useId();
   const draftKey = "accepted-use";
@@ -172,6 +173,23 @@ export function Composer({
     }));
   }, [persistedDrafts]);
 
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (
+      initialFocusAttemptedRef.current ||
+      textarea === null ||
+      isUnavailable ||
+      globalThis.matchMedia?.("(pointer: coarse)").matches === true
+    ) {
+      return;
+    }
+    initialFocusAttemptedRef.current = true;
+    const active = textarea.ownerDocument.activeElement;
+    if (active === null || active === textarea.ownerDocument.body) {
+      textarea.focus({ preventScroll: true });
+    }
+  }, [isUnavailable]);
+
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
     if (textarea === null) {
@@ -194,10 +212,9 @@ export function Composer({
       return;
     }
 
-    const operation = onSubmit(nextPrompt);
     setDrafts((current) => ({ ...current, [draftKey]: "" }));
-    void onDraftChange?.(continuityKey, "");
-    await operation;
+    await onDraftChange?.(continuityKey, "");
+    await onSubmit(nextPrompt);
   };
 
   return (

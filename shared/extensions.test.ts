@@ -270,7 +270,7 @@ describe("portable extension packages", () => {
         version: 1,
         reason: "execution",
         message: "The portable extension failed safely.",
-        recovery: "Disable the extension or fix it in Shape.",
+        recovery: "Disable the extension or ask Flect to fix it.",
       },
     });
 

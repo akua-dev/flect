@@ -3,9 +3,11 @@
   "files": {
     "includes": [
       "**",
+      "!**/.astro",
       "!**/.repos",
       "!**/node_modules",
       "!**/dist",
+      "!**/dist-spa",
       "!**/coverage",
       "!**/playwright-report",
       "!**/test-results",

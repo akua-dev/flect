@@ -1,5 +1,5 @@
 import { Effect } from "effect";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import {
   ShareGitSource,
   ShareLocalSource,
@@ -66,6 +66,7 @@ import { workspacePhase } from "./lib/workspace-phase";
 
 export interface AppProps {
   readonly runtime?: WorkspaceRuntime;
+  readonly initialPrompt?: string;
 }
 
 const toMessages = (
@@ -104,7 +105,7 @@ const clearSafeModeRoute = Effect.fn("Flect.App.clearSafeModeRoute")(() =>
   }).pipe(Effect.catch(() => Effect.void)),
 );
 
-export function App({ runtime = flectRuntime }: AppProps = {}) {
+export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
   const {
     snapshot,
     providerAuth,
@@ -142,6 +143,29 @@ export function App({ runtime = flectRuntime }: AppProps = {}) {
     },
     [dispatch],
   );
+  const initialPromptSent = useRef(false);
+
+  useEffect(() => {
+    if (
+      initialPromptSent.current ||
+      initialPrompt === undefined ||
+      snapshot === undefined
+    ) {
+      return;
+    }
+    initialPromptSent.current = true;
+    void command(
+      workspacePhase(snapshot.shaping, false) === "blank"
+        ? SubmitShaperInstruction.make({
+            type: "submit-shaper-instruction",
+            instruction: initialPrompt,
+          })
+        : SubmitAppPrompt.make({
+            type: "submit-app-prompt",
+            text: initialPrompt,
+          }),
+    );
+  }, [command, initialPrompt, snapshot]);
 
   const workspace = useMemo<AgentWorkspaceController | undefined>(() => {
     if (snapshot === undefined) {
@@ -423,6 +447,7 @@ export function App({ runtime = flectRuntime }: AppProps = {}) {
         snapshot.workbench?.target ??
         (snapshot.mode === "run" ? "use" : "shape")
       }
+      activeRevisionId={snapshot.shaping.active.id}
       candidateRevisionId={snapshot.shaping.proposal?.id}
       diagnostics={{
         control: snapshot.control,

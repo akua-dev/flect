@@ -39,7 +39,7 @@ describe("ComposerActionsMenu", () => {
 
     await user.click(screen.getByRole("button", { name: "Actions" }));
     expect(
-      screen.getByRole("menuitem", { name: "Roll back last change" }),
+      screen.getByRole("menuitem", { name: "Undo last change" }),
     ).toBeVisible();
     expect(
       screen.getByRole("menuitem", { name: "Open safe mode" }),
@@ -134,7 +134,7 @@ describe("ComposerActionsMenu", () => {
     await user.click(screen.getByRole("button", { name: "Actions" }));
 
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Accepted aaaaaaa · Candidate ccccccc isolated",
+      "External change waiting for activation",
     );
   });
 
@@ -162,7 +162,7 @@ describe("ComposerActionsMenu", () => {
 
     await user.click(screen.getByRole("button", { name: "Actions" }));
     expect(
-      screen.getByRole("menuitem", { name: "Roll back last change" }),
+      screen.getByRole("menuitem", { name: "Undo last change" }),
     ).toBeDisabled();
 
     rerender(
@@ -171,7 +171,7 @@ describe("ComposerActionsMenu", () => {
       />,
     );
     await user.click(
-      screen.getByRole("menuitem", { name: "Roll back last change" }),
+      screen.getByRole("menuitem", { name: "Undo last change" }),
     );
 
     expect(onRollback).toHaveBeenCalledOnce();

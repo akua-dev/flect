@@ -118,7 +118,9 @@ const shapedDocument = (_current: InterfaceDocument): InterfaceDocument =>
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 
 const matchesUserRequest = (text: string, request: string) =>
-  text === request || text.includes(`User request:\n${request}`);
+  text === request ||
+  text.startsWith(`${request}\n`) ||
+  text.includes(`User request:\n${request}`);
 
 const appCommand = (text: string) => {
   if (matchesUserRequest(text, "Fail candidate extension")) {
@@ -279,24 +281,41 @@ export const FlectTestRuntimeLive = Layer.effect(
                 }),
                 TurnCompleted.make({ type: "turn_completed" }),
               )
-            : matchesUserRequest(text, "Explicitly change the interface")
+            : [
+                  "Explicitly change the interface",
+                  "Inspect embedded Git",
+                  "Commit Shaper source",
+                ].some((request) => matchesUserRequest(text, request)) ||
+                text.includes("Create deterministic local edit") ||
+                /^Personalize shared (?:conflict )?fork [0-9a-f]{40}$/.test(
+                  text,
+                )
               ? Stream.make(
                   TurnStarted.make({ type: "turn_started" }),
                   InterfaceEditRequested.make({
                     type: "interface_edit_requested",
                     requestId: `edit-${crypto.randomUUID()}`,
-                    instruction:
-                      "Change the current interface while preserving its product context.",
+                    instruction: matchesUserRequest(
+                      text,
+                      "Explicitly change the interface",
+                    )
+                      ? "Change the current interface while preserving its product context."
+                      : matchesUserRequest(text, "Inspect embedded Git")
+                        ? "Inspect embedded Git"
+                        : matchesUserRequest(text, "Commit Shaper source")
+                          ? "Commit Shaper source"
+                          : text,
                   }),
                   TextDelta.make({
                     type: "text_delta",
-                    delta: "I’ll open Shape and prepare a validated candidate.",
+                    delta: "I’ll prepare and apply the validated change.",
                   }),
                   TurnCompleted.make({ type: "turn_completed" }),
                 )
               : Stream.unwrap(
                   Effect.gen(function* () {
                     const requestId = `shell-${crypto.randomUUID()}`;
+                    const startedAt = Date.now();
                     const response = yield* Deferred.make<BunCommandResult>();
                     const command = appCommand(text);
                     yield* Ref.update(pending, (current) => {
@@ -311,7 +330,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                         role: "app",
                         callId: requestId,
                         toolName: "bash",
-                        startedAt: 1,
+                        startedAt,
                         inputSummary: "Run the browser workspace",
                       }),
                       AgentShellRequest.make({
@@ -329,7 +348,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                                 role: "app",
                                 callId: requestId,
                                 toolName: "bash",
-                                completedAt: 11,
+                                completedAt: startedAt + 10,
                                 durationMs: 10,
                                 status:
                                   result.exitCode === 0
@@ -364,6 +383,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                 const candidate = shapedDocument(document);
                 const requestId = `shell-${crypto.randomUUID()}`;
                 const deniedRequestId = `shell-${crypto.randomUUID()}`;
+                const startedAt = Date.now();
                 const response = yield* Deferred.make<BunCommandResult>();
                 const deniedResponse = yield* Deferred.make<BunCommandResult>();
                 yield* Ref.update(pending, (current) => {
@@ -377,68 +397,82 @@ export const FlectTestRuntimeLive = Layer.effect(
                   "flect interface validate /workspace/interface.json",
                   "flect interface propose /workspace/interface.json",
                 ];
+                const fastProposalCommands = [
+                  proposalCommands[0] ?? "true",
+                  "flect interface propose /workspace/interface.json",
+                ];
                 const forkPersonalization =
-                  /^Personalize shared fork ([0-9a-f]{40})$/.exec(
+                  /^Personalize shared fork ([0-9a-f]{40})$/m.exec(
                     instruction,
                   )?.[1];
                 const conflictingForkPersonalization =
-                  /^Personalize shared conflict fork ([0-9a-f]{40})$/.exec(
+                  /^Personalize shared conflict fork ([0-9a-f]{40})$/m.exec(
                     instruction,
                   )?.[1];
                 const shareConflict = instruction.startsWith(
                   "Resolve the shared Git conflict the user explicitly opened.",
                 );
-                const command = shareConflict
-                  ? [
-                      "root=/workspace/.flect/share-conflicts/dev.flect.weather",
-                      'mkdir -p "$root/resolved/components/weather"',
-                      `printf %s ${shellQuote('export const weather = { label: "Storm", temperature: 20, warning: true, personal: true };\n')} > "$root/resolved/components/weather/index.ts"`,
-                      "base=$(grep '^base=' \"$root/conflicts.txt\" | cut -d= -f2)",
-                      "upstream=$(grep '^upstream=' \"$root/conflicts.txt\" | cut -d= -f2)",
-                      "fork=$(grep '^fork=' \"$root/conflicts.txt\" | cut -d= -f2)",
-                      'flect share resolve dev.flect.weather --base "$base" --upstream "$upstream" --fork "$fork" --write components/weather/index.ts "$root/resolved/components/weather/index.ts" --message \'Resolve weather conflict\'',
-                    ].join(" && ")
-                  : conflictingForkPersonalization !== undefined
+                const command = instruction.includes(
+                  "Create deterministic local edit",
+                )
+                  ? fastProposalCommands.join(" && ")
+                  : shareConflict
                     ? [
-                        `printf %s ${shellQuote('export const weather = { label: "Mine", temperature: 20, personal: true };\n')} > /workspace/weather-conflict.ts`,
-                        `flect share checkpoint dev.flect.weather --at ${conflictingForkPersonalization} --write components/weather/index.ts /workspace/weather-conflict.ts --message 'Personalize conflicting weather source'`,
-                        ...proposalCommands,
+                        "root=/workspace/.flect/share-conflicts/dev.flect.weather",
+                        'mkdir -p "$root/resolved/components/weather"',
+                        `printf %s ${shellQuote('export const weather = { label: "Storm", temperature: 20, warning: true, personal: true };\n')} > "$root/resolved/components/weather/index.ts"`,
+                        "base=$(grep '^base=' \"$root/conflicts.txt\" | cut -d= -f2)",
+                        "upstream=$(grep '^upstream=' \"$root/conflicts.txt\" | cut -d= -f2)",
+                        "fork=$(grep '^fork=' \"$root/conflicts.txt\" | cut -d= -f2)",
+                        'flect share resolve dev.flect.weather --base "$base" --upstream "$upstream" --fork "$fork" --write components/weather/index.ts "$root/resolved/components/weather/index.ts" --message \'Resolve weather conflict\'',
                       ].join(" && ")
-                    : forkPersonalization !== undefined
+                    : conflictingForkPersonalization !== undefined
                       ? [
-                          "printf '# My weather layout\\n' > /workspace/personal-note.md",
-                          `flect share checkpoint dev.flect.weather --at ${forkPersonalization} --write components/weather/personal-note.md /workspace/personal-note.md --message 'Personalize weather workspace'`,
+                          `printf %s ${shellQuote('export const weather = { label: "Mine", temperature: 20, personal: true };\n')} > /workspace/weather-conflict.ts`,
+                          `flect share checkpoint dev.flect.weather --at ${conflictingForkPersonalization} --write components/weather/index.ts /workspace/weather-conflict.ts --message 'Personalize conflicting weather source'`,
                           ...proposalCommands,
                         ].join(" && ")
-                      : instruction === "Inspect embedded Git"
+                      : forkPersonalization !== undefined
                         ? [
-                            "alias git=false",
-                            "git branch --show-current",
-                            "git rev-parse HEAD",
+                            "printf '# My weather layout\\n' > /workspace/personal-note.md",
+                            `flect share checkpoint dev.flect.weather --at ${forkPersonalization} --write components/weather/personal-note.md /workspace/personal-note.md --message 'Personalize weather workspace'`,
                             ...proposalCommands,
-                          ].join("; ")
-                        : instruction === "Commit Shaper source"
+                          ].join(" && ")
+                        : matchesUserRequest(
+                              instruction,
+                              "Inspect embedded Git",
+                            )
                           ? [
-                              "printf 'export const shaped = true;\\n' > /workspace/shaped.ts",
-                              "git add -A",
-                              "git commit -m 'Shape source'",
+                              "alias git=false",
                               "git branch --show-current",
                               "git rev-parse HEAD",
-                              "printf 'export const shaped = false;\\n' > /workspace/shaped.ts",
-                              "git status --short | grep shaped.ts",
-                              "git restore .",
-                              "grep 'shaped = true' /workspace/shaped.ts",
-                              'test -z "$(git status --short)"',
                               ...proposalCommands,
-                            ].join(" && ")
-                          : proposalCommands.join(" && ");
+                            ].join("; ")
+                          : matchesUserRequest(
+                                instruction,
+                                "Commit Shaper source",
+                              )
+                            ? [
+                                "printf 'export const shaped = true;\\n' > /workspace/shaped.ts",
+                                "git add -A",
+                                "git commit -m 'Shape source'",
+                                "git branch --show-current",
+                                "git rev-parse HEAD",
+                                "printf 'export const shaped = false;\\n' > /workspace/shaped.ts",
+                                "git status --short | grep shaped.ts",
+                                "git restore .",
+                                "grep 'shaped = true' /workspace/shaped.ts",
+                                'test -z "$(git status --short)"',
+                                ...proposalCommands,
+                              ].join(" && ")
+                            : proposalCommands.join(" && ");
                 return Stream.make(
                   ToolExecutionStarted.make({
                     type: "tool_execution_started",
                     role: "shaper",
                     callId: requestId,
                     toolName: "bash",
-                    startedAt: 1,
+                    startedAt,
                     inputSummary: "Validate a generated interface",
                   }),
                   AgentShellRequest.make({
@@ -455,7 +489,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                           role: "shaper",
                           callId: requestId,
                           toolName: "bash",
-                          completedAt: 41,
+                          completedAt: startedAt + 40,
                           durationMs: 40,
                           status:
                             result.exitCode === 0 ? "succeeded" : "failed",
@@ -473,7 +507,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                         role: "shaper",
                         callId: deniedRequestId,
                         toolName: "bash",
-                        startedAt: 42,
+                        startedAt: startedAt + 42,
                         inputSummary: "Verify protected proposal authority",
                       }),
                       AgentShellRequest.make({
@@ -491,7 +525,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                           role: "shaper",
                           callId: deniedRequestId,
                           toolName: "bash",
-                          completedAt: 44,
+                          completedAt: startedAt + 44,
                           durationMs: 2,
                           status:
                             result.exitCode === 0 ? "succeeded" : "failed",

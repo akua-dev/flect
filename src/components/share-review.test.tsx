@@ -83,11 +83,11 @@ describe("ShareReview", () => {
     expect(
       screen.getByRole("heading", { name: "Weather workspace" }),
     ).toBeVisible();
-    expect(screen.getByText("Inactive until you keep it")).toBeVisible();
+    expect(screen.getByText("Inactive until you activate it")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Retain selected" }));
     expect(onRetain).toHaveBeenCalledWith(["dev.flect.weather.component"]);
     fireEvent.click(
-      screen.getByRole("button", { name: "Reject shared source" }),
+      screen.getByRole("button", { name: "Discard shared source" }),
     );
     expect(onReject).toHaveBeenCalledOnce();
   });
@@ -248,7 +248,7 @@ describe("ShareReview", () => {
     ).toBeDisabled();
   });
 
-  it("offers explicit model-free conflict choices and never enables Keep", () => {
+  it("offers explicit model-free conflict choices and never enables activation", () => {
     const onContinueFork = vi.fn();
     const onOpenConflictInShape = vi.fn();
     const onReject = vi.fn();
@@ -286,9 +286,9 @@ describe("ShareReview", () => {
       screen.getByRole("button", { name: "Continue with my fork" }),
     );
     fireEvent.click(
-      screen.getByRole("button", { name: "Open conflict in Shape" }),
+      screen.getByRole("button", { name: "Resolve conflict with Flect" }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Reject update" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard update" }));
     expect(onContinueFork).toHaveBeenCalledOnce();
     expect(onOpenConflictInShape).toHaveBeenCalledOnce();
     expect(onReject).toHaveBeenCalledOnce();

@@ -158,7 +158,7 @@ describe("ExtensionReview", () => {
         version: 1,
         reason: "execution",
         message: "The portable extension failed safely.",
-        recovery: "Disable the extension or fix it in Shape.",
+        recovery: "Disable the extension or ask Flect to fix it.",
       }),
     });
     render(
@@ -172,7 +172,7 @@ describe("ExtensionReview", () => {
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "The portable extension failed safely. Disable the extension or fix it in Shape.",
+      "The portable extension failed safely. Disable the extension or ask Flect to fix it.",
     );
     await userEvent.click(
       screen.getByRole("button", { name: "Test for App Agent" }),

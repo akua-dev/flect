@@ -1,15 +1,15 @@
 import { fileURLToPath, URL } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type UserConfig } from "vite";
 
-const browserExecutionHeaders = {
+export const browserExecutionHeaders = {
   "Cross-Origin-Opener-Policy": "same-origin",
   "Cross-Origin-Embedder-Policy": "credentialless",
   "Cross-Origin-Resource-Policy": "cross-origin",
 };
 
-export default defineConfig({
-  base: "./",
+export const flectViteConfig = {
+  envPrefix: ["PUBLIC_", "VITE_"],
   plugins: [react()],
   worker: {
     format: "es",
@@ -66,4 +66,6 @@ export default defineConfig({
       "/api": "http://127.0.0.1:3210",
     },
   },
-});
+} satisfies UserConfig;
+
+export default defineConfig(flectViteConfig);

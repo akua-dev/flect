@@ -785,6 +785,16 @@ export const makeGitInterfaceRepositoryLayer = ({
           return;
         }
 
+        // Safe mode is represented by the guarded recovery marker. Keeping
+        // that state off flect/accepted preserves the last accepted product
+        // and lets restoration make the only deliberate product transition.
+        if (
+          snapshot.safeMode &&
+          snapshot.lastEvent.type === "safe-mode-entered"
+        ) {
+          return;
+        }
+
         const repositoryStatus = yield* git
           .status(
             receipt.proposal === undefined
@@ -793,12 +803,18 @@ export const makeGitInterfaceRepositoryLayer = ({
           )
           .pipe(Effect.mapError(storageFailure));
         const sourceRef =
-          snapshot.lastEvent.type === "revision-accepted" &&
-          receipt.proposal !== undefined
-            ? {
-                branch: receipt.proposal.branch,
-                commit: receipt.proposal.commit,
-              }
+          snapshot.lastEvent.type === "revision-accepted"
+            ? receipt.proposal !== undefined
+              ? {
+                  branch: receipt.proposal.branch,
+                  commit: receipt.proposal.commit,
+                }
+              : repositoryStatus.authoringCommit === undefined
+                ? undefined
+                : {
+                    branch: "flect/authoring",
+                    commit: repositoryStatus.authoringCommit,
+                  }
             : snapshot.lastEvent.type === "revision-rolled-back"
               ? {
                   branch: LAST_KNOWN_GOOD_BRANCH,
