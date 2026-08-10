@@ -9,10 +9,10 @@ workflow gates. The historical eager React/Vite entry remains documented in
 
 Astro and Vite are complementary here: Astro owns the static document and
 activation boundary; Vite remains the development and production build engine.
-Focus or pointer intent prewarms only the 3 KiB activation bootstrap. The
-protected React/Effect workspace is dynamically imported when the person sends
-a prompt, uses the Flect shortcut, or invokes an agent action. Tool substrates
-remain lazy after workspace activation.
+The static document includes only a 3.1 KiB activation coordinator. Composer
+focus, the Flect shortcut, or an agent action asks that coordinator to import
+the protected React/Effect workspace; opening the view alone does not. Tool
+substrates remain lazy after workspace activation.
 
 ## Environment
 
@@ -33,9 +33,9 @@ remain lazy after workspace activation.
 | Boundary | Result | Budget |
 | --- | ---: | ---: |
 | View-only requests | 4 | no authoring/runtime requests |
-| Activation bootstrap | 3,031 B gzip / 6,288 B decoded | 10 KiB gzip |
+| Activation bootstrap | 3,165 B gzip / 6,559 B decoded | 10 KiB gzip |
 | Initial CSS | 1,094 B gzip / 2,976 B decoded | 25 KiB gzip |
-| First protected workspace | 22 modules | 200 KiB gzip / 600 KiB decoded |
+| First protected workspace | 28 modules | 200 KiB gzip / 600 KiB decoded |
 
 The static route contains no Effect runtime, React workspace, Git, compiler,
 shell, package resolver, worker, or Wasm dependency. The bundle graph proves
@@ -49,14 +49,14 @@ The production Chromium performance gate records:
 | Metric | Result | Budget |
 | --- | ---: | ---: |
 | View-only readiness | 19 ms | diagnostic |
-| Cold protected-workspace activation | 225 ms | 1,000 ms |
-| Warm activation | 221 ms | 300 ms |
-| Composer p95 acknowledgement | 6 ms | 50 ms |
-| Activation transfer | 3,490 B | diagnostic |
-| Activation decoded bytes | 6,901 B | diagnostic |
-| Deterministic model fixture | 50 ms | reported separately |
+| Cold protected-workspace activation | 239 ms | 1,000 ms |
+| Warm activation | 223 ms | 300 ms |
+| Composer p95 acknowledgement | 5 ms | 50 ms |
+| View-only transfer | 3,496 B | 200 KiB |
+| View-only decoded bytes | 6,928 B | 600 KiB |
+| Deterministic model fixture | 48 ms | reported separately |
 | Cancellation acknowledgement | 0 ms | 250 ms |
-| Representative Markdown | 161 ms | 1,000 ms |
+| Representative Markdown | 182 ms | 1,000 ms |
 
 Activation is measured inside the page with `performance.now()` and a
 `MutationObserver`, avoiding remote-driver polling overhead. Model/provider
@@ -69,11 +69,11 @@ intermediate garbage collection:
 
 | Metric | Result | Budget |
 | --- | ---: | ---: |
-| Baseline used heap | 16,265,924 B | — |
-| Retained growth after 50 cycles | 7,401,424 B | 8 MiB |
-| Final heap including Markdown | 25,536,132 B | 64 MiB |
-| Worst `/shape` operation | 51 ms | 150 ms text/CSS class |
-| Worst complete cycle | 1,848 ms | diagnostic end-to-end |
+| Baseline used heap | 16,372,704 B | — |
+| Retained growth after 50 cycles | 7,493,512 B | 8 MiB |
+| Final heap including Markdown | 25,829,536 B | 64 MiB |
+| Worst candidate rebuild request | 58 ms | 1,000 ms |
+| Worst complete cycle | 1,830 ms | diagnostic end-to-end |
 
 The hot state path uses bounded projections, sliding latest-value streams, and
 shallow trusted snapshot evolution. The embedded libgit2 worker is recycled on
@@ -98,16 +98,20 @@ Production Chromium workflows verify:
   authority changes.
 
 The final `chrome-devtools-axi` inspection observed four view-only requests,
-one 3 KiB bootstrap request after composer focus, no console errors, no mode
-switcher or local decision buttons, no horizontal overflow, and focus on the
-live composer after the first change completed.
+then the protected workspace graph only after composer focus, no console
+errors, no mode switcher or local decision buttons, no horizontal overflow,
+and focus on the one live composer after the first change completed. AXI's
+500 px minimum window and the independent Playwright 320 px/200%-text flow both
+remained contained; protected compact actions have at least 44 px targets.
 
 ## Native package evidence
 
-The native gate built the private Bun/Pi sidecar, passed 25 Rust tests, produced
+The native gate built the private Bun/Pi sidecar, passed 26 Rust tests, produced
 the optimized macOS executable, and bundled an ad-hoc signed `Flect.app` with
-the runtime helper inside `Contents/MacOS`. This proves the static Astro output,
-Tauri CSP/isolation configuration, private sidecar, reopen behavior, and local
+the runtime helper inside `Contents/MacOS`. The bundle also compiles the fixed
+Swift/AppKit accent adapter and exposes it only through the typed, revocable
+native-appearance capability. This proves the static Astro output, Tauri
+CSP/isolation configuration, private sidecar, reopen behavior, and local
 application bundle remain compatible.
 
 The web verification establishes browser-native responsiveness and interaction
@@ -124,6 +128,14 @@ bun run check
 bunx playwright test
 bun run check:rust
 ```
+
+The final source gate passed 166 test files / 881 tests with one deliberate
+skip. The production Chromium gate passed all 84 workflows, including the
+50-cycle performance case, framework imports, direct manipulation, offline
+package reuse, Capsule trust, accessibility, Git history, sharing, and
+capability revocation. A submit/menu race found by the first full run was fixed
+by locking protected composer actions synchronously; the regression and the
+complete final run pass.
 
 The final command results and AXI request/focus inspection are recorded in the
 local completion commit and the corresponding GitHub issue evidence.

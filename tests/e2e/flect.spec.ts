@@ -1627,7 +1627,10 @@ test("uses right and full-height sheets at compact breakpoints", async ({
   ).toBe(false);
 
   for (const name of [
+    "Safe mode",
+    "Select element",
     "Collapse agent",
+    "Fix with Flect",
     "Actions",
     "Model: Auto via Pi",
     "Send to Flect",

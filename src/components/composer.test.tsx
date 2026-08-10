@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelSummary } from "../../shared/contracts";
@@ -185,5 +191,34 @@ describe("Composer", () => {
     expect(
       screen.queryByRole("button", { name: /App Agent|Shaper/ }),
     ).not.toBeInTheDocument();
+  });
+
+  it("locks protected actions synchronously while submission starts", async () => {
+    const user = userEvent.setup();
+    let finish: (() => void) | undefined;
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<Composer {...props({ onSubmit, rollbackAvailable: true })} />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Message Flect" }),
+      "Change the interface",
+    );
+    await user.click(screen.getByRole("button", { name: "Send to Flect" }));
+
+    expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Send to Flect" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Send to Flect" }),
+    ).toHaveAccessibleDescription("Sending the message to Flect.");
+
+    await act(async () => finish?.());
+    expect(screen.getByRole("button", { name: "Actions" })).toBeEnabled();
   });
 });

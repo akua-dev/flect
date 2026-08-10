@@ -127,7 +127,9 @@ export function Composer({
   onToggleExternalExtensions,
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
   const composingRef = useRef(false);
+  const submittingRef = useRef(false);
   const initialFocusAttemptedRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const helpId = useId();
@@ -135,6 +137,7 @@ export function Composer({
   const continuityKey: keyof ContinuityDrafts = "acceptedUse";
   const prompt = mode === "safe" ? "" : (drafts[draftKey] ?? "");
   const isActive = isAgentSessionActive(status);
+  const protectedActionsLocked = submitting || isActive;
   const isUnavailable =
     disabled ||
     mode === "safe" ||
@@ -146,8 +149,9 @@ export function Composer({
     mode === "safe" ||
     status === "booting" ||
     status === "unavailable" ||
-    isActive;
-  const canSubmit = prompt.trim().length > 0 && !isUnavailable && !isActive;
+    protectedActionsLocked;
+  const canSubmit =
+    prompt.trim().length > 0 && !isUnavailable && !protectedActionsLocked;
   const roleName = "Flect";
   const help =
     disabledReason ??
@@ -159,13 +163,15 @@ export function Composer({
           ? "Start the local runtime before sending."
           : status === "setup-required"
             ? "Sign in to a Pi provider before sending."
-            : status === "cancelling"
-              ? "Stopping the current response."
-              : status === "submitting" || status === "streaming"
-                ? "Stop the current response before sending another message."
-                : prompt.trim().length === 0
-                  ? "Enter a message to enable Send."
-                  : "Press Enter to send. Press Shift Enter for a new line.");
+            : submitting
+              ? "Sending the message to Flect."
+              : status === "cancelling"
+                ? "Stopping the current response."
+                : status === "submitting" || status === "streaming"
+                  ? "Stop the current response before sending another message."
+                  : prompt.trim().length === 0
+                    ? "Enter a message to enable Send."
+                    : "Press Enter to send. Press Shift Enter for a new line.");
 
   useEffect(() => {
     if (persistedDrafts === undefined) {
@@ -212,13 +218,20 @@ export function Composer({
 
   const submit = async () => {
     const nextPrompt = prompt.trim();
-    if (!nextPrompt || isActive || isUnavailable) {
+    if (!nextPrompt || submittingRef.current || isActive || isUnavailable) {
       return;
     }
 
-    setDrafts((current) => ({ ...current, [draftKey]: "" }));
-    await onDraftChange?.(continuityKey, "");
-    await onSubmit(nextPrompt);
+    submittingRef.current = true;
+    setSubmitting(true);
+    try {
+      setDrafts((current) => ({ ...current, [draftKey]: "" }));
+      await onDraftChange?.(continuityKey, "");
+      await onSubmit(nextPrompt);
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -269,7 +282,7 @@ export function Composer({
       <div className="composer__rail">
         <div className="composer__tools">
           <ComposerActionsMenu
-            disabled={isActive}
+            disabled={protectedActionsLocked}
             externalExtensionsEnabled={externalExtensionsEnabled}
             onExportRepository={onExportRepository}
             onExportCapsule={onExportCapsule}
@@ -286,7 +299,7 @@ export function Composer({
             onRollback={onRollback}
             onToggleExternalExtensions={onToggleExternalExtensions}
             rollbackAvailable={rollbackAvailable}
-            rollbackDisabled={isActive}
+            rollbackDisabled={protectedActionsLocked}
           />
           {mode === "safe" && (
             <span className="composer__safe-label">Safe mode</span>
