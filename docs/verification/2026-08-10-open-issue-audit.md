@@ -5,8 +5,8 @@ authority still needed to close it. The implementation is maintained on
 `codex/flect-vision-complete` and proposed by
 [PR #38](https://github.com/akua-dev/flect/pull/38). Hosted evidence for each
 pushed head is authoritative in the PR checks; the implementation
-[quality run](https://github.com/akua-dev/flect/actions/runs/31394013331) passed
-on commit `ddfe43c`.
+[quality run](https://github.com/akua-dev/flect/actions/runs/31397856719) passed
+on the latest implementation-bearing head, commit `29b809a`.
 The PR has not been merged. A PR-ready status does not mean the change exists
 on GitHub `main`.
 
@@ -18,6 +18,30 @@ Status meanings:
   credential, independent review, repository-policy change, or clean device
   unavailable to the PR workflow; and
 - **tracking**: an epic remains open while any required child gate remains.
+
+## Scope consolidation
+
+No currently open issue is an unowned duplicate. The apparent overlaps have
+one explicit owner each:
+
+- #1 owns the product destination; #17 owns only the integrated release proof.
+- #20 owns measurable edit-loop, startup, cancellation, and memory budgets;
+  #36 owns platform behavior and applies those budgets per supported host.
+- #32 owns the visible live-canvas loop, #33 owns its persistent workspace and
+  build lifecycle, #34 owns agent inspection/repair tools, and #35 owns direct
+  selection and manipulation. They share one controller and revision contract
+  rather than creating parallel workflows.
+- #37 owns the Astro-on-Vite document and activation boundary. It does not
+  duplicate framework import (#8/#9), workspace execution (#33), or native
+  host behavior (#36).
+- #13 remains a deliberately design-only P3 issue. Its own exclusion forbids a
+  non-loopback implementation until an independent security review approves
+  the protocol.
+
+Earlier Shape/Use, Keep/Reject, Reset, agent-role, and mandatory review-mode
+scope is obsolete for ordinary local UI edits. It is not retained as a second
+workflow. Explicit Activate/Discard decisions remain only where imported code,
+shared artifacts, publication, or new authority crosses a trust boundary.
 
 | Issue | Status | Evidence and remaining gate |
 | ---: | --- | --- |
@@ -31,27 +55,27 @@ Status meanings:
 | #13 | external-gate | ADR 0004 selects user-hosted first and specifies authorities, threats, key lifecycle, protocol, offline behavior, and operations. Pure fixtures cover pairing, reconnect, replay, interruption, revocation, and lost-device recovery. Independent security approval is still required; no listener was implemented. |
 | #17 | tracking | The 85-flow production Chromium journey and isolated packaged-macOS setup/recovery gate pass; real provider authorization, VoiceOver, clean distribution hardware, and hosted-CI children remain. |
 | #19 | external-gate | A real packaged bundle with an isolated Pi home now exposes one direct recommended provider action, progressive disclosure for the other providers, an editable persistent first draft, and no passive retry dead end. Authentication/model/cancellation/redaction tests pass; a real provider callback and successful clean-profile turn still require external authorization. |
-| #20 | pr-ready | The dedicated Apple-Silicon run passes the exact product target at 216 ms cold, 218 ms warm, 4 ms composer p95, and 7,233,416 B retained growth after 50 cycles. Fast 4G with 4× CPU throttling reaches the warmed workspace in 510 ms; LCP is 367 ms on Fast 4G and 1,203 ms on Slow 4G with zero CLS. Shared hosted CI reports against its documented 1,000 ms scheduler ceiling. |
+| #20 | pr-ready | The dedicated Apple-Silicon run passes the exact product target at 212 ms cold, 226 ms warm, 4 ms composer p95, and 7,237,456 B retained growth after 50 cycles. Fast 4G with 4× CPU throttling reaches the warmed workspace in 507 ms; LCP is 368 ms on Fast 4G and 1,182 ms on Slow 4G with zero CLS. Shared hosted CI reports against its documented 1,000 ms scheduler ceiling. |
 | #21 | external-gate | Browser recovery covers workspace, Git, canvas, conversation, drafts, interruption, stale writers, quota, reload, and offline packages. A random-ID packaged bundle additionally survives hard sidecar loss and restores the exact private draft, one runtime, and one window after app relaunch. Clean-machine accepted-revision/storage-pressure proof remains external. |
 | #22 | external-gate | AXE gates, AA contrast, keyboard/focus, light/dark, forced colors, reduced motion, 200% text, 320 px reflow, and compact 44 px protected targets pass. Manual VoiceOver and packaged-host assistive-technology evidence remain external. |
 | #23 | external-gate | The final optimized `Flect.app`, private runtime, updater boundary, Swift adapter, ownership-aware setup/uninstall, and ad-hoc signing build locally. Developer ID, notarization, hardened-runtime review, and clean-machine launch require Apple credentials and external hardware. |
 | #25 | pr-ready | One embedded-Git canonical workspace supplies automatic accepted checkpoints, simple Undo, retained last-known-good state, conflict rejection, cross-tab serialization, and complete source/history export. |
 | #27 | pr-ready | Bounded static HTML/CSS/script/assets import preserves files and attribution, isolates runtime authority, rejects malformed/remote assumptions, and runs offline as a capsule. |
 | #28 | external-gate | The five-export `@flect/product` tarball and clean-consumer/reference-product suites pass. Publishing a registry artifact or deploying references was not authorized by the push-only request. |
-| #31 | external-gate | The canonical workflow passed on PR #38 in hosted run 31394013331 at commit `ddfe43c`: 888 source tests, 85 production-Chromium workflows, 26 Rust host tests, and the signed-ad-hoc desktop app build. Repository settings currently show no classic protection and no ruleset, so requiring this check on `main` remains an explicit repository-policy change. |
+| #31 | external-gate | The canonical workflow passed on PR #38 in hosted run 31397856719 at commit `29b809a`: 888 source tests, 85 production-Chromium workflows, 26 Rust host tests, and the signed-ad-hoc desktop app build. Repository settings currently show no classic protection and no ruleset, so requiring this check on `main` remains an explicit repository-policy change. |
 | #32 | pr-ready | One conversation continuously turns local valid edits into the running canvas with last-known-good failure behavior and no Keep/Reject ceremony. |
 | #33 | pr-ready | Persistent source/Git/package state, warm typed build boundaries, state-preserving live presentation, offline reuse, and repeated edit-cycle bounds pass. |
 | #34 | pr-ready | Bounded revision-bound workspace commands, semantic selected-element context, build/shell diagnostics, protected capability invocation, stale-result rejection, and visible concise tool activity pass. |
 | #35 | pr-ready | Protected pointer/keyboard selection, bounded semantic/source/layout context, targeted conversation, move/resize intents, automatic Git checkpoints, and compact accessibility pass. |
 | #36 | external-gate | Browser-native URLs, selection, focus, reflow, appearance, touch targets, no-overflow, and interaction budgets pass. The actual packaged AX tree now proves standard macOS menus and controls, the 760 × 560 window clamp, actionable setup, editable draft, sidecar-loss survival, relaunch, and single-window ownership alongside the genuine AppKit adapter. Clean-machine trackpad/VoiceOver/long-session hardware evidence remains external; mobile is not claimed supported. |
-| #37 | pr-ready | Astro emits the static activation document while Vite remains the build engine. A custom `client:flect` directive hydrates the Preact-rendered Effect workspace only for prompt, shortcut, or agent actions; CSS is declarative. View-only stays at four requests, the coordinator is 2,365 B gzip / 5,218 B decoded, and the protected pre-tool graph is 190,325 B gzip / 611,858 B decoded. Optional tools remain separate lazy boundaries. |
+| #37 | pr-ready | Astro emits the static activation document while Vite remains the build engine. A custom `client:flect` directive hydrates the Preact-rendered Effect workspace only for prompt, shortcut, or agent actions; CSS is declarative. View-only stays at four requests, the coordinator is 2,363 B gzip / 5,216 B decoded, and the protected pre-tool graph is 190,320 B gzip / 611,856 B decoded. Optional tools remain separate lazy boundaries. |
 
 ## Final local gates
 
 - `bun run check`: 166 passed test files, 888 passed tests, one deliberate skip.
 - `bun run test:e2e`: 85 of 85 production Chromium workflows passed.
-- hosted `Flect quality gate`: run 31394013331 passed the same source/browser
-  gates plus 26 Rust host tests and the desktop app build on commit `ddfe43c`.
+- hosted `Flect quality gate`: run 31397856719 passed the same source/browser
+  gates plus 26 Rust host tests and the desktop app build on commit `29b809a`.
 - `bun run product:package`: 63,559-byte verified package tarball.
 - `bun run check:rust`: 26 of 26 Rust host tests passed.
 - `bun run build:desktop -- --bundles app`: final ad-hoc signed app bundle built.
