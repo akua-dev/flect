@@ -75,7 +75,7 @@ export function BrowserExecutionDiagnostic() {
   .catch(() => console.log("blocked"))`,
                 }),
               ),
-            { concurrency: "unbounded" },
+            { concurrency: 2 },
           );
           yield* javascript.evaluate(
             JavaScriptExecutionRequest.make({

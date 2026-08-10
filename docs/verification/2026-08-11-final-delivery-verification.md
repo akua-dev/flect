@@ -30,9 +30,21 @@ human VoiceOver walkthrough, or clean external machine that was not present.
   administrators, and disallows force-pushes and deletion. It does not invent
   an approval requirement that issue #31 did not request.
 
-This completes the observable acceptance criteria owned by issue #31. A later
-documentation-only commit must still receive its own required green check
-before PR #38 can merge.
+This completes the observable acceptance criteria owned by issue #31. The
+publication head containing this report must still receive its own required
+green check before PR #38 can merge.
+
+The first report-head run,
+[31437835135](https://github.com/akua-dev/flect/actions/runs/31437835135),
+correctly failed rather than being ignored. Its bounded artifact showed 83/85
+Chromium flows passing, one warm Fast-4G activation outlier at 1,075 ms against
+the unchanged 1,000 ms limit, and an execution diagnostic that started eleven
+complete disposable Rifty/QuickJS runtimes with unbounded concurrency. The
+diagnostic now caps those independent Effect fibers at two; no performance
+budget was relaxed. Ten repeated production-browser executions and ten
+Fast/Slow-4G runs then passed locally, with warm Fast-4G activation between 505
+and 522 ms. The final required GitHub check remains authoritative for the
+publication head.
 
 ## Real browser and packaged-host evidence
 
