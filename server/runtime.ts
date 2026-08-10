@@ -1,11 +1,16 @@
 import { Context, type Effect, type Stream } from "effect";
 import type { BunCommandResult } from "../shared/bun-command";
 import type {
+  AuthLoginEvent,
+  AuthLoginReference,
+  AuthLoginRequest,
+  AuthSelectionReply,
   FlectEvent,
   FlectRuntimeError,
   GuardianDiagnostic,
   InteractiveAgentRole,
   ModelSummary,
+  ProviderAuthSummary,
   RecoveryReason,
   RuntimeStatus,
   SessionSelection,
@@ -18,6 +23,26 @@ export interface FlectRuntimeShape {
     ReadonlyArray<ModelSummary>,
     FlectRuntimeError
   >;
+  readonly providerAuth: Effect.Effect<
+    ReadonlyArray<ProviderAuthSummary>,
+    FlectRuntimeError
+  >;
+  readonly loginProvider: (
+    request: AuthLoginRequest,
+  ) => Stream.Stream<AuthLoginEvent, FlectRuntimeError>;
+  readonly replyProviderAuth: (
+    reply: AuthSelectionReply,
+  ) => Effect.Effect<void, FlectRuntimeError>;
+  readonly cancelProviderAuth: (
+    reference: AuthLoginReference,
+  ) => Effect.Effect<void, FlectRuntimeError>;
+  readonly refreshProviderAuth: Effect.Effect<
+    ReadonlyArray<ProviderAuthSummary>,
+    FlectRuntimeError
+  >;
+  readonly logoutProvider: (
+    providerId: string,
+  ) => Effect.Effect<ReadonlyArray<ProviderAuthSummary>, FlectRuntimeError>;
   readonly createSession: (
     selection: SessionSelection,
   ) => Effect.Effect<string, FlectRuntimeError>;

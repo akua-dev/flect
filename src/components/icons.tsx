@@ -145,3 +145,86 @@ export function PanelOpenIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function CopyIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} height={16} viewBox="0 0 16 16" width={16} {...props}>
+      <title>Copy</title>
+      <rect
+        height="8.5"
+        rx="1.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        width="8.5"
+        x="5"
+        y="5"
+      />
+      <path
+        d="M10.5 5V3.75A1.25 1.25 0 0 0 9.25 2.5h-5.5A1.25 1.25 0 0 0 2.5 3.75v5.5A1.25 1.25 0 0 0 3.75 10.5H5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.25"
+      />
+    </svg>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} height={16} viewBox="0 0 16 16" width={16} {...props}>
+      <title>Complete</title>
+      <path
+        d="m3.25 8.2 2.8 2.8 6.7-6.7"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
+export function WrapIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} height={16} viewBox="0 0 16 16" width={16} {...props}>
+      <title>Wrap lines</title>
+      <path
+        d="M2.5 4h8.25a2.75 2.75 0 1 1 0 5.5H8M2.5 7h4M2.5 10h3M8 7.5v4l-2-2"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.25"
+      />
+    </svg>
+  );
+}
+
+export function ExpandIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} height={16} viewBox="0 0 16 16" width={16} {...props}>
+      <title>Expand</title>
+      <path
+        d="M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.25"
+      />
+    </svg>
+  );
+}
+
+export function CollapseIcon(props: IconProps) {
+  return (
+    <svg {...baseProps} height={16} viewBox="0 0 16 16" width={16} {...props}>
+      <title>Collapse</title>
+      <path
+        d="M5.5 2.5V5.5H2.5M10.5 2.5V5.5H13.5M5.5 13.5V10.5H2.5M10.5 13.5V10.5H13.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.25"
+      />
+    </svg>
+  );
+}

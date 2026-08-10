@@ -19,8 +19,12 @@
     "types": ["vite/client", "vitest/globals"],
     "paths": {
       "@/*": ["./src/*"],
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["./shared/*"],
+      "@flect/product": ["./packages/product/src/index.ts"],
+      "@flect/product/contracts": ["./packages/product/src/contracts.ts"],
+      "@flect/product/host": ["./packages/product/src/host.ts"]
     }
   },
-  "include": ["src", "shared"]
+  "include": ["src", "shared", "examples", "packages/product/src"],
+  "exclude": ["src/axi/broker-gateway.ts"]
 }

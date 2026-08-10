@@ -15,6 +15,10 @@ Before changing Flect:
 - Keep changes inside the smallest component that owns the behavior.
 - Use the approved design and implementation plan under
   `docs/superpowers/` for the initial MVP.
+- Read `docs/product-quality.md` before designing, implementing, reviewing, or
+  releasing user-visible behavior. It owns Flect's stable user outcomes and
+  proof requirements. Do not claim an outcome is supported or proven without
+  current linked evidence through the required public interfaces.
 
 Repository-wide constraints:
 
@@ -27,9 +31,15 @@ Repository-wide constraints:
   `Ref`/`SubscriptionRef` for shared or observable state. Use Effect
   configuration, scheduling, retry, timeout, logging, and observability
   facilities instead of parallel ad hoc mechanisms.
+- Use `Effect.all` or `Effect.forEach` for concurrent fan-out. Do not use native
+  promise fan-out in owned TypeScript; `bun run check:effect-concurrency`
+  enforces this across application, tooling, release, and test code.
 - Name non-trivial workflows with `Effect.fn`, keep defects distinct from
   expected typed failures, and provide dependencies through Layers in tests.
   Use Effect test services such as `TestClock` when behavior depends on time.
+- Match expected Effect failures structurally by their stable `_tag`, using
+  `Effect.catchTag` or `Effect.catchTags` when recovering. Do not use
+  `instanceof` to route errors in an Effect error channel.
 - Compose Layers once at the runtime edge. React components may own rendering
   state, but data access and business workflows must enter through an Effect
   runtime rather than Promise-shaped application services.
@@ -73,6 +83,18 @@ Repository-wide constraints:
   prompts. App Agent cannot shape revisions or modify recovery. The Shaper may
   receive explicitly approved UI-shaping capabilities, but it cannot modify
   the Guardian, safe mode, recovery code, or revision journal.
+- Keep accepted App Agent, candidate Preview App Agent, and Shaper conversation,
+  Pi-session, cancellation, and browser-shell workspace state separate. Preview
+  App may inherit App authority policy, but it receives only bounded candidate
+  context and must not read accepted history or accepted workspace files.
+- Present one continuous agent conversation. Keep App Agent, Shaper, Preview
+  App, and Guardian as internal trust domains, never as modes or identities the
+  user must select. Route intent through typed controller decisions informed by
+  the active canvas, selected semantic target, requested operation, and
+  available capabilities. A valid local UI-only change activates and
+  checkpoints automatically; capability expansion, destructive outside
+  effects, installation, sharing, and protected recovery remain explicit
+  decisions.
 - A shared Pi `ModelRuntime` may resolve models and provider authentication,
   but Guardian, App Agent, and Shaper sessions use separate
   `SessionManager`, `SettingsManager`, and `ResourceLoader` instances. An
@@ -105,6 +127,25 @@ Repository-wide constraints:
   Tauri, DOM, storage, module, or arbitrary host-function authority.
 - Keep runtime automation in TypeScript. Prefer native browser, Bun, Pi, and
   provider interfaces over repository-owned wrappers or shadow state.
+- Route every semantic user, CLI, HTTP, MCP, and platform action through the
+  same schema-defined `FlectWorkspaceController`. Outside adapters may not
+  drive DOM selectors, edit client storage, or create parallel revision,
+  conversation, preference, control, or operation state.
+- Keep outside control disabled by default, user-enabled only from the
+  protected shell, bound to an ephemeral loopback address, authenticated by a
+  rotating private capability, attributable, and immediately revocable. Never
+  expose its bearer through output, logs, prompts, argv, tests, screenshots, or
+  public workspace state.
+- Keep operation evidence bounded, in-memory, correlated, and redacted. It may
+  explain controller, transport, turn, tool, validation, and revision behavior;
+  it must not become a credential-bearing transcript, durable audit database,
+  or second source of application truth.
+- Keep every agent-facing command surface AXI-compliant: route commands through
+  the shared Effect parser and `FlectWorkspaceController`, default to bounded
+  TOON, and preserve stable exit codes and output channels. When command
+  metadata changes, regenerate `.agents/skills/flect/SKILL.md`. The canonical
+  reference is `docs/local-control.md`; design rationale lives in
+  `docs/superpowers/specs/2026-07-31-flect-embedded-axi-design.md`.
 - Keep platform behavior behind Effect services and Layers. The browser,
   Tauri host, and macOS Swift code are adapters to shared application
   capabilities, not alternate homes for product workflows or interface state.
@@ -126,12 +167,19 @@ Keep each kind of information in one canonical place and link to it elsewhere:
   and intentional non-capabilities.
 - `PRODUCT.md` owns users, positioning, personality, and product principles.
 - `DESIGN.md` owns the visible design system and interface tokens.
+- `docs/product-quality.md` owns stable user outcomes, release gates, and proof
+  requirements. Dated maturity and evidence belong under `docs/verification/`;
+  GitHub issues own executable gaps, and the dedicated organization project
+  owns live priority and status.
 - `ARCHITECTURE.md` describes only verified behavior and boundaries that exist
   in the current implementation. Planned behavior must not be written there as
   though it were shipped.
 - `docs/trust-model.md` explains the public capability, isolation, permission,
   and recovery model. Permanent contributor safety constraints remain in the
   closest `AGENTS.md`.
+- `docs/local-control.md` owns the user-facing CLI, MCP, JSON/SSE, descriptor,
+  lifecycle, and invocation reference for the implemented local control
+  plane.
 - reviewed future designs belong in `docs/superpowers/specs/`; durable
   technical decisions and their tradeoffs belong in `docs/decisions/`.
 - GitHub issues own executable work and acceptance criteria. The dedicated

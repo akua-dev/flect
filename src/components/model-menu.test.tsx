@@ -5,7 +5,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelSummary } from "../../shared/contracts";
-import { ModelMenu } from "./model-menu";
+import { ModelMenu, modelValue } from "./model-menu";
 
 afterEach(cleanup);
 
@@ -13,6 +13,7 @@ const model = new ModelSummary({
   provider: "openai-codex",
   id: "gpt-5.6",
   name: "GPT-5.6",
+  reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
 });
 
 const defaults = {
@@ -38,7 +39,7 @@ describe("ModelMenu", () => {
       screen.getByRole("button", { name: "Model: Auto via Pi" }),
     );
     await user.click(
-      screen.getByRole("menuitemradio", { name: "GPT-5.6 by openai-codex" }),
+      screen.getByRole("radio", { name: "GPT-5.6 by openai-codex" }),
     );
 
     expect(onSelect).toHaveBeenCalledWith(model);
@@ -58,11 +59,33 @@ describe("ModelMenu", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Model: GPT-5.6" }));
-    await user.click(
-      screen.getByRole("menuitemradio", { name: "Auto via Pi" }),
-    );
+    await user.click(screen.getByRole("radio", { name: "Auto via Pi" }));
 
     expect(onSelect).toHaveBeenCalledWith(undefined);
+  });
+
+  it("selects a supported reasoning level independently of the model", async () => {
+    const user = userEvent.setup();
+    const onSelectReasoning = vi.fn();
+    render(
+      <ModelMenu
+        {...defaults}
+        disabled={false}
+        models={[model]}
+        onSelect={vi.fn()}
+        onSelectReasoning={onSelectReasoning}
+        reasoningLevel="medium"
+        selectedModel={model}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Model: GPT-5.6" }));
+    expect(screen.getByRole("radio", { name: "Medium" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    await user.click(screen.getByRole("radio", { name: "High" }));
+    expect(onSelectReasoning).toHaveBeenCalledWith("high");
   });
 
   it("marks the current selection and exposes provider detail", async () => {
@@ -80,7 +103,7 @@ describe("ModelMenu", () => {
     await user.click(screen.getByRole("button", { name: "Model: GPT-5.6" }));
 
     expect(
-      screen.getByRole("menuitemradio", {
+      screen.getByRole("radio", {
         name: "GPT-5.6 by openai-codex",
       }),
     ).toHaveAttribute("aria-checked", "true");
@@ -125,7 +148,7 @@ describe("ModelMenu", () => {
     await user.keyboard("{Escape}");
 
     expect(
-      screen.queryByRole("menu", { name: "Choose model" }),
+      screen.queryByRole("dialog", { name: "Choose model" }),
     ).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
   });
@@ -148,7 +171,7 @@ describe("ModelMenu", () => {
     expect(trigger).toBeDisabled();
     await user.click(trigger);
     expect(
-      screen.queryByRole("menu", { name: "Choose model" }),
+      screen.queryByRole("dialog", { name: "Choose model" }),
     ).not.toBeInTheDocument();
   });
 
@@ -158,6 +181,7 @@ describe("ModelMenu", () => {
       provider: "anthropic",
       id: "claude-sonnet",
       name: "Claude Sonnet",
+      reasoningLevels: ["off", "low", "medium", "high"],
     });
     render(
       <ModelMenu
@@ -178,12 +202,12 @@ describe("ModelMenu", () => {
     );
 
     expect(
-      screen.getByRole("menuitemradio", {
+      screen.getByRole("radio", {
         name: "Claude Sonnet by anthropic",
       }),
     ).toBeVisible();
     expect(
-      screen.queryByRole("menuitemradio", {
+      screen.queryByRole("radio", {
         name: "GPT-5.6 by openai-codex",
       }),
     ).not.toBeInTheDocument();
@@ -211,5 +235,75 @@ describe("ModelMenu", () => {
     );
 
     expect(onToggleFavorite).toHaveBeenCalledWith("openai-codex:gpt-5.6");
+  });
+
+  it("uses a provider rail and opens on favorites when favorites exist", async () => {
+    const user = userEvent.setup();
+    const anthropic = new ModelSummary({
+      provider: "anthropic",
+      id: "claude-sonnet",
+      name: "Claude Sonnet",
+      reasoningLevels: ["off", "low", "medium", "high"],
+    });
+    render(
+      <ModelMenu
+        {...defaults}
+        disabled={false}
+        favoriteKeys={[modelValue(model)]}
+        models={[model, anthropic]}
+        onSelect={vi.fn()}
+        selectedModel={undefined}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", {
+      name: "Model: Auto via Pi",
+    });
+    await user.click(trigger);
+
+    expect(trigger).toHaveAttribute("aria-haspopup", "dialog");
+    expect(
+      screen.getByRole("navigation", { name: "Model providers" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Favorites" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(
+      screen.getByRole("radio", { name: "GPT-5.6 by openai-codex" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("radio", { name: "Claude Sonnet by anthropic" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "anthropic" }));
+    expect(
+      screen.getByRole("radio", { name: "Claude Sonnet by anthropic" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("radio", { name: "GPT-5.6 by openai-codex" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("gives model search a stable form identity", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelMenu
+        {...defaults}
+        disabled={false}
+        models={[model]}
+        onSelect={vi.fn()}
+        selectedModel={undefined}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Model: Auto via Pi" }),
+    );
+    const search = screen.getByRole("searchbox", { name: "Search models" });
+
+    expect(search).toHaveAttribute("name", "model-search");
+    expect(search).toHaveAttribute("id");
+    expect(search.id).not.toBe("");
   });
 });

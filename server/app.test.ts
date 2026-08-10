@@ -3,9 +3,12 @@ import { Deferred, Effect, Fiber, Stream } from "effect";
 import { BunCommandResult } from "../shared/bun-command";
 import {
   AgentShellRequest,
+  AuthConnected,
+  AuthStarted,
   GuardianDiagnostic,
   ModelSummary,
   ModelsResponse,
+  ProviderAuthSummary,
   RuntimeStatus,
   SessionBusy,
   SessionSelection,
@@ -29,8 +32,35 @@ function createFakeRuntime(): FlectRuntimeShape {
         provider: "openai-codex",
         id: "gpt-5.6",
         name: "GPT-5.6",
+        reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
       }),
     ]),
+    providerAuth: Effect.succeed([
+      ProviderAuthSummary.make({
+        version: 1,
+        id: "openai-codex",
+        name: "OpenAI Codex",
+        status: "disconnected",
+        methods: [{ type: "oauth", label: "Sign in" }],
+      }),
+    ]),
+    loginProvider: ({ providerId }) =>
+      Stream.make(
+        AuthStarted.make({
+          type: "auth_started",
+          loginId: "login-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+          providerId,
+        }),
+        AuthConnected.make({
+          type: "auth_connected",
+          loginId: "login-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+          providerId,
+        }),
+      ),
+    replyProviderAuth: vi.fn(() => Effect.void),
+    cancelProviderAuth: vi.fn(() => Effect.void),
+    refreshProviderAuth: Effect.succeed([]),
+    logoutProvider: vi.fn(() => Effect.succeed([])),
     createSession: vi.fn(() => Effect.succeed("session-1")),
     closeSession: vi.fn(() => Effect.void),
     prompt: vi.fn(() =>
@@ -121,6 +151,57 @@ const deeplyNestedDocument = (depth: number) => {
 };
 
 describe("Flect HTTP application", () => {
+  it.effect(
+    "reserves workspace control routes for an allowed browser origin",
+    () =>
+      Effect.gen(function* () {
+        const app = yield* useApp(createFakeRuntime());
+        const allowed = yield* send(app, request("/api/control/status"));
+        const missing = yield* send(
+          app,
+          request("/api/control/status", undefined, null),
+        );
+        const crossOrigin = yield* send(
+          app,
+          request(
+            "/api/control/status",
+            undefined,
+            "https://untrusted.example",
+          ),
+        );
+
+        expect(allowed.status).toBe(200);
+        expect(yield* readJson(allowed)).toMatchObject({
+          version: 1,
+          enabled: false,
+          connected: false,
+          url: expect.stringMatching(/^http:\/\/127\.0\.0\.1:/),
+        });
+        expect(missing.status).toBe(403);
+        expect(crossOrigin.status).toBe(403);
+      }),
+  );
+
+  it.effect(
+    "ends a revoked browser command poll with an empty successful response",
+    () =>
+      Effect.gen(function* () {
+        const app = yield* useApp(createFakeRuntime());
+        const response = yield* send(
+          app,
+          request("/api/control/commands/next", {
+            method: "POST",
+            body: JSON.stringify({
+              workspaceId: "workspace-local-default",
+            }),
+          }),
+        );
+
+        expect(response.status).toBe(200);
+        expect(yield* readJson(response)).toEqual({ version: 1 });
+      }),
+  );
+
   it.effect("returns schema-encoded runtime and model responses", () =>
     Effect.gen(function* () {
       const app = yield* useApp(createFakeRuntime());
@@ -140,11 +221,104 @@ describe("Flect HTTP application", () => {
               provider: "openai-codex",
               id: "gpt-5.6",
               name: "GPT-5.6",
+              reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
             }),
           ],
         }),
       );
     }),
+  );
+
+  it.effect(
+    "serves provider auth through strict same-origin mutation routes",
+    () => {
+      const runtime = createFakeRuntime();
+      const loginId = "login-018f8f4f-76d1-7f4d-8f35-71eebc5931d2";
+      const promptId = "prompt-018f8f4f-76d1-7f4d-8f35-71eebc5931d2";
+      return Effect.gen(function* () {
+        const app = yield* useApp(runtime);
+        const providers = yield* send(app, request("/api/auth/providers"));
+        const login = yield* send(
+          app,
+          request("/api/auth/login", {
+            method: "POST",
+            body: JSON.stringify({
+              providerId: "openai-codex",
+              method: "oauth",
+            }),
+          }),
+        );
+        const reply = yield* send(
+          app,
+          request("/api/auth/reply", {
+            method: "POST",
+            body: JSON.stringify({
+              loginId,
+              promptId,
+              optionId: "account-1",
+            }),
+          }),
+        );
+        const cancelled = yield* send(
+          app,
+          request("/api/auth/cancel", {
+            method: "POST",
+            body: JSON.stringify({ loginId }),
+          }),
+        );
+        const refreshed = yield* send(
+          app,
+          request("/api/auth/refresh", { method: "POST" }),
+        );
+        const loggedOut = yield* send(
+          app,
+          request("/api/auth/logout", {
+            method: "POST",
+            body: JSON.stringify({ providerId: "openai-codex" }),
+          }),
+        );
+        const missingOrigin = yield* send(
+          app,
+          request(
+            "/api/auth/login",
+            {
+              method: "POST",
+              body: JSON.stringify({
+                providerId: "openai-codex",
+                method: "oauth",
+              }),
+            },
+            null,
+          ),
+        );
+        const secretShapedReply = yield* send(
+          app,
+          request("/api/auth/reply", {
+            method: "POST",
+            body: JSON.stringify({
+              loginId,
+              promptId,
+              optionId: "account-1",
+              credential: "must-not-cross-contract",
+            }),
+          }),
+        );
+
+        expect(yield* readJson(providers)).toMatchObject({
+          version: 1,
+          providers: [{ id: "openai-codex", status: "disconnected" }],
+        });
+        expect(login.headers.get("cache-control")).toBe("no-store");
+        expect(yield* readText(login)).toContain('"type":"auth_connected"');
+        expect(reply.status).toBe(204);
+        expect(cancelled.status).toBe(204);
+        expect(refreshed.status).toBe(200);
+        expect(loggedOut.status).toBe(200);
+        expect(missingOrigin.status).toBe(403);
+        expect(secretShapedReply.status).toBe(400);
+        expect(runtime.replyProviderAuth).toHaveBeenCalledTimes(1);
+      });
+    },
   );
 
   it.effect("creates a selected session from a strict schema body", () => {

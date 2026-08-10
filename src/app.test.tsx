@@ -1,80 +1,51 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime, Stream, SubscriptionRef } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  ControlStateSnapshot,
+  FlectCommandReceipt,
+  FlectWorkspaceSnapshot,
+  RailStateSnapshot,
+  WorkbenchSnapshot,
+} from "../shared/control";
 import {
   defaultInterfaceDocument,
   InterfaceDocument,
 } from "../shared/interface-document";
-import { SandboxResult, SetTextIntent } from "../shared/sandbox";
-import { makeShapingKernelTestLayer } from "./lib/shaping-kernel";
-import { SandboxCapabilityBroker } from "./sandbox/capability-broker";
-import { ExtensionExecution } from "./sandbox/extension-execution";
-import { ExtensionSandbox } from "./sandbox/extension-sandbox";
-
-const mocks = vi.hoisted(() => ({
-  appSubmit: vi.fn(() => Promise.resolve()),
-  shaperShape: vi.fn(),
-}));
-
-vi.mock("./hooks/use-agent-session", async (importOriginal) => {
-  const original =
-    await importOriginal<typeof import("./hooks/use-agent-session")>();
-  return {
-    ...original,
-    useAgentSession: () => ({
-      models: [],
-      selectedModel: undefined,
-      selectModel: vi.fn(),
-      refresh: vi.fn(() => Promise.resolve()),
-      externalExtensions: { app: false, shaper: false },
-      toggleExternalExtensions: vi.fn(() => Promise.resolve()),
-      app: {
-        role: "app" as const,
-        status: "ready" as const,
-        messages: [],
-        lastPrompt: "",
-        error: undefined,
-        submit: mocks.appSubmit,
-        cancel: vi.fn(() => Promise.resolve()),
-      },
-      shaper: {
-        role: "shaper" as const,
-        status: "ready" as const,
-        messages: [],
-        lastPrompt: "",
-        error: undefined,
-        shape: mocks.shaperShape,
-        cancel: vi.fn(() => Promise.resolve()),
-      },
-      diagnoseRecovery: vi.fn(() =>
-        Promise.resolve({
-          version: 1 as const,
-          message: "Protected recovery is available.",
-        }),
-      ),
-    }),
-  };
-});
-
-vi.mock("./hooks/use-shell-preferences", () => ({
-  useShellPreferences: () => ({
-    value: {
-      version: 1 as const,
-      railWidth: 400,
-      railCollapsed: false,
-      modelFavorites: [],
-    },
-    setRailWidth: vi.fn(() => Promise.resolve()),
-    setRailCollapsed: vi.fn(() => Promise.resolve()),
-    toggleModelFavorite: vi.fn(() => Promise.resolve()),
-  }),
-}));
-
+import {
+  InterfaceRevision,
+  RevisionId,
+  ShapingEvent,
+  ShapingSnapshot,
+} from "../shared/revisions";
 import { App } from "./app";
+import type { WorkspaceRuntime } from "./hooks/use-workspace";
+import {
+  FlectWorkspaceController,
+  type FlectWorkspaceControllerShape,
+} from "./lib/workspace-controller";
+
+afterEach(cleanup);
+
+beforeEach(() => {
+  Object.defineProperty(globalThis, "matchMedia", {
+    configurable: true,
+    value: vi.fn((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  });
+});
 
 const candidate = InterfaceDocument.make({
   version: 2,
@@ -95,139 +66,270 @@ const candidate = InterfaceDocument.make({
   },
 });
 
-const stored = new Map<string, string>();
-
-beforeEach(() => {
-  stored.clear();
-  Object.defineProperty(globalThis, "localStorage", {
-    configurable: true,
-    value: {
-      getItem: (key: string) => stored.get(key) ?? null,
-      setItem: (key: string, value: string) => stored.set(key, value),
-      removeItem: (key: string) => stored.delete(key),
-    },
-  });
-  mocks.appSubmit.mockClear();
-  mocks.shaperShape.mockReset();
-  mocks.shaperShape.mockResolvedValue(candidate);
-  Object.defineProperty(globalThis, "matchMedia", {
-    configurable: true,
-    value: vi.fn((query: string) => ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    })),
-  });
+const builtInRevision = InterfaceRevision.make({
+  version: 1,
+  id: RevisionId.make("built-in"),
+  status: "accepted",
+  source: "built-in",
+  document: defaultInterfaceDocument,
+  createdAt: 0,
 });
 
-afterEach(cleanup);
-
-describe("App", () => {
-  it("keeps the protected recovery shell available when workspace loading fails", async () => {
-    const shaping = ManagedRuntime.make(
-      Layer.mergeAll(
-        makeShapingKernelTestLayer(),
-        Layer.succeed(ExtensionExecution)({
-          execute: () =>
-            Effect.succeed(
-              SandboxResult.make({
-                version: 1,
-                intents: [],
-              }),
-            ),
-        }),
-        Layer.succeed(ExtensionSandbox)({
-          execute: () =>
-            Effect.succeed(
-              SandboxResult.make({
-                version: 1,
-                intents: [],
-              }),
-            ),
-        }),
-        Layer.succeed(SandboxCapabilityBroker)({
-          apply: () => Effect.void,
-        }),
-      ),
-    );
-
-    render(
-      <App
-        consumeLegacyInterface={() => Promise.resolve()}
-        loadLegacyInterface={() => Promise.reject(new Error("storage failed"))}
-        shaping={shaping}
-      />,
-    );
-
-    expect(
-      await screen.findByText("Custom interface state is bypassed."),
-    ).toBeVisible();
-    expect(screen.queryByText("Opening workspace")).not.toBeInTheDocument();
-    await shaping.dispose();
+const initialSnapshot = (safeMode = false) =>
+  FlectWorkspaceSnapshot.make({
+    version: 1,
+    workspaceId: "workspace-app-test",
+    sequence: 0,
+    phase: safeMode ? "safe-mode" : "ready",
+    mode: "edit",
+    document: defaultInterfaceDocument,
+    shaping: ShapingSnapshot.make({
+      version: 1,
+      active: builtInRevision,
+      lastKnownGood: builtInRevision,
+      safeMode,
+      disabledExtensions: [],
+      lastEvent: ShapingEvent.make({
+        version: 1,
+        sequence: safeMode ? 1 : 0,
+        type: safeMode ? "safe-mode-entered" : "initialized",
+        revisionId: RevisionId.make("built-in"),
+      }),
+    }),
+    workbench: WorkbenchSnapshot.make({
+      target: "shape",
+      binding: "accepted",
+      transitionSequence: 0,
+    }),
+    agent: {
+      models: [],
+      favoriteModels: [],
+      externalExtensions: { app: false, shaper: false },
+      app: {
+        role: "app",
+        status: "ready",
+        messages: [],
+        activities: [],
+        lastPrompt: "",
+      },
+      previewApp: {
+        role: "app",
+        status: "ready",
+        messages: [],
+        activities: [],
+        lastPrompt: "",
+      },
+      shaper: {
+        role: "shaper",
+        status: "ready",
+        messages: [],
+        activities: [],
+        lastPrompt: "",
+      },
+    },
+    rail: RailStateSnapshot.make({ collapsed: false, width: 400 }),
+    control: ControlStateSnapshot.make({ enabled: false, clients: [] }),
+    operations: [],
   });
 
-  it("routes the first blank-workspace instruction only to Shaper", async () => {
+const makeRuntime = (safeMode = false) => {
+  let setOutsideMode = (_mode: "edit" | "run") => Effect.void;
+  const dispatch = vi.fn<FlectWorkspaceControllerShape["dispatch"]>();
+  const layer = Layer.effect(
+    FlectWorkspaceController,
+    Effect.gen(function* () {
+      const state = yield* SubscriptionRef.make(initialSnapshot(safeMode));
+      setOutsideMode = (mode) =>
+        SubscriptionRef.update(state, (current) =>
+          FlectWorkspaceSnapshot.make({
+            ...current,
+            sequence: current.sequence + 1,
+            mode,
+            workbench: WorkbenchSnapshot.make({
+              target: mode === "run" ? "use" : "shape",
+              binding: "accepted",
+              transitionSequence:
+                (current.workbench?.transitionSequence ?? 0) + 1,
+            }),
+          }),
+        );
+      dispatch.mockImplementation((envelope) =>
+        SubscriptionRef.modify(state, (current) => {
+          const sequence = current.sequence + 1;
+          const command = envelope.command;
+          const next =
+            command.type === "submit-shaper-instruction"
+              ? (() => {
+                  const proposal = InterfaceRevision.make({
+                    version: 1,
+                    id: RevisionId.make("revision-app-test"),
+                    parentId: current.shaping.active.id,
+                    status: "accepted",
+                    source: "shaper",
+                    document: candidate,
+                    createdAt: 1,
+                  });
+                  return FlectWorkspaceSnapshot.make({
+                    ...current,
+                    sequence,
+                    phase: "ready",
+                    mode: "run",
+                    document: candidate,
+                    shaping: ShapingSnapshot.make({
+                      ...current.shaping,
+                      active: proposal,
+                      lastKnownGood: current.shaping.active,
+                      lastEvent: ShapingEvent.make({
+                        version: 1,
+                        sequence: current.shaping.lastEvent.sequence + 2,
+                        type: "revision-accepted",
+                        revisionId: proposal.id,
+                      }),
+                    }),
+                    workbench: WorkbenchSnapshot.make({
+                      target: "use",
+                      binding: "accepted",
+                      transitionSequence:
+                        (current.workbench?.transitionSequence ?? 0) + 1,
+                    }),
+                  });
+                })()
+              : FlectWorkspaceSnapshot.make({
+                  ...current,
+                  sequence,
+                  mode:
+                    command.type === "set-mode" ? command.mode : current.mode,
+                  control:
+                    command.type === "enable-control"
+                      ? ControlStateSnapshot.make({
+                          enabled: true,
+                          instanceId: "instance-app-test-1",
+                          clients: [],
+                        })
+                      : current.control,
+                });
+          return [
+            FlectCommandReceipt.make({
+              version: 1,
+              commandId: envelope.commandId,
+              workspaceId: envelope.workspaceId,
+              operationId: "operation-app-test-1",
+              sequence,
+              status: "completed",
+            }),
+            next,
+          ];
+        }),
+      );
+      return {
+        snapshot: SubscriptionRef.get(state),
+        changes: SubscriptionRef.changes(state),
+        events: Stream.empty,
+        providerAuth: Effect.succeed({ providers: [] }),
+        providerAuthChanges: Stream.empty,
+        continuity: Effect.succeed({
+          drafts: { acceptedUse: "", candidateUse: "", shape: "" },
+          generation: 0,
+          revisionSequence: 0,
+        }),
+        continuityChanges: Stream.empty,
+        setDraft: () => Effect.void,
+        exportContinuity: Effect.succeed("{}"),
+        exportRepository: Effect.succeed(new Uint8Array([1])),
+        readShareExport: () => Effect.succeed(new Uint8Array([1])),
+        discardContinuity: Effect.void,
+        retryContinuity: Effect.void,
+        dispatch,
+        connectClient: () => Effect.void,
+        disconnectClient: () => Effect.void,
+        selectReasoning: () => Effect.void,
+        loginProvider: () => Effect.void,
+        replyProviderAuth: () => Effect.void,
+        cancelProviderAuth: () => Effect.void,
+        refreshProviderAuth: Effect.void,
+        logoutProvider: () => Effect.void,
+      } satisfies FlectWorkspaceControllerShape;
+    }),
+  );
+  const runtime: WorkspaceRuntime = ManagedRuntime.make(layer);
+  return {
+    dispatch,
+    runtime,
+    setOutsideMode: (mode: "edit" | "run") => setOutsideMode(mode),
+  };
+};
+
+describe("App", () => {
+  it("routes shaping and diagnostics through the typed shared controller", async () => {
     const user = userEvent.setup();
-    const shaping = ManagedRuntime.make(
-      Layer.mergeAll(
-        makeShapingKernelTestLayer(),
-        Layer.succeed(ExtensionExecution)({
-          execute: () =>
-            Effect.succeed(
-              SandboxResult.make({
-                version: 1,
-                intents: [
-                  SetTextIntent.make({
-                    type: "set-text",
-                    target: "isolation-status",
-                    text: "undefined,undefined,undefined,undefined,undefined,undefined",
-                  }),
-                ],
-              }),
-            ),
-        }),
-        Layer.succeed(ExtensionSandbox)({
-          execute: () =>
-            Effect.succeed(
-              SandboxResult.make({
-                version: 1,
-                intents: [],
-              }),
-            ),
-        }),
-        Layer.succeed(SandboxCapabilityBroker)({
-          apply: () => Effect.void,
-        }),
-      ),
-    );
-    render(
-      <App
-        consumeLegacyInterface={() => Promise.resolve()}
-        loadLegacyInterface={() => Promise.resolve(defaultInterfaceDocument)}
-        shaping={shaping}
-      />,
-    );
+    const { dispatch, runtime } = makeRuntime();
+    render(<App runtime={runtime} />);
 
     const input = await screen.findByRole("textbox", {
-      name: "Message Shaper",
+      name: "Message Flect",
     });
     await user.type(input, "Create a focused project overview{Enter}");
 
     await waitFor(() =>
-      expect(mocks.shaperShape).toHaveBeenCalledWith(
-        "Create a focused project overview",
-        expect.objectContaining({ name: "Flect" }),
-      ),
+      expect(
+        dispatch.mock.calls.some(
+          ([envelope]) => envelope.command.type === "submit-shaper-instruction",
+        ),
+      ).toBe(true),
     );
-    expect(mocks.appSubmit).not.toHaveBeenCalled();
+    expect(await screen.findByText("Focused project overview")).toBeVisible();
     expect(
-      await screen.findByRole("region", { name: "Revision decision" }),
+      screen.queryByRole("region", { name: "Import decision" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeVisible();
-    await shaping.dispose();
+    expect(screen.getAllByRole("textbox")).toHaveLength(1);
+    expect(
+      dispatch.mock.calls.some(
+        ([envelope]) => envelope.command.type === "accept-proposal",
+      ),
+    ).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Diagnostics" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Enable local control" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Disable local control" }),
+      ).toBeVisible(),
+    );
+
+    await runtime.dispose();
+  });
+
+  it("renders outside state changes without a parallel local mode", async () => {
+    const { runtime, setOutsideMode } = makeRuntime();
+    render(<App runtime={runtime} />);
+    await screen.findByRole("textbox", { name: "Message Flect" });
+
+    await act(async () => {
+      await runtime.runPromise(setOutsideMode("run"));
+    });
+    expect(
+      await screen.findByRole("textbox", { name: "Message Flect" }),
+    ).toBeVisible();
+
+    await runtime.dispose();
+  });
+
+  it("keeps the protected recovery shell available in safe mode", async () => {
+    const { runtime } = makeRuntime(true);
+    render(<App runtime={runtime} />);
+
+    expect(
+      await screen.findByText("Custom interface state is bypassed."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("textbox", { name: "Message Flect" }),
+    ).toBeDisabled();
+
+    await runtime.dispose();
   });
 });

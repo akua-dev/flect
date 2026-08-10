@@ -16,6 +16,10 @@ import {
   makeBunPackageMutationLayer,
 } from "../execution/bun-package-mutation";
 import {
+  NPM_REGISTRY_ORIGIN,
+  trustedNpmRegistryFetch,
+} from "../execution/npm-registry";
+import {
   BunCommand,
   type BunOperationCall,
   makeBunCommandService,
@@ -109,29 +113,6 @@ const packageResult = (
     stderr: "",
   });
 
-export const trustedNpmRegistryFetch: Fetcher = (url, init) => {
-  const parsed = new URL(url);
-  const method = (init?.method ?? "GET").toUpperCase();
-  if (
-    parsed.protocol !== "https:" ||
-    parsed.origin !== "https://registry.npmjs.org" ||
-    (method !== "GET" && method !== "HEAD")
-  ) {
-    return Promise.reject(
-      new Error("The trusted npm registry broker denied the request."),
-    );
-  }
-  return fetch(parsed, {
-    method,
-    signal: init?.signal,
-    credentials: "omit",
-    redirect: "error",
-    headers: {
-      accept: "application/vnd.npm.install-v1+json, application/json",
-    },
-  });
-};
-
 export const makeShellBunCommandLiveLayer = (options: {
   readonly fs: IFileSystem;
   readonly packageFetch?: Fetcher;
@@ -140,7 +121,7 @@ export const makeShellBunCommandLiveLayer = (options: {
 }) => {
   const packageLayer = makeBunPackageMutationLayer({
     fetch: options.packageFetch ?? trustedNpmRegistryFetch,
-    registryBaseUrl: options.registryBaseUrl ?? "https://registry.npmjs.org",
+    registryBaseUrl: options.registryBaseUrl ?? NPM_REGISTRY_ORIGIN,
   });
   const dependencies = Layer.merge(
     options.moduleLayer ?? BunModuleExecutionLive,

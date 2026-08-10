@@ -5,6 +5,7 @@ import type { WorkspaceDelta } from "../../shared/bun-command";
 import {
   BunPackageMutation,
   type BunPackageWorkspace,
+  canonicalPackageVfsPath,
   makeBunPackageMutationLayer,
 } from "./bun-package-mutation";
 import {
@@ -54,6 +55,17 @@ const applyDelta = (
 };
 
 describe("BunPackageMutation", () => {
+  it("normalizes only private cache separator artifacts", () => {
+    assert.strictEqual(
+      canonicalPackageVfsPath("/.rifty/tarball-cache//A/package.tgz"),
+      "/.rifty/tarball-cache/A/package.tgz",
+    );
+    assert.throws(() =>
+      canonicalPackageVfsPath("/workspace/node_modules//outside/index.js"),
+    );
+    assert.throws(() => canonicalPackageVfsPath("/outside/package.json"));
+  });
+
   it.layer(makeBunPackageMutationLayer({ fetch: fixtureRegistryFetch }))(
     (it) => {
       it.effect(

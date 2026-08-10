@@ -1,0 +1,116 @@
+# Open-issue audit — 2026-08-10; delivery update 2026-08-11
+
+## Delivery update
+
+The four final local commits were published to PR #38. The implementation head
+`a7812a0` passed hosted
+[run 31436336436](https://github.com/akua-dev/flect/actions/runs/31436336436),
+and deliberate public failure
+[run 31436397823](https://github.com/akua-dev/flect/actions/runs/31436397823)
+failed only after the canonical gate reached its explicit failure-probe step.
+GitHub `main` now has a matching admin-enforced protection rule requiring the
+strict `Flect quality gate` context and rejecting force-pushes and deletion.
+The complete current evidence and exact remaining external authorities are in
+the [final delivery report](2026-08-11-final-delivery-verification.md).
+
+Issue #31 is therefore implemented. After PR integration, 15 implementation
+issues can close; nine honest external/tracking gates remain: #1, #13, #17,
+#19, #21, #22, #23, #28, and #36.
+
+This audit maps every open GitHub issue to the tested implementation and the
+authority still needed to close it. The implementation is maintained on
+`codex/flect-vision-complete` and proposed by
+[PR #38](https://github.com/akua-dev/flect/pull/38). Hosted evidence for each
+pushed head is authoritative in the PR checks; the implementation
+[quality run](https://github.com/akua-dev/flect/actions/runs/31436336436) passed
+on the latest published implementation-bearing head, commit `a7812a0`.
+The PR has not been merged. An implemented status does not mean the change
+exists on GitHub `main`.
+
+Status meanings:
+
+- **implemented**: the accepted implementation passes local and canonical
+  hosted gates and carries the GitHub `status:implemented` marker while its
+  final local commits await an intentional publication workflow;
+- **external-gate**: implementation exists locally, but closure requires a
+  credential, independent review, repository-policy change, or clean device
+  unavailable to the PR workflow; and
+- **tracking**: an epic remains open while any required child gate remains.
+
+The original GitHub synchronization completed on 2026-08-10. All 24 then-open
+issues received exactly one status marker and evidence comment: 14 were marked
+`status:implemented` and 10 were marked `status:external-gate`. The delivery
+update moves #31 to the implemented set; tracking epics remain external while
+their documented child evidence remains. No issue is closed merely to hide an
+unpublished implementation or an unresolved external authority.
+
+## Scope consolidation
+
+No currently open issue is an unowned duplicate. The apparent overlaps have
+one explicit owner each:
+
+- #1 owns the product destination; #17 owns only the integrated release proof.
+- #20 owns measurable edit-loop, startup, cancellation, and memory budgets;
+  #36 owns platform behavior and applies those budgets per supported host.
+- #32 owns the visible live-canvas loop, #33 owns its persistent workspace and
+  build lifecycle, #34 owns agent inspection/repair tools, and #35 owns direct
+  selection and manipulation. They share one controller and revision contract
+  rather than creating parallel workflows.
+- #37 owns the Astro-on-Vite document and activation boundary. It does not
+  duplicate framework import (#8/#9), workspace execution (#33), or native
+  host behavior (#36).
+- #13 remains a deliberately design-only P3 issue. Its own exclusion forbids a
+  non-loopback implementation until an independent security review approves
+  the protocol.
+
+Earlier Shape/Use, Keep/Reject, Reset, agent-role, and mandatory review-mode
+scope is obsolete for ordinary local UI edits. It is not retained as a second
+workflow. Explicit Activate/Discard decisions remain only where imported code,
+shared artifacts, publication, or new authority crosses a trust boundary.
+
+| Issue | Status        | Evidence and remaining gate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----: | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|    #1 | tracking      | The vision-aligned loop passes locally; #13, #17, #19, #21, #22, #23, #28, and #36 still contain external gates.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+|    #5 | implemented   | Integrity-checked package graphs, bounded extraction, cache reuse, offline rebuild, and provider separation pass source and Chromium tests.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|    #8 | implemented   | Folder, ZIP, POSIX TAR, and exact immutable Git ingestion feed standard Vite/React through the same isolated build/export path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+|    #9 | implemented   | Vanilla, React, Vue, and Svelte fixtures use the same Rolldown workspace, capsule, failure, and offline-cache contract.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+|   #10 | implemented   | File/URL installation, review, offline execution, provenance, explicit fork lineage, guarded three-way update/conflict resolution, export, and two-stage uninstall pass. The primary capsule store additionally proves that only strictly bound objects are removed while unrelated workspace and unknown data survive.                                                                                                                                                                                                                                                                                                                             |
+|   #11 | implemented   | Canonical Ed25519 content signing, key validity/rotation/revocation policy, all requested trust states, protected presentation, and unsigned fork lineage pass source and production Chromium tests.                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|   #12 | implemented   | A real Swift/AppKit accent read crosses a fixed C ABI and main-window-only Rust command, then a schema-decoded Effect service and explicit revocable broker grant; browsers receive typed unavailability.                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|   #13 | external-gate | ADR 0004 selects user-hosted first and specifies authorities, threats, key lifecycle, protocol, offline behavior, and operations. Pure fixtures cover pairing, reconnect, replay, interruption, revocation, and lost-device recovery. Independent security approval is still required; no listener was implemented.                                                                                                                                                                                                                                                                                                                                 |
+|   #17 | tracking      | The 85-flow production Chromium journey, isolated packaged-macOS setup/recovery gate, and hosted CI pass; real provider authorization, VoiceOver, and clean distribution hardware remain.                                                                                                                                                                                                                                                                                                                                                                                               |
+|   #19 | external-gate | A real packaged bundle with an isolated Pi home now exposes one direct recommended provider action, progressive disclosure for the other providers, an editable persistent first draft, and no passive retry dead end. Authentication/model/cancellation/redaction tests pass; a real provider callback and successful clean-profile turn still require external authorization.                                                                                                                                                                                                                                                                     |
+|   #20 | implemented   | The dedicated Apple-Silicon run passes the exact product target at 223 ms cold, 211 ms warm, 4 ms composer p95, and 7,278,924 B retained growth after 50 cycles. Fast 4G with 4× CPU throttling reaches the warmed workspace in 501 ms; LCP is 371 ms on Fast 4G and 1,196 ms on Slow 4G with zero CLS. Shared hosted CI reports against its documented 1,000 ms scheduler ceiling.                                                                                                                                                                                                                                                                 |
+|   #21 | external-gate | Browser recovery covers workspace, Git, canvas, conversation, drafts, interruption, stale writers, quota, reload, and offline packages. A random-ID packaged bundle additionally survives hard sidecar loss and restores the exact private draft, one runtime, and one window after app relaunch. Clean-machine accepted-revision/storage-pressure proof remains external.                                                                                                                                                                                                                                                                          |
+|   #22 | external-gate | AXE gates, AA contrast, keyboard/focus, light/dark, forced colors, reduced motion, 200% text, 320 px reflow, and compact 44 px protected targets pass. Manual VoiceOver and packaged-host assistive-technology evidence remain external.                                                                                                                                                                                                                                                                                                                                                                                                            |
+|   #23 | external-gate | The final optimized `Flect.app`, private runtime, updater boundary, Swift adapter, ownership-aware setup/uninstall, and ad-hoc signing build locally. Developer ID, notarization, hardened-runtime review, and clean-machine launch require Apple credentials and external hardware.                                                                                                                                                                                                                                                                                                                                                                |
+|   #25 | implemented   | One embedded-Git canonical workspace supplies automatic accepted checkpoints, simple Undo, retained last-known-good state, conflict rejection, cross-tab serialization, and complete source/history export.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+|   #27 | implemented   | Bounded static HTML/CSS/script/assets import preserves files and attribution, isolates runtime authority, rejects malformed/remote assumptions, and runs offline as a capsule.                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+|   #28 | external-gate | The five-export `@flect/product` tarball and clean-consumer/reference-product suites pass. Publishing a registry artifact or deploying references was not authorized by the push-only request.                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+|   #31 | implemented   | The canonical workflow passed on PR #38 in hosted run 31436336436 at commit `a7812a0`. Deliberate workflow-dispatch run 31436397823 reached the explicit failure probe and failed publicly. `main` now requires the strict `Flect quality gate` context through an admin-enforced matching branch-protection rule; force-pushes and deletion are disabled.                                                                                                                                                                                                                                                                                        |
+|   #32 | implemented   | One conversation continuously turns local valid edits into the running canvas with last-known-good failure behavior and no Keep/Reject ceremony.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+|   #33 | implemented   | Persistent source/Git/package state, warm typed build boundaries, state-preserving live presentation, offline reuse, and repeated edit-cycle bounds pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+|   #34 | implemented   | Bounded revision-bound workspace commands, semantic selected-element context, build/shell diagnostics, protected capability invocation, stale-result rejection, and visible concise tool activity pass.                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+|   #35 | implemented   | Protected pointer/keyboard selection, bounded semantic/source/layout context, targeted conversation, move/resize intents, automatic Git checkpoints, and compact accessibility pass.                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+|   #36 | external-gate | Browser-native URLs, selection, focus, reflow, appearance, touch targets, no-overflow, and interaction budgets pass. The topmost Actions dialog now owns Escape before the compact agent sheet, with the exact draft/conversation/routing journey passing 10 consecutive production runs. The actual packaged AX tree proves standard macOS menus and controls, the 760 × 560 window clamp, actionable setup, editable draft, sidecar-loss survival, relaunch, and single-window ownership alongside the genuine AppKit adapter. Clean-machine trackpad/VoiceOver/long-session hardware evidence remains external; mobile is not claimed supported. |
+|   #37 | implemented   | Astro emits the static activation document while Vite remains the build engine. A custom `client:flect` directive hydrates the Preact-rendered Effect workspace only for prompt, shortcut, or agent actions; the static shell remains until declarative CSS is loaded. View-only stays at four requests, the bootstrap is 2,199 B gzip / 4,646 B decoded, protected JavaScript is 184,615 B gzip / 594,425 B decoded, and deferred CSS is 12,018 B gzip / 64,796 B decoded. Optional tools remain separate lazy boundaries. Product TypeScript contains no native promise fan-out, ad hoc Promise constructors, or native Promise serialization tails; callback and serialized lifecycles use Effect.                                                     |
+
+## Final local gates
+
+- `bun run check`: 166 passed test files, 889 passed tests, one deliberate skip.
+- `bun run test:e2e`: 85 of 85 production Chromium workflows passed.
+- hosted `Flect quality gate`: run 31436336436 passed the same source/browser
+  gates plus Rust host tests and the desktop app build on commit `a7812a0`;
+  run 31436397823 proved the explicit public failure path.
+- `bun run product:package`: 63,559-byte verified package tarball.
+- `bun run check:rust`: 26 of 26 Rust host tests passed.
+- `bun run build:desktop -- --bundles app`: final ad-hoc signed app bundle built.
+- `bun run test:desktop:local`: isolated real-bundle setup, native-window,
+  sidecar-loss, and relaunch proof passed.
+- `chrome-devtools-axi`: static-only view graph, focus with zero added requests,
+  activation-only workspace and CSS, no overflow or clean-run console output,
+  and 100/100 Accessibility, Best Practices, SEO, and Agentic Browsing scores.
+
+Issues must not be closed merely to make the list empty. Implemented issues can
+close through intentional publication and integration. External gates close
+only when their required independent evidence exists.

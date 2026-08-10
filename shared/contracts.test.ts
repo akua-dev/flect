@@ -2,14 +2,18 @@ import { describe, expect, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
 import {
   AgentShellResultRequest,
+  AuthLoginEvent,
+  AuthSelectionReply,
   CancelRequest,
   decodeFlectEvent,
   decodeModelSummary,
   decodePromptRequest,
   decodeRuntimeStatus,
   decodeSessionSelection,
+  decodeShapeEvent,
   ModelSummary,
   PromptRequest,
+  ProviderAuthSummary,
   RuntimeStatus,
   SessionSelection,
 } from "./contracts";
@@ -66,6 +70,7 @@ describe("runtime contracts", () => {
         provider: "openai-codex",
         id: "gpt-5.6",
         name: "GPT-5.6",
+        reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
       });
 
       expect(model).toEqual(
@@ -73,8 +78,104 @@ describe("runtime contracts", () => {
           provider: "openai-codex",
           id: "gpt-5.6",
           name: "GPT-5.6",
+          reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
         }),
       );
+    }),
+  );
+
+  it.effect("projects only bounded provider authentication metadata", () =>
+    Effect.gen(function* () {
+      const decode = Schema.decodeUnknownEffect(ProviderAuthSummary, {
+        errors: "all",
+        onExcessProperty: "error",
+      });
+      const provider = yield* decode({
+        version: 1,
+        id: "openai-codex",
+        name: "OpenAI Codex",
+        status: "connected",
+        sourceLabel: "OAuth",
+        credentialType: "oauth",
+        methods: [
+          {
+            type: "oauth",
+            label: "ChatGPT subscription",
+          },
+        ],
+      });
+
+      expect(provider.status).toBe("connected");
+      expect(provider.methods[0]?.type).toBe("oauth");
+      yield* decode({
+        ...provider,
+        accessToken: "secret-provider-canary",
+      }).pipe(Effect.flip);
+      yield* decode({
+        ...provider,
+        sourceLabel: "x".repeat(241),
+      }).pipe(Effect.flip);
+    }),
+  );
+
+  it.effect("accepts only safe correlated login interaction events", () =>
+    Effect.gen(function* () {
+      const decode = Schema.decodeUnknownEffect(AuthLoginEvent, {
+        errors: "all",
+        onExcessProperty: "error",
+      });
+      const started = yield* decode({
+        type: "auth_started",
+        loginId: "login-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        providerId: "openai-codex",
+      });
+      const selection = yield* decode({
+        type: "auth_selection_required",
+        loginId: started.loginId,
+        promptId: "prompt-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        message: "Choose a login method",
+        options: [
+          { id: "browser", label: "Browser login" },
+          { id: "device", label: "Device code" },
+        ],
+      });
+      const protectedEntry = yield* decode({
+        type: "auth_protected_entry",
+        loginId: started.loginId,
+        promptId: "prompt-018f8f4f-76d1-7f4d-8f35-71eebc5931d3",
+        label: "Enter credential securely",
+        url: "http://127.0.0.1:43123/entry/one-use-path",
+      });
+
+      expect(selection.type).toBe("auth_selection_required");
+      expect(protectedEntry.type).toBe("auth_protected_entry");
+      yield* decode({
+        ...protectedEntry,
+        url: "http://attacker.invalid/entry/token",
+      }).pipe(Effect.flip);
+      yield* decode({
+        ...selection,
+        credential: "secret-provider-canary",
+      }).pipe(Effect.flip);
+    }),
+  );
+
+  it.effect("bounds safe selection replies to one login prompt", () =>
+    Effect.gen(function* () {
+      const decode = Schema.decodeUnknownEffect(AuthSelectionReply, {
+        errors: "all",
+        onExcessProperty: "error",
+      });
+      const reply = yield* decode({
+        loginId: "login-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        promptId: "prompt-018f8f4f-76d1-7f4d-8f35-71eebc5931d2",
+        optionId: "browser",
+      });
+      expect(reply.optionId).toBe("browser");
+      yield* decode({
+        ...reply,
+        optionId: "x".repeat(81),
+      }).pipe(Effect.flip);
     }),
   );
 
@@ -141,6 +242,84 @@ describe("runtime contracts", () => {
     }),
   );
 
+  it.effect(
+    "decodes visible tool lifecycle events without arbitrary details",
+    () =>
+      Effect.gen(function* () {
+        const started = yield* decodeFlectEvent({
+          type: "tool_execution_started",
+          role: "app",
+          callId: "call-1",
+          toolName: "bash",
+          startedAt: 10,
+          inputSummary: "bun test",
+        });
+        const completed = yield* decodeFlectEvent({
+          type: "tool_execution_completed",
+          role: "app",
+          callId: "call-1",
+          toolName: "bash",
+          completedAt: 25,
+          durationMs: 15,
+          status: "succeeded",
+          resultSummary: "Exit code: 0",
+          exitCode: 0,
+        });
+
+        expect(started.type).toBe("tool_execution_started");
+        expect(completed.type).toBe("tool_execution_completed");
+        yield* decodeFlectEvent({
+          ...started,
+          credential: "not-a-real-secret",
+        }).pipe(Effect.flip);
+      }),
+  );
+
+  it.effect("decodes only bounded trusted Pi extension failures", () =>
+    Effect.gen(function* () {
+      const input = {
+        type: "external_extension_failed",
+        role: "app",
+        failureId: "extension-failure-1",
+        stage: "turn",
+        message: "A trusted Pi extension failed.",
+        recovery: "Disable trusted Pi extensions for this agent and retry.",
+      };
+      const promptEvent = yield* decodeFlectEvent(input);
+      const shapeEvent = yield* decodeShapeEvent({ ...input, role: "shaper" });
+
+      expect(promptEvent.type).toBe("external_extension_failed");
+      expect(shapeEvent.type).toBe("external_extension_failed");
+      yield* decodeFlectEvent({
+        ...input,
+        path: "/Users/example/.pi/agent/extensions/broken.ts",
+        error: "private extension error",
+      }).pipe(Effect.flip);
+    }),
+  );
+
+  it.effect("decodes actionable Shaper validation issues", () =>
+    Effect.gen(function* () {
+      const event = yield* decodeShapeEvent({
+        type: "proposal_validation_failed",
+        attempt: 1,
+        issues: [
+          {
+            path: ["root", "children", 0, "style"],
+            code: "required",
+            message: "Required field is missing.",
+          },
+        ],
+      });
+
+      expect(event.type).toBe("proposal_validation_failed");
+      if (event.type !== "proposal_validation_failed") {
+        return yield* Effect.die("Expected a proposal validation event.");
+      }
+      expect(event.issues[0]?.path).toEqual(["root", "children", 0, "style"]);
+    }),
+  );
+
   it.effect("trims prompts and requires visible text", () =>
     Effect.gen(function* () {
       yield* Effect.flip(decodePromptRequest({ text: "   " }));
@@ -155,13 +334,18 @@ describe("runtime contracts", () => {
       const automatic = yield* decodeSessionSelection({});
       const explicit = yield* decodeSessionSelection({
         model: { provider: "anthropic", id: "claude-sonnet" },
+        reasoningLevel: "high",
       });
 
       expect(automatic).toEqual(new SessionSelection({}));
       expect(explicit).toEqual(
         new SessionSelection({
           model: { provider: "anthropic", id: "claude-sonnet" },
+          reasoningLevel: "high",
         }),
+      );
+      yield* decodeSessionSelection({ reasoningLevel: "extreme" }).pipe(
+        Effect.flip,
       );
     }),
   );

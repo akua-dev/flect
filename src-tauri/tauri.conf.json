@@ -29,7 +29,7 @@
     "security": {
       "freezePrototype": false,
       "csp": {
-        "default-src": "'self'",
+        "default-src": "'self' flect-capsule: http://flect-capsule.localhost",
         "script-src": "'self' 'wasm-unsafe-eval'",
         "style-src": "'self' 'unsafe-inline'",
         "img-src": "'self' data:",
@@ -53,8 +53,7 @@
     "targets": ["app", "dmg"],
     "externalBin": ["binaries/flect-runtime"],
     "macOS": {
-      "minimumSystemVersion": "12.0",
-      "signingIdentity": "-"
+      "minimumSystemVersion": "12.0"
     }
   }
 }

@@ -26,7 +26,13 @@ export class InterfaceRevision extends Schema.Class<InterfaceRevision>(
   id: RevisionId,
   parentId: Schema.optionalKey(RevisionId),
   status: Schema.Literals(["proposed", "previewed", "accepted", "rejected"]),
-  source: Schema.Literals(["built-in", "user", "shaper", "recovery"]),
+  source: Schema.Literals([
+    "built-in",
+    "user",
+    "shaper",
+    "extension",
+    "recovery",
+  ]),
   document: InterfaceDocument,
   createdAt: Schema.Number.check(
     Schema.isInt(),
@@ -53,6 +59,7 @@ export class ShapingEvent extends Schema.Class<ShapingEvent>("ShapingEvent")({
   ]),
   revisionId: Schema.optionalKey(RevisionId),
   extensionId: Schema.optionalKey(IdentifierText),
+  operationId: Schema.optionalKey(IdentifierText),
 }) {}
 
 export class ShapingSnapshot extends Schema.Class<ShapingSnapshot>(

@@ -38,9 +38,12 @@ running UI can be changed from inside itself.
 
 ## Brand Personality
 
-Professional, elegant, and calm, with the precision of a first-party Apple
-tool. The product should feel capable without looking technical for its own
-sake. Its voice is concise, direct, and quietly confident.
+Professional, elegant, and calm, with the precision of first-party software on
+each supported platform. The macOS host should feel at home beside Apple's own
+tools; the browser and future mobile hosts should be equally faithful to their
+own environments rather than imitating macOS. The product should feel capable
+without looking technical for its own sake. Its voice is concise, direct, and
+quietly confident.
 
 ## Anti-references
 
@@ -55,9 +58,18 @@ harder to recognize.
 - The default is excellent, but never a cage.
 - The agent is the product backbone, not an accessory beside it.
 - The work stays central; infrastructure and model mechanics stay quiet.
+- Shared product logic adapts to native platform behavior instead of imposing
+  one generic shell everywhere.
 - Every customizable surface has a protected way back.
 - Changes should be inspectable, reversible, and attributable before they
   become more powerful.
+
+## Product Quality
+
+[`docs/product-quality.md`](docs/product-quality.md) is the canonical contract
+for Flect's stable user outcomes, release gates, and required proof. Current
+maturity belongs in dated verification evidence and the Flect delivery
+project, not in this product context.
 
 ## Accessibility & Inclusion
 

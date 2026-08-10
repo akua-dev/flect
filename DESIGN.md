@@ -54,7 +54,7 @@ components:
     size: "40px"
   button-primary-hover:
     backgroundColor: "{colors.flect-rose-hover}"
-    textColor: "{colors.ink}"
+    textColor: "{colors.void}"
     rounded: "{rounded.pill}"
     size: "40px"
   prompt-surface:
@@ -86,17 +86,100 @@ affordances, short labels, and restrained state motion.
 - Near-black neutral architecture with one precise rose signal.
 - System typography tuned for calm density and high legibility.
 - Tonal layering before shadows; boundaries appear only when useful.
-- A centered shaping prompt that expands naturally into a conversation.
+- One centered agent composer that expands naturally into a conversation rail.
 - Protected recovery controls that remain quiet but always reachable.
 
-## 2. Colors
+## 2. Platform-native quality contract
+
+Flect must feel like first-party software on every platform it claims to
+support. This is behavioral fidelity, not decoration and not pixel-for-pixel
+uniformity. The shared Flect identity remains recognizable while each host
+uses the interaction conventions people already trust there.
+
+### Architecture rule
+
+The agent, canonical workspace, history, capability, and recovery contracts are
+shared. Window chrome, system menus, keyboard routing, focus, scrolling,
+selection, drag and drop, file pickers, notifications, appearance, safe areas,
+touch, haptics, and lifecycle behavior belong to platform adapters.
+
+A WebView is acceptable only while it meets the platform contract. If a
+protected control cannot match native behavior, latency, accessibility, or
+visual integration in the WebView, implement that control in the host and
+expose it through a narrow typed boundary. Do not ship a CSS imitation of a
+native control that behaves incorrectly.
+
+### Browser contract
+
+- Preserve browser history, URLs, text selection, clipboard, context menus,
+  focus navigation, zoom, responsive reflow, and expected keyboard shortcuts.
+- Never draw fake desktop title bars, traffic lights, system dialogs, or
+  application chrome in the web product.
+- Use responsive browser and touch behavior rather than shrinking the desktop
+  composition.
+- Respect light/dark preference, forced colors, reduced motion, text scaling,
+  pointer type, and the browser's back/forward lifecycle.
+- Keep scroll containers intentional. Ordinary page and canvas scrolling must
+  retain platform momentum, overscroll, and input semantics.
+
+### macOS contract
+
+- Respect the title-bar and traffic-light safe region, window resizing,
+  full-screen behavior, app activation, reopen, quit, and state restoration.
+- Provide a real menu bar with standard application, File, Edit, View, Window,
+  and Help behavior where those actions exist.
+- Use macOS shortcut, focus-ring, clipboard, drag-and-drop, open/save panel,
+  context-menu, trackpad, inertial-scroll, and text-editing conventions.
+- Follow the system appearance and accessibility settings, including light,
+  dark, increased contrast, reduced transparency, reduced motion, text size,
+  and VoiceOver.
+- Use SF typography and platform metrics without making every product canvas
+  look like Flect chrome.
+- Prefer host-native sheets, menus, permission prompts, and file surfaces when
+  the WebView equivalent is observably foreign or less accessible.
+
+### Future mobile contract
+
+iOS and Android are not supported merely because the web UI fits a narrow
+viewport. A supported mobile host must prove native back behavior, safe areas,
+software-keyboard avoidance, touch targets, gestures, scrolling, sheets,
+menus, haptics, share/open flows, lifecycle restoration, and platform
+accessibility on real devices.
+
+### Responsiveness and motion gates
+
+- Composer input and ordinary protected-shell interactions have p95 response
+  below 50ms and release-gated INP below 100ms.
+- Scrolling, selection overlays, resizing, dragging, and direct manipulation
+  stay within a 16.7ms frame budget on the 60Hz reference device. Supported
+  120Hz paths target 8.3ms.
+- No ordinary interaction introduces a main-thread task longer than 50ms.
+- Menus, sheets, popovers, focus changes, and navigation acknowledge input in
+  the same frame and use the platform's expected motion curve and duration.
+- The running canvas never flashes blank, jumps layout, loses focus, or resets
+  application state because the agent or compiler is working.
+- Reduced-motion mode removes nonessential interpolation without removing
+  state feedback.
+
+### Release evidence
+
+Every supported host requires real production-build evidence for cold and warm
+launch, input, keyboard/focus, scrolling, direct manipulation, appearance,
+reduced motion, accessibility, failure recovery, long-session memory, and
+resize or rotation. Screenshot similarity alone is not acceptance evidence.
+
+Reviewers must reject a release for visible hitching, fake platform chrome,
+foreign control behavior, theme mismatch, clipped safe areas, nonstandard
+keyboard behavior, or a design that only works at the demo viewport.
+
+## 3. Colors
 
 The palette is monochrome at rest and reveals color only when state or agency
 needs to be communicated.
 
 ### Primary
 
-- **Flect Rose** (`oklch(0.630 0.180 340)`): focus, active shaping state,
+- **Flect Rose** (`oklch(0.630 0.180 340)`): focus, active agent state,
   selected controls, and the rare brand signal.
 - **Flect Rose Hover** (`oklch(0.690 0.170 340)`): interactive emphasis when a
   primary action needs more presence.
@@ -127,7 +210,7 @@ needs to be communicated.
 **The One Signal Rule.** Flect Rose occupies less than ten percent of a screen.
 Its rarity makes agency unmistakable.
 
-## 3. Typography
+## 4. Typography
 
 **Display Font:** SF Pro Display (with system sans-serif fallbacks)
 
@@ -154,7 +237,7 @@ decorative display face.
 **The Quiet Weight Rule.** Use weight before size to establish product
 hierarchy. Nothing in the working shell needs to shout.
 
-## 4. Elevation
+## 5. Elevation
 
 Flect is flat by default. Depth comes from adjacent tonal surfaces and
 occlusion. A focused prompt may use one compact structural shadow; menus may use
@@ -172,7 +255,7 @@ a tighter shadow because they temporarily sit above the working plane.
 **The Flat-Until-Active Rule.** Resting surfaces use tone. Elevation appears only
 to communicate focus, movement, or temporary hierarchy.
 
-## 5. Components
+## 6. Components
 
 ### Buttons
 
@@ -213,32 +296,39 @@ Navigation stays sparse and uses familiar icon-plus-label controls. Active state
 is conveyed by weight, tone, and accessible state, not a bright persistent
 sidebar.
 
-### The Shaping Prompt
+### The Agent Composer
 
-The prompt is Flect's signature component: a centered work surface that begins
-as an invitation, then becomes the stable composer beneath the conversation.
-Its input, model source, attachment entry, voice entry, and submit/cancel state
-share one visual grammar. The prompt itself is customizable; safe mode always
-restores the compiled default.
+The composer is Flect's signature component: one centered work surface that
+begins as an invitation, then becomes the stable instrument beside the running
+interface. Its input, model source, attachment entry, voice entry, selected
+canvas target, tool activity, and submit/cancel state share one visual grammar.
 
-The active role is explicit inside the composer before send:
-**Edit · Shaper** changes the interface and **Run · App Agent** uses the
-accepted product. Each role keeps its own draft and conversation. Switching
-roles changes context; it never submits text or relabels history.
+There is one continuous conversation. The user does not choose Edit versus
+Run, App versus Shaper, a candidate state, or a review mode before speaking.
+The agent infers whether the request changes the interface, uses an approved
+capability, answers a question, or repairs a failure. Capability expansion and
+destructive outside effects remain explicit confirmations.
+
+A valid local UI change appears directly on the running canvas and creates a
+quiet checkpoint. A failed change leaves the last-known-good canvas in place
+and gives the same agent actionable diagnostics. Undo is one visible action;
+History is progressive disclosure. The protected fallback can restore the
+composer and recovery controls, but internal recovery modes are not normal
+workspace navigation.
 
 ### Adaptive Agent Rail
 
 Flect does not bolt a second chat onto the product. The signature composer is
 one mounted instrument whose position reflects the workspace phase:
 
-- a blank workspace centers the Edit/Shaper composer beneath “What should we
-  shape?”;
-- the first message reveals the canvas and moves that same composer into the
-  right conversation rail;
-- a validated proposal adds a compact Keep/Reject decision immediately above
-  the composer;
-- an accepted product defaults to Run/App Agent while Edit remains one explicit
-  switch away.
+- a blank workspace centers the composer beneath “What do you need?”;
+- the first valid result becomes the running canvas and moves that same
+  composer into the right conversation rail;
+- selecting an element adds a compact semantic target to the composer without
+  creating another inspector workflow;
+- agent, build, and capability activity appear as calm bounded status near the
+  composer; and
+- Undo and History stay reachable without turning the rail into a Git client.
 
 Above 980px, the rail is inline and resizable from 340–520px, with 400px as the
 default. From 761–980px it becomes a full-height right sheet. At 760px and
@@ -247,29 +337,79 @@ it, reopening restores focus to its first enabled control, and the protected
 reopen control remains available on the canvas.
 
 The transition uses measured layout motion for at most 220ms. Under
-`prefers-reduced-motion: reduce`, layout changes are immediate. A role change,
-resized rail, collapse, or breakpoint must never create a second composer,
-horizontal page overflow, or hidden recovery control.
+`prefers-reduced-motion: reduce`, layout changes are immediate. A canvas
+update, selected target, resized rail, collapse, or breakpoint must never
+create a second composer, horizontal page overflow, focus loss, application
+state reset, or hidden recovery control.
 
-## 6. Do's and Don'ts
+### Chat Markdown
+
+Agent output uses the same SF/system family as the shell at `1rem` with a
+`1.55` dark-surface line height and a maximum assistant measure of `70ch`.
+Blocks follow a `0.65rem` rhythm. Headings use a compact fixed-rem hierarchy:
+`1.25rem`, `1.125rem`, `1rem`, then `0.875rem` for levels four through six.
+The final three levels retain their semantic rank while sharing one quiet
+visual band to suit the narrow rail.
+
+Code and tables are contained instruments, not new cards. They use the
+existing Surface, Raised Surface, Line, Ink, and Muted tokens; code is
+`0.875rem` mono and table content is `0.8125rem`. Their own viewports own
+horizontal overflow, while copy, wrap, and expand actions stay dense on
+desktop and reach `44px` at compact widths. Details remain native disclosures,
+links use Flect Rose only as an interaction cue, and footnotes remain subdued.
+The complete rendering and trust contract lives in
+[`docs/superpowers/specs/2026-07-31-flect-chat-markdown-design.md`](docs/superpowers/specs/2026-07-31-flect-chat-markdown-design.md).
+
+### Activity, Follow, and Diagnostics
+
+Tool use is a compact instrument in the conversation timeline, not a generic assistant
+sentence and not a developer-console dump. A card always names the tool and
+shows queued, running, completed, or failed state. Duration stays visible;
+bounded commands, output, exit status, preview links, validation paths, and
+operation identifiers live in a native disclosure. Ready Mint and Failure Red
+support the label but never carry meaning alone.
+
+Conversation follow respects the reader. Content follows while the viewport is
+within 48px of its bottom. Once the person scrolls away, streaming and tool
+updates preserve that position and surface a quiet, keyboard-operable **Jump
+to latest** control with an unread count. Following never focuses the timeline
+or composer.
+
+Diagnostics is a protected disclosure above the composer. At rest it shows
+only local-control state and connected-client count. When opened, it exposes
+the explicit enable/revoke action and the latest correlated, redacted
+operation evidence. It must remain legible and useful without turning the
+ordinary product surface into infrastructure chrome.
+
+## 7. Do's and Don'ts
 
 ### Do:
 
 - **Do** keep the person's work and current prompt visually central.
 - **Do** reserve Flect Rose for focus, selection, and active shaping.
 - **Do** use known platform affordances with visible keyboard focus.
+- **Do** use host-native surfaces when the WebView cannot meet the platform
+  contract.
+- **Do** test real light/dark, pointer/touch, keyboard, scrolling, and resize
+  behavior on every supported host.
 - **Do** make runtime failure explain the next action: reconnect or start the
   local runtime.
-- **Do** keep safe mode reachable independently of user interface state.
+- **Do** keep protected Undo and recovery reachable independently of user
+  interface state.
 
 ### Don't:
 
 - **Don't** turn Flect into a fixed widget dashboard.
 - **Don't** present the agent as a second chatbot bolted onto a static
   application.
+- **Don't** expose internal agent roles, candidate states, Keep/Reject, branch,
+  or reset-mode decisions in the ordinary editing flow.
 - **Don't** use terminal cosplay, neon gradients, decorative glass panels, or
   loud generative-AI activity chrome.
 - **Don't** use radii above 16px on cards, sections, or prompt surfaces.
 - **Don't** use controls whose novelty makes ordinary actions harder to
   recognize.
+- **Don't** ship the same generic shell unchanged on browser, macOS, and mobile.
+- **Don't** trade interaction latency or correct platform behavior for visual
+  effects.
 - **Don't** pair a decorative 1px border with a broad soft shadow.

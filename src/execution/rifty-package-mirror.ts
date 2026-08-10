@@ -72,9 +72,14 @@ const installIntoDisposableVfs = (
               registry,
             });
 
-            const dependencyManifests = await Promise.all(
-              Object.keys(request.dependencies).map((name) =>
-                vfs.exists(`/workspace/node_modules/${name}/package.json`),
+            const dependencyManifests = await Effect.runPromise(
+              Effect.forEach(
+                Object.keys(request.dependencies),
+                (name) =>
+                  Effect.promise(() =>
+                    vfs.exists(`/workspace/node_modules/${name}/package.json`),
+                  ),
+                { concurrency: "unbounded" },
               ),
             );
             if (

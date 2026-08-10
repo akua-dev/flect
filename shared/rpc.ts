@@ -3,16 +3,36 @@ import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
 import { BunCommandResult } from "./bun-command";
 import {
+  AuthLoginEvent,
+  AuthLoginReference,
+  AuthLoginRequest,
+  AuthSelectionReply,
   FlectEvent,
   FlectRuntimeError,
   GuardianDiagnostic,
   InteractiveAgentRole,
   ModelSummary,
+  ProviderAuthSummary,
   RecoveryReason,
   RuntimeStatus,
   SessionSelection,
   ShapeEvent,
 } from "./contracts";
+import {
+  FlectCommandEnvelope,
+  FlectWorkspaceEvent,
+  FlectWorkspaceSnapshot,
+} from "./control";
+import {
+  ControlBrokerStatus,
+  ControlCommandCompletion,
+  ControlTransportFailed,
+} from "./control-channel";
+import {
+  AgentIntegrationError,
+  AgentIntegrationHost,
+  AgentIntegrationStatus,
+} from "./setup";
 
 const Identifier = Schema.Trim.check(
   Schema.isMinLength(1),
@@ -26,6 +46,44 @@ export class GetRuntime extends Rpc.make("GetRuntime", {
 
 export class ListModels extends Rpc.make("ListModels", {
   success: Schema.Array(ModelSummary),
+  error: FlectRuntimeError,
+}) {}
+
+export class ListProviderAuth extends Rpc.make("ListProviderAuth", {
+  success: Schema.Array(ProviderAuthSummary),
+  error: FlectRuntimeError,
+}) {}
+
+export class LoginProvider extends Rpc.make("LoginProvider", {
+  payload: AuthLoginRequest,
+  success: AuthLoginEvent,
+  error: FlectRuntimeError,
+  stream: true,
+}) {}
+
+export class ReplyProviderAuthSelection extends Rpc.make(
+  "ReplyProviderAuthSelection",
+  {
+    payload: AuthSelectionReply,
+    success: Schema.Void,
+    error: FlectRuntimeError,
+  },
+) {}
+
+export class CancelProviderAuth extends Rpc.make("CancelProviderAuth", {
+  payload: AuthLoginReference,
+  success: Schema.Void,
+  error: FlectRuntimeError,
+}) {}
+
+export class RefreshProviderAuth extends Rpc.make("RefreshProviderAuth", {
+  success: Schema.Array(ProviderAuthSummary),
+  error: FlectRuntimeError,
+}) {}
+
+export class LogoutProvider extends Rpc.make("LogoutProvider", {
+  payload: { providerId: ProviderAuthSummary.fields.id },
+  success: Schema.Array(ProviderAuthSummary),
   error: FlectRuntimeError,
 }) {}
 
@@ -100,9 +158,82 @@ export class DiagnoseRecovery extends Rpc.make("DiagnoseRecovery", {
   error: FlectRuntimeError,
 }) {}
 
+export class ControlEnable extends Rpc.make("ControlEnable", {
+  payload: {
+    snapshot: FlectWorkspaceSnapshot,
+  },
+  success: ControlBrokerStatus,
+  error: ControlTransportFailed,
+}) {}
+
+export class ControlStatus extends Rpc.make("ControlStatus", {
+  success: ControlBrokerStatus,
+  error: ControlTransportFailed,
+}) {}
+
+export class ControlDisable extends Rpc.make("ControlDisable", {
+  success: Schema.Void,
+  error: ControlTransportFailed,
+}) {}
+
+export class ControlPublishSnapshot extends Rpc.make("ControlPublishSnapshot", {
+  payload: {
+    snapshot: FlectWorkspaceSnapshot,
+  },
+  success: Schema.Void,
+  error: ControlTransportFailed,
+}) {}
+
+export class ControlPublishEvent extends Rpc.make("ControlPublishEvent", {
+  payload: {
+    event: FlectWorkspaceEvent,
+  },
+  success: Schema.Void,
+  error: ControlTransportFailed,
+}) {}
+
+export class ControlNextCommand extends Rpc.make("ControlNextCommand", {
+  payload: {
+    workspaceId: FlectWorkspaceSnapshot.fields.workspaceId,
+  },
+  success: FlectCommandEnvelope,
+  error: ControlTransportFailed,
+}) {}
+
+export class ControlComplete extends Rpc.make("ControlComplete", {
+  payload: {
+    completion: ControlCommandCompletion,
+  },
+  success: Schema.Void,
+  error: ControlTransportFailed,
+}) {}
+
+export class SetupAgentStatus extends Rpc.make("SetupAgentStatus", {
+  success: Schema.Array(AgentIntegrationStatus),
+  error: AgentIntegrationError,
+}) {}
+
+export class SetupAgentInstall extends Rpc.make("SetupAgentInstall", {
+  payload: { host: AgentIntegrationHost },
+  success: AgentIntegrationStatus,
+  error: AgentIntegrationError,
+}) {}
+
+export class SetupAgentRemove extends Rpc.make("SetupAgentRemove", {
+  payload: { host: AgentIntegrationHost },
+  success: AgentIntegrationStatus,
+  error: AgentIntegrationError,
+}) {}
+
 export const FlectRpcs = RpcGroup.make(
   GetRuntime,
   ListModels,
+  ListProviderAuth,
+  LoginProvider,
+  ReplyProviderAuthSelection,
+  CancelProviderAuth,
+  RefreshProviderAuth,
+  LogoutProvider,
   CreateSession,
   CloseSession,
   Prompt,
@@ -110,4 +241,14 @@ export const FlectRpcs = RpcGroup.make(
   Cancel,
   CompleteShellRequest,
   DiagnoseRecovery,
+  ControlEnable,
+  ControlStatus,
+  ControlDisable,
+  ControlPublishSnapshot,
+  ControlPublishEvent,
+  ControlNextCommand,
+  ControlComplete,
+  SetupAgentStatus,
+  SetupAgentInstall,
+  SetupAgentRemove,
 );

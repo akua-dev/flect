@@ -19,7 +19,8 @@ const opfsDenied = globalThis.navigator?.storage?.getDirectory
 Bun.serve({
   port: 3417,
   async fetch(request) {
-    const [network, opfs] = await Promise.all([networkDenied, opfsDenied]);
+    const network = await networkDenied;
+    const opfs = await opfsDenied;
     const path = new URL(request.url).pathname;
     return new Response(
       \`<!doctype html>

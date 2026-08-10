@@ -18,6 +18,15 @@ const NodeId = Schema.String.check(
   Schema.isPattern(/^[a-z][a-z0-9-]*$/),
 );
 
+export const InterfaceAction = Schema.Literals([
+  "shape",
+  "safe-mode",
+  "accept-revision",
+  "reject-revision",
+  "rollback-revision",
+]);
+export type InterfaceAction = typeof InterfaceAction.Type;
+
 export interface StackNode {
   readonly id: string;
   readonly type: "stack";
@@ -43,12 +52,7 @@ export interface ButtonNode {
   readonly id: string;
   readonly type: "button";
   readonly label: string;
-  readonly action:
-    | "shape"
-    | "safe-mode"
-    | "accept-revision"
-    | "reject-revision"
-    | "rollback-revision";
+  readonly action: InterfaceAction;
 }
 
 export interface DividerNode {
@@ -97,13 +101,7 @@ export const ButtonNode: Schema.Codec<ButtonNode> = Schema.Struct({
   id: NodeId,
   type: Schema.Literal("button"),
   label: DisplayText(80),
-  action: Schema.Literals([
-    "shape",
-    "safe-mode",
-    "accept-revision",
-    "reject-revision",
-    "rollback-revision",
-  ]),
+  action: InterfaceAction,
 });
 
 export const DividerNode: Schema.Codec<DividerNode> = Schema.Struct({
@@ -257,7 +255,7 @@ export const defaultInterfaceDocument: InterfaceDocument = Object.freeze(
         {
           id: "headline",
           type: "text",
-          text: "What should we shape?",
+          text: "What do you want to make?",
           style: "headline",
         },
         {
@@ -274,7 +272,7 @@ export const defaultInterfaceDocument: InterfaceDocument = Object.freeze(
             {
               id: "shape-interface",
               type: "button",
-              label: "Shape interface",
+              label: "Start building",
               action: "shape",
             },
           ],

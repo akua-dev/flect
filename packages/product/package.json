@@ -1,0 +1,57 @@
+{
+  "name": "@flect/product",
+  "version": "0.1.0",
+  "description": "Effect-first public contracts and host adapters for adopting Flect.",
+  "type": "module",
+  "sideEffects": false,
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/akua-dev/flect.git",
+    "directory": "packages/product"
+  },
+  "homepage": "https://github.com/akua-dev/flect/tree/main/packages/product",
+  "bugs": "https://github.com/akua-dev/flect/issues",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contracts": {
+      "types": "./dist/contracts.d.ts",
+      "import": "./dist/contracts.js"
+    },
+    "./host": {
+      "types": "./dist/host.d.ts",
+      "import": "./dist/host.js"
+    },
+    "./capsule": {
+      "types": "./dist/capsule.d.ts",
+      "import": "./dist/capsule.js"
+    },
+    "./capsule-trust": {
+      "types": "./dist/capsule-trust.d.ts",
+      "import": "./dist/capsule-trust.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "peerDependencies": {
+    "effect": "4.0.0-beta.102"
+  },
+  "devDependencies": {
+    "effect": "4.0.0-beta.102",
+    "typescript": "7.0.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

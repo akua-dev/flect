@@ -1,0 +1,219 @@
+:root {
+  color-scheme: dark light;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  background: #080808;
+  color: #f5f5f3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(
+      circle at 50% 38%,
+      rgba(255, 255, 255, 0.045),
+      transparent 32rem
+    ),
+    #080808;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+.activation-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-rows: 52px 1fr;
+}
+
+.activation-shell[hidden],
+#root[hidden] {
+  display: none;
+}
+
+.activation-shell__bar {
+  display: flex;
+  align-items: center;
+  padding: 0 22px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  -webkit-app-region: drag;
+}
+
+.activation-shell__wordmark {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  text-decoration: none;
+}
+
+.activation-shell__main {
+  width: min(680px, calc(100% - 32px));
+  margin: auto;
+  padding: 48px 0 88px;
+}
+
+.activation-shell__main h1 {
+  max-width: 620px;
+  margin: 0;
+  font-size: clamp(38px, 7vw, 68px);
+  font-weight: 560;
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.activation-shell__main > p {
+  max-width: 500px;
+  margin: 22px 0 32px;
+  color: #a8a8a3;
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.activation-shell__composer {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  background: rgba(24, 24, 23, 0.92);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+}
+
+.activation-shell__composer textarea {
+  width: 100%;
+  min-height: 92px;
+  resize: vertical;
+  padding: 14px 15px;
+  border: 0;
+  border-radius: 12px;
+  outline: 0;
+  color: inherit;
+  background: transparent;
+  line-height: 1.5;
+}
+
+.activation-shell__composer textarea::placeholder {
+  color: #777772;
+}
+
+.activation-shell__composer button {
+  width: 100%;
+  min-height: 54px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 12px;
+  color: #0b0b0a;
+  background: #f1f1ed;
+  cursor: pointer;
+  font-weight: 620;
+  text-align: center;
+  transition:
+    background-color 120ms ease,
+    transform 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.activation-shell__composer button:hover {
+  background: #fff;
+}
+
+.activation-shell__composer button:active {
+  transform: scale(0.995);
+}
+
+.activation-shell__composer button:focus-visible {
+  outline: 3px solid #8ab4ff;
+  outline-offset: 3px;
+}
+
+.activation-shell__composer textarea:focus-visible {
+  box-shadow: inset 0 0 0 2px #8ab4ff;
+}
+
+.activation-shell__status {
+  min-height: 20px;
+  margin: 10px 8px 0;
+  color: #8e8e89;
+  font-size: 12px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    background: #f6f6f3;
+    color: #161615;
+  }
+
+  body {
+    background:
+      radial-gradient(
+        circle at 50% 38%,
+        rgba(0, 0, 0, 0.035),
+        transparent 32rem
+      ),
+      #f6f6f3;
+  }
+
+  .activation-shell__bar {
+    border-bottom-color: rgba(0, 0, 0, 0.08);
+  }
+
+  .activation-shell__main > p,
+  .activation-shell__status {
+    color: #676762;
+  }
+
+  .activation-shell__composer {
+    border-color: rgba(0, 0, 0, 0.12);
+    background: rgba(255, 255, 252, 0.94);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.09);
+  }
+
+  .activation-shell__composer button {
+    color: #fff;
+    background: #1c1c1a;
+  }
+
+  .activation-shell__composer button:hover {
+    background: #000;
+  }
+
+  .activation-shell__composer textarea::placeholder {
+    color: #777772;
+  }
+}
+
+@media (max-width: 600px) {
+  .activation-shell {
+    grid-template-rows: 48px 1fr;
+  }
+
+  .activation-shell__bar {
+    padding-inline: 16px;
+  }
+
+  .activation-shell__main {
+    padding-block: 28px 64px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .activation-shell__composer button {
+    transition: none;
+  }
+}

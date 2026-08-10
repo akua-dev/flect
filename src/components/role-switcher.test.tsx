@@ -9,26 +9,40 @@ import { RoleSwitcher } from "./role-switcher";
 afterEach(cleanup);
 
 describe("RoleSwitcher", () => {
-  it("announces the selected role before switching", async () => {
+  it("announces the explicit Use and Shape target before switching", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<RoleSwitcher disabled={false} mode="edit" onChange={onChange} />);
+    render(
+      <RoleSwitcher
+        disabled={false}
+        onChange={onChange}
+        target="shape"
+        useDisabled={false}
+      />,
+    );
 
     expect(
-      screen.getByRole("button", { name: "Edit · Shaper" }),
+      screen.getByRole("button", { name: "Shape · Shaper" }),
     ).toHaveAttribute("aria-pressed", "true");
-    await user.click(screen.getByRole("button", { name: "Run · App Agent" }));
-    expect(onChange).toHaveBeenCalledWith("run");
+    await user.click(screen.getByRole("button", { name: "Use · App Agent" }));
+    expect(onChange).toHaveBeenCalledWith("use");
   });
 
-  it("blocks both destinations while an agent is active", () => {
-    render(<RoleSwitcher disabled mode="run" onChange={() => undefined} />);
+  it("can block unavailable Use while leaving Shape reachable", () => {
+    render(
+      <RoleSwitcher
+        disabled={false}
+        onChange={() => undefined}
+        target="shape"
+        useDisabled
+      />,
+    );
 
     expect(
-      screen.getByRole("button", { name: "Edit · Shaper" }),
-    ).toBeDisabled();
+      screen.getByRole("button", { name: "Shape · Shaper" }),
+    ).toBeEnabled();
     expect(
-      screen.getByRole("button", { name: "Run · App Agent" }),
+      screen.getByRole("button", { name: "Use · App Agent" }),
     ).toBeDisabled();
   });
 });

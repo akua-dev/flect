@@ -1,11 +1,11 @@
-import { Effect, Layer, ManagedRuntime, Stream } from "effect";
-import { FlectRuntimeLive, PiSdkLive } from "../server/pi-runtime";
+import { Effect, ManagedRuntime, Ref, Stream } from "effect";
+import { FlectRuntimeWithPiLive } from "../server/pi-services";
 import { FlectRuntime } from "../server/runtime";
+import { BunCommandResult } from "../shared/bun-command";
 import { SessionSelection } from "../shared/contracts";
+import { defaultInterfaceDocument } from "../shared/interface-document";
 
-const runtime = ManagedRuntime.make(
-  FlectRuntimeLive.pipe(Layer.provide(PiSdkLive)),
-);
+const runtime = ManagedRuntime.make(FlectRuntimeWithPiLive);
 
 const failSmoke = (message: string) => Effect.die(new Error(message));
 
@@ -31,6 +31,55 @@ const smoke = Effect.gen(function* () {
   if (!completed || !receivedText) {
     return yield* failSmoke(
       "Flect Pi smoke test did not complete a private turn.",
+    );
+  }
+
+  const usedProposalCommand = yield* Ref.make(false);
+  const shapeCompleted = yield* Ref.make(false);
+  yield* flect
+    .shape(
+      sessionId,
+      "Keep this interface unchanged, validate it, and propose it through the reserved Flect command.",
+      defaultInterfaceDocument,
+    )
+    .pipe(
+      Stream.runForEach((event) => {
+        if (event.type === "shape_completed") {
+          return Ref.set(shapeCompleted, true);
+        }
+        if (event.type !== "shell_request") {
+          return Effect.void;
+        }
+        return Ref.update(
+          usedProposalCommand,
+          (current) =>
+            current ||
+            event.command.includes(
+              "flect interface propose /workspace/interface.json",
+            ),
+        ).pipe(
+          Effect.andThen(
+            flect.completeShellRequest(
+              sessionId,
+              "shaper",
+              event.requestId,
+              BunCommandResult.make({
+                version: 1,
+                exitCode: 0,
+                stdout: "status: proposed\n",
+                stderr: "",
+              }),
+            ),
+          ),
+        );
+      }),
+    );
+  if (
+    !(yield* Ref.get(shapeCompleted)) ||
+    !(yield* Ref.get(usedProposalCommand))
+  ) {
+    return yield* failSmoke(
+      "Flect Pi smoke test did not complete through the reserved proposal command.",
     );
   }
 });

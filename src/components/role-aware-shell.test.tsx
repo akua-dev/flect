@@ -81,11 +81,24 @@ const workspace = (
 ): AgentWorkspaceController => ({
   models: [],
   selectedModel: undefined,
+  reasoningLevel: undefined,
+  providers: [],
+  authEvent: undefined,
   selectModel: vi.fn(),
+  selectReasoning: vi.fn(),
+  loginProvider: vi.fn(),
+  replyProviderAuth: vi.fn(() => Promise.resolve()),
+  cancelProviderAuth: vi.fn(() => Promise.resolve()),
+  refreshProviderAuth: vi.fn(() => Promise.resolve()),
+  logoutProvider: vi.fn(() => Promise.resolve()),
   refresh: vi.fn(() => Promise.resolve()),
   externalExtensions: { app: false, shaper: false },
   toggleExternalExtensions: vi.fn(() => Promise.resolve()),
   app: {
+    ...appRole(),
+    submit: vi.fn(() => Promise.resolve()),
+  },
+  previewApp: {
     ...appRole(),
     submit: vi.fn(() => Promise.resolve()),
   },
@@ -110,6 +123,7 @@ const shaping = (
   isolation: "ready",
   verifyIsolation: vi.fn(() => Promise.resolve()),
   request: vi.fn(() => Promise.resolve()),
+  fixFailure: vi.fn(() => Promise.resolve()),
   accept: vi.fn(() => Promise.resolve()),
   reject: vi.fn(() => Promise.resolve()),
   rollback: vi.fn(() => Promise.resolve()),
@@ -122,12 +136,16 @@ function ShellHarness({
   phase = "accepted",
   workspaceController = workspace(),
   shapingController = shaping(),
+  controlledMode,
+  onModeChange,
 }: {
   readonly initialCollapsed?: boolean;
   readonly initialWidth?: number;
   readonly phase?: "blank" | "preview" | "accepted" | "safe";
   readonly workspaceController?: AgentWorkspaceController;
   readonly shapingController?: ShapingController;
+  readonly controlledMode?: "edit" | "run";
+  readonly onModeChange?: (mode: "edit" | "run") => Promise<void>;
 }) {
   const [value, setValue] = useState(
     ShellPreferencesValue.make({
@@ -154,8 +172,10 @@ function ShellHarness({
   };
   return (
     <RoleAwareShell
+      controlledMode={controlledMode}
       document={documentWithoutPrompt}
       onOpenSafeMode={vi.fn()}
+      onModeChange={onModeChange}
       onRestoreSafeMode={vi.fn(() => Promise.resolve())}
       phase={phase}
       preferences={preferences}
@@ -167,6 +187,63 @@ function ShellHarness({
 }
 
 describe("RoleAwareShell", () => {
+  it("announces the active agent and protected workbench state atomically", () => {
+    const { rerender } = render(<ShellHarness phase="accepted" />);
+
+    expect(
+      screen.getByRole("status", { name: "Workbench status" }),
+    ).toHaveTextContent(
+      "Flect is ready. Build, change, or use the product in one conversation.",
+    );
+
+    rerender(
+      <ShellHarness
+        phase="preview"
+        shapingController={shaping({ status: "preview" })}
+      />,
+    );
+    expect(
+      screen.getByRole("status", { name: "Workbench status" }),
+    ).toHaveTextContent(
+      "Imported candidate Projects validated. Review its authority changes, then activate or discard it.",
+    );
+
+    rerender(<ShellHarness phase="safe" />);
+    expect(
+      screen.getByRole("status", { name: "Workbench status" }),
+    ).toHaveTextContent("Safe mode. Customized interface state is bypassed.");
+  });
+
+  it("does not expose internal mode controls", () => {
+    const onModeChange = vi.fn(() => Promise.resolve());
+    const { rerender } = render(
+      <ShellHarness
+        controlledMode="run"
+        onModeChange={onModeChange}
+        phase="accepted"
+      />,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Message Flect" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /App Agent|Shaper/ }),
+    ).not.toBeInTheDocument();
+    expect(onModeChange).not.toHaveBeenCalled();
+
+    rerender(
+      <ShellHarness
+        controlledMode="edit"
+        onModeChange={onModeChange}
+        phase="accepted"
+      />,
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Message Flect" }),
+    ).toBeVisible();
+  });
+
   it("moves the same focused composer from blank Edit into the rail", async () => {
     const user = userEvent.setup();
     const request = vi.fn((_instruction: string) => Promise.resolve());
@@ -188,9 +265,9 @@ describe("RoleAwareShell", () => {
     }
 
     const { container } = render(<MovingHarness />);
-    const input = screen.getByRole("textbox", { name: "Message Shaper" });
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
     const originalComposer = input.closest(".composer");
-    expect(screen.getByText("What should we shape?")).toBeVisible();
+    expect(screen.getByText("What do you want to make?")).toBeVisible();
     expect(
       container.querySelector(".role-shell--centered"),
     ).toBeInTheDocument();
@@ -203,11 +280,11 @@ describe("RoleAwareShell", () => {
     );
     expect(
       screen
-        .getByRole("textbox", { name: "Message Shaper" })
+        .getByRole("textbox", { name: "Message Flect" })
         .closest(".composer"),
     ).toBe(originalComposer);
     expect(
-      screen.getByRole("textbox", { name: "Message Shaper" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toHaveFocus();
   });
 
@@ -225,15 +302,70 @@ describe("RoleAwareShell", () => {
       />,
     );
 
-    const input = screen.getByRole("textbox", { name: "Message App Agent" });
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
     await user.type(input, "Open the latest project{Enter}");
 
     expect(appSubmit).toHaveBeenCalledWith("Open the latest project");
     expect(shaperRequest).not.toHaveBeenCalled();
   });
 
-  it("shows separate histories and blocks role changes during work", async () => {
+  it("routes a selected visible element through one targeted agent handoff", async () => {
     const user = userEvent.setup();
+    const requestTargeted = vi.fn(() => Promise.resolve());
+    const appSubmit = vi.fn(() => Promise.resolve());
+    render(
+      <ShellHarness
+        phase="accepted"
+        shapingController={shaping({ requestTargeted })}
+        workspaceController={workspace({
+          app: { ...appRole(), submit: appSubmit },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select element" }));
+    await user.click(screen.getByRole("heading", { name: "Projects" }));
+
+    const composer = screen.getByRole("textbox", { name: "Message Flect" });
+    await waitFor(() => expect(composer).toHaveFocus());
+    expect(
+      document.querySelector(".canvas-edit-toolbar__selection"),
+    ).toHaveTextContent("Projects");
+    await user.type(composer, "Make this calmer{Enter}");
+
+    expect(requestTargeted).toHaveBeenCalledWith(
+      "Make this calmer",
+      expect.objectContaining({
+        semanticId: "headline",
+        label: "Projects",
+      }),
+      "headline",
+    );
+    expect(appSubmit).not.toHaveBeenCalled();
+  });
+
+  it("turns direct manipulation into a targeted attributable edit", async () => {
+    const user = userEvent.setup();
+    const requestTargeted = vi.fn(() => Promise.resolve());
+    render(
+      <ShellHarness
+        phase="accepted"
+        shapingController={shaping({ requestTargeted })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select element" }));
+    await user.click(screen.getByRole("heading", { name: "Projects" }));
+    await user.click(screen.getByRole("button", { name: "Move later" }));
+
+    expect(requestTargeted).toHaveBeenCalledWith(
+      expect.stringContaining("one position later"),
+      expect.objectContaining({ semanticId: "headline" }),
+      "headline",
+    );
+  });
+
+  it("shows one history and one stop control during internal work", () => {
     const controller = workspace({
       app: {
         ...appRole(),
@@ -253,9 +385,7 @@ describe("RoleAwareShell", () => {
     );
 
     expect(screen.getByText("App history")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Edit · Shaper" }));
     expect(screen.getByText("Shaper history")).toBeVisible();
-    expect(screen.queryByText("App history")).not.toBeInTheDocument();
 
     rerender(
       <ShellHarness
@@ -268,9 +398,10 @@ describe("RoleAwareShell", () => {
         })}
       />,
     );
+    expect(screen.getByRole("button", { name: "Stop Flect" })).toBeEnabled();
     expect(
-      screen.getByRole("button", { name: "Run · App Agent" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: /App Agent|Shaper/ }),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps preview decisions next to the protected composer", async () => {
@@ -288,14 +419,14 @@ describe("RoleAwareShell", () => {
       />,
     );
 
-    expect(screen.getByText("Validated preview")).toBeVisible();
+    expect(screen.getByText("Imported app ready")).toBeVisible();
     expect(
-      within(
-        screen.getByRole("region", { name: "Revision decision" }),
-      ).getByText("Projects"),
+      within(screen.getByRole("region", { name: "Import decision" })).getByText(
+        "Projects",
+      ),
     ).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Keep change" }));
-    await user.click(screen.getByRole("button", { name: "Reject" }));
+    await user.click(screen.getByRole("button", { name: "Activate app" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(accept).toHaveBeenCalledOnce();
     expect(reject).toHaveBeenCalledOnce();
   });
@@ -306,7 +437,7 @@ describe("RoleAwareShell", () => {
       screen.getByRole("complementary", { name: "Flect agent" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("textbox", { name: "Message App Agent" }),
+      screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeVisible();
   });
 
@@ -338,5 +469,61 @@ describe("RoleAwareShell", () => {
     await user.keyboard("{ArrowLeft}{End}{ArrowRight}{Home}");
 
     expect(separator).toHaveAttribute("aria-valuenow", "340");
+  });
+
+  it("reports a rejected local share without an unhandled file-input failure", async () => {
+    const user = userEvent.setup();
+    const onOpenShareFile = vi
+      .fn<(name: string, bytes: Uint8Array) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("private archive detail"))
+      .mockResolvedValueOnce(undefined);
+    render(
+      <RoleAwareShell
+        document={documentWithoutPrompt}
+        onOpenSafeMode={vi.fn()}
+        onOpenShareFile={onOpenShareFile}
+        onRestoreSafeMode={vi.fn(() => Promise.resolve())}
+        phase="accepted"
+        preferences={{
+          value: ShellPreferencesValue.make({
+            version: 1,
+            railWidth: 400,
+            railCollapsed: false,
+            modelFavorites: [],
+          }),
+          setRailWidth: vi.fn(() => Promise.resolve()),
+          setRailCollapsed: vi.fn(() => Promise.resolve()),
+          toggleModelFavorite: vi.fn(() => Promise.resolve()),
+        }}
+        preview={false}
+        shaping={shaping()}
+        workspace={workspace()}
+      />,
+    );
+
+    const input = screen.getByLabelText("Open shared file");
+    await user.upload(
+      input,
+      new File(["invalid"], "invalid.flect-share", {
+        type: "application/octet-stream",
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The shared file could not be reviewed safely.",
+    );
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      "private archive detail",
+    );
+
+    await user.upload(
+      input,
+      new File(["valid"], "valid.flect-share", {
+        type: "application/octet-stream",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(onOpenShareFile).toHaveBeenCalledTimes(2);
   });
 });

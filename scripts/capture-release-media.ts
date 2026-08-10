@@ -333,7 +333,7 @@ const captureHero = async () => {
     const page = await browser.newPage({ viewport });
     await page.goto(pathToFileURL(paths.heroSource).href);
     await page.evaluate(async () => {
-      await Promise.all(Array.from(document.images, (image) => image.decode()));
+      for (const image of document.images) await image.decode();
     });
     await page.screenshot({
       path: paths.hero,
