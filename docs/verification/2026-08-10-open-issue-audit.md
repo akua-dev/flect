@@ -4,7 +4,7 @@ This audit maps every open GitHub issue to the tested implementation and the
 authority still needed to close it. The implementation is maintained on
 `codex/flect-vision-complete` and proposed by
 [PR #38](https://github.com/akua-dev/flect/pull/38). Hosted evidence for each
-pushed head is authoritative in the PR checks; the final
+pushed head is authoritative in the PR checks; the implementation
 [quality run](https://github.com/akua-dev/flect/actions/runs/31394013331) passed
 on commit `ddfe43c`.
 The PR has not been merged. A PR-ready status does not mean the change exists

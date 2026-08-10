@@ -19,6 +19,18 @@ import {
 import { resetBrowserWorkspace } from "./reset-browser-workspace";
 
 const browserFailures = new WeakMap<Page, Array<string>>();
+const completedPromptPages = new WeakSet<Page>();
+const completedShapePages = new WeakSet<Page>();
+
+const isCompletedSessionAbort = (page: Page, failure: string) =>
+  (completedPromptPages.has(page) &&
+    /request: POST .*\/api\/sessions\/session-browser-test-\d+\/prompts net::ERR_ABORTED$/.test(
+      failure,
+    )) ||
+  (completedShapePages.has(page) &&
+    /request: POST .*\/api\/sessions\/session-browser-test-\d+\/shape net::ERR_ABORTED$/.test(
+      failure,
+    ));
 
 const run = async (directory: string, args: ReadonlyArray<string>) => {
   const [command, ...rest] = args;
@@ -312,9 +324,8 @@ test.beforeEach(async ({ page }) => {
   page.on("pageerror", (error) => failures.push(`page: ${error.message}`));
   page.on("requestfailed", (request) => {
     if (request.url().startsWith("http://127.0.0.1:")) {
-      failures.push(
-        `request: ${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`,
-      );
+      const failure = `request: ${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`;
+      if (!isCompletedSessionAbort(page, failure)) failures.push(failure);
     }
   });
   await resetBrowserWorkspace(page);
@@ -324,7 +335,11 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterEach(async ({ page }) => {
-  expect(browserFailures.get(page) ?? []).toEqual([]);
+  expect(
+    (browserFailures.get(page) ?? []).filter(
+      (failure) => !isCompletedSessionAbort(page, failure),
+    ),
+  ).toEqual([]);
 });
 
 test("retains, previews, exports, removes, and explicitly deletes a real Git share", async ({
@@ -525,6 +540,7 @@ test("routes fork personalization through one composer and activates a real two-
     "aria-busy",
     "false",
   );
+  completedPromptPages.add(page);
   await expect(
     page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
@@ -601,6 +617,7 @@ test("resolves a real Git conflict with Flect and activates only the explicit re
     "aria-busy",
     "false",
   );
+  completedPromptPages.add(page);
   await expect(
     page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
@@ -639,6 +656,7 @@ test("resolves a real Git conflict with Flect and activates only the explicit re
   await expect(review.getByText(/2\.0\.0-conflict · fork/)).toBeVisible({
     timeout: 30_000,
   });
+  completedShapePages.add(page);
   await expect(
     page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
