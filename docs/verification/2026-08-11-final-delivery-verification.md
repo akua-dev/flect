@@ -2,11 +2,13 @@
 
 ## Result
 
-The vision implementation at commit `a7812a0` is published on
-[PR #38](https://github.com/akua-dev/flect/pull/38), passes the canonical
+The vision implementation is published on
+[PR #38](https://github.com/akua-dev/flect/pull/38), has passed the canonical
 credential-free hosted gate, and is protected by a real `main` branch rule.
 The same public workflow also proved that an explicitly requested failure
-cannot report success.
+cannot report success. PR #38 is mergeable only after its publication head
+receives the same required green check; the final run listed in the PR checks
+is the authoritative integration proof.
 
 This report separates implementation evidence from authorities that cannot be
 created by source code or an untrusted pull-request workflow. It does not claim
@@ -30,9 +32,7 @@ human VoiceOver walkthrough, or clean external machine that was not present.
   administrators, and disallows force-pushes and deletion. It does not invent
   an approval requirement that issue #31 did not request.
 
-This completes the observable acceptance criteria owned by issue #31. The
-publication head containing this report must still receive its own required
-green check before PR #38 can merge.
+This completes the observable acceptance criteria owned by issue #31.
 
 The first report-head run,
 [31437835135](https://github.com/akua-dev/flect/actions/runs/31437835135),
@@ -43,8 +43,26 @@ complete disposable Rifty/QuickJS runtimes with unbounded concurrency. The
 diagnostic now caps those independent Effect fibers at two; no performance
 budget was relaxed. Ten repeated production-browser executions and ten
 Fast/Slow-4G runs then passed locally, with warm Fast-4G activation between 505
-and 522 ms. The final required GitHub check remains authoritative for the
-publication head.
+and 522 ms.
+
+The next publication-head run,
+[31439588509](https://github.com/akua-dev/flect/actions/runs/31439588509),
+proved that the bounded execution diagnostic passed. Its sole remaining
+failure exposed test pre-activation rather than a product budget failure: the
+performance fixture first opened a normal test-mode workspace, which
+auto-activated, and only then navigated to the view-only route. A fast
+navigation could therefore inherit the deliberately fail-closed recovery
+marker and enter Safe Mode before the measurement. The fixture now opens the
+fresh workspace directly as `view=1` and asserts that the Astro document is
+still inactive with no workbench status before activation. Safe Mode still
+does not count as ready, and all budgets remain unchanged.
+
+After that isolation fix, ten repeated Fast/Slow-4G production-browser runs
+passed with warm activation between 499 and 520 ms. The complete local
+`bun run check:all` gate also passed: 889 tests with one explicit skip, all 85
+Chromium flows, all 26 Rust tests, and the optimized ad-hoc-signed macOS app
+bundle. Its measured cold/warm activation was 236/217 ms, Fast/Slow-4G LCP was
+366/1,196 ms, CLS was zero, and no long task was observed.
 
 ## Real browser and packaged-host evidence
 

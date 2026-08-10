@@ -142,10 +142,17 @@ const shape = async (page: Page, instruction: string, enforceBudget = true) => {
 };
 
 test.beforeEach(async ({ page }) => {
-  await resetBrowserWorkspace(page);
+  await resetBrowserWorkspace(page, { viewOnly: true });
   await expect(
     page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute(
+    "data-flect-state",
+    "inactive",
+  );
+  await expect(
+    page.getByRole("status", { name: "Workbench status" }),
+  ).toHaveCount(0);
 });
 
 test("enforces the static Astro shell and cold/warm interaction budgets", async ({
