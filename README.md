@@ -148,8 +148,9 @@ shaped interfaces.
   last-known-good recovery;
 - a canonical browser-portable Git repository in OPFS, guarded revision refs,
   persistence across reloads, and complete ordinary-Git export;
-- bounded static and single-entry Vite JavaScript, TypeScript, and React import,
-  a Worker compiler, integrity-checked package resolution, and offline cache;
+- bounded static and single-entry Vite JavaScript, TypeScript, React, Vue, and
+  Svelte import from folders, archives, or exact public Git commits, a Worker
+  compiler, integrity-checked package resolution, and offline cache;
 - deterministic `.flect` capsule import/export, protected provenance and
   capability review, portable sharing, and user-owned forks;
 - a typed product-capability registry plus the packable
@@ -213,8 +214,7 @@ reviewable candidate flow. It also imports, isolates, persists, restores, and
 byte-preservingly re-exports compiled HTML capsules with verified local CSS,
 classic scripts, images, fonts, and media in supported browsers.
 Arbitrary Vite plugins/config transforms, CSS modules/preprocessors and asset
-URL rewriting, multi-entry routing, Vue/Svelte project adapters, archive/Git
-ingestion for ordinary project directories, capsule-level personal-fork merges
+URL rewriting, multi-entry routing, capsule-level personal-fork merges
 outside the implemented `.flect-share` lifecycle, a public component registry,
 custom duration/rate editing in the protected permission UI, database adapters,
 privileged native product transport, remote runtimes, a published signed
@@ -229,19 +229,25 @@ commands and deliberate omissions.
 
 ## Import an existing interface
 
-Open the composer’s **Actions** menu and choose **Import app project**. Select
-one directory with a root `index.html`. Flect currently recognizes plain static
-sites and standard Vite browser entrypoints, including React JSX/TSX. It checks
-paths and compatibility without executing source, excludes secret-shaped and
-generated dependency files before reading them, checkpoints recognizable
-source into embedded Git, and builds the exact isolated proposal locally.
+Open the composer’s **Actions** menu and choose **Import app project** for a
+folder, **Import project archive** for a bounded ZIP/POSIX TAR, or **Import from
+Git** for a credential-free public HTTPS repository plus its exact 40-character
+commit. Flect recognizes plain static sites and standard single-entry Vite
+browser projects, including React JSX/TSX, Vue SFC, and Svelte components. It
+checks paths and compatibility without executing source, excludes
+secret-shaped and generated dependency files, checkpoints recognizable source
+into embedded Git, and builds the exact isolated proposal locally. Git cloning
+runs in the isolated WASM Git worker and never accepts a mutable branch name.
 When runtime dependencies need resolution, Flect generates or verifies an npm
 v3 lock, checkpoints it into the candidate's ordinary Git source, supersedes
 the guarded proposal, and compiles only that locked commit.
-The current boundary accepts at most 255 source files (the capsule reserves one
-metadata entry), 32 MiB total, and 100 characters per portable relative path.
-Named unsupported Vite plugins, `resolve.alias`, and `node:` built-ins are
-reported before a candidate exists, with a browser-portable alternative.
+The current boundary accepts at most 255 retained source files (the capsule
+reserves one metadata entry), 32 MiB total, and 100 characters per portable
+relative path. Archive preflight also rejects encryption, ZIP64, unsupported
+links/types, excessive entries, and expansion beyond 32 MiB. Named unsupported
+Vite plugins, `resolve.alias`, `node:` built-ins, CSS preprocessors, and
+external Vue blocks are reported before a candidate exists, with a
+browser-portable alternative.
 
 The resulting external app opens as an isolated import candidate. Review its
 source revision, artifact digest, adaptations, ignored files, capabilities, and

@@ -1,6 +1,13 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { Effect } from "effect";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { CanvasSelection } from "../../shared/canvas-selection";
 import {
   type CapsuleHostMessage,
   type CapsuleIntent,
@@ -36,7 +43,46 @@ const bridgeNonce = () => {
 const bridgeNonceFor = (_document: string) => bridgeNonce();
 
 const bridgeFor = (nonce: string) =>
-  `<script>(()=>{const nonce=${JSON.stringify(nonce)};let attempts=0;let timer;const announce=()=>{parent.postMessage({version:1,type:"flect:bridge-ready",nonce},"*");attempts+=1;if(attempts>=20)clearInterval(timer)};const connect=event=>{if(event.data?.type!=="flect:connect"||event.data?.version!==1||event.data?.nonce!==nonce||event.ports.length!==1)return;removeEventListener("message",connect);clearInterval(timer);const port=event.ports[0];Object.defineProperty(globalThis,"flect",{configurable:false,writable:false,value:Object.freeze({post(message){port.postMessage(message)}})});port.onmessage=message=>dispatchEvent(new CustomEvent("flect:host",{detail:message.data}));port.start();port.postMessage({version:1,type:"ready"})};addEventListener("message",connect);announce();timer=setInterval(announce,100)})()</script>`;
+  `<script>(()=>{
+const nonce=${JSON.stringify(nonce)};
+let attempts=0,timer,port,selectionEnabled=false,selectedElement,framePending=false;
+const announce=()=>{parent.postMessage({version:1,type:"flect:bridge-ready",nonce},"*");attempts+=1;if(attempts>=20)clearInterval(timer)};
+const clean=value=>String(value??"").replace(/\\s+/g," ").trim();
+const selectorFor=element=>{
+  const explicit=clean(element.getAttribute("data-flect-id")||element.id||element.getAttribute("data-testid"));
+  if(explicit)return explicit.slice(0,240);
+  const parts=[];let current=element;
+  while(current&&current!==document.body&&parts.length<8){
+    const tag=current.localName||"element";
+    let index=1,sibling=current;
+    while((sibling=sibling.previousElementSibling))if(sibling.localName===tag)index+=1;
+    parts.unshift(tag+":nth-of-type("+index+")");current=current.parentElement;
+  }
+  return parts.join(" > ").slice(0,240)||element.localName||"element";
+};
+const selectionFor=element=>{
+  const rect=element.getBoundingClientRect();
+  const style=getComputedStyle(element);
+  const tag=(element.localName||"element").toLowerCase().slice(0,40);
+  const privateText=element instanceof HTMLInputElement||element instanceof HTMLTextAreaElement||element instanceof HTMLSelectElement;
+  const visible=privateText?"":clean(element.innerText||element.textContent).slice(0,500);
+  const aria=clean(element.getAttribute("aria-label")||element.getAttribute("title")||element.getAttribute("alt"));
+  const label=(aria||visible||tag).slice(0,240);
+  const role=clean(element.getAttribute("role")).slice(0,80);
+  const source=clean(element.getAttribute("data-flect-source")).slice(0,240);
+  const line=Number.parseInt(element.getAttribute("data-flect-line")||"",10);
+  return {version:1,semanticId:selectorFor(element),tag,label,...(role?{role}:{}),...(visible?{text:visible}:{}),...(/^(?!\\/)(?!.*(?:^|\\/)\\.\\.?(?:\\/|$))[A-Za-z0-9._-]+(?:\\/[A-Za-z0-9._-]+)*$/.test(source)?{sourcePath:source,...(Number.isInteger(line)&&line>0&&line<=1000000?{sourceLine:line}:{})}:{}),rect:{x:rect.x,y:rect.y,width:rect.width,height:rect.height},styles:{display:style.display||"initial",position:style.position||"static",color:style.color||"transparent",backgroundColor:style.backgroundColor||"transparent",fontSize:style.fontSize||"initial",fontWeight:style.fontWeight||"normal",gap:style.gap||"normal",padding:style.padding||"0px",margin:style.margin||"0px"}};
+};
+const publish=element=>{if(!port)return;selectedElement=element;port.postMessage({version:1,type:"selection-changed",...(element?{selection:selectionFor(element)}:{})})};
+const selectable=event=>event.composedPath().find(value=>value instanceof HTMLElement&&!value.matches("html,body,script,style,link,meta"));
+addEventListener("click",event=>{if(!selectionEnabled)return;const element=selectable(event);if(!element)return;event.preventDefault();event.stopImmediatePropagation();publish(element)},true);
+addEventListener("keydown",event=>{if(!selectionEnabled)return;if(event.key==="Escape"){event.preventDefault();event.stopImmediatePropagation();publish(undefined);return}if(event.key!=="Enter")return;const element=document.activeElement instanceof HTMLElement?document.activeElement:undefined;if(!element||element===document.body)return;event.preventDefault();event.stopImmediatePropagation();publish(element)},true);
+const refreshSelection=()=>{framePending=false;if(selectionEnabled&&selectedElement?.isConnected)publish(selectedElement)};
+const scheduleRefresh=()=>{if(framePending)return;framePending=true;requestAnimationFrame(refreshSelection)};
+addEventListener("scroll",scheduleRefresh,true);addEventListener("resize",scheduleRefresh);
+const connect=event=>{if(event.data?.type!=="flect:connect"||event.data?.version!==1||event.data?.nonce!==nonce||event.ports.length!==1)return;removeEventListener("message",connect);clearInterval(timer);port=event.ports[0];Object.defineProperty(globalThis,"flect",{configurable:false,writable:false,value:Object.freeze({post(message){port.postMessage(message)}})});port.onmessage=message=>{if(message.data?.type==="selection-mode"&&message.data?.version===1){selectionEnabled=message.data.enabled===true;if(!selectionEnabled)selectedElement=undefined}dispatchEvent(new CustomEvent("flect:host",{detail:message.data}))};port.start();port.postMessage({version:1,type:"ready"})};
+addEventListener("message",connect);announce();timer=setInterval(announce,100)
+})()</script>`;
 
 export interface CapsuleAsset {
   readonly path: string;
@@ -202,6 +248,14 @@ export interface CapsuleFrameProps {
   readonly entrypointPath?: string;
   readonly assets?: ReadonlyArray<CapsuleAsset>;
   readonly title?: string;
+  readonly selectionMode?: boolean;
+  readonly selection?: CanvasSelection;
+  readonly onSelectionChange?: (selection: CanvasSelection | undefined) => void;
+  readonly onDirectManipulation?: (
+    kind: "move" | "resize",
+    deltaX: number,
+    deltaY: number,
+  ) => void;
   readonly onIntent?: (intent: CapsuleIntent) => Promise<CapsuleIntentOutcome>;
   readonly onViolation?: () => void;
 }
@@ -211,6 +265,10 @@ export function CapsuleFrame({
   entrypointPath,
   assets,
   title = "Flect app",
+  selectionMode = false,
+  selection,
+  onSelectionChange,
+  onDirectManipulation,
   onIntent,
   onViolation,
 }: CapsuleFrameProps) {
@@ -218,9 +276,15 @@ export function CapsuleFrame({
   const connectRef = useRef<(() => void) | undefined>(undefined);
   const portRef = useRef<MessagePort | undefined>(undefined);
   const onIntentRef = useRef(onIntent);
+  const onSelectionChangeRef = useRef(onSelectionChange);
   const onViolationRef = useRef(onViolation);
+  const onDirectManipulationRef = useRef(onDirectManipulation);
+  const selectionModeRef = useRef(selectionMode);
   onIntentRef.current = onIntent;
+  onSelectionChangeRef.current = onSelectionChange;
   onViolationRef.current = onViolation;
+  onDirectManipulationRef.current = onDirectManipulation;
+  selectionModeRef.current = selectionMode;
   const projectedDocument = useMemo(
     () => projectCapsuleDocument(html, entrypointPath, assets ?? []),
     [assets, entrypointPath, html],
@@ -246,6 +310,20 @@ export function CapsuleFrame({
   const [height, setHeight] = useState<{
     readonly source: string;
     readonly value: number;
+  }>();
+  const manipulationRef = useRef<
+    | {
+        readonly kind: "move" | "resize";
+        readonly pointerId: number;
+        readonly x: number;
+        readonly y: number;
+      }
+    | undefined
+  >(undefined);
+  const [manipulationPreview, setManipulationPreview] = useState<{
+    readonly kind: "move" | "resize";
+    readonly deltaX: number;
+    readonly deltaY: number;
   }>();
   const mountedFrameSource = nativeHost
     ? nativeFrame?.source === source
@@ -360,8 +438,15 @@ export function CapsuleFrame({
               portRef.current = channel.port1;
               globalThis.clearTimeout(timeout);
               visibility();
+              channel.port1.postMessage({
+                version: 1,
+                type: "selection-mode",
+                enabled: selectionModeRef.current,
+              } satisfies CapsuleHostMessage);
             } else if (message.type === "resize") {
               setHeight({ source, value: message.height });
+            } else if (message.type === "selection-changed") {
+              onSelectionChangeRef.current?.(message.selection);
             } else {
               const failed = CapsuleIntentFailed.make({
                 version: 1,
@@ -463,6 +548,59 @@ export function CapsuleFrame({
     };
   }, [mountedFrameSource, nonce, source]);
 
+  useEffect(() => {
+    portRef.current?.postMessage({
+      version: 1,
+      type: "selection-mode",
+      enabled: selectionMode,
+    } satisfies CapsuleHostMessage);
+  }, [selectionMode]);
+
+  useEffect(() => {
+    void source;
+    onSelectionChangeRef.current?.(undefined);
+  }, [source]);
+
+  const beginManipulation = (
+    kind: "move" | "resize",
+    event: ReactPointerEvent<HTMLElement>,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    manipulationRef.current = {
+      kind,
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setManipulationPreview({ kind, deltaX: 0, deltaY: 0 });
+  };
+
+  const moveManipulation = (event: ReactPointerEvent<HTMLElement>) => {
+    const origin = manipulationRef.current;
+    if (origin === undefined || origin.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    setManipulationPreview({
+      kind: origin.kind,
+      deltaX: event.clientX - origin.x,
+      deltaY: event.clientY - origin.y,
+    });
+  };
+
+  const finishManipulation = (event: ReactPointerEvent<HTMLElement>) => {
+    const origin = manipulationRef.current;
+    if (origin === undefined || origin.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const deltaX = event.clientX - origin.x;
+    const deltaY = event.clientY - origin.y;
+    manipulationRef.current = undefined;
+    setManipulationPreview(undefined);
+    if (Math.hypot(deltaX, deltaY) < 4) return;
+    onDirectManipulationRef.current?.(origin.kind, deltaX, deltaY);
+  };
+
   if (failedSource === source) {
     return (
       <section className="capsule-fallback" role="status">
@@ -483,22 +621,73 @@ export function CapsuleFrame({
   }
 
   return (
-    <iframe
-      className="capsule-frame"
-      onFocus={() =>
-        portRef.current?.postMessage({
-          version: 1,
-          type: "focus",
-        } satisfies CapsuleHostMessage)
-      }
-      onLoad={() => connectRef.current?.()}
-      ref={frameRef}
-      sandbox="allow-scripts"
-      src={mountedFrameSource}
-      style={
-        height?.source === source ? { height: `${height.value}px` } : undefined
-      }
-      title={title}
-    />
+    <div className="capsule-surface">
+      <iframe
+        className="capsule-frame"
+        onFocus={() =>
+          portRef.current?.postMessage({
+            version: 1,
+            type: "focus",
+          } satisfies CapsuleHostMessage)
+        }
+        onLoad={() => connectRef.current?.()}
+        ref={frameRef}
+        sandbox="allow-scripts"
+        src={mountedFrameSource}
+        style={
+          height?.source === source
+            ? { height: `${height.value}px` }
+            : undefined
+        }
+        title={title}
+      />
+      {selection !== undefined && (
+        <fieldset
+          aria-label={`Selected element: ${selection.label}. Drag to move.`}
+          className="canvas-selection-outline"
+          onPointerCancel={finishManipulation}
+          onPointerDown={(event) => beginManipulation("move", event)}
+          onPointerMove={moveManipulation}
+          onPointerUp={finishManipulation}
+          style={{
+            left:
+              selection.rect.x +
+              (manipulationPreview?.kind === "move"
+                ? manipulationPreview.deltaX
+                : 0),
+            top:
+              selection.rect.y +
+              (manipulationPreview?.kind === "move"
+                ? manipulationPreview.deltaY
+                : 0),
+            width: Math.max(
+              16,
+              selection.rect.width +
+                (manipulationPreview?.kind === "resize"
+                  ? manipulationPreview.deltaX
+                  : 0),
+            ),
+            height: Math.max(
+              16,
+              selection.rect.height +
+                (manipulationPreview?.kind === "resize"
+                  ? manipulationPreview.deltaY
+                  : 0),
+            ),
+          }}
+        >
+          <span>{selection.label}</span>
+          <button
+            aria-label={`Resize selected element: ${selection.label}`}
+            className="canvas-selection-resize"
+            onPointerCancel={finishManipulation}
+            onPointerDown={(event) => beginManipulation("resize", event)}
+            onPointerMove={moveManipulation}
+            onPointerUp={finishManipulation}
+            type="button"
+          />
+        </fieldset>
+      )}
+    </div>
   );
 }

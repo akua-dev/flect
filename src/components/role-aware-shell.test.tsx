@@ -309,6 +309,62 @@ describe("RoleAwareShell", () => {
     expect(shaperRequest).not.toHaveBeenCalled();
   });
 
+  it("routes a selected visible element through one targeted agent handoff", async () => {
+    const user = userEvent.setup();
+    const requestTargeted = vi.fn(() => Promise.resolve());
+    const appSubmit = vi.fn(() => Promise.resolve());
+    render(
+      <ShellHarness
+        phase="accepted"
+        shapingController={shaping({ requestTargeted })}
+        workspaceController={workspace({
+          app: { ...appRole(), submit: appSubmit },
+        })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select element" }));
+    await user.click(screen.getByRole("heading", { name: "Projects" }));
+
+    const composer = screen.getByRole("textbox", { name: "Message Flect" });
+    await waitFor(() => expect(composer).toHaveFocus());
+    expect(
+      document.querySelector(".canvas-edit-toolbar__selection"),
+    ).toHaveTextContent("Projects");
+    await user.type(composer, "Make this calmer{Enter}");
+
+    expect(requestTargeted).toHaveBeenCalledWith(
+      "Make this calmer",
+      expect.objectContaining({
+        semanticId: "headline",
+        label: "Projects",
+      }),
+      "headline",
+    );
+    expect(appSubmit).not.toHaveBeenCalled();
+  });
+
+  it("turns direct manipulation into a targeted attributable edit", async () => {
+    const user = userEvent.setup();
+    const requestTargeted = vi.fn(() => Promise.resolve());
+    render(
+      <ShellHarness
+        phase="accepted"
+        shapingController={shaping({ requestTargeted })}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select element" }));
+    await user.click(screen.getByRole("heading", { name: "Projects" }));
+    await user.click(screen.getByRole("button", { name: "Move later" }));
+
+    expect(requestTargeted).toHaveBeenCalledWith(
+      expect.stringContaining("one position later"),
+      expect.objectContaining({ semanticId: "headline" }),
+      "headline",
+    );
+  });
+
   it("shows one history and one stop control during internal work", () => {
     const controller = workspace({
       app: {

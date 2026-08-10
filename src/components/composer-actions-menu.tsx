@@ -20,6 +20,8 @@ export interface ComposerActionsMenuProps {
   readonly onImportCapsule?: () => void;
   readonly onInstallCapsule?: () => void;
   readonly onImportWebProject?: () => void;
+  readonly onImportWebProjectArchive?: () => void;
+  readonly onImportWebProjectGit?: () => void;
   readonly onOpenShareSource?: () => void;
   readonly onOpenShareFile?: () => void;
   readonly onManageSharedSources?: () => void;
@@ -46,6 +48,8 @@ export function ComposerActionsMenu({
   onImportCapsule,
   onInstallCapsule,
   onImportWebProject,
+  onImportWebProjectArchive,
+  onImportWebProjectGit,
   onOpenShareSource,
   onOpenShareFile,
   onManageSharedSources,
@@ -279,7 +283,37 @@ export function ComposerActionsMenu({
                 type="button"
               >
                 <span>Import app project</span>
-                <small>Static HTML or a standard Vite app</small>
+                <small>Choose a static HTML or standard Vite folder</small>
+              </button>
+            )}
+            {onImportWebProjectArchive !== undefined && (
+              <button
+                aria-label="Import project archive"
+                className="composer-popover__item"
+                onClick={() => {
+                  setOpen(false);
+                  onImportWebProjectArchive();
+                }}
+                role="menuitem"
+                type="button"
+              >
+                <span>Import project archive</span>
+                <small>Choose a bounded ZIP or POSIX TAR source</small>
+              </button>
+            )}
+            {onImportWebProjectGit !== undefined && (
+              <button
+                aria-label="Import project from Git"
+                className="composer-popover__item"
+                onClick={() => {
+                  setOpen(false);
+                  onImportWebProjectGit();
+                }}
+                role="menuitem"
+                type="button"
+              >
+                <span>Import from Git</span>
+                <small>Bind public HTTPS source to an exact commit</small>
               </button>
             )}
             {(onOpenShareSource !== undefined ||

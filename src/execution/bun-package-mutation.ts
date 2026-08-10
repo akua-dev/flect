@@ -15,7 +15,7 @@ import {
 
 const WORKSPACE_ROOT = "/workspace";
 const REGISTRY_BASE_URL = "https://registry.flect.invalid";
-const PACKAGE_DEADLINE = "10 seconds";
+const PACKAGE_DEADLINE = "30 seconds";
 const FILE_LIMIT = 4_096;
 const BYTE_LIMIT = 67_108_864;
 const PACKAGE_NAME =
@@ -117,35 +117,43 @@ const isAppliedMutationPath = (path: string) =>
   path === "/workspace/package-lock.json" ||
   isWithin(path, "/workspace/node_modules");
 
+export const canonicalPackageVfsPath = (path: string) => {
+  if (path.includes("\0") || path.includes("\\") || path.includes("%")) {
+    throw packageFailure();
+  }
+  const normalized = normalizePath(path);
+  const privateCachePath = isWithin(normalized, "/.rifty");
+  if (
+    !isOwnedMutationPath(normalized) ||
+    (!privateCachePath && path !== normalized)
+  ) {
+    throw packageFailure();
+  }
+  return normalized;
+};
+
 const guardedPackageVfs = (vfs: Vfs): Vfs => {
-  const assertOwned = (path: string) => {
-    if (!isOwnedMutationPath(path)) {
-      throw packageFailure();
-    }
-  };
   return {
-    readFile: (path) => vfs.readFile(path),
-    readFileText: (path, encoding) => vfs.readFileText(path, encoding),
+    readFile: (path) => vfs.readFile(canonicalPackageVfsPath(path)),
+    readFileText: (path, encoding) =>
+      vfs.readFileText(canonicalPackageVfsPath(path), encoding),
     writeFile: (path, data) => {
-      assertOwned(path);
-      return vfs.writeFile(path, data);
+      return vfs.writeFile(canonicalPackageVfsPath(path), data);
     },
-    readdir: (path) => vfs.readdir(path),
+    readdir: (path) => vfs.readdir(canonicalPackageVfsPath(path)),
     mkdir: (path, options) => {
-      assertOwned(path);
-      return vfs.mkdir(path, options);
+      return vfs.mkdir(canonicalPackageVfsPath(path), options);
     },
     rm: (path, options) => {
-      assertOwned(path);
-      return vfs.rm(path, options);
+      return vfs.rm(canonicalPackageVfsPath(path), options);
     },
-    stat: (path) => vfs.stat(path),
-    exists: (path) => vfs.exists(path),
+    stat: (path) => vfs.stat(canonicalPackageVfsPath(path)),
+    exists: (path) => vfs.exists(canonicalPackageVfsPath(path)),
     utimes: (path, atimeMs, mtimeMs) => {
-      assertOwned(path);
-      return vfs.utimes(path, atimeMs, mtimeMs);
+      return vfs.utimes(canonicalPackageVfsPath(path), atimeMs, mtimeMs);
     },
-    openReadable: (path, options) => vfs.openReadable(path, options),
+    openReadable: (path, options) =>
+      vfs.openReadable(canonicalPackageVfsPath(path), options),
   };
 };
 

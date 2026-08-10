@@ -247,6 +247,16 @@ The controller correlates revision and operation identifiers and routes the
 result through validation and atomic local acceptance. Internal authority
 selection never mounts a second composer or asks the person to choose an agent.
 
+Explicit element targeting adds one protected overlay outside guest authority.
+The isolated frame publishes only a bounded semantic selector, role/text
+summary, source hint, layout box, curated computed styles, viewport, and current
+workspace revision; form values and unrelated DOM never cross the channel.
+Pointer, touch, and keyboard selection are inactive during normal app use.
+Move/resize/spacing/style intents and conversational targeted prompts enter the
+same revision-checked Shaper handoff, so the agent remains the implementation
+brain and a successful manipulation creates the same automatic Git checkpoint
+as any other visible edit.
+
 At wide sizes the agent rail is inline, 400 px by default, and keyboard- or
 pointer-resizable from 340–520 px. At 761–980 px it becomes a right sheet; at
 760 px and below it becomes a full-width sheet. Collapse, Escape, reopen, focus
@@ -510,8 +520,8 @@ Ed25519 publisher-signature verification is implemented for `.flect-share`
 manifests, while ordinary `.flect` capsule signature claims remain
 presence-only and non-authoritative. Guarded personal forks and two-parent
 merges are implemented by the sharing lifecycle, and standard single-entry
-Vite JavaScript, TypeScript, and React source projects compile through the
-separate build adapter. Verified archive-local stylesheets, classic scripts, images,
+Vite JavaScript, TypeScript, React, Vue, and Svelte source projects compile
+through the separate build adapter. Verified archive-local stylesheets, classic scripts, images,
 fonts/media, and CSS URLs are projected into the generated `srcdoc`: text is
 strict UTF-8, binary assets become `data:` URLs, and unresolved or remote
 references remain unavailable under the deny-by-default CSP. Module graphs,
@@ -541,9 +551,13 @@ frame remain the only path to preview. The current adapter does not yet commit
 source to accepted state directly: it checkpoints recognizable files under
 `project/` on isolated `flect/authoring`; the existing proposal-source delta
 promotes them to `flect/accepted` only on Activate. It does not yet analyze
-multi-page routes, archives, repositories, or content-dependent secrets. Its
-bounded text inspection does report forms, module graphs, remote URLs, storage,
-and workers as visible manifest requests;
+multi-page routes or content-dependent secrets. Folder files, bounded ZIP/POSIX
+TAR archives, and public credential-free HTTPS Git repositories at an exact
+commit all converge on this adapter. Archive validation rejects traversal,
+encryption, ZIP64, unsupported entry types, excessive expansion, and unsafe
+paths before packaging; Git clones and checkouts run in a disposable WASM-Git
+workspace. Its bounded text inspection reports forms, module graphs, remote
+URLs, storage, and workers as visible manifest requests;
 unsupported required assumptions block activation.
 
 Compiled capsule bytes persist through `CapsuleStore`, independently from the
@@ -576,11 +590,18 @@ accepted snapshot before the decision completes.
 protocol. A request contains an exact source revision, entrypoint, and bounded
 mirrored file set. The Worker validates every path and byte limit, copies only
 that set into Rolldown's disposable memfs, compiles browser JavaScript,
-TypeScript, JSX, and TSX, and returns bounded output files plus deterministic
+TypeScript, JSX, TSX, Vue SFCs, and Svelte components, and returns bounded output files plus deterministic
 SHA-256 input and artifact digests. Completion, failure, timeout, and
 interruption terminate the Worker. The service updates its in-memory
 last-successful artifact only after a valid success response, so a later
 compiler failure cannot replace the preview fallback.
+
+Vue's and Svelte's official compilers are separate dynamic Worker boundaries
+selected only when a mirrored `.vue` or `.svelte` module is actually loaded.
+They produce ordinary browser modules and deterministic CSS for the same
+Rolldown graph; neither compiler, framework runtime, nor Vite plugin enters the
+Astro activation bootstrap or a vanilla/React build. Unsupported preprocessors
+and external component blocks fail with bounded source diagnostics.
 
 Rolldown 1.2 removed its earlier experimental CSS bundling. Flect therefore
 owns a deliberately smaller CSS adapter: local relative `.css` imports resolve
@@ -614,6 +635,8 @@ the verified outputs plus the inert import report, and opens the normal
 Activate/Discard review. The review exposes the exact source revision and artifact
 digest. Chromium proves Vite TypeScript activation/reload/export and a React JSX
 import whose cached dependency graph rebuilds with the npm registry blocked.
+The same production-browser contract covers interactive Vue and Svelte
+fixtures and an offline reload from their verified cached package graphs.
 
 `BrowserPackageResolver` supplies the package-lock/cache part of that boundary.
 For the portable import path, Flect derives an inert manifest containing only
@@ -642,8 +665,8 @@ request, capsule build receipt, and persisted build artifact. Production
 Chromium proves the accepted lock, exact versions, and integrity fields are
 present in an ordinary exported Git repository, then proves the warm graph is
 reused with npm registry access blocked. General registry selection, lock
-conflict UX, cache management, and broader package/framework compatibility
-remain open.
+conflict UX, cache management, and server/native framework compatibility remain
+outside this browser contract.
 
 ## QuickJS logic sandbox
 

@@ -1,4 +1,5 @@
 import { Effect, Schema, type SchemaAST } from "effect";
+import { CanvasSelection } from "./canvas-selection";
 
 const strict: SchemaAST.ParseOptions = {
   errors: "all",
@@ -38,10 +39,19 @@ export class CapsuleIntent extends Schema.Class<CapsuleIntent>("CapsuleIntent")(
   },
 ) {}
 
+export class CapsuleSelectionChanged extends Schema.Class<CapsuleSelectionChanged>(
+  "CapsuleSelectionChanged",
+)({
+  version: Schema.Literal(1),
+  type: Schema.Literal("selection-changed"),
+  selection: Schema.optionalKey(CanvasSelection),
+}) {}
+
 export const CapsuleMessage = Schema.Union([
   CapsuleReady,
   CapsuleResize,
   CapsuleIntent,
+  CapsuleSelectionChanged,
 ]);
 export type CapsuleMessage = typeof CapsuleMessage.Type;
 
@@ -91,6 +101,14 @@ export class CapsuleDispose extends Schema.Class<CapsuleDispose>(
   type: Schema.Literal("dispose"),
 }) {}
 
+export class CapsuleSelectionMode extends Schema.Class<CapsuleSelectionMode>(
+  "CapsuleSelectionMode",
+)({
+  version: Schema.Literal(1),
+  type: Schema.Literal("selection-mode"),
+  enabled: Schema.Boolean,
+}) {}
+
 export class CapsuleIntentFailure extends Schema.Class<CapsuleIntentFailure>(
   "CapsuleIntentFailure",
 )({
@@ -128,6 +146,7 @@ export const CapsuleHostMessage = Schema.Union([
   CapsuleVisibility,
   CapsuleFocus,
   CapsuleDispose,
+  CapsuleSelectionMode,
   CapsuleIntentSucceeded,
   CapsuleIntentFailed,
 ]);

@@ -15,9 +15,17 @@ export class ProjectImportReport extends Schema.Class<ProjectImportReport>(
   "ProjectImportReport",
 )({
   version: Schema.Literal(1),
-  kind: Schema.Literals(["static-html", "vite", "vite-react"]),
+  kind: Schema.Literals([
+    "static-html",
+    "vite",
+    "vite-react",
+    "vite-vue",
+    "vite-svelte",
+  ]),
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80)),
   entrypoint: Path,
+  source: Schema.optionalKey(Schema.Literals(["directory", "archive", "git"])),
+  revision: Schema.optionalKey(Text),
   includedFiles: Schema.Int.check(
     Schema.isBetween({ minimum: 1, maximum: 256 }),
   ),

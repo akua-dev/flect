@@ -466,7 +466,7 @@ describe("AgentWorkspace", () => {
     "reuses one protected session across separate App and Shaper state",
     () => {
       const proposal = makeProposalBridge(defaultInterfaceDocument);
-      const { createSession, layer } = makeLayer({
+      const { client, createSession, layer } = makeLayer({
         shape: () =>
           Stream.make(
             AgentShellRequest.make({
@@ -485,8 +485,9 @@ describe("AgentWorkspace", () => {
         yield* workspace.submitAppPrompt(userOperation(1), "Use the product");
         const document = yield* workspace.submitShaperInstruction(
           userOperation(2),
-          "Change the interface",
+          "Change the interface\n\nProtected selection context: headline",
           defaultInterfaceDocument,
+          "Change the interface",
         );
         const snapshot = yield* workspace.snapshot;
 
@@ -499,6 +500,14 @@ describe("AgentWorkspace", () => {
         assert.deepStrictEqual(
           snapshot.shaper.messages.map((message) => message.content),
           ["Change the interface", `Change complete: ${document.name}`],
+        );
+        assert.include(
+          String(vi.mocked(client.shape).mock.calls[0]?.[1]),
+          "Protected selection context: headline",
+        );
+        assert.notInclude(
+          snapshot.shaper.messages.map((message) => message.content).join("\n"),
+          "Protected selection context",
         );
         assert.strictEqual(snapshot.app.status, "ready");
         assert.strictEqual(snapshot.shaper.status, "ready");

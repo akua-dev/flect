@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { PrivateShareSourceSummary } from "../../packages/product/src/host/share-source";
+import type { CanvasSelection } from "../../shared/canvas-selection";
 import type {
   CapsuleIntent,
   CapsuleIntentOutcome,
@@ -170,6 +171,9 @@ export function RoleAwareShell({
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareLibraryOpen, setShareLibraryOpen] = useState(false);
   const [shareFileError, setShareFileError] = useState<string>();
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [canvasSelection, setCanvasSelection] = useState<CanvasSelection>();
+  const [selectedNodeId, setSelectedNodeId] = useState<string>();
   const shareFileRef = useRef<HTMLInputElement>(null);
   const mode: ShellMode =
     phase === "safe" ? "safe" : (controlledMode ?? localMode);
@@ -355,6 +359,54 @@ export function RoleAwareShell({
     shouldFocusRailRef.current = true;
     void preferences.setRailCollapsed(false);
   }, [preferences]);
+
+  const focusComposer = useCallback(() => {
+    if (preferences.value.railCollapsed) {
+      shouldFocusRailRef.current = true;
+      void preferences.setRailCollapsed(false);
+    }
+    queueMicrotask(() => {
+      railContainerRef.current
+        ?.querySelector<HTMLTextAreaElement>(
+          '.composer textarea[name="prompt"]',
+        )
+        ?.focus({ preventScroll: true });
+    });
+  }, [preferences]);
+
+  const chooseCanvasSelection = useCallback(
+    (selection: CanvasSelection | undefined, nodeId?: string) => {
+      setCanvasSelection(selection);
+      setSelectedNodeId(selection === undefined ? undefined : nodeId);
+      if (selection !== undefined) {
+        setSelectionMode(false);
+        focusComposer();
+      }
+    },
+    [focusComposer],
+  );
+
+  useEffect(() => {
+    void activeRevisionId;
+    setSelectionMode(false);
+    setCanvasSelection(undefined);
+    setSelectedNodeId(undefined);
+  }, [activeRevisionId]);
+
+  const applyDirectManipulation = useCallback(
+    (instruction: string) => {
+      if (canvasSelection === undefined || operationActive) return;
+      setSelectionMode(false);
+      void (
+        shaping.requestTargeted?.(
+          instruction,
+          canvasSelection,
+          selectedNodeId,
+        ) ?? shaping.request(instruction)
+      );
+    },
+    [canvasSelection, operationActive, selectedNodeId, shaping],
+  );
 
   useEffect(() => {
     if (!compactViewport || !docked || collapsed) {
@@ -586,6 +638,83 @@ export function RoleAwareShell({
         )}
 
       <main className="workspace-canvas">
+        {docked && phase === "accepted" && !preview && (
+          <div
+            aria-label="Canvas editing"
+            className="canvas-edit-toolbar"
+            role="toolbar"
+          >
+            <button
+              aria-pressed={selectionMode}
+              className="canvas-edit-toolbar__select"
+              disabled={operationActive}
+              onClick={() => setSelectionMode((current) => !current)}
+              type="button"
+            >
+              {selectionMode ? "Choose an element" : "Select element"}
+            </button>
+            {canvasSelection !== undefined && (
+              <>
+                <span className="canvas-edit-toolbar__selection" role="status">
+                  {canvasSelection.label}
+                </span>
+                <div className="canvas-edit-toolbar__actions">
+                  <button
+                    disabled={operationActive}
+                    onClick={() =>
+                      applyDirectManipulation(
+                        "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
+                      )
+                    }
+                    type="button"
+                  >
+                    Move earlier
+                  </button>
+                  <button
+                    disabled={operationActive}
+                    onClick={() =>
+                      applyDirectManipulation(
+                        "Move the selected element one position later in its current layout while preserving responsive behavior.",
+                      )
+                    }
+                    type="button"
+                  >
+                    Move later
+                  </button>
+                  <button
+                    disabled={operationActive}
+                    onClick={() =>
+                      applyDirectManipulation(
+                        "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
+                      )
+                    }
+                    type="button"
+                  >
+                    Smaller
+                  </button>
+                  <button
+                    disabled={operationActive}
+                    onClick={() =>
+                      applyDirectManipulation(
+                        "Make the selected element slightly larger using its existing responsive layout and design tokens.",
+                      )
+                    }
+                    type="button"
+                  >
+                    Larger
+                  </button>
+                  <button
+                    aria-label="Clear canvas selection"
+                    onClick={() => chooseCanvasSelection(undefined)}
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
         {!preview &&
           shareReview !== undefined &&
           onRetainShare !== undefined &&
@@ -623,7 +752,17 @@ export function RoleAwareShell({
             assets={compiledCapsule.assets}
             entrypointPath={compiledCapsule.entrypointPath}
             html={compiledCapsule.html}
+            onDirectManipulation={(kind, deltaX, deltaY) =>
+              applyDirectManipulation(
+                kind === "move"
+                  ? `Move the selected element ${Math.abs(Math.round(deltaX))} pixels ${deltaX < 0 ? "left" : "right"} and ${Math.abs(Math.round(deltaY))} pixels ${deltaY < 0 ? "up" : "down"} in the current view. Translate that gesture into responsive layout source instead of storing fixed canvas coordinates.`
+                  : `Resize the selected element by approximately ${Math.round(deltaX)} pixels in width and ${Math.round(deltaY)} pixels in height in the current view. Translate that gesture into responsive layout source and preserve accessible content reflow.`,
+              )
+            }
             onIntent={onCapsuleIntent}
+            onSelectionChange={(selection) => chooseCanvasSelection(selection)}
+            selection={canvasSelection}
+            selectionMode={selectionMode}
             title={compiledCapsule.name}
           />
         ) : (
@@ -631,6 +770,9 @@ export function RoleAwareShell({
             actions={actions}
             document={document}
             onAction={handleInterfaceAction}
+            onSelectionChange={(selection, nodeId) =>
+              chooseCanvasSelection(selection, nodeId)
+            }
             renderPrompt={() => (
               <button
                 className="canvas-agent-entry"
@@ -640,6 +782,8 @@ export function RoleAwareShell({
                 Open Flect
               </button>
             )}
+            selectedNodeId={selectedNodeId}
+            selectionMode={selectionMode}
           />
         )}
       </main>
@@ -671,6 +815,7 @@ export function RoleAwareShell({
         <AgentRail
           acceptedCapsuleReview={capsulePresentation?.acceptedReview}
           build={build}
+          canvasSelection={canvasSelection}
           capsuleReview={capsulePresentation?.candidateReview}
           diagnostics={diagnostics}
           document={document}
@@ -678,6 +823,7 @@ export function RoleAwareShell({
           mode={mode}
           preview={preview}
           candidateRevisionId={candidateRevisionId}
+          selectedNodeId={selectedNodeId}
           useDisabled={useDisabled || phase === "blank"}
           onCollapse={collapse}
           onOpenSafeMode={onOpenSafeMode}

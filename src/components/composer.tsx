@@ -74,6 +74,8 @@ export interface ComposerProps {
   readonly onImportCapsule?: () => void;
   readonly onInstallCapsule?: () => void;
   readonly onImportWebProject?: () => void;
+  readonly onImportWebProjectArchive?: () => void;
+  readonly onImportWebProjectGit?: () => void;
   readonly onOpenShareSource?: () => void;
   readonly onOpenShareFile?: () => void;
   readonly onManageSharedSources?: () => void;
@@ -114,6 +116,8 @@ export function Composer({
   onImportCapsule,
   onInstallCapsule,
   onImportWebProject,
+  onImportWebProjectArchive,
+  onImportWebProjectGit,
   onOpenShareSource,
   onOpenShareFile,
   onManageSharedSources,
@@ -272,6 +276,8 @@ export function Composer({
             onImportCapsule={onImportCapsule}
             onInstallCapsule={onInstallCapsule}
             onImportWebProject={onImportWebProject}
+            onImportWebProjectArchive={onImportWebProjectArchive}
+            onImportWebProjectGit={onImportWebProjectGit}
             onOpenShareSource={onOpenShareSource}
             onOpenShareFile={onOpenShareFile}
             onManageSharedSources={onManageSharedSources}

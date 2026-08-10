@@ -9,6 +9,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { CanvasSelection } from "../../shared/canvas-selection";
 import { CapsuleIntentSucceeded } from "../../shared/capsule-protocol";
 import { CapsuleFrame, projectCapsuleDocument } from "./capsule-frame";
 
@@ -204,6 +205,88 @@ describe("CapsuleFrame", () => {
     expect(firstIntent).not.toHaveBeenCalled();
     expect(FakeMessageChannel.created).toBe(createdBeforeRerender);
     expect(channel?.port1.close).not.toHaveBeenCalled();
+  });
+
+  it("exchanges a bounded selection without reconnecting the capsule", async () => {
+    vi.stubGlobal("MessageChannel", FakeMessageChannel);
+    const onSelectionChange = vi.fn();
+    const onDirectManipulation = vi.fn();
+    const selection = CanvasSelection.make({
+      version: 1,
+      semanticId: "delivery-card",
+      tag: "article",
+      label: "Late delivery",
+      role: "article",
+      text: "Late delivery",
+      sourcePath: "src/delivery-card.tsx",
+      sourceLine: 24,
+      rect: { x: 12, y: 20, width: 180, height: 72 },
+      styles: {
+        display: "block",
+        position: "relative",
+        color: "rgb(20, 20, 20)",
+        backgroundColor: "rgb(255, 255, 255)",
+        fontSize: "16px",
+        fontWeight: "600",
+        gap: "8px",
+        padding: "12px",
+        margin: "0px",
+      },
+    });
+    const rendered = render(
+      <CapsuleFrame
+        html="<article>Late delivery</article>"
+        onDirectManipulation={onDirectManipulation}
+        onSelectionChange={onSelectionChange}
+        selectionMode
+      />,
+    );
+    fireEvent.load(screen.getByTitle("Flect app"));
+    await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+    const channel = FakeMessageChannel.latest;
+    channel?.port1.receive({ version: 1, type: "ready" });
+    await waitFor(() =>
+      expect(channel?.port1.posted).toContainEqual({
+        version: 1,
+        type: "selection-mode",
+        enabled: true,
+      }),
+    );
+    const createdBeforeSelection = FakeMessageChannel.created;
+
+    channel?.port1.receive({
+      version: 1,
+      type: "selection-changed",
+      selection,
+    });
+    await waitFor(() =>
+      expect(onSelectionChange).toHaveBeenCalledWith(selection),
+    );
+    rendered.rerender(
+      <CapsuleFrame
+        html="<article>Late delivery</article>"
+        onDirectManipulation={onDirectManipulation}
+        onSelectionChange={onSelectionChange}
+        selection={selection}
+      />,
+    );
+
+    expect(screen.getByText("Late delivery").parentElement).toHaveClass(
+      "canvas-selection-outline",
+    );
+    const outline = screen.getByRole("group", {
+      name: "Selected element: Late delivery. Drag to move.",
+    });
+    fireEvent.pointerDown(outline, { pointerId: 7, clientX: 20, clientY: 20 });
+    fireEvent.pointerMove(outline, { pointerId: 7, clientX: 44, clientY: 31 });
+    fireEvent.pointerUp(outline, { pointerId: 7, clientX: 44, clientY: 31 });
+    expect(onDirectManipulation).toHaveBeenCalledWith("move", 24, 11);
+    expect(FakeMessageChannel.created).toBe(createdBeforeSelection);
+    expect(channel?.port1.posted).toContainEqual({
+      version: 1,
+      type: "selection-mode",
+      enabled: false,
+    });
   });
 
   it("sanitizes rejected or invalid host results before replying", async () => {

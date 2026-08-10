@@ -11,6 +11,7 @@ import {
   BrowserBuildWorkerSuccess,
 } from "../../shared/browser-build";
 import { digestBuildEntries } from "./browser-build-digest";
+import { transformFrameworkSource } from "./framework-source-transform";
 import {
   collectRestrictedCss,
   resolveRestrictedCssImport,
@@ -120,10 +121,22 @@ const compile = (request: BrowserBuildWorkerRequest["request"]) =>
       }
 
       const root = `/flect/${request.buildId}`;
+      const frameworkModules = new Map<string, string>();
+      const frameworkStyles: Array<string> = [];
       for (const file of files) {
         const absolute = `${root}/${file.path}`;
         mkdirParents(absolute, memfs);
         memfs.fs.writeFileSync(absolute, file.contents);
+        const transformed = await transformFrameworkSource(
+          file.path,
+          file.contents,
+        );
+        if (transformed !== undefined) {
+          frameworkModules.set(absolute, transformed.code);
+          if (transformed.css.length > 0) {
+            frameworkStyles.push(transformed.css);
+          }
+        }
       }
 
       const inputDigest = await digestBuildEntries(files);
@@ -148,9 +161,13 @@ const compile = (request: BrowserBuildWorkerRequest["request"]) =>
               return resolved === undefined ? null : `${cssPrefix}${resolved}`;
             },
             load(id) {
-              return id.startsWith(cssPrefix)
-                ? { code: "export {};", moduleType: "js" }
-                : null;
+              if (id.startsWith(cssPrefix)) {
+                return { code: "export {};", moduleType: "js" };
+              }
+              const transformed = frameworkModules.get(id);
+              return transformed === undefined
+                ? null
+                : { code: transformed, moduleType: "js" };
             },
           },
         ],
@@ -210,7 +227,13 @@ const compile = (request: BrowserBuildWorkerRequest["request"]) =>
             contents,
           });
         });
-        const css = collectRestrictedCss(files);
+        const restrictedCss = collectRestrictedCss(files);
+        const frameworkCss = encoder.encode(frameworkStyles.join("\n"));
+        const css = new Uint8Array(
+          restrictedCss.byteLength + frameworkCss.byteLength,
+        );
+        css.set(restrictedCss);
+        css.set(frameworkCss, restrictedCss.byteLength);
         if (css.byteLength > 0) {
           outputBytes += css.byteLength;
           if (outputBytes > MAX_BUILD_BYTES) {

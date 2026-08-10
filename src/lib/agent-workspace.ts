@@ -144,6 +144,7 @@ export interface AgentWorkspaceShape {
     operation: OperationContext,
     instruction: string,
     document: InterfaceDocument,
+    visibleInstruction?: string,
   ) => Effect.Effect<InterfaceDocument, AgentWorkspaceError>;
   readonly cancel: (
     role: InteractiveAgentRole,
@@ -1602,12 +1603,18 @@ export const AgentWorkspaceLive = Layer.effect(
       operation: OperationContext,
       instruction: string,
       document: InterfaceDocument,
+      visibleInstruction?: string,
     ) {
       const prompt = instruction.trim();
       if (prompt.length === 0) {
         return yield* Effect.fail(unavailable());
       }
-      yield* claimRole("shaper", prompt, operation.source, false);
+      yield* claimRole(
+        "shaper",
+        visibleInstruction?.trim() || prompt,
+        operation.source,
+        false,
+      );
       yield* appendJournal(operation, {
         category: "turn",
         phase: "started",

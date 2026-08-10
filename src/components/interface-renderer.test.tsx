@@ -66,4 +66,32 @@ describe("InterfaceRenderer", () => {
     await user.click(button);
     expect(onAction).not.toHaveBeenCalled();
   });
+
+  it("selects a semantic canvas node without invoking its normal action", async () => {
+    const onAction = vi.fn();
+    const onSelectionChange = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <InterfaceRenderer
+        document={defaultInterfaceDocument}
+        onAction={onAction}
+        onSelectionChange={onSelectionChange}
+        renderPrompt={() => null}
+        selectionMode
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Start building" }));
+
+    expect(onAction).not.toHaveBeenCalled();
+    expect(onSelectionChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: 1,
+        semanticId: "shape-interface",
+        tag: "button",
+        label: "Start building",
+      }),
+      "shape-interface",
+    );
+  });
 });

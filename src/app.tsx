@@ -410,6 +410,20 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
           instruction,
         }),
       ),
+    requestTargeted: (instruction, selection, selectedNodeId) =>
+      command(
+        RequestShapeHandoff.make({
+          type: "request-shape-handoff",
+          handoff: WorkbenchHandoff.make({
+            version: 1,
+            instruction,
+            revisionId:
+              snapshot.shaping.proposal?.id ?? snapshot.shaping.active.id,
+            selection,
+            ...(selectedNodeId === undefined ? {} : { selectedNodeId }),
+          }),
+        }),
+      ),
     fixFailure: (activity) =>
       command(
         RequestShapeHandoff.make({

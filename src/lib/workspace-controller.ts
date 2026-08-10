@@ -20,6 +20,7 @@ import {
   type ShareSource,
 } from "../../packages/product/src/share";
 import { ProposalBuildRequest } from "../../shared/browser-build";
+import { canvasSelectionSummary } from "../../shared/canvas-selection";
 import {
   type DecodedCapsule,
   decodeCapsule,
@@ -513,6 +514,9 @@ const boundedHandoffInstruction = (handoff: WorkbenchHandoff) =>
     ...(handoff.selectedNodeId === undefined
       ? []
       : [`Selected interface node: ${handoff.selectedNodeId}`]),
+    ...(handoff.selection === undefined
+      ? []
+      : [canvasSelectionSummary(handoff.selection)]),
     ...(handoff.failureOperationId === undefined
       ? []
       : [`Failed operation: ${handoff.failureOperationId}`]),
@@ -2333,6 +2337,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
               ? instruction
               : boundedHandoffInstruction(handoff),
             shaping.proposal?.document ?? shaping.active.document,
+            instruction,
           ),
         );
         if (extensionCatalog !== undefined) {

@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import type { CanvasSelection } from "../../shared/canvas-selection";
 import type {
   ControlStateSnapshot,
   OperationRecord,
@@ -32,6 +33,7 @@ import {
   importWebProject,
   shouldAvoidReadingWebProjectFile,
   WebProjectImportFailure,
+  type WebProjectImportResult,
 } from "../lib/web-project-import";
 import type { CapsuleReview } from "../lib/workspace-controller";
 import { ActivityCard } from "./activity-card";
@@ -53,6 +55,11 @@ export interface ShapingController {
   readonly isolation: "unchecked" | "checking" | "ready" | "unavailable";
   readonly verifyIsolation: () => Promise<void>;
   readonly request: (instruction: string) => Promise<void>;
+  readonly requestTargeted?: (
+    instruction: string,
+    selection: CanvasSelection,
+    selectedNodeId?: string,
+  ) => Promise<void>;
   readonly fixFailure: (activity: ToolActivity) => Promise<void>;
   readonly accept: () => Promise<void>;
   readonly reject: () => Promise<void>;
@@ -70,6 +77,8 @@ export interface AgentRailProps {
   readonly acceptedCapsuleReview?: CapsuleReview;
   readonly extensions?: PortableExtensionCatalogSnapshot;
   readonly useDisabled?: boolean;
+  readonly canvasSelection?: CanvasSelection;
+  readonly selectedNodeId?: string;
   readonly document: InterfaceDocument;
   readonly workspace: AgentWorkspaceController;
   readonly shaping: ShapingController;
@@ -480,6 +489,8 @@ export function AgentRail({
   acceptedCapsuleReview,
   extensions,
   useDisabled = false,
+  canvasSelection,
+  selectedNodeId,
   document,
   workspace,
   shaping,
@@ -548,12 +559,16 @@ export function AgentRail({
   const submit =
     mode === "safe"
       ? async () => undefined
-      : preview && candidateRevisionId !== undefined
+      : canvasSelection !== undefined
         ? (text: string) =>
-            workspace.previewApp.submit(text, document, candidateRevisionId)
-        : useDisabled
-          ? shaping.request
-          : workspace.app.submit;
+            shaping.requestTargeted?.(text, canvasSelection, selectedNodeId) ??
+            shaping.request(text)
+        : preview && candidateRevisionId !== undefined
+          ? (text: string) =>
+              workspace.previewApp.submit(text, document, candidateRevisionId)
+          : useDisabled
+            ? shaping.request
+            : workspace.app.submit;
   const externalExtensionsEnabled =
     workspace.externalExtensions.app && workspace.externalExtensions.shaper;
   const toggleExternalExtensions = async () => {
@@ -600,6 +615,12 @@ export function AgentRail({
   const [installError, setInstallError] = useState<string>();
   const [installing, setInstalling] = useState(false);
   const installDialogRef = useRef<HTMLDialogElement>(null);
+  const [gitImportOpen, setGitImportOpen] = useState(false);
+  const [gitImportUrl, setGitImportUrl] = useState("");
+  const [gitImportCommit, setGitImportCommit] = useState("");
+  const [gitImportError, setGitImportError] = useState<string>();
+  const [gitImporting, setGitImporting] = useState(false);
+  const gitImportDialogRef = useRef<HTMLDialogElement>(null);
   const exportContinuity = async () => {
     const encoded = await workspace.exportContinuity?.();
     if (encoded === undefined) {
@@ -661,6 +682,26 @@ export function AgentRail({
     });
     input.click();
   };
+  const finishProjectImport = async ({
+    archive,
+    report,
+  }: WebProjectImportResult) => {
+    setCapsuleNotice(
+      report.kind === "static-html"
+        ? "Packaging static HTML project…"
+        : `Building ${report.kind === "vite-react" ? "Vite React" : report.kind === "vite-vue" ? "Vue" : report.kind === "vite-svelte" ? "Svelte" : "Vite"} project locally…`,
+    );
+    await workspace.importCapsule?.(archive);
+    setCapsuleNotice(
+      `${report.kind === "static-html" ? "Static app packaged" : "Portable build verified"} · ${report.includedFiles} source files${report.ignoredFiles.length === 0 ? "" : ` · ${report.ignoredFiles.length} ignored`}. Ready to activate.`,
+    );
+  };
+  const projectImportFailureMessage = (error: unknown) =>
+    Schema.is(WebProjectImportFailure)(error)
+      ? error.message
+      : Schema.is(OperationFailedSchema)(error)
+        ? error.message
+        : "App project import failed safely. Choose one source with a root index.html.";
   const importHtmlProject = () => {
     const input = globalThis.document.createElement("input");
     input.type = "file";
@@ -687,30 +728,65 @@ export function AgentRail({
               }),
             ),
           catch: () => new Error("project files could not be read"),
-        }).pipe(Effect.flatMap(importWebProject)),
+        }).pipe(
+          Effect.flatMap((projectFiles) => importWebProject(projectFiles)),
+        ),
       )
-        .then(async ({ archive, report }) => {
-          setCapsuleNotice(
-            report.kind === "static-html"
-              ? "Packaging static HTML project…"
-              : `Building ${report.kind === "vite-react" ? "Vite React" : "Vite"} project locally…`,
-          );
-          await workspace.importCapsule?.(archive);
-          setCapsuleNotice(
-            `${report.kind === "static-html" ? "Static app packaged" : "Portable build verified"} · ${report.includedFiles} source files${report.ignoredFiles.length === 0 ? "" : ` · ${report.ignoredFiles.length} ignored`}. Ready to activate.`,
-          );
-        })
+        .then(finishProjectImport)
         .catch((error: unknown) => {
-          setCapsuleNotice(
-            Schema.is(WebProjectImportFailure)(error)
-              ? error.message
-              : Schema.is(OperationFailedSchema)(error)
-                ? error.message
-                : "App project import failed safely. Choose one folder with a root index.html.",
-          );
+          setCapsuleNotice(projectImportFailureMessage(error));
         });
     });
     input.click();
+  };
+  const importProjectArchive = () => {
+    const input = globalThis.document.createElement("input");
+    input.type = "file";
+    input.accept = ".zip,.tar,application/zip,application/x-tar";
+    input.addEventListener("change", () => {
+      const file = input.files?.[0];
+      if (file === undefined) return;
+      setCapsuleNotice("Checking project archive…");
+      void file
+        .arrayBuffer()
+        .then(async (buffer) => {
+          const { importWebProjectArchive } = await import(
+            "../lib/web-project-archive"
+          );
+          return Effect.runPromise(
+            importWebProjectArchive(file.name, new Uint8Array(buffer)),
+          );
+        })
+        .then(finishProjectImport)
+        .catch((error: unknown) =>
+          setCapsuleNotice(projectImportFailureMessage(error)),
+        );
+    });
+    input.click();
+  };
+  const importGitProject = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setGitImporting(true);
+    setGitImportError(undefined);
+    setCapsuleNotice("Cloning exact Git source in isolation…");
+    try {
+      const { importWebProjectFromGit } = await import(
+        "../lib/web-project-git-import"
+      );
+      const result = await Effect.runPromise(
+        importWebProjectFromGit(gitImportUrl, gitImportCommit),
+      );
+      await finishProjectImport(result);
+      setGitImportOpen(false);
+      setGitImportUrl("");
+      setGitImportCommit("");
+    } catch (error) {
+      const message = projectImportFailureMessage(error);
+      setGitImportError(message);
+      setCapsuleNotice(message);
+    } finally {
+      setGitImporting(false);
+    }
   };
   const installCapsule = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -741,6 +817,13 @@ export function AgentRail({
     if (typeof dialog.showModal === "function") dialog.showModal();
     else dialog.setAttribute("open", "");
   }, [installOpen]);
+
+  useEffect(() => {
+    const dialog = gitImportDialogRef.current;
+    if (!gitImportOpen || dialog === null || dialog.open) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+  }, [gitImportOpen]);
 
   useEffect(() => {
     if (shaping.status === "preview") {
@@ -1005,9 +1088,13 @@ export function AgentRail({
                     <p>
                       {capsuleReview.importReport.kind === "vite-react"
                         ? "Vite React"
-                        : capsuleReview.importReport.kind === "vite"
-                          ? "Vite"
-                          : "Static HTML"}
+                        : capsuleReview.importReport.kind === "vite-vue"
+                          ? "Vue"
+                          : capsuleReview.importReport.kind === "vite-svelte"
+                            ? "Svelte"
+                            : capsuleReview.importReport.kind === "vite"
+                              ? "Vite"
+                              : "Static HTML"}
                       {" · "}
                       {capsuleReview.importReport.entrypoint}
                     </p>
@@ -1172,6 +1259,11 @@ export function AgentRail({
             setInstallOpen(true);
           }}
           onImportWebProject={importHtmlProject}
+          onImportWebProjectArchive={importProjectArchive}
+          onImportWebProjectGit={() => {
+            setGitImportError(undefined);
+            setGitImportOpen(true);
+          }}
           onOpenShareSource={onOpenShareSource}
           onOpenShareFile={onOpenShareFile}
           onManageSharedSources={onManageSharedSources}
@@ -1241,6 +1333,81 @@ export function AgentRail({
                   type="submit"
                 >
                   {installing ? "Verifying…" : "Download and review"}
+                </button>
+              </div>
+            </form>
+          </dialog>
+        )}
+        {gitImportOpen && (
+          <dialog
+            aria-labelledby="git-import-title"
+            className="capsule-install-dialog"
+            onCancel={(event) => {
+              event.preventDefault();
+              if (!gitImporting) setGitImportOpen(false);
+            }}
+            ref={gitImportDialogRef}
+          >
+            <form onSubmit={(event) => void importGitProject(event)}>
+              <header>
+                <strong id="git-import-title">Import from Git</strong>
+                <p>
+                  Flect clones public HTTPS source in its isolated Git worker,
+                  checks out exactly one commit, and never runs repository code.
+                </p>
+              </header>
+              <label htmlFor="git-import-url">Public HTTPS repository</label>
+              <input
+                autoFocus
+                disabled={gitImporting}
+                id="git-import-url"
+                onChange={(event) => setGitImportUrl(event.currentTarget.value)}
+                placeholder="https://github.com/owner/project.git"
+                required
+                type="url"
+                value={gitImportUrl}
+              />
+              <label htmlFor="git-import-commit">Exact commit ID</label>
+              <input
+                autoCapitalize="none"
+                autoCorrect="off"
+                disabled={gitImporting}
+                id="git-import-commit"
+                maxLength={40}
+                minLength={40}
+                onChange={(event) =>
+                  setGitImportCommit(event.currentTarget.value)
+                }
+                pattern="[0-9a-f]{40}"
+                placeholder="40 lowercase hexadecimal characters"
+                required
+                spellCheck={false}
+                value={gitImportCommit}
+              />
+              {gitImportError !== undefined && (
+                <p className="capsule-install-dialog__error" role="alert">
+                  {gitImportError}
+                </p>
+              )}
+              <div>
+                <button
+                  className="decision-button"
+                  disabled={gitImporting}
+                  onClick={() => setGitImportOpen(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button
+                  className="decision-button decision-button--primary"
+                  disabled={
+                    gitImporting ||
+                    gitImportUrl.length === 0 ||
+                    gitImportCommit.length !== 40
+                  }
+                  type="submit"
+                >
+                  {gitImporting ? "Importing…" : "Import exact commit"}
                 </button>
               </div>
             </form>

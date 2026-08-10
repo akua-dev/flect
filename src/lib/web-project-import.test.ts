@@ -28,6 +28,8 @@ describe("plain web project import", () => {
       kind: "static-html",
       name: "portfolio",
       entrypoint: "index.html",
+      source: "directory",
+      revision: "unversioned",
       includedFiles: 3,
       ignoredFiles: [".DS_Store"],
       adaptations: [],
@@ -95,6 +97,21 @@ describe("plain web project import", () => {
     ]);
   });
 
+  it("does not mistake ordinary source comments for remote network authority", async () => {
+    const result = await Effect.runPromise(
+      importWebProject([
+        file("site/index.html", '<script type="module" src="app.js"></script>'),
+        file(
+          "site/app.js",
+          "// local implementation note\ndocument.body.textContent='ready'",
+        ),
+      ]),
+    );
+    expect(result.report.warnings).not.toContain(
+      "Remote URLs require an explicit product network capability.",
+    );
+  });
+
   it("recognizes a standard Vite React entrypoint without executing Vite", async () => {
     const result = await Effect.runPromise(
       importWebProject([
@@ -150,6 +167,53 @@ describe("plain web project import", () => {
       "metadata/import-report.json",
     );
   });
+
+  it.each([
+    {
+      framework: "Vue",
+      dependency: "vue",
+      plugin: "@vitejs/plugin-vue",
+      component: "App.vue",
+      kind: "vite-vue" as const,
+    },
+    {
+      framework: "Svelte",
+      dependency: "svelte",
+      plugin: "@sveltejs/vite-plugin-svelte",
+      component: "App.svelte",
+      kind: "vite-svelte" as const,
+    },
+  ])(
+    "recognizes a standard Vite $framework project without a Flect mode",
+    async ({ dependency, plugin, component, kind }) => {
+      const result = await Effect.runPromise(
+        importWebProject([
+          file(
+            "app/index.html",
+            '<div id="app"></div><script type="module" src="/src/main.ts"></script>',
+          ),
+          file(
+            "app/package.json",
+            JSON.stringify({
+              dependencies: { [dependency]: "1.0.0" },
+              devDependencies: { [plugin]: "1.0.0", vite: "8.1.5" },
+            }),
+          ),
+          file(
+            "app/src/main.ts",
+            `import App from "./${component}"; void App;`,
+          ),
+          file(`app/src/${component}`, "<main>Portable component</main>"),
+        ]),
+      );
+
+      expect(result.report.kind).toBe(kind);
+      expect(result.report.entrypoint).toBe("src/main.ts");
+      expect(result.report.adaptations).toContain(
+        "Flect uses its restricted browser compiler instead of executing Vite config or package scripts.",
+      );
+    },
+  );
 
   it("rejects unsupported Vite plugins before packaging source", async () => {
     const failure = await Effect.runPromise(

@@ -1770,6 +1770,143 @@ textarea:focus-visible,
   width: 100%;
 }
 
+.capsule-surface {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+}
+
+.canvas-selection-outline {
+  position: absolute;
+  z-index: 4;
+  border: 2px solid var(--flect-rose);
+  border-radius: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  box-shadow: 0 0 0 1px color-mix(in oklch, var(--void) 70%, transparent);
+}
+
+.canvas-selection-outline:active {
+  cursor: grabbing;
+}
+
+.canvas-selection-outline > span {
+  position: absolute;
+  top: -27px;
+  left: -2px;
+  max-width: min(280px, 70vw);
+  overflow: hidden;
+  border-radius: 5px 5px 5px 0;
+  padding: 4px 7px;
+  background: var(--flect-rose);
+  color: var(--void);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-selection-resize {
+  position: absolute;
+  right: -14px;
+  bottom: -14px;
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--void);
+  border-radius: 50%;
+  padding: 0;
+  background: var(--flect-rose);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.canvas-edit-toolbar {
+  position: fixed;
+  z-index: calc(var(--z-topbar) - 1);
+  top: 72px;
+  left: 50%;
+  display: flex;
+  max-width: min(760px, calc(100vw - 32px));
+  min-height: 38px;
+  align-items: center;
+  gap: 6px;
+  overflow: auto hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 4px;
+  background: color-mix(in oklch, var(--surface) 94%, transparent);
+  box-shadow: 0 8px 18px var(--shadow-soft);
+  color: var(--ink);
+  transform: translateX(-50%);
+  backdrop-filter: blur(16px);
+}
+
+.role-shell--split:not(.role-shell--collapsed) .canvas-edit-toolbar {
+  left: calc((100vw - var(--flect-rail-width)) / 2);
+  max-width: min(760px, calc(100vw - var(--flect-rail-width) - 32px));
+}
+
+.canvas-edit-toolbar button {
+  min-height: 30px;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 7px;
+  padding: 0 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 590;
+}
+
+.canvas-edit-toolbar button:hover:not(:disabled),
+.canvas-edit-toolbar button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+
+.canvas-edit-toolbar button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.canvas-edit-toolbar button.canvas-edit-toolbar__select {
+  color: var(--ink);
+}
+
+.canvas-edit-toolbar__selection {
+  max-width: 180px;
+  overflow: hidden;
+  padding: 0 4px;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 620;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-edit-toolbar__actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.interface-canvas[data-selection-mode="true"] [data-node-id] {
+  cursor: crosshair;
+}
+
+.interface-canvas [data-selected="true"] {
+  outline: 2px solid var(--flect-rose);
+  outline-offset: 3px;
+}
+
 .capsule-fallback {
   margin: auto;
   max-width: 32rem;
@@ -3728,6 +3865,11 @@ textarea:focus-visible,
     padding-left: 32px;
   }
 
+  .role-shell--split:not(.role-shell--collapsed) .canvas-edit-toolbar {
+    left: 50%;
+    max-width: calc(100vw - 32px);
+  }
+
   .role-shell--split .agent-rail-container {
     position: fixed;
     z-index: var(--z-sheet);
@@ -3758,6 +3900,11 @@ textarea:focus-visible,
 
   .workspace-canvas {
     padding: 76px 18px 28px;
+  }
+
+  .canvas-edit-toolbar {
+    top: 60px;
+    max-width: calc(100vw - 20px);
   }
 
   .blank-invitation {
@@ -3899,6 +4046,19 @@ textarea:focus-visible,
   }
 }
 
+@media (pointer: coarse) {
+  .canvas-edit-toolbar button {
+    min-height: 44px;
+  }
+
+  .canvas-selection-resize {
+    right: -22px;
+    bottom: -22px;
+    width: 44px;
+    height: 44px;
+  }
+}
+
 @media (forced-colors: active) {
   :root {
     --void: Canvas;
@@ -3919,6 +4079,14 @@ textarea:focus-visible,
   .activity-card__dot,
   .runtime-state__dot {
     border: 1px solid CanvasText;
+  }
+
+  .canvas-edit-toolbar,
+  .canvas-selection-outline,
+  .interface-canvas [data-selected="true"] {
+    border-color: Highlight;
+    outline-color: Highlight;
+    forced-color-adjust: auto;
   }
 }
 

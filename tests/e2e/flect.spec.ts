@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { expect, type Page, test } from "@playwright/test";
 import { Effect } from "effect";
+import { zipSync } from "fflate";
 import { decodeCapsule, encodeCapsule } from "../../shared/capsule";
 import { defaultInterfaceDocument } from "../../shared/interface-document";
 import { resetBrowserWorkspace } from "./reset-browser-workspace";
@@ -309,6 +310,48 @@ test("shapes a blank workspace in one continuous live canvas", async ({
   await expect(page.locator(".composer")).toHaveCount(1);
 });
 
+test("selects and directly edits the running canvas through the same agent", async ({
+  page,
+}) => {
+  await shapeFirstInterface(page);
+  const shell = page.locator(".role-shell");
+  const before = await shell.getAttribute("data-active-revision");
+
+  await page.getByRole("button", { name: "Select element" }).click();
+  await page.getByRole("heading", { name: "Focused project overview" }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toBeFocused();
+  await expect(page.locator('[data-node-id="headline"]')).toHaveAttribute(
+    "data-selected",
+    "true",
+  );
+
+  completedShapePages.add(page);
+  await page
+    .getByRole("textbox", { name: "Message Flect" })
+    .fill("Make this calmer without reducing contrast");
+  await page.getByRole("textbox", { name: "Message Flect" }).press("Enter");
+  await expect(shell).not.toHaveAttribute("data-active-revision", before ?? "");
+  await expect(
+    page.getByRole("heading", { name: "Focused project overview" }),
+  ).toBeVisible();
+
+  const afterPrompt = await shell.getAttribute("data-active-revision");
+  await page.getByRole("button", { name: "Select element" }).click();
+  await page.getByRole("heading", { name: "Focused project overview" }).click();
+  completedShapePages.add(page);
+  await page.getByRole("button", { name: "Move later" }).click();
+  await expect(shell).not.toHaveAttribute(
+    "data-active-revision",
+    afterPrompt ?? "",
+  );
+  await expect(page.locator(".composer")).toHaveCount(1);
+  await expect(
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
+});
+
 test("exports the shaped source and complete Git history", async ({ page }) => {
   await shapeFirstInterface(page);
   await page.getByRole("button", { name: "Actions" }).click();
@@ -574,6 +617,60 @@ test("imports an ordinary static HTML project as a reviewable Flect app", async 
   expect(sourceTree).not.toContain(".env.production");
 });
 
+test("imports a bounded source archive through the ordinary project pipeline", async ({
+  page,
+}) => {
+  const archive = zipSync({
+    "archive-app/index.html": new TextEncoder().encode(
+      "<!doctype html><main><h1>Archive imported</h1></main>",
+    ),
+    "archive-app/.env": new TextEncoder().encode("TOKEN=never-retained"),
+  });
+  await page.getByRole("button", { name: "Actions" }).click();
+  const chooserPromise = page.waitForEvent("filechooser");
+  await page.getByRole("menuitem", { name: "Import project archive" }).click();
+  const chooser = await chooserPromise;
+  await chooser.setFiles({
+    name: "archive-app.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from(archive),
+  });
+
+  await expect(
+    page
+      .frameLocator('iframe[title="archive-app"]')
+      .getByRole("heading", { name: "Archive imported" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText(
+      "Static app packaged · 1 source files · 1 ignored. Ready to activate.",
+    ),
+  ).toBeVisible();
+  const decision = page.getByRole("region", { name: "Import decision" });
+  await expect(
+    decision.getByText("archive-import:archive-app.zip"),
+  ).toBeVisible();
+  await expect(decision.getByText(/^[0-9a-f]{64}$/)).toBeVisible();
+});
+
+test("requires exact immutable identity before importing public Git source", async ({
+  page,
+}) => {
+  await page.getByRole("button", { name: "Actions" }).click();
+  await page.getByRole("menuitem", { name: "Import project from Git" }).click();
+  const dialog = page.getByRole("dialog", { name: "Import from Git" });
+  await expect(dialog).toBeVisible();
+  await dialog
+    .getByLabel("Public HTTPS repository")
+    .fill("https://example.test/project.git");
+  await dialog.getByLabel("Exact commit ID").fill("main");
+  await expect(
+    dialog.getByRole("button", { name: "Import exact commit" }),
+  ).toBeDisabled();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toHaveCount(0);
+});
+
 test("imports, builds, reviews, keeps, and exports a Vite source project", async ({
   page,
 }) => {
@@ -718,6 +815,61 @@ test("imports a Vite React project and rebuilds it with the registry offline", a
   await page.getByRole("button", { name: "Discard" }).click();
 });
 
+test("imports Vue and Svelte through the same portable workspace contract", async ({
+  context,
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const importFramework = async (
+    fixture: "vite-vue" | "vite-svelte",
+    framework: "Vue" | "Svelte",
+  ) => {
+    await page.getByRole("button", { name: "Actions" }).click();
+    const chooserPromise = page.waitForEvent("filechooser");
+    await page.getByRole("menuitem", { name: "Import app project" }).click();
+    const chooser = await chooserPromise;
+    await chooser.setFiles(resolve(`tests/fixtures/${fixture}`));
+    await expect(
+      page.getByText(
+        "Portable build verified · 5 source files. Ready to activate.",
+      ),
+    ).toBeVisible({ timeout: 75_000 });
+    const frame = page.frameLocator(`iframe[title="${fixture}"]`);
+    await expect(
+      frame.getByRole("heading", { name: `${framework} project imported` }),
+    ).toBeVisible();
+    await frame.getByRole("button", { name: `${framework} count 0` }).click();
+    await expect(
+      frame.getByRole("button", { name: `${framework} count 1` }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "Import decision" })
+        .getByText(`${framework} · src/main.js`),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Activate app" }).click();
+    await expect(
+      page.getByRole("button", { name: "Activate app" }),
+    ).toHaveCount(0);
+  };
+
+  await importFramework("vite-vue", "Vue");
+  await importFramework("vite-svelte", "Svelte");
+
+  let blockedRegistryRequests = 0;
+  await context.route("https://registry.npmjs.org/**", async (route) => {
+    blockedRegistryRequests += 1;
+    await route.abort("internetdisconnected");
+  });
+  await page.reload();
+  await expect(
+    page
+      .frameLocator('iframe[title="vite-svelte"]')
+      .getByRole("heading", { name: "Svelte project imported" }),
+  ).toBeVisible();
+  expect(blockedRegistryRequests).toBe(0);
+});
+
 test("downloads a capsule URL without credentials and opens verified review", async ({
   page,
 }) => {
@@ -849,6 +1001,18 @@ test("previews and accepts compiled UI only inside the isolated capsule frame", 
   await expect(
     restoredAccepted.getByRole("heading", { name: "Compiled product" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Select element" }).click();
+  await restoredAccepted
+    .getByRole("heading", { name: "Compiled product" })
+    .click();
+  await expect(page.locator(".canvas-selection-outline")).toContainText(
+    "Compiled product",
+  );
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toBeFocused();
+  await page.getByRole("button", { name: "Clear canvas selection" }).click();
+  await expect(page.locator(".canvas-selection-outline")).toHaveCount(0);
   await restoredAccepted.getByRole("button", { name: "Use product" }).click();
   await expect(
     restoredAccepted.getByRole("button", { name: "Used" }),

@@ -16,6 +16,17 @@ export interface WebProjectFile {
 
 export type WebProjectImportReport = ProjectImportReport;
 
+export interface WebProjectImportResult {
+  readonly archive: Uint8Array;
+  readonly report: WebProjectImportReport;
+}
+
+export interface WebProjectImportOptions {
+  readonly source: "directory" | "archive" | "git";
+  readonly revision: string;
+  readonly sourceLabel?: string;
+}
+
 export class WebProjectImportFailure extends Schema.TaggedErrorClass<WebProjectImportFailure>()(
   "WebProjectImportFailure",
   { message: Schema.String },
@@ -61,7 +72,7 @@ const compatibility = (
 ) => {
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const source = files
-    .filter((file) => /\.(?:html?|css|js|mjs)$/i.test(file.path))
+    .filter((file) => /\.(?:html?|css|js|mjs|vue|svelte)$/i.test(file.path))
     .flatMap((file) => {
       try {
         return [decoder.decode(file.contents)];
@@ -87,7 +98,10 @@ const compatibility = (
       warning: "Module graphs require a framework-compatible build adapter.",
     },
     {
-      found: /(?:https?:)?\/\//i.test(source),
+      found:
+        /https?:\/\//i.test(source) ||
+        /(?:\bsrc|\bhref|\baction)\s*=\s*["']\/\//i.test(source) ||
+        /["'`]\/\/[a-z0-9]/i.test(source),
       capability: { id: "web:remote-network", required: true },
       warning: "Remote URLs require an explicit product network capability.",
     },
@@ -161,6 +175,8 @@ const moduleEntrypoint = (
 const supportedVitePlugins = new Set([
   "@vitejs/plugin-react",
   "@vitejs/plugin-react-swc",
+  "@vitejs/plugin-vue",
+  "@sveltejs/vite-plugin-svelte",
 ]);
 
 const unsupportedVitePlugin = (dependencies: ReadonlyArray<string>) =>
@@ -223,7 +239,11 @@ const projectName = (value: string) =>
 
 export const importWebProject = Effect.fn("Flect.WebProject.import")(function* (
   input: ReadonlyArray<WebProjectFile>,
-) {
+  options: WebProjectImportOptions = {
+    source: "directory",
+    revision: "unversioned",
+  },
+): Effect.fn.Return<WebProjectImportResult, WebProjectImportFailure> {
   if (input.length === 0) {
     return yield* Effect.fail(failure("Choose a web project folder."));
   }
@@ -318,9 +338,13 @@ export const importWebProject = Effect.fn("Flect.WebProject.import")(function* (
   const kind =
     sourceEntrypoint === undefined
       ? ("static-html" as const)
-      : dependencies.includes("react") || dependencies.includes("react-dom")
-        ? ("vite-react" as const)
-        : ("vite" as const);
+      : dependencies.includes("vue")
+        ? ("vite-vue" as const)
+        : dependencies.includes("svelte")
+          ? ("vite-svelte" as const)
+          : dependencies.includes("react") || dependencies.includes("react-dom")
+            ? ("vite-react" as const)
+            : ("vite" as const);
   const name = projectName(stripRoot ? firstRoot : "web-project");
   const compatibilityReport = compatibility(
     included,
@@ -342,6 +366,8 @@ export const importWebProject = Effect.fn("Flect.WebProject.import")(function* (
     kind,
     name: stripRoot ? firstRoot : "web-project",
     entrypoint: sourceEntrypoint ?? "index.html",
+    source: options.source,
+    revision: options.revision,
     includedFiles: included.length,
     ignoredFiles,
     adaptations,
@@ -369,8 +395,11 @@ export const importWebProject = Effect.fn("Flect.WebProject.import")(function* (
       },
       provenance: {
         publisher: "local-user",
-        source: "local-directory-import",
-        revision: "unversioned",
+        source:
+          options.sourceLabel === undefined
+            ? `${options.source}-import`
+            : `${options.source}-import:${options.sourceLabel}`,
+        revision: options.revision.slice(0, 120),
         builder: `flect@${packageMetadata.version}`,
       },
       signatures: [],

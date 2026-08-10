@@ -5,6 +5,7 @@ import {
   ShareUrlSource,
 } from "../../packages/product/src/share";
 import { BrowserBuildArtifact } from "../../shared/browser-build";
+import { CanvasSelection } from "../../shared/canvas-selection";
 import { encodeCapsule, hashCapsuleArchive } from "../../shared/capsule";
 import {
   ExternalPiExtensionSelection,
@@ -3348,6 +3349,25 @@ describe("FlectWorkspaceController", () => {
                 instruction: "Fix the failed action",
                 revisionId: current.shaping.active.id,
                 selectedNodeId: "shape-interface",
+                selection: CanvasSelection.make({
+                  version: 1,
+                  semanticId: "shape-interface",
+                  tag: "button",
+                  label: "Start building",
+                  text: "Start building",
+                  rect: { x: 24, y: 80, width: 160, height: 44 },
+                  styles: {
+                    display: "inline-flex",
+                    position: "static",
+                    color: "rgb(20, 20, 20)",
+                    backgroundColor: "rgb(250, 250, 250)",
+                    fontSize: "16px",
+                    fontWeight: "600",
+                    gap: "8px",
+                    padding: "12px 16px",
+                    margin: "0px",
+                  },
+                }),
                 failureOperationId: failed.operationId,
                 failureSummary: "The product action failed safely.",
               }),
@@ -3359,6 +3379,9 @@ describe("FlectWorkspaceController", () => {
           submitShaperInstruction.mock.calls.at(-1)?.[1] ?? "";
         assert.include(instruction, `Revision: ${current.shaping.active.id}`);
         assert.include(instruction, "Selected interface node: shape-interface");
+        assert.include(instruction, "Selected element: Start building");
+        assert.include(instruction, "Semantic identity: shape-interface");
+        assert.include(instruction, "Layout: 160 × 44 at 24, 80");
         assert.include(instruction, `Failed operation: ${failed.operationId}`);
         assert.include(
           instruction,

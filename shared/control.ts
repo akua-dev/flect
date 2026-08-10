@@ -1,5 +1,6 @@
 import { Effect, Schema, type SchemaAST } from "effect";
 import { ShareSource } from "../packages/product/src/share";
+import { CanvasSelection } from "./canvas-selection";
 import {
   ExternalPiExtensionSelection,
   InteractiveAgentRole,
@@ -98,6 +99,7 @@ export class WorkbenchHandoff extends Schema.Class<WorkbenchHandoff>(
   instruction: BoundedText(1, 4_000),
   revisionId: RevisionId,
   selectedNodeId: Schema.optionalKey(NodeId),
+  selection: Schema.optionalKey(CanvasSelection),
   failureOperationId: Schema.optionalKey(OperationId),
   failureSummary: Schema.optionalKey(
     Schema.String.check(Schema.isMaxLength(1_000)),
