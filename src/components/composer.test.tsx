@@ -164,6 +164,27 @@ describe("Composer", () => {
     },
   );
 
+  it("keeps the first message editable while provider setup blocks sending", async () => {
+    const user = userEvent.setup();
+    const onDraftChange = vi.fn(() => Promise.resolve());
+    render(
+      <Composer {...props({ status: "setup-required", onDraftChange })} />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
+    await user.type(input, "Build my first interface");
+
+    expect(input).toBeEnabled();
+    expect(input).toHaveValue("Build my first interface");
+    expect(onDraftChange).toHaveBeenLastCalledWith(
+      "acceptedUse",
+      "Build my first interface",
+    );
+    expect(
+      screen.getByRole("button", { name: "Send to Flect" }),
+    ).toBeDisabled();
+  });
+
   it("turns the primary action into a single Flect stop control", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn(() => Promise.resolve());

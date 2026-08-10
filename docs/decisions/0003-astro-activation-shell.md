@@ -236,12 +236,12 @@ implemented Astro path includes:
 8. static output compatible with the existing Tauri bundle and CSP boundary.
 
 The accepted build requests four view-only resources. Its activation bootstrap
-is 3,036 bytes gzip / 6,288 bytes decoded and its initial CSS is 1,094 bytes
+is 3,159 bytes gzip / 6,559 bytes decoded and its initial CSS is 1,094 bytes
 gzip / 2,976 bytes decoded. The view-only route requests no Flect workspace,
 Effect runtime, Git, compiler, shell, package, Worker, or Wasm code. The first
-workspace activation reaches 22 modules; shell, compiler, package, Worker, and
+workspace activation reaches 28 modules; shell, compiler, package, Worker, and
 Wasm boundaries remain independently on demand. Local production measurements
-record 229 ms cold activation, 223 ms warm activation, and 6 ms p95 composer
+record 241 ms cold activation, 219 ms warm activation, and 5 ms p95 composer
 acknowledgement. The full evidence is recorded in
 [`2026-08-10-astro-live-canvas-verification.md`](../verification/2026-08-10-astro-live-canvas-verification.md).
 

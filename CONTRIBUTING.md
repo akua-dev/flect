@@ -100,6 +100,7 @@ For a local bundle:
 
 ```bash
 bun run build:desktop -- --bundles app
+bun run test:desktop:local
 open src-tauri/target/release/bundle/macos/Flect.app
 ```
 
@@ -107,6 +108,11 @@ open src-tauri/target/release/bundle/macos/Flect.app
 development bundle is internally valid. `build:desktop:inferred-signing` is
 reserved for the release pipeline, where Tauri infers an imported signing
 certificate. Do not use the inferred-signing path as a local trust claim.
+`test:desktop:local` copies that bundle under a random test-only identifier,
+uses the real macOS Accessibility tree to verify actionable clean-profile
+setup, hard sidecar loss, private-draft restoration, relaunch, and single-window
+ownership, then removes only the isolated test profile and temporary Pi home.
+It never consumes a provider credential or the ordinary Flect/Pi profiles.
 
 The application bundle must contain public `flect` and private
 `flect-runtime` in `Contents/MacOS`, with no separately shipped command

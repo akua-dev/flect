@@ -39,6 +39,40 @@ const callbacks = () => ({
 });
 
 describe("ProviderAuthPanel", () => {
+  it("keeps one recommended browser login primary until more providers are requested", async () => {
+    const actions = callbacks();
+    const apiKeyProvider = ProviderAuthSummary.make({
+      version: 1,
+      id: "anthropic",
+      name: "Anthropic",
+      status: "disconnected",
+      methods: [{ type: "api_key", label: "Anthropic API key" }],
+    });
+    render(
+      <ProviderAuthPanel
+        authEvent={undefined}
+        compact
+        disabled={false}
+        providers={[apiKeyProvider, disconnected]}
+        {...actions}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "ChatGPT subscription" }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Anthropic API key" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Other providers (1)" }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Anthropic API key" }),
+    ).toBeVisible();
+  });
+
   it("starts a Pi-owned provider login without rendering credential inputs", async () => {
     const actions = callbacks();
     render(

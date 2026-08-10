@@ -278,6 +278,8 @@ dependencies enter the portable package graph.
 - [Implemented architecture](ARCHITECTURE.md)
 - [Capability and sandbox trust model](docs/trust-model.md)
 - [Current Astro/live-canvas performance verification](docs/verification/2026-08-10-astro-live-canvas-verification.md)
+- [Packaged macOS local verification](docs/verification/2026-08-10-packaged-macos-local-verification.md)
+- [Open-issue implementation audit](docs/verification/2026-08-10-open-issue-audit.md)
 - [Historical pre-migration performance baseline](docs/verification/2026-08-10-performance-and-native-feel-baseline.md)
 - [Astro activation-shell architecture decision](docs/decisions/0003-astro-activation-shell.md)
 - [Local agent control](docs/local-control.md)

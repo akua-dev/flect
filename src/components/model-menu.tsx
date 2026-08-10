@@ -30,6 +30,7 @@ export interface ModelMenuProps {
   readonly reasoningLevel?: ReasoningLevel;
   readonly providers?: ReadonlyArray<ProviderAuthSummary>;
   readonly authEvent?: AuthLoginEvent;
+  readonly providerAuthVisible?: boolean;
   readonly onSelectReasoning?: (
     reasoningLevel: ReasoningLevel | undefined,
   ) => void;
@@ -70,6 +71,7 @@ export function ModelMenu({
   reasoningLevel,
   providers: authProviders = [],
   authEvent,
+  providerAuthVisible = true,
   onSelectReasoning = () => undefined,
   onLoginProvider = () => undefined,
   onReplyProviderAuth = async () => undefined,
@@ -449,18 +451,21 @@ export function ModelMenu({
                 </div>
               </section>
             )}
-            {(authProviders.length > 0 || models.length === 0 || authEvent) && (
-              <ProviderAuthPanel
-                authEvent={authEvent}
-                disabled={disabled}
-                onCancel={onCancelProviderAuth}
-                onLogin={onLoginProvider}
-                onLogout={onLogoutProvider}
-                onRefresh={onRefreshProviderAuth}
-                onReply={onReplyProviderAuth}
-                providers={authProviders}
-              />
-            )}
+            {providerAuthVisible &&
+              (authProviders.length > 0 ||
+                models.length === 0 ||
+                authEvent) && (
+                <ProviderAuthPanel
+                  authEvent={authEvent}
+                  disabled={disabled}
+                  onCancel={onCancelProviderAuth}
+                  onLogin={onLoginProvider}
+                  onLogout={onLogoutProvider}
+                  onRefresh={onRefreshProviderAuth}
+                  onReply={onReplyProviderAuth}
+                  providers={authProviders}
+                />
+              )}
           </div>
         </div>
       )}

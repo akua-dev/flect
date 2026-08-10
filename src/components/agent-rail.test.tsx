@@ -303,6 +303,58 @@ describe("AgentRail", () => {
     });
   });
 
+  it("turns clean-profile setup into a direct provider action beside the editable draft", async () => {
+    const loginProvider = vi.fn();
+    const setupWorkspace: AgentWorkspaceController = {
+      ...workspace,
+      providers: [
+        {
+          version: 1,
+          id: "anthropic",
+          name: "Anthropic",
+          status: "disconnected",
+          methods: [{ type: "api_key", label: "Anthropic API key" }],
+        },
+        {
+          version: 1,
+          id: "openai-codex",
+          name: "OpenAI Codex",
+          status: "disconnected",
+          methods: [{ type: "oauth", label: "OpenAI (ChatGPT Plus/Pro)" }],
+        },
+      ],
+      loginProvider,
+      app: { ...workspace.app, status: "setup-required" },
+    };
+    render(
+      <AgentRail
+        document={document}
+        mode="edit"
+        onCollapse={vi.fn()}
+        onOpenSafeMode={vi.fn()}
+        onRestoreSafeMode={vi.fn(() => Promise.resolve())}
+        preferences={preferences}
+        shaping={shaping}
+        workspace={setupWorkspace}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Connect an agent");
+    expect(
+      screen.queryByRole("button", { name: "Try again" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Message Flect" }),
+    ).toBeEnabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "OpenAI (ChatGPT Plus/Pro)" }),
+    );
+    expect(loginProvider).toHaveBeenCalledWith({
+      providerId: "openai-codex",
+      method: "oauth",
+    });
+  });
+
   it("passes each message role into semantic Markdown rendering", () => {
     const roleWorkspace: AgentWorkspaceController = {
       ...workspace,

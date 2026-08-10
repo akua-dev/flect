@@ -15,6 +15,7 @@ export interface ProviderAuthPanelProps {
   readonly onCancel: (reference: AuthLoginReference) => Promise<void>;
   readonly onRefresh: () => Promise<void>;
   readonly onLogout: (providerId: string) => Promise<void>;
+  readonly compact?: boolean;
 }
 
 const isActive = (event: AuthLoginEvent | undefined) =>
@@ -161,9 +162,36 @@ export function ProviderAuthPanel({
   onCancel,
   onRefresh,
   onLogout,
+  compact = false,
 }: ProviderAuthPanelProps) {
   const [copyNotice, setCopyNotice] = useState<string>();
   const [logoutConfirmation, setLogoutConfirmation] = useState<string>();
+  const [showAllProviders, setShowAllProviders] = useState(false);
+  const recommendedProvider =
+    providers.find(
+      (provider) =>
+        provider.id === "openai-codex" &&
+        provider.status !== "connected" &&
+        provider.methods.length > 0,
+    ) ??
+    providers.find(
+      (provider) =>
+        provider.status !== "connected" &&
+        provider.methods.some((method) => method.type === "oauth"),
+    ) ??
+    providers.find(
+      (provider) =>
+        provider.status !== "connected" && provider.methods.length > 0,
+    ) ??
+    providers[0];
+  const visibleProviders =
+    compact && !showAllProviders && recommendedProvider !== undefined
+      ? [recommendedProvider]
+      : providers;
+  const hiddenProviderCount = Math.max(
+    0,
+    providers.length - visibleProviders.length,
+  );
   const copyPublicValue = (value: string, label: string) => {
     void Effect.runPromise(
       Effect.tryPromise({
@@ -201,7 +229,7 @@ export function ProviderAuthPanel({
       </header>
 
       <div className="provider-auth__providers">
-        {providers.map((provider) => (
+        {visibleProviders.map((provider) => (
           <div className="provider-auth__provider" key={provider.id}>
             <span>
               <strong>{provider.name}</strong>
@@ -266,6 +294,19 @@ export function ProviderAuthPanel({
           </div>
         ))}
         {providers.length === 0 && <p>No Pi providers are available.</p>}
+        {compact && providers.length > 1 && (
+          <button
+            aria-expanded={showAllProviders}
+            className="provider-auth__more"
+            disabled={disabled || isActive(authEvent)}
+            onClick={() => setShowAllProviders((current) => !current)}
+            type="button"
+          >
+            {showAllProviders
+              ? "Show recommended provider"
+              : `Other providers (${hiddenProviderCount})`}
+          </button>
+        )}
       </div>
 
       {authEvent !== undefined && (

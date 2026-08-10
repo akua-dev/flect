@@ -44,6 +44,7 @@ export interface ComposerProps {
   readonly reasoningLevel?: ReasoningLevel;
   readonly providers?: ReadonlyArray<ProviderAuthSummary>;
   readonly authEvent?: AuthLoginEvent;
+  readonly providerSetupInline?: boolean;
   readonly modelFavorites: ReadonlyArray<string>;
   readonly rollbackAvailable: boolean;
   /** @deprecated There is no visible mode switcher. */
@@ -97,6 +98,7 @@ export function Composer({
   reasoningLevel,
   providers = [],
   authEvent,
+  providerSetupInline = false,
   modelFavorites,
   rollbackAvailable,
   onSelectModel,
@@ -138,12 +140,12 @@ export function Composer({
   const prompt = mode === "safe" ? "" : (drafts[draftKey] ?? "");
   const isActive = isAgentSessionActive(status);
   const protectedActionsLocked = submitting || isActive;
-  const isUnavailable =
+  const inputUnavailable =
     disabled ||
     mode === "safe" ||
     status === "booting" ||
-    status === "unavailable" ||
-    status === "setup-required";
+    status === "unavailable";
+  const submissionUnavailable = inputUnavailable || status === "setup-required";
   const modelMenuDisabled =
     disabled ||
     mode === "safe" ||
@@ -151,7 +153,9 @@ export function Composer({
     status === "unavailable" ||
     protectedActionsLocked;
   const canSubmit =
-    prompt.trim().length > 0 && !isUnavailable && !protectedActionsLocked;
+    prompt.trim().length > 0 &&
+    !submissionUnavailable &&
+    !protectedActionsLocked;
   const roleName = "Flect";
   const help =
     disabledReason ??
@@ -188,7 +192,7 @@ export function Composer({
     if (
       initialFocusAttemptedRef.current ||
       textarea === null ||
-      isUnavailable ||
+      inputUnavailable ||
       globalThis.matchMedia?.("(pointer: coarse)").matches === true
     ) {
       return;
@@ -198,7 +202,7 @@ export function Composer({
     if (active === null || active === textarea.ownerDocument.body) {
       textarea.focus({ preventScroll: true });
     }
-  }, [isUnavailable]);
+  }, [inputUnavailable]);
 
   useLayoutEffect(() => {
     const textarea = textareaRef.current;
@@ -218,7 +222,12 @@ export function Composer({
 
   const submit = async () => {
     const nextPrompt = prompt.trim();
-    if (!nextPrompt || submittingRef.current || isActive || isUnavailable) {
+    if (
+      !nextPrompt ||
+      submittingRef.current ||
+      isActive ||
+      submissionUnavailable
+    ) {
       return;
     }
 
@@ -247,7 +256,7 @@ export function Composer({
       <textarea
         aria-describedby={helpId}
         aria-label={`Message ${roleName}`}
-        disabled={isUnavailable}
+        disabled={inputUnavailable}
         name="prompt"
         onChange={(event) => {
           const value = event.target.value;
@@ -306,6 +315,7 @@ export function Composer({
           )}
           <ModelMenu
             authEvent={authEvent}
+            providerAuthVisible={!providerSetupInline}
             disabled={modelMenuDisabled}
             favoriteKeys={modelFavorites}
             models={models}

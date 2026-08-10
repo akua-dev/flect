@@ -46,6 +46,7 @@ import {
 import { ExtensionReview, type ExtensionReviewKey } from "./extension-review";
 import { PanelCloseIcon, RefreshIcon } from "./icons";
 import { MessageContent } from "./message-content";
+import { ProviderAuthPanel } from "./provider-auth-panel";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
 
 export interface ShapingController {
@@ -1207,15 +1208,33 @@ export function AgentRail({
           </section>
         )}
 
-        {(controller.status === "unavailable" ||
-          controller.status === "setup-required") && (
+        {controller.status === "setup-required" && (
+          <div className="runtime-alert runtime-alert--setup" role="alert">
+            <div>
+              <strong>Connect an agent</strong>
+              <p>
+                Choose a Pi-owned provider below. You can write your first
+                message now; Flect keeps it private until sign-in succeeds.
+              </p>
+            </div>
+            <ProviderAuthPanel
+              authEvent={workspace.authEvent}
+              compact
+              disabled={operationActive}
+              onCancel={workspace.cancelProviderAuth}
+              onLogin={workspace.loginProvider}
+              onLogout={workspace.logoutProvider}
+              onRefresh={workspace.refreshProviderAuth}
+              onReply={workspace.replyProviderAuth}
+              providers={workspace.providers}
+            />
+          </div>
+        )}
+
+        {controller.status === "unavailable" && (
           <div className="runtime-alert" role="alert">
             <div>
-              <strong>
-                {controller.status === "setup-required"
-                  ? "Pi setup needed"
-                  : "Local runtime offline"}
-              </strong>
+              <strong>Local runtime offline</strong>
               <p>{controller.error}</p>
             </div>
             <button
@@ -1224,7 +1243,7 @@ export function AgentRail({
               type="button"
             >
               <RefreshIcon />
-              Try again
+              Restart runtime
             </button>
           </div>
         )}
@@ -1266,6 +1285,7 @@ export function AgentRail({
           models={workspace.models}
           reasoningLevel={workspace.reasoningLevel}
           providers={workspace.providers}
+          providerSetupInline={controller.status === "setup-required"}
           authEvent={workspace.authEvent}
           onCancel={cancel}
           onDraftChange={workspace.setDraft}

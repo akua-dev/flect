@@ -2756,6 +2756,10 @@ textarea:focus-visible,
   gap: 7px;
 }
 
+.provider-auth__more {
+  justify-self: start;
+}
+
 .provider-auth__provider {
   min-height: 42px;
   border-radius: 9px;
@@ -2917,6 +2921,16 @@ textarea:focus-visible,
 .runtime-alert {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+}
+
+.runtime-alert--setup {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.runtime-alert--setup .provider-auth {
+  max-height: min(34dvh, 260px);
+  border-top: 1px solid var(--line);
+  padding: 10px 0 0;
 }
 
 .runtime-alert strong,
