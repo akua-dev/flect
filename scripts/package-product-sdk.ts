@@ -206,15 +206,8 @@ export const packageProductSdk = Effect.fn("Flect.ProductSdk.package")(
     });
 
     yield* runCommand(
-      [
-        "npm",
-        "pack",
-        staging,
-        "--pack-destination",
-        output,
-        "--ignore-scripts",
-      ],
-      root,
+      ["bun", "pm", "pack", "--destination", output, "--ignore-scripts"],
+      staging,
       "pack",
     );
     const tarballs = (yield* Effect.tryPromise({
@@ -306,12 +299,10 @@ export const verifyProductSdkConsumer = Effect.fn(
   });
   yield* runCommand(
     [
-      "npm",
-      "install",
+      "bun",
+      "add",
       "--ignore-scripts",
-      "--no-audit",
-      "--no-fund",
-      "--no-package-lock",
+      "--no-save",
       tarball,
       `file:${resolve(root, "node_modules/effect")}`,
     ],
