@@ -94,9 +94,6 @@ describe("release media", () => {
       "releases/latest/download/Flect_0.2.0_aarch64.dmg",
     );
     expect(readme).toContain("assets/demo/flect-v0.2-demo.webp");
-    expect(readme).toContain("assets/screenshots/flect-edit-mode.png");
-    expect(readme).toContain("assets/screenshots/flect-shaper-preview.png");
-    expect(readme).toContain("assets/screenshots/flect-run-mode.png");
     expect(readme).toContain("ad-hoc signed");
     expect(readme).toContain("Apple Silicon");
 

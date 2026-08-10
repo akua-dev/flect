@@ -1,5 +1,13 @@
 import type { Fetcher } from "@riftydev/npm-client";
-import { Effect, Layer, Schema, type SchemaAST, Semaphore } from "effect";
+import { MemoryVfs, OpfsVfs } from "@riftydev/vfs";
+import {
+  Effect,
+  Layer,
+  Option,
+  Schema,
+  type SchemaAST,
+  Semaphore,
+} from "effect";
 import {
   Bash,
   type CommandName,
@@ -13,14 +21,21 @@ import {
   BunCommandRequest,
   BunCommandResult,
 } from "../../shared/bun-command";
+import { AgentCommandBus } from "../axi/agent-command-bus";
 import type { BunModuleExecution } from "../execution/bun-module-execution";
+import { GitWorkspace } from "../git/git-workspace";
 import { BunCommand } from "./bun-command";
 import { makeShellBunCommandLiveLayer } from "./bun-command-live";
+import { makeFlectCommand } from "./flect-command";
+import { makeGitCommand } from "./git-command";
+import { makePersistentWorkspaceFs } from "./persistent-workspace-fs";
 import {
   type FlectAgentRole,
+  type SandboxedAgentContext,
   SandboxedShell,
   type SandboxedShellExecuteOptions,
   type SandboxedShellShape,
+  type SandboxedShellWorkspace,
 } from "./sandboxed-shell-service";
 
 export {
@@ -28,6 +43,7 @@ export {
   SandboxedShell,
   type SandboxedShellExecuteOptions,
   type SandboxedShellShape,
+  type SandboxedShellWorkspace,
 } from "./sandboxed-shell-service";
 
 const WORKSPACE_ROOT = "/workspace";
@@ -73,7 +89,10 @@ const replaceStaticWord = (word: AstRecord, value: string) => {
   word.parts = [{ type: "Literal", value }];
 };
 
-const reserveBunCommands = (ast: unknown, hiddenCommand: string) => {
+const reserveCommands = (
+  ast: unknown,
+  replacements: Readonly<Record<string, string>>,
+) => {
   const seen = new Set<object>();
   const visit = (value: unknown): void => {
     if (!isRecord(value) || seen.has(value)) {
@@ -84,11 +103,19 @@ const reserveBunCommands = (ast: unknown, hiddenCommand: string) => {
     if (
       value.type === "SimpleCommand" &&
       isRecord(value.name) &&
-      staticWord(value.name) === "bun"
+      staticWord(value.name) !== undefined
     ) {
-      replaceStaticWord(value.name, hiddenCommand);
-    } else if (value.type === "FunctionDef" && value.name === "bun") {
-      value.name = "__flect_guest_bun";
+      const name = staticWord(value.name);
+      const replacement = name === undefined ? undefined : replacements[name];
+      if (replacement !== undefined) {
+        replaceStaticWord(value.name, replacement);
+      }
+    } else if (
+      value.type === "FunctionDef" &&
+      typeof value.name === "string" &&
+      replacements[value.name] !== undefined
+    ) {
+      value.name = `__flect_guest_${value.name}`;
     }
 
     for (const child of Object.values(value)) {
@@ -124,11 +151,19 @@ const isEnabledCommand = (name: string): name is CommandName =>
 
 interface SandboxedShellWorkspaceOptions {
   readonly role: FlectAgentRole;
+  readonly workspace?: SandboxedShellWorkspace;
   readonly files: Readonly<Record<string, string | Uint8Array>>;
   readonly fs?: IFileSystem;
 }
 
 export interface SandboxedShellWorkspaceShape {
+  readonly replaceTree: (
+    root: string,
+    files: ReadonlyArray<{
+      readonly path: string;
+      readonly contents: Uint8Array;
+    }>,
+  ) => Effect.Effect<void, BunCommandFailed>;
   readonly execute: (
     line: string,
     options?: SandboxedShellExecuteOptions,
@@ -140,9 +175,20 @@ const makeSandboxedShellWorkspace = Effect.fn(
   "Flect.SandboxedShell.makeWorkspace",
 )(function* (options: SandboxedShellWorkspaceOptions) {
   const command = yield* BunCommand;
+  const maybeBus = yield* Effect.serviceOption(AgentCommandBus);
+  const bus = Option.getOrUndefined(maybeBus);
+  const git = Option.getOrUndefined(yield* Effect.serviceOption(GitWorkspace));
   const executionPermit = yield* Semaphore.make(1);
   let previewUrl: string | undefined;
+  let agentContext: SandboxedAgentContext | undefined;
+  const initialFiles = {
+    "/workspace/.flect-root": "",
+    ...options.files,
+  };
+  const fileSystem = options.fs ?? new InMemoryFs(initialFiles);
   const hiddenCommand = `__flect_reserved_bun_${crypto.randomUUID().replaceAll("-", "")}`;
+  const hiddenFlectCommand = `__flect_reserved_flect_${crypto.randomUUID().replaceAll("-", "")}`;
+  const hiddenGitCommand = `__flect_reserved_git_${crypto.randomUUID().replaceAll("-", "")}`;
   const bun = defineCommand(hiddenCommand, async (args, context) => {
     try {
       const request = await Schema.decodeUnknownPromise(
@@ -172,22 +218,31 @@ const makeSandboxedShellWorkspace = Effect.fn(
       };
     }
   });
-  const initialFiles = {
-    "/workspace/.flect-root": "",
-    ...options.files,
-  };
+  const flect = makeFlectCommand({
+    role: options.role,
+    hiddenName: hiddenFlectCommand,
+    bus,
+    context: () => agentContext,
+    readFile: (path) => fileSystem.readFileBuffer(path),
+  });
+  const gitCommand = makeGitCommand({
+    role: options.role,
+    hiddenName: hiddenGitCommand,
+    bus,
+    git,
+    fileSystem,
+    context: () => agentContext,
+  });
   const bash = new Bash({
     cwd: WORKSPACE_ROOT,
-    ...(options.fs === undefined
-      ? { files: initialFiles }
-      : { fs: options.fs }),
+    fs: fileSystem,
     env: {
       FLECT_ROLE: options.role,
       HOME: WORKSPACE_ROOT,
       PATH: "/usr/bin:/bin",
     },
     commands: getCommandNames().filter(isEnabledCommand),
-    customCommands: [bun],
+    customCommands: [bun, flect, gitCommand],
     executionLimitProfile: "hardened",
     executionLimits: {
       maxSourceBytes: 262_144,
@@ -200,7 +255,7 @@ const makeSandboxedShellWorkspace = Effect.fn(
     },
   });
   const reservedPlugin: Parameters<Bash["registerTransformPlugin"]>[0] = {
-    name: "flect-reserved-bun",
+    name: "flect-reserved-commands",
     transform: ({
       ast,
       metadata,
@@ -208,17 +263,67 @@ const makeSandboxedShellWorkspace = Effect.fn(
       readonly ast: unknown;
       readonly metadata: Record<string, unknown>;
     }) => {
-      reserveBunCommands(ast, hiddenCommand);
+      reserveCommands(ast, {
+        bun: hiddenCommand,
+        flect: hiddenFlectCommand,
+        git: hiddenGitCommand,
+      });
       return { ast, metadata };
     },
   };
   bash.registerTransformPlugin(reservedPlugin);
 
   return {
+    replaceTree: Effect.fn("Flect.SandboxedShell.replaceTree")((root, files) =>
+      executionPermit.withPermit(
+        Effect.tryPromise({
+          try: async () => {
+            if (
+              !/^\/workspace\/\.flect\/share-conflicts\/[a-z0-9][a-z0-9.-]{2,119}$/.test(
+                root,
+              ) ||
+              files.length > 300
+            ) {
+              throw new Error("invalid conflict tree");
+            }
+            const paths = new Set<string>();
+            let bytes = 0;
+            for (const file of files) {
+              bytes += file.contents.byteLength;
+              if (
+                !/^(?!\/)(?!.*(?:^|\/)\.\.?(?:\/|$))[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)*$/.test(
+                  file.path,
+                ) ||
+                paths.has(file.path) ||
+                file.contents.byteLength > 8 * 1024 * 1024 ||
+                bytes > 32 * 1024 * 1024
+              ) {
+                throw new Error("invalid conflict file");
+              }
+              paths.add(file.path);
+            }
+            await fileSystem.rm(root, { recursive: true, force: true });
+            await fileSystem.mkdir(root, { recursive: true });
+            for (const file of files) {
+              const target = `${root}/${file.path}`;
+              const parent = target.slice(0, target.lastIndexOf("/"));
+              await fileSystem.mkdir(parent, { recursive: true });
+              await fileSystem.writeFile(target, file.contents);
+            }
+          },
+          catch: () =>
+            shellFailure(
+              "execution",
+              "The selected agent workspace could not be prepared safely.",
+            ),
+        }),
+      ),
+    ),
     execute: Effect.fn("Flect.SandboxedShell.execute")((line, executeOptions) =>
       executionPermit.withPermit(
         Effect.sync(() => {
           previewUrl = undefined;
+          agentContext = executeOptions?.agentContext;
         }).pipe(
           Effect.andThen(
             Effect.tryPromise({
@@ -236,6 +341,11 @@ const makeSandboxedShellWorkspace = Effect.fn(
                 shellFailure("execution", "The sandboxed shell failed safely."),
             }),
           ),
+          Effect.ensuring(
+            Effect.sync(() => {
+              agentContext = undefined;
+            }),
+          ),
           Effect.flatMap((output) =>
             output.stdout.length > OUTPUT_LIMIT ||
             output.stderr.length > OUTPUT_LIMIT
@@ -248,7 +358,11 @@ const makeSandboxedShellWorkspace = Effect.fn(
               : Effect.succeed(
                   BunCommandResult.make({
                     version: 1,
-                    exitCode: Math.min(255, Math.max(0, output.exitCode)),
+                    exitCode:
+                      executeOptions?.agentContext !== undefined &&
+                      executeOptions.signal?.aborted === true
+                        ? 1
+                        : Math.min(255, Math.max(0, output.exitCode)),
                     stdout: output.stdout,
                     stderr: output.stderr,
                     ...(previewUrl === undefined ? {} : { previewUrl }),
@@ -277,23 +391,31 @@ const missingRoleWorkspace = () =>
 
 const makeSandboxedShellService = (
   workspaces: Partial<
-    Readonly<Record<FlectAgentRole, SandboxedShellWorkspaceShape>>
+    Readonly<Record<SandboxedShellWorkspace, SandboxedShellWorkspaceShape>>
   >,
 ): SandboxedShellShape => ({
+  replaceTree: Effect.fn("Flect.SandboxedShell.replaceTreeForRole")(
+    (workspace, root, files) =>
+      workspaces[workspace]?.replaceTree(root, files) ?? missingRoleWorkspace(),
+  ),
   execute: Effect.fn("Flect.SandboxedShell.executeForRole")(
     (
-      role: FlectAgentRole,
+      workspace: SandboxedShellWorkspace,
       line: string,
       options?: SandboxedShellExecuteOptions,
-    ) => workspaces[role]?.execute(line, options) ?? missingRoleWorkspace(),
+    ) =>
+      workspaces[workspace]?.execute(line, options) ?? missingRoleWorkspace(),
   ),
   stop: Effect.fn("Flect.SandboxedShell.stopRole")(
-    (role: FlectAgentRole) => workspaces[role]?.stop ?? missingRoleWorkspace(),
+    (workspace: SandboxedShellWorkspace) =>
+      workspaces[workspace]?.stop ?? missingRoleWorkspace(),
   ),
 });
 
 export const makeRoleSandboxedShellService = (
-  workspaces: Readonly<Record<FlectAgentRole, SandboxedShellWorkspaceShape>>,
+  workspaces: Readonly<
+    Record<SandboxedShellWorkspace, SandboxedShellWorkspaceShape>
+  >,
 ) => makeSandboxedShellService(workspaces);
 
 export const makeSandboxedShellLayer = (
@@ -303,7 +425,9 @@ export const makeSandboxedShellLayer = (
     SandboxedShell,
     makeSandboxedShellWorkspace(options).pipe(
       Effect.map((workspace) =>
-        makeSandboxedShellService({ [options.role]: workspace }),
+        makeSandboxedShellService({
+          [options.workspace ?? options.role]: workspace,
+        }),
       ),
     ),
   );
@@ -312,6 +436,7 @@ type RoleWorkspaceOptions = Omit<SandboxedShellWorkspaceOptions, "role">;
 
 export const makeRoleSandboxedShellLayer = (options: {
   readonly app: RoleWorkspaceOptions;
+  readonly previewApp: RoleWorkspaceOptions;
   readonly shaper: RoleWorkspaceOptions;
 }) =>
   Layer.effect(
@@ -319,13 +444,20 @@ export const makeRoleSandboxedShellLayer = (options: {
     Effect.gen(function* () {
       const app = yield* makeSandboxedShellWorkspace({
         role: "app",
+        workspace: "app",
         ...options.app,
+      });
+      const previewApp = yield* makeSandboxedShellWorkspace({
+        role: "app",
+        workspace: "previewApp",
+        ...options.previewApp,
       });
       const shaper = yield* makeSandboxedShellWorkspace({
         role: "shaper",
+        workspace: "shaper",
         ...options.shaper,
       });
-      return makeRoleSandboxedShellService({ app, shaper });
+      return makeRoleSandboxedShellService({ app, previewApp, shaper });
     }),
   );
 
@@ -369,13 +501,11 @@ type LiveRoleWorkspaceOptions = Omit<
 
 const makeLiveWorkspace = (
   role: FlectAgentRole,
+  workspace: SandboxedShellWorkspace,
   options: LiveRoleWorkspaceOptions,
+  fs: IFileSystem,
 ) =>
   Effect.gen(function* () {
-    const fs = new InMemoryFs({
-      "/workspace/.flect-root": "",
-      ...options.files,
-    });
     const commandLayer = makeShellBunCommandLiveLayer({
       fs,
       ...(options.packageFetch === undefined
@@ -390,20 +520,62 @@ const makeLiveWorkspace = (
     });
     return yield* makeSandboxedShellWorkspace({
       role,
+      workspace,
       files: {},
       fs,
     }).pipe(Effect.provide(commandLayer));
   });
 
 export const makeLiveRoleSandboxedShellLayer = (options: {
+  readonly workspaceId?: string;
   readonly app: LiveRoleWorkspaceOptions;
+  readonly previewApp: LiveRoleWorkspaceOptions;
   readonly shaper: LiveRoleWorkspaceOptions;
 }) =>
   Layer.effect(
     SandboxedShell,
     Effect.gen(function* () {
-      const app = yield* makeLiveWorkspace("app", options.app);
-      const shaper = yield* makeLiveWorkspace("shaper", options.shaper);
-      return makeRoleSandboxedShellService({ app, shaper });
+      const vfs = yield* Effect.promise(async () => {
+        if (OpfsVfs.isSupported()) {
+          try {
+            const opfs = new OpfsVfs();
+            await opfs.init();
+            return opfs;
+          } catch {}
+        }
+        return new MemoryVfs();
+      });
+      const workspaceId = options.workspaceId ?? "default";
+      const makeFs = (
+        workspace: SandboxedShellWorkspace,
+        files: LiveRoleWorkspaceOptions["files"],
+      ) =>
+        Effect.promise(() =>
+          makePersistentWorkspaceFs({
+            vfs,
+            namespace: `/flect-role-workspaces/${workspaceId}/${workspace === "previewApp" ? "preview-app" : workspace}`,
+            files,
+          }),
+        );
+      const appFs = yield* makeFs("app", options.app.files);
+      const previewAppFs = yield* makeFs(
+        "previewApp",
+        options.previewApp.files,
+      );
+      const shaperFs = yield* makeFs("shaper", options.shaper.files);
+      const app = yield* makeLiveWorkspace("app", "app", options.app, appFs);
+      const previewApp = yield* makeLiveWorkspace(
+        "app",
+        "previewApp",
+        options.previewApp,
+        previewAppFs,
+      );
+      const shaper = yield* makeLiveWorkspace(
+        "shaper",
+        "shaper",
+        options.shaper,
+        shaperFs,
+      );
+      return makeRoleSandboxedShellService({ app, previewApp, shaper });
     }),
   );

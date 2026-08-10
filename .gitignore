@@ -1,8 +1,11 @@
 .DS_Store
 .worktrees/
-.repos/effect
+.repos/
 node_modules/
+.astro/
 dist/
+dist-spa/
+dist-product-sdk/
 dist-release/
 coverage/
 playwright-report/
@@ -13,3 +16,4 @@ src-tauri/binaries/
 .env
 .env.*
 !.env.example
+.tauri-signing-key*

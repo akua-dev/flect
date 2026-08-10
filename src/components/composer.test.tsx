@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelSummary } from "../../shared/contracts";
@@ -14,24 +20,24 @@ const model = new ModelSummary({
   provider: "openai-codex",
   id: "gpt-5.6",
   name: "GPT-5.6",
+  reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
 });
 
 const props = (overrides: Partial<ComposerProps> = {}): ComposerProps => ({
   mode: "edit",
   placeholder: "Build, change, or connect anything",
   disabled: false,
-  roleSwitchDisabled: false,
   status: "ready",
   models: [model],
   selectedModel: undefined,
   modelFavorites: [],
   rollbackAvailable: false,
-  onModeChange: vi.fn(),
   onSelectModel: vi.fn(),
   onToggleModelFavorite: vi.fn(() => Promise.resolve()),
   onSubmit: vi.fn(() => Promise.resolve()),
   onCancel: vi.fn(() => Promise.resolve()),
   onRollback: vi.fn(() => Promise.resolve()),
+  onExportRepository: vi.fn(() => Promise.resolve()),
   onOpenSafeMode: vi.fn(),
   externalExtensionsEnabled: false,
   onToggleExternalExtensions: vi.fn(() => Promise.resolve()),
@@ -43,7 +49,7 @@ describe("Composer", () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn(() => Promise.resolve());
     render(<Composer {...props({ onSubmit })} />);
-    const input = screen.getByRole("textbox", { name: "Message Shaper" });
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
 
     await user.type(input, "First line{Shift>}{Enter}{/Shift}Second line");
     expect(input).toHaveValue("First line\nSecond line");
@@ -58,28 +64,50 @@ describe("Composer", () => {
     expect(input).toHaveValue("");
   });
 
-  it("retains a separate draft for each explicit role", async () => {
+  it("keeps one draft while internal routing changes", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<Composer {...props()} />);
     await user.type(
-      screen.getByRole("textbox", { name: "Message Shaper" }),
-      "Edit draft",
+      screen.getByRole("textbox", { name: "Message Flect" }),
+      "Continuous draft",
     );
 
     rerender(<Composer {...props({ mode: "run" })} />);
-    const appInput = screen.getByRole("textbox", { name: "Message App Agent" });
-    expect(appInput).toHaveValue("");
-    await user.type(appInput, "Run draft");
+    expect(screen.getByRole("textbox", { name: "Message Flect" })).toHaveValue(
+      "Continuous draft",
+    );
+    expect(
+      screen.queryByRole("button", { name: /App Agent|Shaper/ }),
+    ).not.toBeInTheDocument();
+  });
 
-    rerender(<Composer {...props({ mode: "edit" })} />);
-    expect(screen.getByRole("textbox", { name: "Message Shaper" })).toHaveValue(
-      "Edit draft",
+  it("hydrates the single private draft and reports it as accepted continuity", async () => {
+    const user = userEvent.setup();
+    const onDraftChange = vi.fn(() => Promise.resolve());
+    render(
+      <Composer
+        {...props({
+          drafts: {
+            acceptedUse: "Saved Flect message",
+            candidateUse: "Legacy candidate draft",
+            shape: "Legacy shape draft",
+          },
+          onDraftChange,
+        })}
+      />,
+    );
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
+    expect(input).toHaveValue("Saved Flect message");
+    await user.type(input, " now");
+    expect(onDraftChange).toHaveBeenLastCalledWith(
+      "acceptedUse",
+      "Saved Flect message now",
     );
   });
 
   it("grows with the draft and scrolls only after the height bound", () => {
     render(<Composer {...props()} />);
-    const input = screen.getByRole("textbox", { name: "Message Shaper" });
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
 
     Object.defineProperty(input, "scrollHeight", {
       configurable: true,
@@ -114,7 +142,7 @@ describe("Composer", () => {
   it("disables empty submission with a direct accessible reason", () => {
     render(<Composer {...props()} />);
 
-    const send = screen.getByRole("button", { name: "Send to Shaper" });
+    const send = screen.getByRole("button", { name: "Send to Flect" });
     expect(send).toHaveAccessibleDescription("Enter a message to enable Send.");
     expect(send).toBeDisabled();
   });
@@ -130,39 +158,88 @@ describe("Composer", () => {
       render(<Composer {...props({ status })} />);
       const action =
         status === "cancelling"
-          ? screen.getByRole("button", { name: "Stop Shaper" })
-          : screen.getByRole("button", { name: "Send to Shaper" });
+          ? screen.getByRole("button", { name: "Stop Flect" })
+          : screen.getByRole("button", { name: "Send to Flect" });
       expect(action).toHaveAccessibleDescription(help);
     },
   );
 
-  it("turns the primary action into a role-aware stop control", async () => {
+  it("keeps the first message editable while provider setup blocks sending", async () => {
+    const user = userEvent.setup();
+    const onDraftChange = vi.fn(() => Promise.resolve());
+    render(
+      <Composer {...props({ status: "setup-required", onDraftChange })} />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
+    await user.type(input, "Build my first interface");
+
+    expect(input).toBeEnabled();
+    expect(input).toHaveValue("Build my first interface");
+    expect(onDraftChange).toHaveBeenLastCalledWith(
+      "acceptedUse",
+      "Build my first interface",
+    );
+    expect(
+      screen.getByRole("button", { name: "Send to Flect" }),
+    ).toBeDisabled();
+  });
+
+  it("turns the primary action into a single Flect stop control", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn(() => Promise.resolve());
     render(<Composer {...props({ status: "streaming", onCancel })} />);
 
-    await user.click(screen.getByRole("button", { name: "Stop Shaper" }));
+    await user.click(screen.getByRole("button", { name: "Stop Flect" }));
 
     expect(onCancel).toHaveBeenCalledOnce();
     expect(
-      screen.queryByRole("button", { name: "Send to Shaper" }),
+      screen.queryByRole("button", { name: "Send to Flect" }),
     ).not.toBeInTheDocument();
   });
 
-  it("disables protected actions and role switching while active", () => {
+  it("disables protected actions and exposes no role switching while active", () => {
     render(
       <Composer
         {...props({
           status: "streaming",
           rollbackAvailable: true,
-          roleSwitchDisabled: true,
         })}
       />,
     );
 
     expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
     expect(
-      screen.getByRole("button", { name: "Run · App Agent" }),
+      screen.queryByRole("button", { name: /App Agent|Shaper/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("locks protected actions synchronously while submission starts", async () => {
+    const user = userEvent.setup();
+    let finish: (() => void) | undefined;
+    const onSubmit = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<Composer {...props({ onSubmit, rollbackAvailable: true })} />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Message Flect" }),
+      "Change the interface",
+    );
+    await user.click(screen.getByRole("button", { name: "Send to Flect" }));
+
+    expect(screen.getByRole("button", { name: "Actions" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Send to Flect" }),
     ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Send to Flect" }),
+    ).toHaveAccessibleDescription("Sending the message to Flect.");
+
+    await act(async () => finish?.());
+    expect(screen.getByRole("button", { name: "Actions" })).toBeEnabled();
   });
 });

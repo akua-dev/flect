@@ -18,37 +18,49 @@ const operationResult = (operation: string) =>
   });
 
 describe("SandboxedShell", () => {
-  it.effect("keeps App and Shaper filesystems isolated in one service", () =>
-    Effect.gen(function* () {
-      const commandLayer = makeBunCommandTestLayer(() =>
-        Effect.succeed(operationResult("unused")),
-      );
-      const shellLayer = makeRoleSandboxedShellLayer({
-        app: {
-          files: { "/workspace/role.txt": "app\n" },
-        },
-        shaper: {
-          files: { "/workspace/role.txt": "shaper\n" },
-        },
-      }).pipe(Layer.provide(commandLayer));
-
-      const results = yield* Effect.gen(function* () {
-        const shell = yield* SandboxedShell;
-        const app = yield* shell.execute(
-          "app",
-          "cat role.txt; echo app > marker",
+  it.effect(
+    "keeps accepted App, candidate App, and Shaper filesystems isolated",
+    () =>
+      Effect.gen(function* () {
+        const commandLayer = makeBunCommandTestLayer(() =>
+          Effect.succeed(operationResult("unused")),
         );
-        const shaper = yield* shell.execute(
-          "shaper",
-          "cat role.txt; test ! -e marker",
-        );
-        return { app, shaper };
-      }).pipe(Effect.provide(shellLayer));
+        const shellLayer = makeRoleSandboxedShellLayer({
+          app: {
+            files: { "/workspace/role.txt": "app\n" },
+          },
+          previewApp: {
+            files: { "/workspace/role.txt": "preview-app\n" },
+          },
+          shaper: {
+            files: { "/workspace/role.txt": "shaper\n" },
+          },
+        }).pipe(Layer.provide(commandLayer));
 
-      assert.strictEqual(results.app.stdout, "app\n");
-      assert.strictEqual(results.shaper.stdout, "shaper\n");
-      assert.strictEqual(results.shaper.exitCode, 0);
-    }),
+        const results = yield* Effect.gen(function* () {
+          const shell = yield* SandboxedShell;
+          const app = yield* shell.execute(
+            "app",
+            "cat role.txt; echo app > marker",
+          );
+          const shaper = yield* shell.execute(
+            "shaper",
+            "cat role.txt; test ! -e marker",
+          );
+          const previewApp = yield* shell.execute(
+            "previewApp",
+            "cat role.txt; test ! -e marker; echo candidate > marker",
+          );
+          const acceptedAgain = yield* shell.execute("app", "cat marker");
+          return { acceptedAgain, app, previewApp, shaper };
+        }).pipe(Effect.provide(shellLayer));
+
+        assert.strictEqual(results.app.stdout, "app\n");
+        assert.strictEqual(results.shaper.stdout, "shaper\n");
+        assert.strictEqual(results.previewApp.stdout, "preview-app\n");
+        assert.strictEqual(results.acceptedAgain.stdout, "app\n");
+        assert.strictEqual(results.shaper.exitCode, 0);
+      }),
   );
 
   it.effect("stops only the selected role workspace", () =>
@@ -57,12 +69,19 @@ describe("SandboxedShell", () => {
       const shaperStop = vi.fn(() => undefined);
       const shell = makeRoleSandboxedShellService({
         app: {
+          replaceTree: () => Effect.void,
           execute: () => Effect.succeed(operationResult("app")),
           stop: Effect.sync(appStop),
         },
         shaper: {
+          replaceTree: () => Effect.void,
           execute: () => Effect.succeed(operationResult("shaper")),
           stop: Effect.sync(shaperStop),
+        },
+        previewApp: {
+          replaceTree: () => Effect.void,
+          execute: () => Effect.succeed(operationResult("preview-app")),
+          stop: Effect.void,
         },
       });
 
@@ -70,6 +89,39 @@ describe("SandboxedShell", () => {
 
       assert.strictEqual(appStop.mock.calls.length, 1);
       assert.strictEqual(shaperStop.mock.calls.length, 0);
+    }),
+  );
+
+  it.effect("replaces one protected Shaper conflict tree atomically", () =>
+    Effect.gen(function* () {
+      const commandLayer = makeBunCommandTestLayer(() =>
+        Effect.succeed(operationResult("unused")),
+      );
+      const shellLayer = makeSandboxedShellLayer({
+        role: "shaper",
+        files: {
+          "/workspace/.flect/share-conflicts/weather/stale.txt": "stale\n",
+        },
+      }).pipe(Layer.provide(commandLayer));
+      const result = yield* Effect.gen(function* () {
+        const shell = yield* SandboxedShell;
+        yield* shell.replaceTree(
+          "shaper",
+          "/workspace/.flect/share-conflicts/weather",
+          [
+            {
+              path: "fork/components/card.tsx",
+              contents: new TextEncoder().encode("personal\n"),
+            },
+          ],
+        );
+        return yield* shell.execute(
+          "shaper",
+          "test ! -e .flect/share-conflicts/weather/stale.txt && cat .flect/share-conflicts/weather/fork/components/card.tsx",
+        );
+      }).pipe(Effect.provide(shellLayer));
+      assert.strictEqual(result.exitCode, 0);
+      assert.strictEqual(result.stdout, "personal\n");
     }),
   );
 

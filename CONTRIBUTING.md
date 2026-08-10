@@ -5,7 +5,7 @@ the browser/native trust boundaries.
 
 ## Requirements
 
-- Bun 1.4 or newer
+- Bun 1.3.14 exactly
 - Rust and Cargo
 - macOS command-line developer tools for native builds
 - a Playwright-supported Chromium installation
@@ -65,21 +65,30 @@ This runs:
 1. Biome;
 2. TypeScript project checking;
 3. Vitest unit and integration tests;
-4. Playwright against a production Vite build in real Chromium;
-5. Rust host tests; and
+4. Playwright against a production Astro-on-Vite build in real Chromium;
+5. Rust formatting and host tests; and
 6. a release-mode macOS application bundle build.
 
+The pinned, least-privilege GitHub workflow runs this canonical command for
+every pull request and every change to `main`. Live Pi, Apple signing,
+notarization, and other credentialed release proof remain separate authorized
+gates; the public workflow must never silently represent them as completed.
+
 Playwright uses `FLECT_TEST_MODE=1`, a deterministic in-memory runtime, and no
-provider credentials. It covers a streamed turn, model-backed-shaping behavior
-through the test Layer, accept/reject, persistence, rollback, corrupt-journal
-recovery, keyboard submission, reduced motion, the QuickJS isolation check, and
-compact layout. Unexpected browser console errors, page errors, and failed
-local application requests fail the test.
+provider credentials. It covers streamed turns, schema-driven Shaper tool
+activity, accept/reject, persistence, rollback, corrupt-journal recovery,
+sticky follow, keyboard submission, reduced motion, QuickJS isolation, compact
+layout, reserved browser `flect` role policy and shell composition, plus a real
+public `flect` process driving the same reactive browser workspace. Unexpected
+browser console errors, page errors, and failed local application requests
+fail the test.
 
 Unit and integration coverage additionally proves the protected fallback
 composer, typed Guardian diagnostic, session close across both transports,
 model/refresh lifecycle invalidation, non-destructive busy conflicts in both
-directions, and the 32-pair runtime bound.
+directions, the 32-pair runtime bound, strict local-control authentication and
+descriptor permissions, concurrent cancellation, token rotation, SSE
+decoding, CLI behavior, and MCP protocol interoperability.
 
 After authenticating Pi, verify the real Guardian/Shaper construction:
 
@@ -91,12 +100,41 @@ For a local bundle:
 
 ```bash
 bun run build:desktop -- --bundles app
+bun run test:desktop:local
 open src-tauri/target/release/bundle/macos/Flect.app
 ```
 
-The local bundle is ad-hoc signed for development. It is not a substitute for
-Developer ID signing, notarization, hardened-runtime review, App Sandbox
-entitlements, or distribution testing.
+`build:desktop` requests an explicit ad-hoc hardened-runtime signature so the
+development bundle is internally valid. `build:desktop:inferred-signing` is
+reserved for the release pipeline, where Tauri infers an imported signing
+certificate. Do not use the inferred-signing path as a local trust claim.
+`test:desktop:local` copies that bundle under a random test-only identifier,
+uses the real macOS Accessibility tree to verify actionable clean-profile
+setup, hard sidecar loss, private-draft restoration, relaunch, and single-window
+ownership, then removes only the isolated test profile and temporary Pi home.
+It never consumes a provider credential or the ordinary Flect/Pi profiles.
+
+The application bundle must contain public `flect` and private
+`flect-runtime` in `Contents/MacOS`, with no separately shipped command
+companions.
+After enabling local control from Diagnostics, smoke-test the installed app
+through the public executable rather than a private test hook:
+
+```bash
+src-tauri/target/release/bundle/macos/Flect.app/Contents/MacOS/flect
+src-tauri/target/release/bundle/macos/Flect.app/Contents/MacOS/flect inspect
+src-tauri/target/release/bundle/macos/Flect.app/Contents/MacOS/flect mcp
+```
+
+See [`docs/local-control.md`](docs/local-control.md).
+
+The local bundle is ad-hoc signed with hardened runtime for development. It is
+not a substitute for Developer ID signing, notarization, App Sandbox
+entitlement review, independent reproducibility, or clean-machine distribution
+testing. `bun run release:package` stages the DMG, checksum, demo MP4, and
+release evidence under ignored `dist-release/`; it mounts and verifies the DMG
+before succeeding. `FLECT_PUBLIC_RELEASE=1 bun run release:package` fails
+closed at every public-trust boundary and must not be bypassed.
 
 ## Change expectations
 

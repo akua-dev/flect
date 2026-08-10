@@ -57,14 +57,19 @@ or host-function authority by constructing a different return value.
 
 ### Browser agent workspace
 
-App Agent and Shaper may each use one Pi-visible `bash` tool. Pi does not run a
-host shell: each tool call returns over the Flect transport to that role's
-just-bash workspace inside the browser or desktop WebView. Guardian remains
-tool-free.
+Behind the single visible Flect conversation, accepted App, candidate Preview,
+and Shaper authorities may each use one Pi-visible `bash` tool. These are trust
+partitions, not user-facing roles or modes. Pi does not run a host shell: each tool call returns
+over the Flect transport to that context's separate just-bash workspace inside
+the browser or desktop WebView. Preview App retains App authority but cannot
+read or mutate the accepted App filesystem. Guardian remains tool-free.
 
-Each workspace is disposable memory and has no handle to canonical interface
-state, OPFS, Git metadata, credentials, product APIs, Pi internals, Tauri, or
-the parent DOM. Its reserved Bun-compatible command may:
+Each workspace is a separate working mirror and has no handle to canonical
+interface state, the canonical OPFS root, Git metadata, credentials, product
+APIs, Pi internals, Tauri, or the parent DOM. Supported hosts persist each
+mirror under a role-specific OPFS namespace; unavailable OPFS falls back to
+disposable memory without granting another capability. Its reserved
+Bun-compatible command may:
 
 - transform and run workspace JavaScript and TypeScript in disposable Rifty
   Workers;
@@ -90,11 +95,36 @@ typed brokers, deadlines, resource finalizers, deterministic validation, and
 recovery. The exact compatibility surface is documented in
 [`docs/bun-compatibility.md`](bun-compatibility.md).
 
+Each interactive workspace also contains a reserved `flect` command. This is
+not an outside-control grant. Flect captures App Agent or Shaper identity, Pi session,
+parent operation, and tool-call ID when it constructs the command; model text,
+arguments, environment variables, aliases, functions, PATH entries, and files
+cannot change that source. Requests cross a bounded in-process Effect queue
+and the shared workspace controller enforces the role policy. App Agent can
+inspect and invoke currently projected product actions and registered product
+operations. Shaper can validate
+and propose a file from its own disposable workspace. Neither can impersonate
+the other, enable outside control, accept a proposal, change recovery policy,
+or gain host access.
+
 ### Capability broker
 
 The broker is the only route from an untrusted experience to product or host
 effects. Every capability has a typed contract and an implementation provided
 through a protected Effect service.
+
+The implemented product-operation path never accepts a URL from a capsule or
+agent. A trusted registry maps an operation ID to one manifest capability,
+broker policy, HTTP policy, and input/output projections. Capsule identity,
+accepted/candidate binding, workspace, provenance revision, declared request,
+and SHA-256 of the exact archive are constructed by the host. A decision must
+match that immutable binding. The shared controller rejects stale, undeclared,
+unregistered, and ungranted requests before the adapter. The broker atomically
+reserves one-use and rate allowance before independent product authorization,
+so approval cannot override product denial or scope expansion. The initial HTTP
+adapter enforces HTTPS origin/path/method/header/byte/deadline policy, injects
+host credentials privately, and returns only allowlisted headers and bounded
+bytes.
 
 A grant identifies:
 
@@ -102,8 +132,15 @@ A grant identifies:
 - the operation and resource scope;
 - the approving authority;
 - any duration, rate, or data limits;
-- whether confirmation is required for each invocation; and
+- whether approval lasts once, for the session, for the workspace, or for the
+  exact request persistently; and
 - how the grant can be inspected and revoked.
+
+Only the protected user can create or deny a decision. A paired outside agent
+may inspect the reactive lifecycle and revoke a visible decision but cannot
+grant one; App Agent, Preview App Agent, Shaper, Guardian, capsules, and shaped
+UI cannot grant or revoke. Every attempted invocation records only bounded
+decision/operation/revision/result metadata, never its input or output payload.
 
 Product authorization and user approval are separate requirements. A user
 cannot grant an operation the product has not exposed, and a product cannot
@@ -120,9 +157,34 @@ files, local services, Pi, notifications, windows, menus, or other native
 features. Their adapters run outside the capsule and enforce platform and
 product policy.
 
+HTTP and GraphQL callers receive named operations, not network primitives.
+GraphQL endpoints and documents are fixed and digest-checked by trusted host
+code. Event callers receive a bounded decoded stream; a scoped host connector
+owns backpressure, finite reconnect, sequence resume, cancellation, and live
+grant revocation. Product credentials are resolved after public validation and
+may enter only the protected transport request, never capsule/Pi messages,
+interface state, Git, receipts, logs, screenshots, or public failures.
+
 Platform adapters do not give a shared capsule native code execution. Swift,
 Kotlin, Rust, and TypeScript implementations remain protected host
 capabilities behind the same typed broker contract.
+
+The first implemented example reads macOS's real AppKit control accent. Its
+Swift function returns only packed RGBA to a main-window-only Rust command; a
+closed Effect schema validates the public color projection. The operation is
+registered only in Tauri and the capability broker denies it before approval
+and after revocation. Browser hosts return typed unavailability and the capsule
+keeps rendering. The adapter has no interface, Git, Pi, credential, or grant
+store access.
+
+`@flect/product` is the public description and trusted-adapter boundary, not an
+authority SDK. It exports strict product, recommended-experience,
+compatibility/migration, inference, and adoption schemas plus bounded
+transport services. It does not export Flect's grant store, broker mutation,
+activation, workspace, safe-mode, recovery, or credential state. Product
+connection metadata remains separate from user-owned fork/export references,
+and detach preserves those references. A model provider or product inference
+choice is never an input to capability or product authorization.
 
 ## Protected core
 
@@ -148,16 +210,83 @@ External Pi extensions are loaded only after an explicit role-scoped user
 enablement. App Agent and Shaper receive separate extension-enabled sessions;
 Guardian never does. The enabled sessions load only the user's configured Pi
 extension sources and keep them outside the protected recovery domain.
+Candidate Preview App uses the App extension policy but a separate Pi session
+and disposable execution workspace; breaking it cannot replace the accepted
+session or protected shell. It never loads Shaper extensions into its session
+set.
+
+## Local paired control
+
+An outside coding agent may receive user-equivalent control of one currently
+open Flect workspace. This is distinct from a capsule capability: it is a
+temporary grant made by the user from the protected shell to a named local
+client.
+
+The grant is:
+
+- disabled by default and impossible to enable from outside Flect;
+- bound to an ephemeral server on `127.0.0.1`, never a wildcard, LAN, or remote
+  address;
+- authenticated by a fresh 256-bit bearer stored only in an atomic,
+  owner-private descriptor;
+- scoped to one live instance and workspace;
+- attributable in workspace state and bounded operation evidence;
+- revocable from Flect or through an already authorized disable command; and
+- removed when its owning runtime exits.
+
+Paired commands enter the same closed Effect command union and workspace
+controller as visible user controls. They cannot write revision storage,
+invoke DOM selectors, bypass a proposal decision, address an action that is not
+in the current validated document, grant a capability, enable their own
+control token, or cross App Agent, Shaper, and Guardian authority boundaries.
+
+The broker caches the latest published snapshot and recent events for
+authorized readers. It is not a daemon, workspace owner, revision store, or
+second application state machine. Browser and desktop bridges stop with their
+Effect scopes. Bearers, credentials, raw provider payloads, private Pi session
+objects, and host handles are excluded from public snapshots and logs.
+
+The exact CLI, MCP, JSON/SSE, lifecycle, and descriptor behavior is documented
+in [`docs/local-control.md`](local-control.md).
+
+## Native setup integrations
+
+Installing `~/.local/bin/flect` or an ambient Codex, Claude Code, or OpenCode
+context hook is a separate opt-in host mutation. These operations are available
+only through the native adapter and require explicit confirmation in the
+protected UI when invoked there. The link target is fixed to the current Flect
+app. Integration files use a stable ownership marker, private atomic writes,
+and merge/remove logic that preserves unrelated settings. A regular file,
+foreign symlink, malformed configuration, or occupied plugin path becomes a
+visible conflict rather than an overwrite.
+
+The integrations run bounded `flect context --host ...` discovery; they do not
+copy the control descriptor, grant control, read Pi credentials, or keep a
+Flect process alive. A user can remove each integration independently.
+
+Uninstall preparation composes only these ownership-checked removals. It first
+revokes Local control, preserves every conflict, reports the exact `Flect.app`
+bundle for the user to move to Trash, and retains workspaces, provider
+authentication, and exports. It has no general filesystem-delete capability.
+
+Native updating is a separate protected host capability. Only the compiled main
+window may call the fixed HTTPS updater adapter, and every install requires a
+reviewed candidate plus user confirmation. A public verification key may be
+compiled into the app; its corresponding private key remains only in the release
+environment. Capsules, shaped UI, all Pi roles, extensions, product adapters,
+Local control, AXI, MCP, and embedded Bash receive no updater operation.
 
 ## Interface change flow
 
 ```text
 user request
+  -> explicit Shape or typed App-Agent edit request
   -> Shaper proposes source or interface changes
   -> browser or desktop authoring service compiles them
   -> isolated preview runs with requested capabilities ungranted
   -> schemas, compatibility, and capability requests are validated
-  -> user keeps or rejects the revision
+  -> candidate Preview App Agent can exercise the isolated proposal
+  -> user returns to Shape, or keeps or rejects the revision
   -> accepted capsule runs with approved grants
   -> deterministic recovery can disable or roll back failures
 ```
@@ -170,7 +299,9 @@ authorization.
 
 People and products may share complete experiences, components, themes, and
 workflows. Flect records publisher and build provenance where available and
-can present signatures or review status.
+verifies canonical Ed25519 capsule signatures against host-configured keys.
+Unknown, revoked, expired, invalid, changed, unsigned, and local-fork states
+remain explicit in protected review.
 
 Provenance answers who produced an artifact and whether it changed. It does not
 grant authority. A signed capsule still starts without ambient capabilities
@@ -201,6 +332,15 @@ broader substitute.
 
 ## Failure and recovery
 
+Role continuity is a private, bounded projection rather than a second revision
+history. Its strict record excludes activities, tool payloads, provider
+credentials, auth events, Pi sessions, control grants, and provider/model
+state. Unsent drafts never enter workspace snapshots, AXI, the control broker,
+operation logs, or diagnostics. Safe mode may decode bounded metadata for
+inspection and explicit export/discard, but it does not hydrate stored draft or
+conversation content into the recovery UI. See
+[`docs/recovery.md`](recovery.md) for the lifecycle and limits.
+
 - invalid capsule or interface state falls back to the compiled recovery shell;
 - invalid generated output never becomes an accepted revision;
 - rejecting a preview leaves the active revision unchanged;
@@ -215,20 +355,47 @@ broader substitute.
 
 ## Current implementation
 
-The current vertical slice uses a closed schema-defined renderer rather than
-arbitrary UI capsules. It implements model-backed proposals, preview, keep,
-reject, a versioned revision journal, rollback, safe mode, separate Guardian,
+The current vertical slice supports both the closed schema-defined renderer and
+verified compiled HTML capsules in an opaque network-denied frame. It
+implements model-backed proposals, preview, keep,
+reject, a canonical OPFS Git repository with guarded accepted, proposal, and
+last-known-good refs plus a protected activation receipt, complete ordinary-Git
+export, rollback, safe mode, separate Guardian,
 App Agent, and Shaper Pi sessions with explicit close and bounded retention, a
+private Effect coordinator over Pi-owned provider authentication with a
+one-use loopback credential-entry host and auth state excluded from public
+workspace/control history, a
 resource-limited QuickJS logic worker, a browser-resident agent shell with
-bounded Bun-compatible source/package/preview operations, and a minimal
-capability broker. That broker requires both manifest declaration and an
-explicit grant supplied by the protected caller before invoking its current
+bounded Bun-compatible source/package/preview operations, a schema-driven
+proposal tool with one corrective retry, a bounded redacted operation journal,
+and explicitly enabled local control through CLI, JSON/SSE, and MCP adapters.
+Its minimal interface capability broker requires both manifest declaration and
+an explicit grant supplied by the protected caller before invoking its current
 interface-local adapter; denied requests never reach the adapter. Repeated
 sandbox or broker failures disable the extension and request deterministic
 recovery.
 
-Arbitrary generated React activation, the isolated capsule renderer, canonical
-OPFS/Git source workspaces, product/API adapters, privileged native brokerage,
-sharing, signing, mobile hosts, and remote runtimes remain future work. See
+Its product-operation registry gives capsules and App Agent one shared named
+operation contract. The HTTP implementation is policy-bounded and credential
+private; the default distribution registers no product operations. Product
+forks may compose explicit operations at the trusted Effect runtime root.
+Protected review projects requested, granted, denied, expired, and revoked
+state for one exact capsule request; unavailable host support remains a separate
+visible fact. It supports once, session, workspace, persistent, deny, and revoke
+choices, persists only durable decisions through the local interface store, and
+fails without changing live authority when storage is unavailable. Safe mode
+retains inspection and revocation without Pi. A brokered AppKit appearance read
+is the first native product operation. Privileged native credential transport
+and user-authored custom duration/rate controls remain open, so HTTP product
+operations in the current desktop host use the same CORS-aware WebView fetch
+behavior as the browser.
+
+Arbitrary Vite plugin activation, capsule-carried Pi extensions, additional
+product/API adapters, additional privileged native brokerage, public publisher-key
+distribution, capsule-level three-way merges, real-time collaboration, mobile
+hosts, and remote runtimes remain future work. The current inactive sharing,
+Ed25519-verified publisher claims, guarded personal-fork, clean-merge, and
+explicit shared-conflict boundary is documented
+in [`docs/sharing.md`](sharing.md). See
 [`README.md`](../README.md) for the current user-facing status and
 [`VISION.md`](../VISION.md) for the complete destination.

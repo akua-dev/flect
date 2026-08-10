@@ -11,6 +11,11 @@ import type {
   FromServerEncoded,
 } from "effect/unstable/rpc/RpcMessage";
 import type { FlectRuntimeError } from "../../shared/contracts";
+import type {
+  FlectWorkspaceEvent,
+  FlectWorkspaceSnapshot,
+} from "../../shared/control";
+import type { ControlCommandCompletion } from "../../shared/control-channel";
 import { encodeInterfaceDocument } from "../../shared/interface-document";
 import { FlectRpcs } from "../../shared/rpc";
 import {
@@ -18,6 +23,11 @@ import {
   type FlectClientShape,
   FlectUnavailableError,
 } from "./api";
+import { TauriNativeHost } from "./tauri-native-host";
+import {
+  WorkspaceControlTransport,
+  type WorkspaceControlTransportShape,
+} from "./workspace-control-transport";
 
 const unavailable = () =>
   FlectUnavailableError.make({
@@ -114,6 +124,15 @@ export class TauriBridge extends Context.Service<
   TauriBridgeShape
 >()("flect/TauriBridge") {}
 
+export const TauriNativeHostLive = Layer.succeed(TauriNativeHost)({
+  invoke: Effect.fn("Flect.TauriNativeHost.invoke")((command, args) =>
+    Effect.tryPromise({
+      try: () => invoke<unknown>(command, args),
+      catch: unavailable,
+    }),
+  ),
+});
+
 export const TauriBridgeLive = Layer.succeed(TauriBridge)({
   listen: Effect.fn("Flect.TauriBridge.listen")((handler) =>
     Effect.tryPromise({
@@ -139,7 +158,7 @@ export const TauriBridgeLive = Layer.succeed(TauriBridge)({
   ),
 });
 
-const TauriProtocolLive = Layer.effect(
+export const TauriProtocolLive = Layer.effect(
   RpcClient.Protocol,
   RpcClient.Protocol.make((writeResponse, clientIds) =>
     Effect.gen(function* () {
@@ -182,6 +201,16 @@ export const makeTauriFlectClientLayer = () =>
       return {
         status: mapError(rpc.GetRuntime()),
         models: mapError(rpc.ListModels()),
+        providerAuth: mapError(rpc.ListProviderAuth()),
+        loginProvider: (request) =>
+          rpc.LoginProvider(request).pipe(Stream.mapError(unavailable)),
+        replyProviderAuth: (reply) =>
+          mapError(rpc.ReplyProviderAuthSelection(reply)).pipe(Effect.asVoid),
+        cancelProviderAuth: (reference) =>
+          mapError(rpc.CancelProviderAuth(reference)).pipe(Effect.asVoid),
+        refreshProviderAuth: mapError(rpc.RefreshProviderAuth()),
+        logoutProvider: (providerId) =>
+          mapError(rpc.LogoutProvider({ providerId })),
         createSession: (selection) => mapError(rpc.CreateSession(selection)),
         closeSession: (sessionId) => mapError(rpc.CloseSession({ sessionId })),
         prompt: (sessionId, text) =>
@@ -220,5 +249,32 @@ export const makeTauriFlectClientLayer = () =>
         diagnoseRecovery: (sessionId, reason) =>
           mapSessionError(rpc.DiagnoseRecovery({ sessionId, reason })),
       } satisfies FlectClientShape;
+    }),
+  ).pipe(Layer.provide(TauriProtocolLive));
+
+export const makeTauriWorkspaceControlTransportLayer = () =>
+  Layer.effect(
+    WorkspaceControlTransport,
+    Effect.gen(function* () {
+      const rpc = yield* RpcClient.make(FlectRpcs);
+      const mapError = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(Effect.mapError(unavailable));
+
+      return {
+        enable: (snapshot: FlectWorkspaceSnapshot) =>
+          mapError(rpc.ControlEnable({ snapshot })),
+        status: mapError(rpc.ControlStatus()),
+        disable: mapError(rpc.ControlDisable()).pipe(Effect.asVoid),
+        publishSnapshot: (snapshot: FlectWorkspaceSnapshot) =>
+          mapError(rpc.ControlPublishSnapshot({ snapshot })).pipe(
+            Effect.asVoid,
+          ),
+        publishEvent: (event: FlectWorkspaceEvent) =>
+          mapError(rpc.ControlPublishEvent({ event })).pipe(Effect.asVoid),
+        nextCommand: (workspaceId: string) =>
+          mapError(rpc.ControlNextCommand({ workspaceId })),
+        complete: (completion: ControlCommandCompletion) =>
+          mapError(rpc.ControlComplete({ completion })).pipe(Effect.asVoid),
+      } satisfies WorkspaceControlTransportShape;
     }),
   ).pipe(Layer.provide(TauriProtocolLive));

@@ -1,8 +1,8 @@
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
 import {
   createAgentSession,
   DefaultResourceLoader,
   getAgentDir,
-  ModelRuntime,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
@@ -21,13 +21,16 @@ import {
 import type { BunCommandResult } from "../shared/bun-command";
 import {
   AgentShellRequest,
+  ExternalPiExtensionFailed,
   type FlectEvent,
   type FlectRuntimeError,
   GuardianDiagnostic,
   type InteractiveAgentRole,
+  InterfaceEditRequested,
   ModelSummary,
   NoModelAvailable,
   PiOperationFailed,
+  type ReasoningLevel,
   type RecoveryReason,
   RuntimeStatus,
   SessionBusy,
@@ -36,6 +39,9 @@ import {
   ShapeCompleted,
   type ShapeEvent,
   TextDelta,
+  ToolExecutionCompleted,
+  ToolExecutionStarted,
+  ToolExecutionUpdated,
   TurnCancelled,
   TurnCompleted,
   TurnError,
@@ -45,7 +51,10 @@ import {
   type InterfaceDocument,
   validateInterfaceDocument,
 } from "../shared/interface-document";
+import { PiModelRuntime } from "./pi-model-runtime";
 import { makePiShellBridge } from "./pi-shell-bridge";
+import { makePiWorkbenchBridge } from "./pi-workbench-bridge";
+import { ProviderAuthentication } from "./provider-authentication";
 import { FlectRuntime } from "./runtime";
 
 export type PiSessionPolicy = {
@@ -65,6 +74,45 @@ export type PiEvent =
       readonly type: "shell_request";
       readonly requestId: string;
       readonly command: string;
+    }
+  | {
+      readonly type: "interface_edit_requested";
+      readonly requestId: string;
+      readonly instruction: string;
+    }
+  | {
+      readonly type: "tool_execution_started";
+      readonly callId: string;
+      readonly toolName: string;
+      readonly startedAt: number;
+      readonly inputSummary?: string;
+    }
+  | {
+      readonly type: "tool_execution_updated";
+      readonly callId: string;
+      readonly toolName: string;
+      readonly updatedAt: number;
+      readonly output?: string;
+    }
+  | {
+      readonly type: "tool_execution_completed";
+      readonly callId: string;
+      readonly toolName: string;
+      readonly completedAt: number;
+      readonly durationMs: number;
+      readonly status: "succeeded" | "failed";
+      readonly resultSummary?: string;
+      readonly output?: string;
+      readonly exitCode?: number;
+      readonly previewUrl?: string;
+    }
+  | {
+      readonly type: "external_extension_failed";
+      readonly role: InteractiveAgentRole;
+      readonly failureId: string;
+      readonly stage: "load" | "turn";
+      readonly message: "A trusted Pi extension failed.";
+      readonly recovery: "Disable trusted Pi extensions for this agent and retry.";
     };
 
 export interface PiSession {
@@ -129,6 +177,7 @@ export interface PiSdkShape {
   >;
   readonly createAgentSet: (
     model: ModelSummary,
+    reasoningLevel: ReasoningLevel | undefined,
     policies: {
       readonly guardian: PiSessionPolicy;
       readonly app: PiSessionPolicy;
@@ -176,7 +225,7 @@ const guardianSystemPrompt =
   "You are Flect Guardian, the protected recovery agent. You may reason about typed validation summaries and request deterministic recovery actions only. You cannot load user resources, modify the revision journal, execute extensions, or use shell, filesystem, browser, network, or process tools.";
 
 const appSystemPrompt =
-  "You are Flect App Agent, the user-facing agent inside the current product experience. Help the user operate the product through its exposed interface and API capabilities. You may use the bash tool only inside Flect's disposable App workspace. It cannot access Shaper source, the host filesystem, credentials, the parent UI, the canonical workspace, or ambient network. You cannot reshape the interface, activate revisions, modify Guardian or safe mode, or load user resources.";
+  "You are Flect App Agent, the user-facing agent inside the current product experience. Help the user operate the product through its exposed interface and API capabilities. You may use the bash tool only inside Flect's disposable App workspace. It cannot access Shaper source, the host filesystem, credentials, the parent UI, the canonical workspace, or ambient network. You cannot reshape or activate revisions, modify Guardian or safe mode, or load user resources. When and only when the user clearly asks to change the interface, request a visible handoff through request_interface_edit; questions and ordinary product actions stay in this session.";
 
 const shaperSystemPrompt =
   "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may use the bash tool only inside Flect's disposable browser workspace. It cannot access the host filesystem, credentials, parent UI, canonical workspace, or ambient network; the reserved compatible bun command provides bounded run, build, package, preview, and stop operations. You cannot activate revisions, modify Guardian or safe mode, or load user resources.";
@@ -202,13 +251,84 @@ const piFailure = (operation: PiOperationFailed["operation"]) =>
     message: "The model runtime could not complete the request.",
   });
 
+const toolInputSummary = (toolName: string) => {
+  if (toolName === "bash") {
+    return "Browser sandbox command";
+  }
+  return "Extension tool";
+};
+
+const publicToolEvent = (
+  role: InteractiveAgentRole,
+  event: Extract<
+    PiEvent,
+    {
+      readonly type:
+        | "tool_execution_started"
+        | "tool_execution_updated"
+        | "tool_execution_completed";
+    }
+  >,
+): ToolExecutionStarted | ToolExecutionUpdated | ToolExecutionCompleted => {
+  switch (event.type) {
+    case "tool_execution_started":
+      return new ToolExecutionStarted({
+        type: event.type,
+        role,
+        callId: event.callId,
+        toolName: event.toolName,
+        startedAt: event.startedAt,
+        ...(event.inputSummary === undefined
+          ? {}
+          : { inputSummary: event.inputSummary }),
+      });
+    case "tool_execution_updated":
+      return new ToolExecutionUpdated({
+        type: event.type,
+        role,
+        callId: event.callId,
+        toolName: event.toolName,
+        updatedAt: event.updatedAt,
+        ...(event.output === undefined ? {} : { output: event.output }),
+      });
+    case "tool_execution_completed":
+      return new ToolExecutionCompleted({
+        type: event.type,
+        role,
+        callId: event.callId,
+        toolName: event.toolName,
+        completedAt: event.completedAt,
+        durationMs: event.durationMs,
+        status: event.status,
+        ...(event.resultSummary === undefined
+          ? {}
+          : { resultSummary: event.resultSummary }),
+        ...(event.output === undefined ? {} : { output: event.output }),
+        ...(event.exitCode === undefined ? {} : { exitCode: event.exitCode }),
+        ...(event.previewUrl === undefined
+          ? {}
+          : { previewUrl: event.previewUrl }),
+      });
+  }
+};
+
+const publicExtensionFailure = (
+  role: InteractiveAgentRole,
+  event: Extract<PiEvent, { readonly type: "external_extension_failed" }>,
+) =>
+  ExternalPiExtensionFailed.make({
+    type: "external_extension_failed",
+    role,
+    failureId: event.failureId,
+    stage: event.stage,
+    message: "A trusted Pi extension failed.",
+    recovery: "Disable trusted Pi extensions for this agent and retry.",
+  });
+
 export const PiSdkLive = Layer.effect(
   PiSdk,
   Effect.gen(function* () {
-    const modelRuntime = yield* Effect.tryPromise({
-      try: () => ModelRuntime.create(),
-      catch: () => piFailure("initialize"),
-    });
+    const modelRuntime = yield* PiModelRuntime;
 
     const availableModels = Effect.fn("Flect.PiSdk.availableModels")(() =>
       Effect.tryPromise({
@@ -225,6 +345,7 @@ export const PiSdkLive = Layer.effect(
               provider: model.provider,
               id: model.id,
               name: model.name,
+              reasoningLevels: getSupportedThinkingLevels(model),
             }),
         ),
       ),
@@ -232,6 +353,7 @@ export const PiSdkLive = Layer.effect(
 
     const createAgentSet = Effect.fn("Flect.PiSdk.createAgentSet")(function* (
       model: ModelSummary,
+      reasoningLevel: ReasoningLevel | undefined,
       policies: {
         readonly guardian: PiSessionPolicy;
         readonly app: PiSessionPolicy;
@@ -279,6 +401,9 @@ export const PiSdkLive = Layer.effect(
         const shellBridge = yield* makePiShellBridge((event) => {
           emit(event);
         });
+        const workbenchBridge = makePiWorkbenchBridge((event) => {
+          emit(event);
+        });
         const resourceLoader = new DefaultResourceLoader({
           cwd: process.cwd(),
           agentDir: getAgentDir(),
@@ -296,17 +421,48 @@ export const PiSdkLive = Layer.effect(
           catch: () => piFailure("create_session"),
         });
 
+        const extensionRole =
+          policy.role === "guardian" ? undefined : policy.role;
+        const makeExtensionFailure = (
+          stage: "load" | "turn",
+        ): Extract<
+          PiEvent,
+          { readonly type: "external_extension_failed" }
+        > => ({
+          type: "external_extension_failed",
+          role: extensionRole ?? "app",
+          failureId: `extension-failure-${crypto.randomUUID()}`,
+          stage,
+          message: "A trusted Pi extension failed.",
+          recovery: "Disable trusted Pi extensions for this agent and retry.",
+        });
+        let pendingLoadFailure =
+          extensionRole !== undefined &&
+          policy.extensions === "enabled" &&
+          resourceLoader.getExtensions().errors.length > 0
+            ? makeExtensionFailure("load")
+            : undefined;
+
         const result = yield* Effect.tryPromise({
           try: () =>
             createAgentSession({
               modelRuntime,
               model: selected,
+              ...(reasoningLevel === undefined
+                ? {}
+                : { thinkingLevel: reasoningLevel }),
               ...(policy.tools === "none"
                 ? { noTools: "all" }
                 : {
                     noTools: "builtin",
-                    tools: ["bash"],
-                    customTools: [shellBridge.tool],
+                    tools:
+                      policy.role === "app"
+                        ? ["bash", "request_interface_edit"]
+                        : ["bash"],
+                    customTools:
+                      policy.role === "app"
+                        ? [shellBridge.tool, workbenchBridge.tool]
+                        : [shellBridge.tool],
                   }),
               sessionManager,
               settingsManager,
@@ -315,18 +471,63 @@ export const PiSdkLive = Layer.effect(
           catch: () => piFailure("create_session"),
         });
 
+        const unsubscribeFromExtensionErrors =
+          extensionRole === undefined || policy.extensions === "disabled"
+            ? () => undefined
+            : result.session.extensionRunner.onError(() => {
+                emit(makeExtensionFailure("turn"));
+              });
+
         let observedTextDelta = false;
+        const toolStartedAt = new Map<string, number>();
         const unsubscribeFromPi = result.session.subscribe((event) => {
-          if (
-            event.type === "message_update" &&
-            event.assistantMessageEvent.type === "text_delta"
-          ) {
-            observedTextDelta = true;
-            const delta = {
-              type: "text_delta",
-              delta: event.assistantMessageEvent.delta,
-            } satisfies PiEvent;
-            emit(delta);
+          switch (event.type) {
+            case "message_update":
+              if (event.assistantMessageEvent.type === "text_delta") {
+                observedTextDelta = true;
+                const delta = {
+                  type: "text_delta",
+                  delta: event.assistantMessageEvent.delta,
+                } satisfies PiEvent;
+                emit(delta);
+              }
+              break;
+            case "tool_execution_start": {
+              const startedAt = Date.now();
+              toolStartedAt.set(event.toolCallId, startedAt);
+              emit({
+                type: "tool_execution_started",
+                callId: event.toolCallId,
+                toolName: event.toolName,
+                startedAt,
+                inputSummary: toolInputSummary(event.toolName),
+              });
+              break;
+            }
+            case "tool_execution_update":
+              emit({
+                type: "tool_execution_updated",
+                callId: event.toolCallId,
+                toolName: event.toolName,
+                updatedAt: Date.now(),
+              });
+              break;
+            case "tool_execution_end": {
+              const completedAt = Date.now();
+              const startedAt =
+                toolStartedAt.get(event.toolCallId) ?? completedAt;
+              toolStartedAt.delete(event.toolCallId);
+              emit({
+                type: "tool_execution_completed",
+                callId: event.toolCallId,
+                toolName: event.toolName,
+                completedAt,
+                durationMs: Math.max(0, completedAt - startedAt),
+                status: event.isError ? "failed" : "succeeded",
+                resultSummary: event.isError ? "Tool failed" : "Tool completed",
+              });
+              break;
+            }
           }
         });
 
@@ -335,6 +536,10 @@ export const PiSdkLive = Layer.effect(
           subscribe: (listener: (event: PiEvent) => void) =>
             Effect.sync(() => {
               listeners.add(listener);
+              if (pendingLoadFailure !== undefined) {
+                listener(pendingLoadFailure);
+                pendingLoadFailure = undefined;
+              }
               return () => {
                 listeners.delete(listener);
               };
@@ -376,14 +581,21 @@ export const PiSdkLive = Layer.effect(
           ),
           abort: Effect.fn("Flect.PiSession.abort")(function* () {
             yield* shellBridge.cancel;
-            yield* Effect.tryPromise({
-              try: () => result.session.abort(),
+            yield* Effect.try({
+              // AgentSession.abort() waits for idle. Flect's operation
+              // controller owns that wait; trigger Pi's public immediate
+              // abort here so cancellation cannot deadlock on itself.
+              try: () => {
+                result.session.abortRetry();
+                result.session.agent.abort();
+              },
               catch: () => piFailure("cancel"),
             });
           }),
           dispose: shellBridge.close.pipe(
             Effect.andThen(
               Effect.sync(() => {
+                unsubscribeFromExtensionErrors();
                 unsubscribeFromPi();
                 listeners.clear();
                 result.session.dispose();
@@ -530,15 +742,17 @@ const makeOperationController = Effect.fn(
           ),
         );
 
-        yield* restore(
-          Effect.gen(function* () {
-            const interruptResult = yield* Effect.result(operation.interrupt);
-            if (interruptResult._tag === "Failure") {
-              return yield* Effect.fail(interruptResult.failure);
-            }
-            yield* Deferred.await(operation.done);
-          }),
-        ).pipe(Effect.ensuring(releaseClaim));
+        const interruptResult = yield* restore(
+          Effect.result(operation.interrupt),
+        );
+        if (interruptResult._tag === "Failure") {
+          yield* releaseClaim;
+          return yield* Effect.fail(interruptResult.failure);
+        }
+        yield* Deferred.await(operation.done).pipe(
+          Effect.ensuring(releaseClaim),
+          Effect.forkDetach,
+        );
       }),
     ),
   );
@@ -602,6 +816,7 @@ const executeOperation = <A, E>(
   );
 
 type SessionRecord = {
+  readonly sessionId: string;
   readonly app: PiSession;
   readonly shaper: PiSession;
   readonly guardian: PiSession;
@@ -650,12 +865,16 @@ const makeBoundedResponse = (
 const shapePrompt = (
   instruction: string,
   document: InterfaceDocument,
-) => `Propose a revised Flect interface document.
+) => `Propose a revised Flect interface document using only Bash.
 
-Return exactly one JSON object and no markdown or commentary. The root must use
-only these closed node types: stack, text, prompt, button, divider, agent-panel.
+Run \`flect interface schema\`, write the candidate to
+\`/workspace/interface.json\`, run
+\`flect interface validate /workspace/interface.json\`, then run
+\`flect interface propose /workspace/interface.json\` exactly once as your
+final action. Never return the document as prose, Markdown, or a JSON code
+block. Preserve stable node IDs when possible.
 Never invent executable code, URLs, credentials, HTML, CSS, scripts, tools, or
-capabilities. Preserve stable node IDs when possible.
+capabilities.
 
 Current validated document:
 ${JSON.stringify(document)}
@@ -673,32 +892,11 @@ Deterministic safe mode and rollback remain owned by the protected Flect kernel.
 
 Recovery reason: ${reason}`;
 
-const parseShaperDocument = Effect.fn("Flect.Runtime.parseShaperDocument")(
-  function* (raw: string) {
-    if (new TextEncoder().encode(raw).byteLength > MAX_SHAPER_RESPONSE_BYTES) {
-      return yield* Effect.fail(piFailure("shape"));
-    }
-
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start < 0 || end < start) {
-      return yield* Effect.fail(piFailure("shape"));
-    }
-
-    const parsed = yield* Effect.try({
-      try: (): unknown => JSON.parse(raw.slice(start, end + 1)),
-      catch: () => piFailure("shape"),
-    });
-    return yield* validateInterfaceDocument(parsed).pipe(
-      Effect.mapError(() => piFailure("shape")),
-    );
-  },
-);
-
 export const FlectRuntimeLive = Layer.effect(
   FlectRuntime,
   Effect.gen(function* () {
     const pi = yield* PiSdk;
+    const authentication = yield* ProviderAuthentication;
     const sessions = yield* Ref.make(HashMap.empty<string, SessionRecord>());
     const sessionSequence = yield* Ref.make(0);
 
@@ -791,21 +989,26 @@ export const FlectRuntimeLive = Layer.effect(
 
       const agents = yield* pi.createAgentSet(
         model,
+        selection.reasoningLevel,
         protectedAgentPolicies(selection),
       );
+      // Pi session identifiers belong to the embedded SDK. Flect exposes a
+      // separate capability-shaped handle so browser commands can be
+      // validated without leaking or depending on Pi's identifier format.
+      const sessionId = `session-${crypto.randomUUID()}`;
       return yield* Effect.gen(function* () {
         const appAbort = agents.app.abort;
         yield* Effect.yieldNow;
         const appOperation = yield* makeOperationController(
-          agents.app.sessionId,
+          sessionId,
           appAbort,
         );
         const shaperOperation = yield* makeOperationController(
-          agents.app.sessionId,
+          sessionId,
           agents.shaper.abort,
         );
         const guardianOperation = yield* makeOperationController(
-          agents.app.sessionId,
+          sessionId,
           agents.guardian.abort,
         );
         const sequence = yield* Ref.getAndUpdate(
@@ -813,6 +1016,7 @@ export const FlectRuntimeLive = Layer.effect(
           (current) => current + 1,
         );
         const record: SessionRecord = {
+          sessionId,
           app: agents.app,
           shaper: agents.shaper,
           guardian: agents.guardian,
@@ -824,7 +1028,7 @@ export const FlectRuntimeLive = Layer.effect(
         yield* Effect.uninterruptible(
           Effect.gen(function* () {
             const evicted = yield* Ref.modify(sessions, (current) => {
-              const replaced = HashMap.get(current, agents.app.sessionId);
+              const replaced = HashMap.get(current, sessionId);
               let oldest: SessionRecord | undefined;
               if (
                 Option.isNone(replaced) &&
@@ -843,10 +1047,10 @@ export const FlectRuntimeLive = Layer.effect(
               const withoutEvicted =
                 evictedRecord === undefined
                   ? current
-                  : HashMap.remove(current, evictedRecord.app.sessionId);
+                  : HashMap.remove(current, evictedRecord.sessionId);
               return [
                 evictedRecord,
-                HashMap.set(withoutEvicted, agents.app.sessionId, record),
+                HashMap.set(withoutEvicted, sessionId, record),
               ];
             });
             if (evicted !== undefined) {
@@ -854,17 +1058,17 @@ export const FlectRuntimeLive = Layer.effect(
             }
           }),
         );
-        return agents.app.sessionId;
+        return sessionId;
       }).pipe(
         Effect.onInterrupt(() =>
           Effect.uninterruptible(
             Ref.update(sessions, (current) => {
-              const registered = HashMap.get(current, agents.app.sessionId);
+              const registered = HashMap.get(current, sessionId);
               return Option.isSome(registered) &&
                 registered.value.app === agents.app &&
                 registered.value.shaper === agents.shaper &&
                 registered.value.guardian === agents.guardian
-                ? HashMap.remove(current, agents.app.sessionId)
+                ? HashMap.remove(current, sessionId)
                 : current;
             }).pipe(
               Effect.andThen(
@@ -985,19 +1189,44 @@ export const FlectRuntimeLive = Layer.effect(
                   );
 
                   const unsubscribe = yield* record.app.subscribe((event) => {
-                    Queue.offerUnsafe(
-                      queue,
-                      event.type === "text_delta"
-                        ? new TextDelta({
+                    switch (event.type) {
+                      case "text_delta":
+                        Queue.offerUnsafe(
+                          queue,
+                          new TextDelta({
                             type: "text_delta",
                             delta: event.delta,
-                          })
-                        : new AgentShellRequest({
+                          }),
+                        );
+                        break;
+                      case "shell_request":
+                        Queue.offerUnsafe(
+                          queue,
+                          new AgentShellRequest({
                             type: "shell_request",
                             requestId: event.requestId,
                             command: event.command,
                           }),
-                    );
+                        );
+                        break;
+                      case "interface_edit_requested":
+                        Queue.offerUnsafe(
+                          queue,
+                          InterfaceEditRequested.make(event),
+                        );
+                        break;
+                      case "tool_execution_started":
+                      case "tool_execution_updated":
+                      case "tool_execution_completed":
+                        Queue.offerUnsafe(queue, publicToolEvent("app", event));
+                        break;
+                      case "external_extension_failed":
+                        Queue.offerUnsafe(
+                          queue,
+                          publicExtensionFailure("app", event),
+                        );
+                        break;
+                    }
                   });
 
                   const turn = Effect.gen(function* () {
@@ -1095,42 +1324,65 @@ export const FlectRuntimeLive = Layer.effect(
             done: yield* Deferred.make<void>(),
             fiber: undefined,
           };
-          const shaped = yield* executeOperation(
+          yield* executeOperation(
             record.shaperOperation,
             operation,
             Effect.gen(function* () {
-              const response = makeBoundedResponse(
-                MAX_SHAPER_RESPONSE_BYTES,
-                record.shaper.abort,
-              );
-              const unsubscribe = yield* record.shaper.subscribe((event) => {
-                if (event.type === "text_delta") {
-                  response.append(event.delta);
-                } else {
-                  Queue.offerUnsafe(
-                    queue,
-                    new AgentShellRequest({
-                      type: "shell_request",
-                      requestId: event.requestId,
-                      command: event.command,
-                    }),
+              const runAttempt = Effect.fn("Flect.Runtime.runShapeAttempt")(
+                function* (promptText: string) {
+                  const response = makeBoundedResponse(
+                    MAX_SHAPER_RESPONSE_BYTES,
+                    record.shaper.abort,
                   );
-                }
-              });
+                  const unsubscribe = yield* record.shaper.subscribe(
+                    (event) => {
+                      switch (event.type) {
+                        case "text_delta":
+                          response.append(event.delta);
+                          break;
+                        case "shell_request":
+                          Queue.offerUnsafe(
+                            queue,
+                            new AgentShellRequest({
+                              type: "shell_request",
+                              requestId: event.requestId,
+                              command: event.command,
+                            }),
+                          );
+                          break;
+                        case "tool_execution_started":
+                        case "tool_execution_updated":
+                        case "tool_execution_completed":
+                          Queue.offerUnsafe(
+                            queue,
+                            publicToolEvent("shaper", event),
+                          );
+                          break;
+                        case "external_extension_failed":
+                          Queue.offerUnsafe(
+                            queue,
+                            publicExtensionFailure("shaper", event),
+                          );
+                          break;
+                      }
+                    },
+                  );
 
-              yield* record.shaper
-                .prompt(shapePrompt(instruction, document))
-                .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
+                  yield* record.shaper
+                    .prompt(promptText)
+                    .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
 
-              if (response.isExceeded()) {
-                return yield* Effect.fail(piFailure("shape"));
-              }
-              return yield* parseShaperDocument(response.text());
+                  if (response.isExceeded()) {
+                    return yield* Effect.fail(piFailure("shape"));
+                  }
+                },
+              );
+              yield* runAttempt(shapePrompt(instruction, document));
             }),
           );
           Queue.offerUnsafe(
             queue,
-            new ShapeCompleted({ type: "shape_completed", document: shaped }),
+            new ShapeCompleted({ type: "shape_completed" }),
           );
           Queue.endUnsafe(queue);
         }).pipe(
@@ -1154,6 +1406,12 @@ export const FlectRuntimeLive = Layer.effect(
         new RuntimeStatus({ version: 1, status: "ready" }),
       ),
       listModels: pi.listModels,
+      providerAuth: authentication.providers,
+      loginProvider: authentication.login,
+      replyProviderAuth: authentication.reply,
+      cancelProviderAuth: authentication.cancel,
+      refreshProviderAuth: authentication.refresh,
+      logoutProvider: authentication.logout,
       createSession,
       closeSession,
       prompt,
