@@ -305,6 +305,14 @@ sanitized public errors. This loopback API exists for browser development; it
 is not used by the packaged desktop app and is not approved for network
 exposure.
 
+Authenticated remote execution is intentionally not implemented. The proposed
+user-hosted-first trust boundary, key lifecycle, replay/reconnect rules,
+revocation behavior, offline semantics, and independent security-review gate
+are recorded in
+[`docs/decisions/0004-authenticated-remote-runtime.md`](docs/decisions/0004-authenticated-remote-runtime.md).
+The executable companion is a pure protocol state-machine fixture only; it
+opens no listener and carries no production cryptography.
+
 The connected browser workspace also registers its controller with the local
 control broker through origin-protected internal routes. Those routes are not
 the public control API and reject missing or foreign origins.
