@@ -7,7 +7,6 @@ import {
   type Stream,
   SubscriptionRef,
 } from "effect";
-import { satisfies } from "semver";
 import {
   assessPortableExtensionUpdate,
   type ExtensionCapability,
@@ -23,6 +22,7 @@ import {
   InterfaceStorage,
   type InterfaceStorageError,
 } from "../lib/interface-store";
+import { satisfiesVersion } from "../lib/semver-compatibility";
 
 const STORAGE_KEY = "flect.portable-extension-catalog.v1";
 const strict: SchemaAST.ParseOptions = {
@@ -264,99 +264,116 @@ export const makeExtensionCatalogLayer = () =>
 
       const stageCandidate = Effect.fn("Flect.ExtensionCatalog.stageCandidate")(
         (input: StagePortableExtensions) =>
-          mutate((current) => {
-            const accepted = current.entries.filter(
-              (entry) => entry.binding === "accepted",
-            );
-            const entries = current.entries.filter(
-              (entry) => entry.binding !== "candidate",
-            );
-            for (const extension of input.packages) {
-              for (const role of extension.roles) {
-                const previous = accepted.find(
-                  (entry) =>
-                    entry.capsuleId === input.capsuleId &&
-                    entry.extensionId === extension.id &&
-                    entry.role === role,
-                );
-                const compatible =
-                  satisfies(input.flectVersion, extension.compatibility.flect, {
-                    includePrerelease: true,
-                  }) &&
-                  extension.compatibility.platforms.includes(input.platform);
-                const assessment =
-                  previous === undefined
-                    ? { status: "compatible" as const }
-                    : assessPortableExtensionUpdate(
-                        {
-                          id: previous.extensionId,
-                          version: previous.packageVersion,
-                          roles: [previous.role],
-                          capabilities: previous.requestedCapabilities.map(
-                            (id) => ({
-                              id,
-                              required:
-                                previous.requiredCapabilities.includes(id),
-                            }),
-                          ),
-                        },
+          Effect.gen(function* () {
+            const compatibility = new Map(
+              yield* Effect.forEach(input.packages, (extension) =>
+                satisfiesVersion(
+                  input.flectVersion,
+                  extension.compatibility.flect,
+                ).pipe(
+                  Effect.map(
+                    (compatible) =>
+                      [
                         extension,
-                        {
-                          pinned: previous.pinned,
-                          ...(previous.forkRevision === undefined
-                            ? {}
-                            : { forkRevision: previous.forkRevision }),
-                        },
-                      );
-                const requestedCapabilities = extension.capabilities.map(
-                  (capability) => capability.id,
-                );
-                const requiredCapabilities = extension.capabilities
-                  .filter((capability) => capability.required)
-                  .map((capability) => capability.id);
-                entries.push(
-                  PortableExtensionRoleState.make({
-                    version: 1,
-                    capsuleId: input.capsuleId,
-                    extensionId: extension.id,
-                    packageVersion: extension.version,
-                    bundleSha256: extension.provenance.bundleSha256,
-                    provenanceRevision: extension.provenance.revision,
-                    role,
-                    binding: "candidate",
-                    state: !compatible
-                      ? "incompatible"
-                      : assessment.status === "pinned" ||
-                          assessment.status === "conflict"
-                        ? "conflict"
-                        : "available",
-                    requestedCapabilities,
-                    requiredCapabilities,
-                    grantedCapabilities:
-                      previous === undefined
-                        ? []
-                        : intersectPortableExtensionGrants(
-                            extension,
-                            role,
-                            previous.grantedCapabilities,
+                        compatible &&
+                          extension.compatibility.platforms.includes(
+                            input.platform,
                           ),
-                    pinned: previous?.pinned ?? false,
-                    ...(previous?.forkRevision === undefined
-                      ? {}
-                      : { forkRevision: previous.forkRevision }),
-                    tested: false,
-                    failureCount: 0,
-                  }),
-                );
+                      ] as const,
+                  ),
+                ),
+              ),
+            );
+            return yield* mutate((current) => {
+              const accepted = current.entries.filter(
+                (entry) => entry.binding === "accepted",
+              );
+              const entries = current.entries.filter(
+                (entry) => entry.binding !== "candidate",
+              );
+              for (const extension of input.packages) {
+                for (const role of extension.roles) {
+                  const previous = accepted.find(
+                    (entry) =>
+                      entry.capsuleId === input.capsuleId &&
+                      entry.extensionId === extension.id &&
+                      entry.role === role,
+                  );
+                  const compatible = compatibility.get(extension) === true;
+                  const assessment =
+                    previous === undefined
+                      ? { status: "compatible" as const }
+                      : assessPortableExtensionUpdate(
+                          {
+                            id: previous.extensionId,
+                            version: previous.packageVersion,
+                            roles: [previous.role],
+                            capabilities: previous.requestedCapabilities.map(
+                              (id) => ({
+                                id,
+                                required:
+                                  previous.requiredCapabilities.includes(id),
+                              }),
+                            ),
+                          },
+                          extension,
+                          {
+                            pinned: previous.pinned,
+                            ...(previous.forkRevision === undefined
+                              ? {}
+                              : { forkRevision: previous.forkRevision }),
+                          },
+                        );
+                  const requestedCapabilities = extension.capabilities.map(
+                    (capability) => capability.id,
+                  );
+                  const requiredCapabilities = extension.capabilities
+                    .filter((capability) => capability.required)
+                    .map((capability) => capability.id);
+                  entries.push(
+                    PortableExtensionRoleState.make({
+                      version: 1,
+                      capsuleId: input.capsuleId,
+                      extensionId: extension.id,
+                      packageVersion: extension.version,
+                      bundleSha256: extension.provenance.bundleSha256,
+                      provenanceRevision: extension.provenance.revision,
+                      role,
+                      binding: "candidate",
+                      state: !compatible
+                        ? "incompatible"
+                        : assessment.status === "pinned" ||
+                            assessment.status === "conflict"
+                          ? "conflict"
+                          : "available",
+                      requestedCapabilities,
+                      requiredCapabilities,
+                      grantedCapabilities:
+                        previous === undefined
+                          ? []
+                          : intersectPortableExtensionGrants(
+                              extension,
+                              role,
+                              previous.grantedCapabilities,
+                            ),
+                      pinned: previous?.pinned ?? false,
+                      ...(previous?.forkRevision === undefined
+                        ? {}
+                        : { forkRevision: previous.forkRevision }),
+                      tested: false,
+                      failureCount: 0,
+                    }),
+                  );
+                }
               }
-            }
-            return Effect.succeed([
-              undefined,
-              PortableExtensionCatalogSnapshot.make({
-                version: 1,
-                entries: sortEntries(entries),
-              }),
-            ] as const);
+              return Effect.succeed([
+                undefined,
+                PortableExtensionCatalogSnapshot.make({
+                  version: 1,
+                  entries: sortEntries(entries),
+                }),
+              ] as const);
+            });
           }),
       );
 

@@ -1,5 +1,7 @@
 import {
   type KeyboardEvent,
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useId,
@@ -18,7 +20,12 @@ import type {
   ReasoningLevel,
 } from "../../shared/contracts";
 import { ChevronIcon, SearchIcon, StarIcon } from "./icons";
-import { ProviderAuthPanel } from "./provider-auth-panel";
+
+const ProviderAuthPanel = lazy(() =>
+  import("./provider-auth-panel").then((module) => ({
+    default: module.ProviderAuthPanel,
+  })),
+);
 
 export interface ModelMenuProps {
   readonly models: ReadonlyArray<ModelSummary>;
@@ -455,16 +462,24 @@ export function ModelMenu({
               (authProviders.length > 0 ||
                 models.length === 0 ||
                 authEvent) && (
-                <ProviderAuthPanel
-                  authEvent={authEvent}
-                  disabled={disabled}
-                  onCancel={onCancelProviderAuth}
-                  onLogin={onLoginProvider}
-                  onLogout={onLogoutProvider}
-                  onRefresh={onRefreshProviderAuth}
-                  onReply={onReplyProviderAuth}
-                  providers={authProviders}
-                />
+                <Suspense
+                  fallback={
+                    <span className="sr-only" role="status">
+                      Opening provider controls
+                    </span>
+                  }
+                >
+                  <ProviderAuthPanel
+                    authEvent={authEvent}
+                    disabled={disabled}
+                    onCancel={onCancelProviderAuth}
+                    onLogin={onLoginProvider}
+                    onLogout={onLogoutProvider}
+                    onRefresh={onRefreshProviderAuth}
+                    onReply={onReplyProviderAuth}
+                    providers={authProviders}
+                  />
+                </Suspense>
               )}
           </div>
         </div>

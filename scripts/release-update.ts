@@ -172,11 +172,19 @@ export const validateUpdaterEvidence = Effect.fn(
   }
   const archivePath = yield* requiredFile(input.archivePath, "archive");
   const signaturePath = yield* requiredFile(input.signaturePath, "signature");
-  const [archive, signatureSource] = yield* Effect.tryPromise({
-    try: () =>
-      Promise.all([readFile(archivePath), readFile(signaturePath, "utf8")]),
-    catch: () => evidenceError("The updater evidence could not be read."),
-  });
+  const [archive, signatureSource] = yield* Effect.all(
+    [
+      Effect.tryPromise({
+        try: () => readFile(archivePath),
+        catch: () => evidenceError("The updater evidence could not be read."),
+      }),
+      Effect.tryPromise({
+        try: () => readFile(signaturePath, "utf8"),
+        catch: () => evidenceError("The updater evidence could not be read."),
+      }),
+    ],
+    { concurrency: "unbounded" },
+  );
   const signature = signatureSource.trim();
   if (signature.length === 0 || signature.length > 16_384) {
     return yield* Effect.fail(

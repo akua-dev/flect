@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "@playwright/test";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import {
   GitShareImportDiagnosticResult,
   GitShareLifecycleDiagnosticResult,
@@ -167,24 +167,33 @@ test("uses a persistent real Git repository without system Git", async ({
     "HEAD",
   ]);
   expect(stdout.trim()).toBe(result.rollbackCommit);
-  const [{ stdout: userName }, { stdout: userEmail }] = await Promise.all([
-    execFileAsync("git", [
-      "-C",
-      join(extractionRoot, "repository"),
-      "config",
-      "--local",
-      "--get",
-      "user.name",
-    ]),
-    execFileAsync("git", [
-      "-C",
-      join(extractionRoot, "repository"),
-      "config",
-      "--local",
-      "--get",
-      "user.email",
-    ]),
-  ]);
+  const [{ stdout: userName }, { stdout: userEmail }] = await Effect.runPromise(
+    Effect.all(
+      [
+        Effect.promise(() =>
+          execFileAsync("git", [
+            "-C",
+            join(extractionRoot, "repository"),
+            "config",
+            "--local",
+            "--get",
+            "user.name",
+          ]),
+        ),
+        Effect.promise(() =>
+          execFileAsync("git", [
+            "-C",
+            join(extractionRoot, "repository"),
+            "config",
+            "--local",
+            "--get",
+            "user.email",
+          ]),
+        ),
+      ],
+      { concurrency: "unbounded" },
+    ),
+  );
   expect(userName.trim()).toBe("Flect");
   expect(userEmail.trim()).toBe("workspace@flect.local");
 });
@@ -231,35 +240,62 @@ test("serializes competing browser checkpoints and rejects the stale writer", as
     });
     return `/?${query.toString()}`;
   };
-  await Promise.all([
-    first.goto(makeUrl("first")),
-    second.goto(makeUrl("second")),
-  ]);
-  await Promise.all(
-    [first, second].map((target) =>
-      expect(transactionResult(target)).toHaveAttribute("data-state", "ready", {
-        timeout: 90_000,
-      }),
+  await Effect.runPromise(
+    Effect.all(
+      [
+        Effect.promise(() => first.goto(makeUrl("first"))),
+        Effect.promise(() => second.goto(makeUrl("second"))),
+      ],
+      { concurrency: "unbounded", discard: true },
     ),
   );
-  await Promise.all(
-    [first, second].map((target) =>
-      target.getByRole("button", { name: "Run checkpoint" }).click(),
+  await Effect.runPromise(
+    Effect.forEach(
+      [first, second],
+      (target) =>
+        Effect.promise(() =>
+          expect(transactionResult(target)).toHaveAttribute(
+            "data-state",
+            "ready",
+            { timeout: 90_000 },
+          ),
+        ),
+      { concurrency: "unbounded", discard: true },
     ),
   );
-  await Promise.all(
-    [first, second].map((target) =>
-      expect(transactionResult(target)).toHaveAttribute(
-        "data-state",
-        "complete",
-      ),
+  await Effect.runPromise(
+    Effect.forEach(
+      [first, second],
+      (target) =>
+        Effect.promise(() =>
+          target.getByRole("button", { name: "Run checkpoint" }).click(),
+        ),
+      { concurrency: "unbounded", discard: true },
     ),
   );
-  const outcomes = await Promise.all(
-    [first, second].map(async (target) =>
-      Schema.decodeUnknownPromise(GitTransactionDiagnosticResult)(
-        JSON.parse((await transactionResult(target).textContent()) ?? "{}"),
-      ),
+  await Effect.runPromise(
+    Effect.forEach(
+      [first, second],
+      (target) =>
+        Effect.promise(() =>
+          expect(transactionResult(target)).toHaveAttribute(
+            "data-state",
+            "complete",
+          ),
+        ),
+      { concurrency: "unbounded", discard: true },
+    ),
+  );
+  const outcomes = await Effect.runPromise(
+    Effect.forEach(
+      [first, second],
+      (target) =>
+        Effect.promise(async () =>
+          Schema.decodeUnknownPromise(GitTransactionDiagnosticResult)(
+            JSON.parse((await transactionResult(target).textContent()) ?? "{}"),
+          ),
+        ),
+      { concurrency: "unbounded" },
     ),
   );
   expect(outcomes).toContainEqual(

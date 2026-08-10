@@ -97,7 +97,15 @@ const digestTree = (entries: ReadonlyMap<string, TreeEntry>) =>
   );
 
 const changedOffsets = async (first: string, second: string) => {
-  const [left, right] = await Promise.all([readFile(first), readFile(second)]);
+  const [left, right] = await Effect.runPromise(
+    Effect.all(
+      [
+        Effect.promise(() => readFile(first)),
+        Effect.promise(() => readFile(second)),
+      ],
+      { concurrency: "unbounded" },
+    ),
+  );
   const offsets: Array<number> = [];
   const length = Math.max(left.length, right.length);
   for (let index = 0; index < length && offsets.length < 32; index += 1) {
@@ -111,10 +119,15 @@ export const compareUnsignedReleaseTrees = Effect.fn(
 )((firstApp: string, secondApp: string) =>
   Effect.tryPromise({
     try: async (): Promise<ReleaseBuildComparison> => {
-      const [first, second] = await Promise.all([
-        readTree(firstApp),
-        readTree(secondApp),
-      ]);
+      const [first, second] = await Effect.runPromise(
+        Effect.all(
+          [
+            Effect.promise(() => readTree(firstApp)),
+            Effect.promise(() => readTree(secondApp)),
+          ],
+          { concurrency: "unbounded" },
+        ),
+      );
       const allPaths = [...new Set([...first.keys(), ...second.keys()])].sort();
       const changedPaths = allPaths
         .filter(
@@ -124,19 +137,24 @@ export const compareUnsignedReleaseTrees = Effect.fn(
         )
         .slice(0, 100);
       const binaryOffsets = Object.fromEntries(
-        await Promise.all(
-          changedPaths.flatMap((path) => {
-            const left = first.get(path);
-            const right = second.get(path);
-            return left?.kind === "file" && right?.kind === "file"
-              ? [
-                  changedOffsets(
-                    join(firstApp, path),
-                    join(secondApp, path),
-                  ).then((offsets) => [path, offsets] as const),
-                ]
-              : [];
-          }),
+        await Effect.runPromise(
+          Effect.forEach(
+            changedPaths.flatMap((path) => {
+              const left = first.get(path);
+              const right = second.get(path);
+              return left?.kind === "file" && right?.kind === "file"
+                ? [path]
+                : [];
+            }),
+            (path) =>
+              Effect.promise(() =>
+                changedOffsets(
+                  join(firstApp, path),
+                  join(secondApp, path),
+                ).then((offsets) => [path, offsets] as const),
+              ),
+            { concurrency: "unbounded" },
+          ),
         ),
       );
       const firstTreeSha256 = digestTree(first);
@@ -193,20 +211,34 @@ export const compareReleaseBuilds = Effect.fn("Flect.Release.compareBuilds")(
           try: async () => {
             const first = join(temporary, "first", "Flect.app");
             const second = join(temporary, "second", "Flect.app");
-            await Promise.all([
-              cp(firstApp, first, {
-                recursive: true,
-                preserveTimestamps: true,
-              }),
-              cp(secondApp, second, {
-                recursive: true,
-                preserveTimestamps: true,
-              }),
-            ]);
-            await Promise.all([
-              stripActualSignatures(first),
-              stripActualSignatures(second),
-            ]);
+            await Effect.runPromise(
+              Effect.all(
+                [
+                  Effect.promise(() =>
+                    cp(firstApp, first, {
+                      recursive: true,
+                      preserveTimestamps: true,
+                    }),
+                  ),
+                  Effect.promise(() =>
+                    cp(secondApp, second, {
+                      recursive: true,
+                      preserveTimestamps: true,
+                    }),
+                  ),
+                ],
+                { concurrency: "unbounded", discard: true },
+              ),
+            );
+            await Effect.runPromise(
+              Effect.all(
+                [
+                  Effect.promise(() => stripActualSignatures(first)),
+                  Effect.promise(() => stripActualSignatures(second)),
+                ],
+                { concurrency: "unbounded", discard: true },
+              ),
+            );
             return await Effect.runPromise(
               compareUnsignedReleaseTrees(first, second),
             );

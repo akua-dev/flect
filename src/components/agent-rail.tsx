@@ -35,7 +35,6 @@ import type {
 import { isAgentSessionActive } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
 import { useStickyFollow } from "../hooks/use-sticky-follow";
-import { loadBrowserCapsuleArchiveFromUrl } from "../lib/browser-capsule-loader";
 import type { WebProjectImportResult } from "../lib/web-project-import";
 import type { CapsuleReview } from "../lib/workspace-controller";
 import { Composer } from "./composer";
@@ -661,9 +660,15 @@ export function AgentRail({
     const active = conversationControllers.filter((entry) =>
       isAgentSessionActive(entry.status),
     );
-    await Promise.all(
-      (active.length === 0 ? [controller] : active).map((entry) =>
-        entry.cancel(),
+    await Effect.runPromise(
+      Effect.forEach(
+        active.length === 0 ? [controller] : active,
+        (entry) =>
+          Effect.tryPromise({
+            try: () => entry.cancel(),
+            catch: () => new Error("Agent cancellation failed."),
+          }),
+        { concurrency: "unbounded", discard: true },
       ),
     );
   };
@@ -827,10 +832,11 @@ export function AgentRail({
       void import("../lib/web-project-import")
         .then(({ importWebProject, shouldAvoidReadingWebProjectFile }) =>
           Effect.runPromise(
-            Effect.tryPromise({
-              try: async () =>
-                Promise.all(
-                  files.map(async (file) => {
+            Effect.forEach(
+              files,
+              (file) =>
+                Effect.tryPromise({
+                  try: async () => {
                     const path = file.webkitRelativePath || file.name;
                     const ignored = shouldAvoidReadingWebProjectFile(path);
                     return {
@@ -839,10 +845,11 @@ export function AgentRail({
                         ? new Uint8Array()
                         : new Uint8Array(await file.arrayBuffer()),
                     };
-                  }),
-                ),
-              catch: () => new Error("project files could not be read"),
-            }).pipe(
+                  },
+                  catch: () => new Error("project file could not be read"),
+                }),
+              { concurrency: "unbounded" },
+            ).pipe(
               Effect.flatMap((projectFiles) => importWebProject(projectFiles)),
             ),
           ),
@@ -909,6 +916,9 @@ export function AgentRail({
     setInstallError(undefined);
     setCapsuleNotice("Downloading and verifying Flect app…");
     try {
+      const { loadBrowserCapsuleArchiveFromUrl } = await import(
+        "../lib/browser-capsule-loader"
+      );
       const archive = await Effect.runPromise(
         loadBrowserCapsuleArchiveFromUrl(installUrl),
       );

@@ -11,7 +11,6 @@ import {
   Stream,
   SubscriptionRef,
 } from "effect";
-import { satisfies } from "semver";
 import packageMetadata from "../../package.json";
 import {
   type CapsuleSignatureAssessment,
@@ -167,6 +166,7 @@ import {
 } from "./operation-journal";
 import { projectAgentContinuity } from "./role-continuity";
 import { RoleContinuityRepository } from "./role-continuity-repository";
+import { satisfiesVersion } from "./semver-compatibility";
 import { ShapingKernel } from "./shaping-kernel";
 import { ShellPreferences } from "./shell-preferences";
 import {
@@ -333,6 +333,7 @@ const projectImportReport = (capsule: DecodedCapsule) => {
 const reviewCapsule = (
   capsule: DecodedCapsule,
   archive: Uint8Array,
+  flectCompatible: boolean,
   permissionContext: ProductCapabilityRequestContext,
   capabilities: ReadonlyArray<ProductCapabilityProjection>,
   trust: {
@@ -350,11 +351,7 @@ const reviewCapsule = (
   platforms: [...capsule.manifest.compatibility.platforms],
   currentPlatform: currentCapsulePlatform(),
   flectRange: capsule.manifest.compatibility.flect,
-  flectCompatible: satisfies(
-    packageMetadata.version,
-    capsule.manifest.compatibility.flect,
-    { includePrerelease: true },
-  ),
+  flectCompatible,
   platformCompatible: capsule.manifest.compatibility.platforms.includes(
     currentCapsulePlatform(),
   ),
@@ -390,9 +387,7 @@ const reviewCapsule = (
   })(),
   activationBlocked:
     !trust.decision.allowed ||
-    !satisfies(packageMetadata.version, capsule.manifest.compatibility.flect, {
-      includePrerelease: true,
-    }) ||
+    !flectCompatible ||
     !capsule.manifest.compatibility.platforms.includes(
       currentCapsulePlatform(),
     ) ||
@@ -653,6 +648,10 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       return reviewCapsule(
         capsule,
         archive,
+        yield* satisfiesVersion(
+          packageMetadata.version,
+          capsule.manifest.compatibility.flect,
+        ),
         context,
         yield* permissionsFor(context),
         trust,

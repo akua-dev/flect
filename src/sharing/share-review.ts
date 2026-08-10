@@ -1,5 +1,4 @@
 import { Effect, Schema } from "effect";
-import { satisfies } from "semver";
 import type { ShareManifest } from "../../packages/product/src/share";
 import type { ShareInstallationSource } from "../../shared/share-installation";
 import {
@@ -8,6 +7,7 @@ import {
   ShareReviewChange,
   type ShareSignatureAssessment,
 } from "../../shared/share-review";
+import { satisfiesVersion } from "../lib/semver-compatibility";
 
 export {
   ShareReview,
@@ -154,9 +154,10 @@ export const buildShareReview = Effect.fn("Flect.ShareReview.build")(function* (
   }
 
   const compatible =
-    satisfies(input.flectVersion, input.manifest.compatibility.flect, {
-      includePrerelease: true,
-    }) && input.manifest.compatibility.platforms.includes(input.platform);
+    (yield* satisfiesVersion(
+      input.flectVersion,
+      input.manifest.compatibility.flect,
+    )) && input.manifest.compatibility.platforms.includes(input.platform);
   const previousExtensionIds = new Set(
     (input.previousManifest?.artifacts ?? [])
       .filter((artifact) => artifact.kind === "extension")

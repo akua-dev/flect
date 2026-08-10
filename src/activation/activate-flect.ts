@@ -65,7 +65,6 @@ export const installFlectActivation = (
 ) => {
   const document = options.document ?? globalThis.document;
   const location = options.location ?? globalThis.location;
-  const load = options.load ?? (() => import("../main"));
   const root = document.getElementById("root");
   const shell = document.getElementById("flect-static-shell");
   const status = document.getElementById("flect-activation-status");
@@ -74,31 +73,94 @@ export const installFlectActivation = (
   }
 
   document.documentElement.dataset.platform = platformName();
-  let activation: Promise<void> | undefined;
-  const activate = () => {
-    if (activation !== undefined) return activation;
+  const immediate = shouldActivateFlectImmediately({
+    href: location.href,
+    testMode: options.testMode ?? import.meta.env.VITE_FLECT_TEST_MODE === "1",
+    desktop: options.desktop ?? isFlectDesktop(location),
+  });
+  const load = options.load;
+  let coordinator: Promise<void> | undefined;
+  let workspace: Promise<void> | undefined;
+
+  const openWorkspace = (initialPrompt?: string) => {
+    if (initialPrompt !== undefined) {
+      root.dataset.flectInitialPrompt = initialPrompt;
+    }
+    if (workspace !== undefined) return workspace;
     shell.setAttribute("aria-busy", "true");
     if (status !== null) status.textContent = "Opening Flect…";
-    activation = load()
-      .then(async ({ mountFlect }) => {
-        await mountFlect(root);
-        if (!root.hidden) shell.hidden = true;
-        shell.removeAttribute("aria-busy");
-        document.documentElement.dataset.flectState = "active";
-      })
-      .catch((error: unknown) => {
-        activation = undefined;
-        root.hidden = true;
-        shell.removeAttribute("aria-busy");
-        document.documentElement.dataset.flectState = "error";
-        if (status !== null) {
-          status.textContent =
-            "Flect could not open. Your current view is still safe; try again.";
-          status.setAttribute("role", "alert");
-        }
-        throw error;
+    workspace = import("effect").then(({ Effect }) => {
+      const islandHydration = Effect.callback<void, Error>((resume) => {
+        const ready = () => resume(Effect.void);
+        const failed = () =>
+          resume(Effect.fail(new Error("Flect workspace hydration failed.")));
+        document.addEventListener("flect:workspace-ready", ready, {
+          once: true,
+        });
+        document.addEventListener("flect:workspace-error", failed, {
+          once: true,
+        });
+        document.documentElement.dataset.flectOpenRequested = "true";
+        document.dispatchEvent(new CustomEvent("flect:workspace-open"));
+        return Effect.sync(() => {
+          document.removeEventListener("flect:workspace-ready", ready);
+          document.removeEventListener("flect:workspace-error", failed);
+        });
       });
-    return activation;
+      const hydration =
+        load === undefined
+          ? islandHydration
+          : Effect.tryPromise({
+              try: async () => {
+                const { mountFlect } = await load();
+                await mountFlect(root);
+              },
+              catch: (error) =>
+                error instanceof Error
+                  ? error
+                  : new Error("Flect client module failed to load."),
+            });
+      return Effect.runPromise(
+        hydration.pipe(
+          Effect.tap(() =>
+            Effect.sync(() => {
+              if (load === undefined) root.hidden = false;
+              if (!root.hidden) shell.hidden = true;
+              shell.removeAttribute("aria-busy");
+              document.documentElement.dataset.flectState = "active";
+            }),
+          ),
+          Effect.tapError(() =>
+            Effect.sync(() => {
+              workspace = undefined;
+              root.hidden = true;
+              shell.hidden = false;
+              shell.removeAttribute("aria-busy");
+              delete document.documentElement.dataset.flectOpenRequested;
+              document.documentElement.dataset.flectState = "error";
+              if (status !== null) {
+                status.textContent =
+                  "Flect could not open. Your current view is still safe; try again.";
+                status.setAttribute("role", "alert");
+              }
+            }),
+          ),
+        ),
+      );
+    });
+    return workspace;
+  };
+
+  const armCoordinator = async () => {
+    shell.removeAttribute("aria-busy");
+    if (status !== null) status.textContent = "Flect is ready.";
+  };
+
+  const activate = () => {
+    if (options.load !== undefined || immediate) return openWorkspace();
+    if (coordinator !== undefined) return coordinator;
+    coordinator = armCoordinator();
+    return coordinator;
   };
 
   const activateSafely = () => {
@@ -130,7 +192,7 @@ export const installFlectActivation = (
     const data = new FormData(form);
     const prompt = data.get("prompt");
     if (typeof prompt !== "string" || prompt.trim().length === 0) return;
-    void activate()
+    void openWorkspace(prompt.trim())
       .then(() => {
         document.dispatchEvent(
           new CustomEvent("flect:starter-submit", {
@@ -148,16 +210,14 @@ export const installFlectActivation = (
         !(event.target instanceof HTMLTextAreaElement));
     if (!shortcut) return;
     event.preventDefault();
-    activateSafely();
+    void openWorkspace().catch(() => undefined);
   });
-  document.addEventListener("flect:activate", activateSafely);
+  document.addEventListener("flect:activate", () => {
+    void openWorkspace().catch(() => undefined);
+  });
 
-  const immediate = shouldActivateFlectImmediately({
-    href: location.href,
-    testMode: options.testMode ?? import.meta.env.VITE_FLECT_TEST_MODE === "1",
-    desktop: options.desktop ?? isFlectDesktop(location),
-  });
-  if (immediate) queueMicrotask(activateSafely);
+  if (immediate)
+    queueMicrotask(() => void openWorkspace().catch(() => undefined));
 
   return { activate, immediate };
 };

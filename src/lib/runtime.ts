@@ -5,7 +5,6 @@ import {
   type PrivateShareSourceDefinition,
   ShareSourceFailure,
 } from "../../packages/product/src/host/share-source";
-import type { NativeUpdateError } from "../../shared/native-update";
 import {
   AuthorizedProductOperation,
   ProductCapabilityManifest,
@@ -91,7 +90,6 @@ import {
 } from "../sharing/share-source-resolver";
 import { LazyRoleSandboxedShellLive } from "../shell/lazy-sandboxed-shell";
 import type { SandboxedShell } from "../shell/sandboxed-shell-service";
-import type { AgentIntegration } from "./agent-integration";
 import { type AgentWorkspace, AgentWorkspaceLive } from "./agent-workspace";
 import {
   type FlectClient,
@@ -102,14 +100,9 @@ import { type Clipboard, ClipboardLive } from "./clipboard";
 import { makeGitInterfaceRepositoryLayer } from "./git-interface-repository";
 import { type InterfaceStorage, InterfaceStorageLive } from "./interface-store";
 import {
-  makeTauriNativePlatformLayer,
   NativePlatform,
   NativePlatformUnavailableLive,
 } from "./native-platform";
-import {
-  type NativeUpdate,
-  NativeUpdateUnavailableLive,
-} from "./native-update";
 import {
   type OperationJournal,
   OperationJournalLive,
@@ -123,22 +116,10 @@ import {
   makePersistentShapingKernelLayer,
   ShapingKernel,
 } from "./shaping-kernel";
-import type { ShellLink } from "./shell-link";
 import {
   makeShellPreferencesLayer,
   type ShellPreferences,
 } from "./shell-preferences";
-import {
-  makeTauriAgentIntegrationLayer,
-  makeTauriFlectClientLayer,
-  makeTauriNativeUpdateLayer,
-  makeTauriShellLinkLayer,
-  makeTauriUninstallLayer,
-  makeTauriWorkspaceControlTransportLayer,
-  TauriBridgeLive,
-  TauriNativeHostLive,
-} from "./tauri-transport";
-import type { Uninstall } from "./uninstall";
 import {
   type WorkspaceControlBridge,
   WorkspaceControlBridgeLive,
@@ -152,7 +133,9 @@ import {
   FlectWorkspaceControllerLive,
 } from "./workspace-controller";
 
-const runtimeQuery = new URLSearchParams(globalThis.location.search);
+const runtimeQuery = new URLSearchParams(
+  typeof globalThis.location === "undefined" ? "" : globalThis.location.search,
+);
 const PrivateShareDiagnosticBootstrap = Schema.Struct({
   adapterId: Schema.String.check(
     Schema.isMinLength(1),
@@ -214,8 +197,12 @@ const SharedGitWorkspaceLive = makeGitWorkspaceLayer({
   defaultWorkspaceId: runtimeWorkspaceId,
 });
 
-const ClientLive = isTauri()
-  ? makeTauriFlectClientLayer().pipe(Layer.provide(TauriBridgeLive))
+const ClientLive = nativePlatformAvailable
+  ? Layer.unwrap(
+      Effect.promise(() => import("./tauri-runtime-layers")).pipe(
+        Effect.map((module) => module.TauriClientLive),
+      ),
+    )
   : makeFlectClientLayer().pipe(Layer.provide(BrowserHttpClient.layerFetch));
 
 const AgentShellLive = LazyRoleSandboxedShellLive.pipe(
@@ -310,7 +297,11 @@ const ProductWorkflowManifest = ProductCapabilityManifest.make({
 });
 
 const NativePlatformForApplication = nativePlatformAvailable
-  ? makeTauriNativePlatformLayer().pipe(Layer.provide(TauriNativeHostLive))
+  ? Layer.unwrap(
+      Effect.promise(() => import("./tauri-runtime-layers")).pipe(
+        Effect.map((module) => module.TauriNativePlatformLive),
+      ),
+    )
   : NativePlatformUnavailableLive;
 const NativeSystemAccentColor = Effect.flatMap(
   NativePlatform,
@@ -462,9 +453,11 @@ const FlectApplicationWithAgentBridgeLive = AgentCommandBridgeLive.pipe(
   Layer.provideMerge(FlectApplicationLive),
 );
 
-const ControlTransportLive = isTauri()
-  ? makeTauriWorkspaceControlTransportLayer().pipe(
-      Layer.provide(TauriBridgeLive),
+const ControlTransportLive = nativePlatformAvailable
+  ? Layer.unwrap(
+      Effect.promise(() => import("./tauri-runtime-layers")).pipe(
+        Effect.map((module) => module.TauriControlTransportLive),
+      ),
     )
   : makeBrowserWorkspaceControlTransportLayer().pipe(
       Layer.provide(BrowserHttpClient.layerFetch),
@@ -481,43 +474,3 @@ export const flectRuntime = ManagedRuntime.make(
 );
 export const browserRuntime: FlectBrowserRuntime = flectRuntime;
 export const shapingRuntime = flectRuntime;
-
-export type NativeSetupRuntime = ManagedRuntime.ManagedRuntime<
-  AgentIntegration | ShellLink | Uninstall,
-  FlectUnavailableError
->;
-
-const NativeSetupDependenciesLive = isTauri()
-  ? Layer.merge(
-      makeTauriAgentIntegrationLayer().pipe(Layer.provide(TauriBridgeLive)),
-      makeTauriShellLinkLayer().pipe(Layer.provide(TauriNativeHostLive)),
-    )
-  : undefined;
-
-const NativeSetupLive =
-  NativeSetupDependenciesLive === undefined
-    ? undefined
-    : Layer.merge(
-        NativeSetupDependenciesLive,
-        makeTauriUninstallLayer().pipe(
-          Layer.provideMerge(NativeSetupDependenciesLive),
-          Layer.provide(TauriNativeHostLive),
-        ),
-      );
-
-export const nativeSetupRuntime: NativeSetupRuntime | undefined =
-  NativeSetupLive === undefined
-    ? undefined
-    : ManagedRuntime.make(NativeSetupLive);
-
-export type NativeUpdateRuntime = ManagedRuntime.ManagedRuntime<
-  NativeUpdate,
-  NativeUpdateError
->;
-
-const NativeUpdateLive = isTauri()
-  ? makeTauriNativeUpdateLayer().pipe(Layer.provide(TauriNativeHostLive))
-  : NativeUpdateUnavailableLive;
-
-export const nativeUpdateRuntime: NativeUpdateRuntime =
-  ManagedRuntime.make(NativeUpdateLive);

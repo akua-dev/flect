@@ -70,10 +70,15 @@ const mkdirParents = (
 const compile = (request: BrowserBuildWorkerRequest["request"]) =>
   Effect.tryPromise({
     try: async () => {
-      const [{ rolldown }, { memfs }] = await Promise.all([
-        import("@rolldown/browser"),
-        import("@rolldown/browser/experimental"),
-      ]);
+      const [{ rolldown }, { memfs }] = await Effect.runPromise(
+        Effect.all(
+          [
+            Effect.promise(() => import("@rolldown/browser")),
+            Effect.promise(() => import("@rolldown/browser/experimental")),
+          ],
+          { concurrency: "unbounded" },
+        ),
+      );
       if (memfs === undefined) {
         throw buildFailure(
           request.buildId,

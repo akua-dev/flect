@@ -25,6 +25,9 @@ export class CapsuleStoreError extends Schema.TaggedErrorClass<CapsuleStoreError
 const failure = () =>
   CapsuleStoreError.make({ message: "Capsule storage is unavailable." });
 
+const storageEffect = <A>(operation: () => Promise<A>) =>
+  Effect.tryPromise({ try: operation, catch: failure });
+
 export interface CapsuleStoreShape {
   readonly persistence: "durable" | "session";
   readonly load: Effect.Effect<CapsuleArchiveBindings, CapsuleStoreError>;
@@ -85,45 +88,47 @@ const makeCapsuleStore = (
   persistence: CapsuleStoreShape["persistence"],
 ): CapsuleStoreShape => ({
   persistence,
-  load: Effect.tryPromise({
-    try: async () => {
-      const digests = await readBindingDigests(vfs);
-      if (digests === undefined) return {};
-      const read = async (key: string) => {
-        const value = digests[key as keyof typeof digests];
-        if (value === undefined) return undefined;
-        return vfs.readFile(`${OBJECTS}/${value}.flect`);
-      };
-      const [accepted, candidate, lastKnownGood] = await Promise.all([
-        read("accepted"),
-        read("candidate"),
-        read("lastKnownGood"),
-      ]);
-      return {
-        ...(accepted === undefined ? {} : { accepted }),
-        ...(candidate === undefined ? {} : { candidate }),
-        ...(lastKnownGood === undefined ? {} : { lastKnownGood }),
-      };
-    },
-    catch: failure,
+  load: Effect.gen(function* () {
+    const digests = yield* storageEffect(() => readBindingDigests(vfs));
+    if (digests === undefined) return {};
+    const read = (key: keyof typeof digests) => {
+      const value = digests[key];
+      return value === undefined
+        ? Effect.succeed(undefined)
+        : storageEffect(() => vfs.readFile(`${OBJECTS}/${value}.flect`));
+    };
+    const [accepted, candidate, lastKnownGood] = yield* Effect.all(
+      [read("accepted"), read("candidate"), read("lastKnownGood")],
+      { concurrency: "unbounded" },
+    );
+    return {
+      ...(accepted === undefined ? {} : { accepted }),
+      ...(candidate === undefined ? {} : { candidate }),
+      ...(lastKnownGood === undefined ? {} : { lastKnownGood }),
+    };
   }),
   save: (bindings) =>
-    Effect.tryPromise({
-      try: async () => {
-        await vfs.mkdir(OBJECTS, { recursive: true });
-        const write = async (archive: Uint8Array | undefined) => {
-          if (archive === undefined) return undefined;
-          const digest = await hash(archive);
-          const path = `${OBJECTS}/${digest}.flect`;
-          if (!(await vfs.exists(path))) await vfs.writeFile(path, archive);
-          return digest;
-        };
-        const [accepted, candidate, lastKnownGood] = await Promise.all([
+    Effect.gen(function* () {
+      yield* storageEffect(() => vfs.mkdir(OBJECTS, { recursive: true }));
+      const write = (archive: Uint8Array | undefined) =>
+        archive === undefined
+          ? Effect.succeed(undefined)
+          : storageEffect(async () => {
+              const digest = await hash(archive);
+              const path = `${OBJECTS}/${digest}.flect`;
+              if (!(await vfs.exists(path))) await vfs.writeFile(path, archive);
+              return digest;
+            });
+      const [accepted, candidate, lastKnownGood] = yield* Effect.all(
+        [
           write(bindings.accepted),
           write(bindings.candidate),
           write(bindings.lastKnownGood),
-        ]);
-        await vfs.writeFile(
+        ],
+        { concurrency: "unbounded" },
+      );
+      yield* storageEffect(() =>
+        vfs.writeFile(
           BINDINGS,
           JSON.stringify({
             version: 1,
@@ -131,9 +136,8 @@ const makeCapsuleStore = (
             ...(candidate === undefined ? {} : { candidate }),
             ...(lastKnownGood === undefined ? {} : { lastKnownGood }),
           }),
-        );
-      },
-      catch: failure,
+        ),
+      );
     }),
   uninstall: Effect.tryPromise({
     try: async () => {

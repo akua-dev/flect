@@ -6,7 +6,7 @@ import {
   NativePlatform,
   NativePlatformUnavailableLive,
 } from "./native-platform";
-import { TauriNativeHost } from "./tauri-transport";
+import { TauriNativeHost } from "./tauri-native-host";
 
 const readAccent = Effect.flatMap(
   NativePlatform,

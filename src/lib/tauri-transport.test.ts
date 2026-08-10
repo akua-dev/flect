@@ -16,15 +16,19 @@ import { FlectClient } from "./api";
 import { NativeUpdate } from "./native-update";
 import { ShellLink } from "./shell-link";
 import {
+  TauriNativeHost,
+  type TauriNativeHostShape,
+} from "./tauri-native-host";
+import {
   makeTauriAgentIntegrationLayer,
-  makeTauriFlectClientLayer,
   makeTauriNativeUpdateLayer,
   makeTauriShellLinkLayer,
   nativeApplicationPath,
+} from "./tauri-native-lifecycle-transport";
+import {
+  makeTauriFlectClientLayer,
   TauriBridge,
   type TauriBridgeShape,
-  TauriNativeHost,
-  type TauriNativeHostShape,
 } from "./tauri-transport";
 
 describe("Tauri RPC transport", () => {

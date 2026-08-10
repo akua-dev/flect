@@ -31,6 +31,20 @@ const initialState: DiagnosticState = {
   release: "pending",
 };
 
+const deniedCapabilityExpressions = [
+  'fetch("https://example.invalid/")',
+  'globalThis.localStorage.getItem("flect")',
+  'globalThis.sessionStorage.getItem("flect")',
+  'globalThis.indexedDB.open("flect")',
+  'globalThis.caches.open("flect")',
+  "globalThis.navigator.storage.getDirectory()",
+  'new WebSocket("wss://example.invalid/")',
+  'new EventSource("https://example.invalid/")',
+  'new Worker("data:text/javascript,void 0")',
+  'importScripts("https://example.invalid/worker.js")',
+  "globalThis.showOpenFilePicker()",
+] as const;
+
 export function BrowserExecutionDiagnostic() {
   const [state, setState] = useState(initialState);
 
@@ -49,31 +63,19 @@ export function BrowserExecutionDiagnostic() {
               source: "40 + 2",
             }),
           );
-          const capabilitiesResult = yield* javascript.evaluate(
-            JavaScriptExecutionRequest.make({
-              version: 1,
-              source: `const attempt = async action => {
-  try {
-    await action();
-    return "escaped";
-  } catch {
-    return "blocked";
-  }
-};
-Promise.all([
-  attempt(() => fetch("https://example.invalid/")),
-  attempt(() => globalThis.localStorage.getItem("flect")),
-  attempt(() => globalThis.sessionStorage.getItem("flect")),
-  attempt(() => globalThis.indexedDB.open("flect")),
-  attempt(() => globalThis.caches.open("flect")),
-  attempt(() => globalThis.navigator.storage.getDirectory()),
-  attempt(() => new WebSocket("wss://example.invalid/")),
-  attempt(() => new EventSource("https://example.invalid/")),
-  attempt(() => new Worker("data:text/javascript,void 0")),
-  attempt(() => importScripts("https://example.invalid/worker.js")),
-  attempt(() => globalThis.showOpenFilePicker())
-]).then(values => console.log(values.join(",")));`,
-            }),
+          const capabilityResults = yield* Effect.forEach(
+            deniedCapabilityExpressions,
+            (expression) =>
+              javascript.evaluate(
+                JavaScriptExecutionRequest.make({
+                  version: 1,
+                  source: `Promise.resolve()
+  .then(() => ${expression})
+  .then(() => console.log("escaped"))
+  .catch(() => console.log("blocked"))`,
+                }),
+              ),
+            { concurrency: "unbounded" },
           );
           yield* javascript.evaluate(
             JavaScriptExecutionRequest.make({
@@ -112,7 +114,11 @@ console.log(existsSync("/workspace/.flect-memory-probe") ? "persistent" : "isola
 
           return {
             javascript: javascriptResult.stdout.trim(),
-            capabilities: capabilitiesResult.stdout.trim(),
+            capabilities: capabilityResults
+              .map((result) =>
+                result.stdout.trim() === "escaped" ? "escaped" : "blocked",
+              )
+              .join(","),
             vfsIsolation: vfsIsolationResult.stdout.trim(),
             wasi: String(wasiResult.exitCode),
             packages: String(packageResult.packageCount),

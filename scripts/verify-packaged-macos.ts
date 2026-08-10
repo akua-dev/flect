@@ -1,6 +1,7 @@
 import { access, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve, sep } from "node:path";
+import { Effect } from "effect";
 
 interface ProcessRecord {
   readonly pid: number;
@@ -18,11 +19,16 @@ const command = async (argv: ReadonlyArray<string>) => {
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ]);
+  const [stdout, stderr, exitCode] = await Effect.runPromise(
+    Effect.all(
+      [
+        Effect.promise(() => new Response(child.stdout).text()),
+        Effect.promise(() => new Response(child.stderr).text()),
+        Effect.promise(() => child.exited),
+      ],
+      { concurrency: "unbounded" },
+    ),
+  );
   if (exitCode !== 0) {
     throw new Error(
       `${argv[0] ?? "command"} failed (${exitCode}): ${stderr.trim() || stdout.trim()}`,

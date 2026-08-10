@@ -7,7 +7,10 @@ import type {
 } from "../../shared/setup";
 import type { UninstallPlan } from "../../shared/uninstall";
 import { AgentIntegration } from "../lib/agent-integration";
-import { type NativeSetupRuntime, nativeSetupRuntime } from "../lib/runtime";
+import {
+  type NativeSetupRuntime,
+  nativeSetupRuntime,
+} from "../lib/native-runtimes";
 import { ShellLink } from "../lib/shell-link";
 import { Uninstall } from "../lib/uninstall";
 

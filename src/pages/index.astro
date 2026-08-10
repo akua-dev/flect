@@ -1,5 +1,7 @@
 ---
 import "../activation-shell.css";
+// biome-ignore lint/correctness/noUnusedImports: Astro consumes framework component imports in the template below.
+import FlectWorkspaceIsland from "../workspace-entry";
 ---
 
 <!doctype html>
@@ -46,7 +48,9 @@ import "../activation-shell.css";
         </form>
       </main>
     </div>
-    <div id="root" hidden></div>
+    <div id="root" hidden>
+      <FlectWorkspaceIsland client:flect />
+    </div>
     <noscript>Flect needs JavaScript only after you open the workspace.</noscript>
     <script>
       import { installFlectActivation } from "../activation/activate-flect";

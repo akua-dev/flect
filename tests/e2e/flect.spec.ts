@@ -1738,10 +1738,9 @@ test("keeps safe mode and promptless products inside the protected shell", async
   await expect(
     page.getByRole("button", { name: "Restore interface" }),
   ).toBeVisible();
-  const [download] = await Promise.all([
-    page.waitForEvent("download"),
-    page.getByRole("button", { name: "Export session continuity" }).click(),
-  ]);
+  const downloadEvent = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export session continuity" }).click();
+  const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe("flect-role-continuity.json");
   await page
     .getByRole("button", { name: "Discard session continuity" })

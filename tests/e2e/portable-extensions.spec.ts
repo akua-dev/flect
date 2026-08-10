@@ -131,6 +131,11 @@ test("reviews, tests, activates, discovers, disables, and removes role-scoped pa
   ).toHaveAttribute("aria-busy", "false");
   await candidatePromptFinished;
   await page.getByRole("button", { name: "Activate app" }).click();
+  await expect(decision).toHaveCount(0);
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-phase",
+    "accepted",
+  );
 
   const composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill("Inspect portable extensions");

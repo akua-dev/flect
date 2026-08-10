@@ -4,8 +4,11 @@ import {
   NativeUpdateProgress,
   NativeUpdateSnapshot,
 } from "../../shared/native-update";
+import {
+  type NativeUpdateRuntime,
+  nativeUpdateRuntime,
+} from "../lib/native-runtimes";
 import { NativeUpdate } from "../lib/native-update";
-import { type NativeUpdateRuntime, nativeUpdateRuntime } from "../lib/runtime";
 
 export interface NativeUpdateClient {
   readonly status: () => Promise<NativeUpdateSnapshot>;

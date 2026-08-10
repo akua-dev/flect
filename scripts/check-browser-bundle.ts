@@ -1,5 +1,5 @@
-import { readdir } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { parse } from "acorn";
 
 const DIST = join(import.meta.dir, "..", "dist");
 const ASSETS = join(DIST, "assets");
@@ -9,46 +9,91 @@ const fail = (message: string): never => {
   throw new Error(`Browser bundle gate failed: ${message}`);
 };
 
+const required = (value: string | undefined, message: string): string =>
+  value ?? fail(message);
+
 const gzipSize = async (path: string) =>
   Bun.gzipSync(await Bun.file(path).bytes()).byteLength;
-
-const oneAsset = async (prefix: string, suffix = ".js") => {
-  const matches = (await readdir(ASSETS)).filter(
-    (name) => name.startsWith(prefix) && name.endsWith(suffix),
-  );
-  if (matches.length !== 1) {
-    fail(`expected one ${prefix}*${suffix} asset, found ${matches.length}`);
-  }
-  return join(ASSETS, matches[0] as string);
-};
-
-const assetReferences = (source: string) =>
-  [...source.matchAll(/["'`](assets\/[^"'`]+)["'`]/g)].map(
-    (match) => match[1] as string,
-  );
 
 const size = async (path: string) => ({
   decoded: Bun.file(path).size,
   gzip: await gzipSize(path),
 });
 
+const assetPath = (reference: string) => {
+  const path = resolve(DIST, reference.replace(/^\//, ""));
+  if (!path.startsWith(`${resolve(ASSETS)}/`)) {
+    fail(
+      `asset reference escapes the production asset directory: ${reference}`,
+    );
+  }
+  return path;
+};
+
+const staticGraph = async (entries: ReadonlyArray<string>) => {
+  const paths = new Set<string>();
+  const visit = async (path: string): Promise<void> => {
+    if (paths.has(path)) return;
+    paths.add(path);
+    const source = await Bun.file(path).text();
+    const program = parse(source, {
+      ecmaVersion: "latest",
+      sourceType: "module",
+    });
+    for (const node of program.body) {
+      if (
+        node.type === "ImportDeclaration" &&
+        typeof node.source.value === "string" &&
+        node.source.value.startsWith(".")
+      ) {
+        await visit(resolve(dirname(path), node.source.value));
+      }
+    }
+  };
+  for (const entry of entries) await visit(entry);
+  return paths;
+};
+
+const graphSize = async (paths: ReadonlySet<string>) => {
+  let decoded = 0;
+  let gzip = 0;
+  for (const path of paths) {
+    const current = await size(path);
+    decoded += current.decoded;
+    gzip += current.gzip;
+  }
+  return { decoded, gzip };
+};
+
 const htmlPath = join(DIST, "index.html");
 const html = await Bun.file(htmlPath).text();
-const initialNames = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(
-  (match) => basename((match[1] as string).split("?")[0] as string),
+const initialReferences = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(
+  (match) => match[1] as string,
 );
-const activationEntry = await oneAsset(
-  "index.astro_astro_type_script_index_0_lang.",
+const initialNames = initialReferences.map((reference) =>
+  basename(reference.split("?")[0] as string),
 );
-const activationClient = await oneAsset("main.");
-const activationCss = await oneAsset("index.", ".css");
-const workspaceEntry = await oneAsset("workspace-entry.");
-const activationEntrySource = await Bun.file(activationEntry).text();
-const activationClientSource = await Bun.file(activationClient).text();
-const workspaceGraph = [
-  `assets/${basename(workspaceEntry)}`,
-  ...assetReferences(activationClientSource),
-].filter((value, index, all) => all.indexOf(value) === index);
+const initialScriptPaths = initialReferences
+  .filter(
+    (reference) =>
+      reference.startsWith("/assets/") && reference.endsWith(".js"),
+  )
+  .map(assetPath);
+const activationCssReference = required(
+  initialReferences.find(
+    (reference) =>
+      reference.startsWith("/assets/") && reference.endsWith(".css"),
+  ),
+  "static Astro document has no activation-shell stylesheet",
+);
+const componentReference = required(
+  html.match(/component-url="([^"]+)"/)?.[1],
+  "static Astro document has no Flect island component",
+);
+const rendererReference = required(
+  html.match(/renderer-url="([^"]+)"/)?.[1],
+  "static Astro document has no Flect island renderer",
+);
 
 const forbiddenInitial = [
   "workspace-entry",
@@ -68,21 +113,33 @@ for (const name of initialNames) {
     fail(`view-only HTML references ${name}`);
   }
 }
+if (
+  initialNames.some(
+    (name) => name.startsWith("workspace-entry") && name.endsWith(".css"),
+  )
+) {
+  fail("view-only HTML eagerly references workspace CSS");
+}
 
-const initialJs = await size(activationEntry);
-const clientJs = await size(activationClient);
-const css = await size(activationCss);
-const bootstrapGzip = initialJs.gzip + clientJs.gzip;
-if (bootstrapGzip > 10 * KIB) {
-  fail(`activation bootstrap is ${bootstrapGzip} bytes gzip (limit 10240)`);
+const activationGraph = await staticGraph(initialScriptPaths);
+const activationJs = await graphSize(activationGraph);
+const activationCss = await size(assetPath(activationCssReference));
+if (activationJs.gzip > 10 * KIB) {
+  fail(`activation bootstrap is ${activationJs.gzip} bytes gzip (limit 10240)`);
 }
-if (clientJs.gzip > 200 * KIB || clientJs.decoded > 600 * KIB) {
+if (activationCss.gzip > 25 * KIB) {
+  fail(`initial CSS is ${activationCss.gzip} bytes gzip (limit 25600)`);
+}
+
+const workspaceGraph = await staticGraph([
+  assetPath(componentReference),
+  assetPath(rendererReference),
+]);
+const workspace = await graphSize(workspaceGraph);
+if (workspace.gzip > 200 * KIB || workspace.decoded > 600 * KIB) {
   fail(
-    `protected client is ${clientJs.gzip} bytes gzip / ${clientJs.decoded} decoded`,
+    `protected workspace is ${workspace.gzip} bytes gzip / ${workspace.decoded} decoded (limits 204800 / 614400)`,
   );
-}
-if (css.gzip > 25 * KIB) {
-  fail(`initial CSS is ${css.gzip} bytes gzip (limit 25600)`);
 }
 
 const forbiddenWorkspaceModules = [
@@ -97,31 +154,35 @@ const forbiddenWorkspaceModules = [
   "quickjs",
   ".wasm",
 ];
-for (const reference of workspaceGraph) {
-  if (forbiddenWorkspaceModules.some((token) => reference.includes(token))) {
-    fail(`first workspace graph eagerly references ${reference}`);
+for (const path of workspaceGraph) {
+  const name = basename(path);
+  if (forbiddenWorkspaceModules.some((token) => name.includes(token))) {
+    fail(`first workspace graph eagerly references ${name}`);
   }
 }
 
-if (!activationEntrySource.includes("main.")) {
-  fail("static entry does not expose the event-driven activation client");
+let activationSource = "";
+for (const path of initialScriptPaths) {
+  activationSource += `${await Bun.file(path).text()}\n`;
 }
-if (!activationClientSource.includes("workspace-entry.")) {
-  fail(
-    "activation client does not keep the workspace behind a second boundary",
-  );
+if (!activationSource.includes("flect:workspace-open")) {
+  fail("Astro activation coordinator does not request the Flect island");
+}
+if (!html.includes('client="flect"')) {
+  fail("static document does not use the client:flect Astro directive");
 }
 
 console.log(
   JSON.stringify(
     {
       viewOnlyRequests: initialNames.length,
-      activationBootstrap: {
-        gzip: bootstrapGzip,
-        decoded: initialJs.decoded + clientJs.decoded,
+      viewOnlyDocument: await size(htmlPath),
+      activationBootstrap: activationJs,
+      initialCss: activationCss,
+      protectedWorkspace: {
+        ...workspace,
+        modules: workspaceGraph.size,
       },
-      initialCss: css,
-      firstWorkspaceModules: workspaceGraph.length,
       onDemandBoundaries: ["shell", "compiler", "package", "worker", "wasm"],
     },
     undefined,

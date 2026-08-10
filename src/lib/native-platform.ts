@@ -3,7 +3,7 @@ import {
   NativeAccentColor,
   NativePlatformCapabilityFailure,
 } from "../../shared/native-platform";
-import { TauriNativeHost } from "./tauri-transport";
+import { TauriNativeHost } from "./tauri-native-host";
 
 const unavailable = (reason: NativePlatformCapabilityFailure["reason"]) =>
   NativePlatformCapabilityFailure.make({

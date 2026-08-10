@@ -335,7 +335,9 @@ describe("AgentRail", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Model: Auto via Pi" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Connect" }));
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Connect" }),
+    );
     expect(loginProvider).toHaveBeenCalledWith({
       providerId: "openai-codex",
       method: "oauth",

@@ -4,6 +4,34 @@ import { resetBrowserWorkspace } from "./reset-browser-workspace";
 
 const budget = FlectPerformanceBudgets.browser;
 
+const networkProfiles = [
+  {
+    cpuRate: 4,
+    downloadThroughput: ((9 * 1_000 * 1_000) / 8) * 0.9,
+    label: "Fast 4G",
+    latencyMs: 60 * 2.75,
+    lcpBudgetMs: budget.lcpFast4gMs,
+    reportPrefix: "fast4g",
+    uploadThroughput: ((1.5 * 1_000 * 1_000) / 8) * 0.9,
+  },
+  {
+    cpuRate: 4,
+    downloadThroughput: ((1.6 * 1_000 * 1_000) / 8) * 0.9,
+    label: "Slow 4G",
+    latencyMs: 150 * 3.75,
+    lcpBudgetMs: budget.lcpSlow4gMs,
+    reportPrefix: "slow4g",
+    uploadThroughput: ((750 * 1_000) / 8) * 0.9,
+  },
+] as const;
+
+type NavigationPaintMetrics = {
+  readonly cls: number;
+  readonly fcpMs: number;
+  readonly lcpMs: number;
+  readonly longestTaskMs: number;
+};
+
 const report = (metrics: Readonly<Record<string, number>>) => {
   console.log(JSON.stringify({ type: "flect-performance", ...metrics }));
 };
@@ -59,6 +87,7 @@ const activate = async (page: Page) => {
           subtree: true,
         });
         element.focus();
+        document.dispatchEvent(new CustomEvent("flect:activate"));
         if (ready()) {
           observer.disconnect();
           clearTimeout(timeout);
@@ -239,6 +268,169 @@ test("enforces the static Astro shell and cold/warm interaction budgets", async 
     warmActivationLimitMs,
     warmActivationMs: Math.round(warmActivationMs),
   });
+});
+
+test("gates the static Astro shell on Fast and Slow 4G with 4x CPU", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(() => {
+    const target = window as typeof window & {
+      __flectNavigationMetrics?: {
+        cls: number;
+        lcpMs: number;
+        longestTaskMs: number;
+      };
+    };
+    const metrics = {
+      cls: 0,
+      lcpMs: 0,
+      longestTaskMs: 0,
+    };
+    target.__flectNavigationMetrics = metrics;
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        metrics.lcpMs = Math.max(metrics.lcpMs, entry.startTime);
+      }
+    }).observe({ buffered: true, type: "largest-contentful-paint" });
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        const shift = entry as PerformanceEntry & {
+          readonly hadRecentInput: boolean;
+          readonly value: number;
+        };
+        if (!shift.hadRecentInput) metrics.cls += shift.value;
+      }
+    }).observe({ buffered: true, type: "layout-shift" });
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        metrics.longestTaskMs = Math.max(metrics.longestTaskMs, entry.duration);
+      }
+    }).observe({ buffered: true, type: "longtask" });
+  });
+
+  const session = await page.context().newCDPSession(page);
+  const workspace = new URL(page.url()).searchParams.get("workspace");
+  if (workspace === null) throw new Error("Performance workspace is missing.");
+  const viewUrl = (network: string) =>
+    `/?workspace=${encodeURIComponent(workspace)}&view=1&network=${encodeURIComponent(network)}`;
+  const results: Array<{
+    readonly label: string;
+    readonly metrics: NavigationPaintMetrics;
+    readonly reportPrefix: string;
+  }> = [];
+  let warmFast4gActivationMs = Number.POSITIVE_INFINITY;
+
+  try {
+    await session.send("Network.enable");
+    for (const profile of networkProfiles) {
+      await session.send("Network.emulateNetworkConditions", {
+        connectionType: "cellular4g",
+        downloadThroughput: profile.downloadThroughput,
+        latency: profile.latencyMs,
+        offline: false,
+        uploadThroughput: profile.uploadThroughput,
+      });
+      await session.send("Emulation.setCPUThrottlingRate", {
+        rate: profile.cpuRate,
+      });
+      await session.send("Network.setCacheDisabled", { cacheDisabled: true });
+
+      await page.goto(viewUrl(profile.reportPrefix), {
+        waitUntil: "networkidle",
+      });
+      await expect(
+        page.getByRole("textbox", { name: "Message Flect" }),
+      ).toBeVisible();
+      await page.waitForFunction(() => {
+        const target = window as typeof window & {
+          __flectNavigationMetrics?: { readonly lcpMs: number };
+        };
+        return (
+          (target.__flectNavigationMetrics?.lcpMs ?? 0) > 0 &&
+          performance.getEntriesByName("first-contentful-paint").length > 0
+        );
+      });
+
+      const metrics = await page.evaluate(() => {
+        const target = window as typeof window & {
+          __flectNavigationMetrics?: {
+            readonly cls: number;
+            readonly lcpMs: number;
+            readonly longestTaskMs: number;
+          };
+        };
+        const observed = target.__flectNavigationMetrics;
+        const fcp = performance.getEntriesByName("first-contentful-paint")[0];
+        if (observed === undefined || fcp === undefined) {
+          throw new Error("Navigation paint metrics were not observed.");
+        }
+        return {
+          cls: observed.cls,
+          fcpMs: fcp.startTime,
+          lcpMs: observed.lcpMs,
+          longestTaskMs: observed.longestTaskMs,
+        };
+      });
+      results.push({
+        label: profile.label,
+        metrics,
+        reportPrefix: profile.reportPrefix,
+      });
+
+      if (profile.reportPrefix === "fast4g") {
+        await session.send("Network.setCacheDisabled", {
+          cacheDisabled: false,
+        });
+        await page.goto(viewUrl("fast4g-warmup"));
+        await activate(page);
+        await page.goto(viewUrl("fast4g-warm"));
+        warmFast4gActivationMs = await activate(page);
+      }
+    }
+  } finally {
+    await session.send("Network.emulateNetworkConditions", {
+      downloadThroughput: -1,
+      latency: 0,
+      offline: false,
+      uploadThroughput: -1,
+    });
+    await session.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+    await session.send("Network.setCacheDisabled", { cacheDisabled: false });
+    await session.detach();
+  }
+
+  const reported: Record<string, number> = {
+    warmFast4gActivationMs: Math.round(warmFast4gActivationMs),
+  };
+  for (const result of results) {
+    const profile = networkProfiles.find(
+      (candidate) => candidate.reportPrefix === result.reportPrefix,
+    );
+    expect(profile, `${result.label} profile`).toBeDefined();
+    expect(
+      result.metrics.lcpMs,
+      `${result.label} LCP milliseconds`,
+    ).toBeLessThan(profile?.lcpBudgetMs ?? 0);
+    expect(result.metrics.cls, `${result.label} CLS`).toBeLessThan(0.1);
+    expect(
+      result.metrics.longestTaskMs,
+      `${result.label} longest main-thread task milliseconds`,
+    ).toBeLessThan(budget.longTaskMs);
+    reported[`${result.reportPrefix}FcpMs`] = Math.round(result.metrics.fcpMs);
+    reported[`${result.reportPrefix}LcpMs`] = Math.round(result.metrics.lcpMs);
+    reported[`${result.reportPrefix}ClsMilli`] = Math.round(
+      result.metrics.cls * 1_000,
+    );
+    reported[`${result.reportPrefix}LongestTaskMs`] = Math.round(
+      result.metrics.longestTaskMs,
+    );
+  }
+  expect(
+    warmFast4gActivationMs,
+    "warmed protected workspace on Fast 4G / 4x CPU milliseconds",
+  ).toBeLessThan(budget.coldInteractiveMs);
+  report(reported);
 });
 
 test("bounds 50 accepted edit cycles, Markdown rendering, and heap growth", async ({

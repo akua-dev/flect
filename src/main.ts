@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+
 let mounted = false;
 let opening: Promise<void> | undefined;
 
@@ -27,22 +29,30 @@ const openWorkspace = (root: HTMLElement, prompt?: string) => {
   const status = document.getElementById("flect-activation-status");
   shell?.setAttribute("aria-busy", "true");
   if (status !== null) status.textContent = "Opening your workspace…";
-  opening = import("./workspace-entry")
-    .then(({ mountWorkspace }) => mountWorkspace(root, prompt))
-    .then(() => {
-      root.hidden = false;
-      if (shell !== null) shell.hidden = true;
-    })
-    .catch((error: unknown) => {
-      opening = undefined;
-      shell?.removeAttribute("aria-busy");
-      if (status !== null) {
-        status.textContent =
-          "The workspace could not open. Your draft is still here; try again.";
-        status.setAttribute("role", "alert");
-      }
-      throw error;
-    });
+  opening = Effect.runPromise(
+    Effect.promise(() => import("./workspace-entry")).pipe(
+      Effect.flatMap(({ mountWorkspace }) =>
+        Effect.sync(() => mountWorkspace(root, prompt)),
+      ),
+      Effect.tap(() =>
+        Effect.sync(() => {
+          root.hidden = false;
+          if (shell !== null) shell.hidden = true;
+        }),
+      ),
+      Effect.tapError(() =>
+        Effect.sync(() => {
+          opening = undefined;
+          shell?.removeAttribute("aria-busy");
+          if (status !== null) {
+            status.textContent =
+              "The workspace could not open. Your draft is still here; try again.";
+            status.setAttribute("role", "alert");
+          }
+        }),
+      ),
+    ),
+  );
   return opening;
 };
 

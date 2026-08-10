@@ -58,8 +58,6 @@ import type {
   ConversationMessage,
   RoleConversationState,
 } from "./hooks/use-agent-session";
-import { useNativeSetup } from "./hooks/use-native-setup";
-import { useNativeUpdate } from "./hooks/use-native-update";
 import { useWorkspace, type WorkspaceRuntime } from "./hooks/use-workspace";
 import { flectRuntime } from "./lib/runtime";
 import { workspacePhase } from "./lib/workspace-phase";
@@ -130,9 +128,6 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
     refreshProviderAuth,
     logoutProvider,
   } = useWorkspace(runtime);
-  const setup = useNativeSetup();
-  const update = useNativeUpdate();
-
   const command = useCallback(
     async (value: Parameters<typeof dispatch>[0]) => {
       try {
@@ -467,8 +462,6 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
         control: snapshot.control,
         operations: snapshot.operations,
         persistence: snapshot.persistence,
-        setup,
-        update,
         onToggleControl: () =>
           command(
             snapshot.control.enabled

@@ -31,7 +31,6 @@ import {
   type AgentRailProps,
   type ShapingController,
 } from "./agent-rail";
-import { CapsuleFrame } from "./capsule-frame";
 import { PanelOpenIcon } from "./icons";
 import { type InterfaceAction, InterfaceRenderer } from "./interface-renderer";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
@@ -49,6 +48,11 @@ const ShareReview = lazy(() =>
 const ShareSourceDialog = lazy(() =>
   import("./share-source-dialog").then((module) => ({
     default: module.ShareSourceDialog,
+  })),
+);
+const CapsuleFrame = lazy(() =>
+  import("./capsule-frame").then((module) => ({
+    default: module.CapsuleFrame,
   })),
 );
 
@@ -779,23 +783,27 @@ export function RoleAwareShell({
             <h1>What do you want to make?</h1>
           </section>
         ) : compiledCapsule !== undefined ? (
-          <CapsuleFrame
-            assets={compiledCapsule.assets}
-            entrypointPath={compiledCapsule.entrypointPath}
-            html={compiledCapsule.html}
-            onDirectManipulation={(kind, deltaX, deltaY) =>
-              applyDirectManipulation(
-                kind === "move"
-                  ? `Move the selected element ${Math.abs(Math.round(deltaX))} pixels ${deltaX < 0 ? "left" : "right"} and ${Math.abs(Math.round(deltaY))} pixels ${deltaY < 0 ? "up" : "down"} in the current view. Translate that gesture into responsive layout source instead of storing fixed canvas coordinates.`
-                  : `Resize the selected element by approximately ${Math.round(deltaX)} pixels in width and ${Math.round(deltaY)} pixels in height in the current view. Translate that gesture into responsive layout source and preserve accessible content reflow.`,
-              )
-            }
-            onIntent={onCapsuleIntent}
-            onSelectionChange={(selection) => chooseCanvasSelection(selection)}
-            selection={canvasSelection}
-            selectionMode={selectionMode}
-            title={compiledCapsule.name}
-          />
+          <Suspense fallback={<ShareSurfaceFallback />}>
+            <CapsuleFrame
+              assets={compiledCapsule.assets}
+              entrypointPath={compiledCapsule.entrypointPath}
+              html={compiledCapsule.html}
+              onDirectManipulation={(kind, deltaX, deltaY) =>
+                applyDirectManipulation(
+                  kind === "move"
+                    ? `Move the selected element ${Math.abs(Math.round(deltaX))} pixels ${deltaX < 0 ? "left" : "right"} and ${Math.abs(Math.round(deltaY))} pixels ${deltaY < 0 ? "up" : "down"} in the current view. Translate that gesture into responsive layout source instead of storing fixed canvas coordinates.`
+                    : `Resize the selected element by approximately ${Math.round(deltaX)} pixels in width and ${Math.round(deltaY)} pixels in height in the current view. Translate that gesture into responsive layout source and preserve accessible content reflow.`,
+                )
+              }
+              onIntent={onCapsuleIntent}
+              onSelectionChange={(selection) =>
+                chooseCanvasSelection(selection)
+              }
+              selection={canvasSelection}
+              selectionMode={selectionMode}
+              title={compiledCapsule.name}
+            />
+          </Suspense>
         ) : (
           <InterfaceRenderer
             actions={actions}

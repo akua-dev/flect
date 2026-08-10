@@ -140,14 +140,27 @@ const writeFixtureApp = Effect.fn("Flect.FixtureUpdate.writeApp")(function* (
   );
   yield* writeFixtureFile(executable, executableSource(version));
   yield* writeFixtureFile(runtime, `fixture-runtime:${version}\n`);
-  yield* Effect.tryPromise({
-    try: () => Promise.all([chmod(executable, 0o755), chmod(runtime, 0o755)]),
-    catch: () =>
-      fixtureError(
-        "filesystem",
-        "The fixture executables could not be made runnable.",
-      ),
-  });
+  yield* Effect.all(
+    [
+      Effect.tryPromise({
+        try: () => chmod(executable, 0o755),
+        catch: () =>
+          fixtureError(
+            "filesystem",
+            "The fixture executables could not be made runnable.",
+          ),
+      }),
+      Effect.tryPromise({
+        try: () => chmod(runtime, 0o755),
+        catch: () =>
+          fixtureError(
+            "filesystem",
+            "The fixture executables could not be made runnable.",
+          ),
+      }),
+    ],
+    { concurrency: "unbounded", discard: true },
+  );
 });
 
 const runCommand = Effect.fn("Flect.FixtureUpdate.runCommand")(

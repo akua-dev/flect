@@ -228,11 +228,20 @@ export const makeFlectCommand = (options: FlectCommandOptions) =>
         return { stdout: "", stderr: shareResolutionUsage, exitCode: 2 };
       }
       try {
-        const files = await Promise.all(
-          parsed.writes.map(async (write) => ({
-            path: write.sharePath,
-            contents: await options.readFile(write.workspacePath),
-          })),
+        const files = await Effect.runPromise(
+          Effect.forEach(
+            parsed.writes,
+            (write) =>
+              Effect.tryPromise({
+                try: async () => ({
+                  path: write.sharePath,
+                  contents: await options.readFile(write.workspacePath),
+                }),
+                catch: () => new Error("Shared file could not be read."),
+              }),
+            { concurrency: "unbounded" },
+          ),
+          { signal: commandContext.signal },
         );
         const command = await Effect.runPromise(
           Schema.decodeUnknownEffect(ResolveShareConflict)({
@@ -279,11 +288,20 @@ export const makeFlectCommand = (options: FlectCommandOptions) =>
         return { stdout: "", stderr: shareCheckpointUsage, exitCode: 2 };
       }
       try {
-        const files = await Promise.all(
-          parsed.writes.map(async (write) => ({
-            path: write.sharePath,
-            contents: await options.readFile(write.workspacePath),
-          })),
+        const files = await Effect.runPromise(
+          Effect.forEach(
+            parsed.writes,
+            (write) =>
+              Effect.tryPromise({
+                try: async () => ({
+                  path: write.sharePath,
+                  contents: await options.readFile(write.workspacePath),
+                }),
+                catch: () => new Error("Shared file could not be read."),
+              }),
+            { concurrency: "unbounded" },
+          ),
+          { signal: commandContext.signal },
         );
         const command = await Effect.runPromise(
           Schema.decodeUnknownEffect(CheckpointShareFork)({

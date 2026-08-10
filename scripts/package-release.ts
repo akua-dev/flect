@@ -324,11 +324,16 @@ const captureCommand = async (
     stdout: "pipe",
     stderr: "pipe",
   });
-  const [exitCode, stdout, stderr] = await Promise.all([
-    child.exited,
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-  ]);
+  const [exitCode, stdout, stderr] = await Effect.runPromise(
+    Effect.all(
+      [
+        Effect.promise(() => child.exited),
+        Effect.promise(() => new Response(child.stdout).text()),
+        Effect.promise(() => new Response(child.stderr).text()),
+      ],
+      { concurrency: "unbounded" },
+    ),
+  );
   return { exitCode, stderr, stdout };
 };
 
@@ -721,11 +726,16 @@ const writeReleaseEvidence = Effect.fn("Flect.Release.writeEvidence")(
     const inputDigests = yield* Effect.tryPromise({
       try: async () =>
         Object.fromEntries(
-          await Promise.all(
-            inputPaths.map(async (path) => [
-              path,
-              await sha256File(join(root, path)),
-            ]),
+          await Effect.runPromise(
+            Effect.forEach(
+              inputPaths,
+              (path) =>
+                Effect.promise(
+                  async () =>
+                    [path, await sha256File(join(root, path))] as const,
+                ),
+              { concurrency: "unbounded" },
+            ),
           ),
         ),
       catch: () => packagingError("Release inputs could not be hashed."),
@@ -733,25 +743,30 @@ const writeReleaseEvidence = Effect.fn("Flect.Release.writeEvidence")(
     const unsignedContentSha256 = yield* unsignedApplicationDigest();
     const artifacts = yield* Effect.tryPromise({
       try: async () => {
-        const values = await Promise.all(
-          [
-            paths.releaseDmg,
-            paths.checksum,
-            paths.demoMp4,
-            ...(updater.available
-              ? [
-                  paths.updaterArchive,
-                  paths.updaterSignature,
-                  paths.updaterManifest,
-                ]
-              : []),
-          ].map(async (path) => {
-            const entry = await stat(path);
-            return [
-              basename(path),
-              { bytes: entry.size, sha256: await sha256File(path) },
-            ] as const;
-          }),
+        const values = await Effect.runPromise(
+          Effect.forEach(
+            [
+              paths.releaseDmg,
+              paths.checksum,
+              paths.demoMp4,
+              ...(updater.available
+                ? [
+                    paths.updaterArchive,
+                    paths.updaterSignature,
+                    paths.updaterManifest,
+                  ]
+                : []),
+            ],
+            (path) =>
+              Effect.promise(async () => {
+                const entry = await stat(path);
+                return [
+                  basename(path),
+                  { bytes: entry.size, sha256: await sha256File(path) },
+                ] as const;
+              }),
+            { concurrency: "unbounded" },
+          ),
         );
         return Object.fromEntries(values);
       },

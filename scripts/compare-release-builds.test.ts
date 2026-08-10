@@ -8,11 +8,9 @@ import { compareUnsignedReleaseTrees } from "./compare-release-builds";
 const temporaryDirectories: Array<string> = [];
 
 afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((path) => rm(path, { recursive: true, force: true })),
-  );
+  for (const path of temporaryDirectories.splice(0)) {
+    await rm(path, { recursive: true, force: true });
+  }
 });
 
 const fixture = async () => {

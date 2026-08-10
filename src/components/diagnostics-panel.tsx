@@ -11,6 +11,8 @@ import type {
   ShellLinkStatus,
 } from "../../shared/setup";
 import type { UninstallPlan } from "../../shared/uninstall";
+import { useNativeSetup } from "../hooks/use-native-setup";
+import { useNativeUpdate } from "../hooks/use-native-update";
 
 export interface NativeSetupView {
   readonly available: boolean;
@@ -93,10 +95,14 @@ export function DiagnosticsPanel({
   operations,
   onToggleControl,
   persistence,
-  setup,
-  update,
+  setup: providedSetup,
+  update: providedUpdate,
   defaultOpen = false,
 }: DiagnosticsPanelProps) {
+  const nativeSetup = useNativeSetup();
+  const nativeUpdate = useNativeUpdate();
+  const setup = providedSetup ?? nativeSetup;
+  const update = providedUpdate ?? nativeUpdate;
   const [open, setOpen] = useState(defaultOpen);
   const nativeAvailable = setup?.available === true;
   const shell = setup?.shell;
