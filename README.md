@@ -76,8 +76,9 @@ until that stylesheet has loaded and the island is ready. Compiler, package,
 shell, Worker, and Wasm substrates remain on demand until a typed operation
 needs them. Production Astro uses Preact's React compatibility renderer for the
 existing workspace components; the direct Vite SPA remains a React fallback.
-Official Shadcn v4 components, its Radix primitives, and its native chat
-primitives compile inside that deferred workspace stylesheet/chunk only.
+Official Shadcn v4 components, its Radix primitives, and the official AI
+Elements conversation, message, composer, reasoning, and tool components
+compile inside that deferred workspace stylesheet/chunk only.
 The product intentionally starts from Shadcn's neutral defaults; Flect-specific
 styling comes later, without forking interaction behavior. The static Astro
 route carries none of the component runtime.

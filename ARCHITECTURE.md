@@ -68,8 +68,9 @@ nor Effect. Compiler, package, shell, Worker, and Wasm implementations are
 separate dynamic boundaries after workspace activation. Astro production uses
 Preact compatibility for the protected components; the direct Vite SPA remains
 a React fallback. UI primitives follow the official Shadcn v4 composition
-model with its Radix and chat primitives. Radix and Tailwind are workspace
-implementation details behind the Astro island boundary; they do not
+model with its Radix primitives and the official AI Elements registry. Radix
+and Tailwind are workspace implementation details behind the Astro island
+boundary; they do not
 own workflows, persistence, or the static view-only route, and each added
 primitive must preserve the browser budgets.
 

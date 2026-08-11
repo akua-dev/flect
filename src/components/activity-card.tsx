@@ -1,4 +1,10 @@
 import type { ToolActivity } from "../../shared/control";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  type ToolPart,
+} from "./ai-elements/tool";
 
 const label = (toolName: string) =>
   toolName === "bash" ? "Bash" : toolName === "flect" ? "Flect" : toolName;
@@ -11,6 +17,15 @@ const phaseLabel = (phase: ToolActivity["phase"]) =>
       : phase === "failed"
         ? "Failed"
         : "Queued";
+
+const toolState = (phase: ToolActivity["phase"]): ToolPart["state"] =>
+  phase === "running"
+    ? "input-available"
+    : phase === "succeeded"
+      ? "output-available"
+      : phase === "failed"
+        ? "output-error"
+        : "input-streaming";
 
 export function ActivityCard({
   activity,
@@ -28,25 +43,21 @@ export function ActivityCard({
 
   return (
     <article className={`activity-card activity-card--${activity.phase}`}>
-      <details className="activity-card__disclosure">
-        {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
-        <summary
+      <Tool className="activity-card__disclosure">
+        <ToolHeader
           aria-label={`${label(activity.toolName)} details`}
           className="activity-card__summary"
-          role="button"
-        >
-          <span aria-hidden="true" className="activity-card__dot" />
-          <strong>{label(activity.toolName)}</strong>
-          <span>{phaseLabel(activity.phase)}</span>
-          {activity.durationMs !== undefined && (
-            <time>{`${activity.durationMs}ms`}</time>
-          )}
-          {!detail && activity.resultSummary !== undefined && (
-            <small>{activity.resultSummary}</small>
-          )}
-        </summary>
+          description={activity.command}
+          meta={
+            activity.durationMs === undefined
+              ? undefined
+              : `${activity.durationMs}ms`
+          }
+          state={toolState(activity.phase)}
+          title={label(activity.toolName)}
+        />
         {detail && (
-          <div className="activity-card__details">
+          <ToolContent className="activity-card__details">
             {activity.command !== undefined && (
               <section>
                 <span>Command</span>
@@ -74,6 +85,13 @@ export function ActivityCard({
               </section>
             )}
             <footer>
+              <span>{phaseLabel(activity.phase)}</span>
+              {activity.durationMs !== undefined && (
+                <time>{`${activity.durationMs}ms`}</time>
+              )}
+              {activity.resultSummary !== undefined && (
+                <small>{activity.resultSummary}</small>
+              )}
               {activity.exitCode !== undefined && (
                 <span>{`Exit ${activity.exitCode}`}</span>
               )}
@@ -84,9 +102,9 @@ export function ActivityCard({
                 </a>
               )}
             </footer>
-          </div>
+          </ToolContent>
         )}
-      </details>
+      </Tool>
       {activity.phase === "failed" && onFixInShape !== undefined && (
         <button
           className="activity-card__fix"

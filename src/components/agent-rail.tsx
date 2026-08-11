@@ -36,6 +36,17 @@ import { isAgentSessionActive } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
 import type { WebProjectImportResult } from "../lib/web-project-import";
 import type { CapsuleReview } from "../lib/workspace-controller";
+import {
+  Conversation as AIConversation,
+  ConversationContent as AIConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "./ai-elements/conversation";
+import {
+  Message as AIMessage,
+  MessageContent as AIMessageContent,
+} from "./ai-elements/message";
+import { Reasoning, ReasoningTrigger } from "./ai-elements/reasoning";
 import { Composer } from "./composer";
 import type {
   DiagnosticsPanelProps,
@@ -45,7 +56,6 @@ import type {
 import type { ExtensionReviewKey } from "./extension-review";
 import { PanelCloseIcon, RefreshIcon } from "./icons";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
-import { Bubble, BubbleContent } from "./ui/bubble";
 import {
   Card,
   CardContent,
@@ -53,18 +63,6 @@ import {
   CardHeader,
   CardTitle,
 } from "./ui/card";
-import {
-  Message as ChatMessage,
-  MessageContent as ChatMessageContent,
-} from "./ui/message";
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from "./ui/message-scroller";
 
 const ActivityCard = lazy(() =>
   import("./activity-card").then((module) => ({
@@ -511,106 +509,80 @@ function Conversation({
   readonly onFixFailure?: (activity: ToolActivity) => void;
 }) {
   return (
-    <MessageScrollerProvider autoScroll defaultScrollPosition="end">
-      <MessageScroller className="conversation-shell">
-        <MessageScrollerViewport
-          aria-label={`${label} conversation`}
-          className="conversation"
-          role="log"
-        >
-          <MessageScrollerContent className="conversation__content">
-            {messages.length === 0 && activities.length === 0 && (
-              <div className="conversation__empty">
-                <strong>Build and use the product in one conversation.</strong>
-                <p>
-                  Ask for a change, use the current interface, or call an
-                  approved action. Flect routes the work for you.
-                </p>
-              </div>
-            )}
-            {messages.map((message, index) => {
-              const isLatest = index === messages.length - 1;
-              return (
-                <MessageScrollerItem
-                  key={message.id}
-                  messageId={message.id}
-                  scrollAnchor={message.role === "user"}
-                >
-                  <ChatMessage
-                    align={message.role === "user" ? "end" : "start"}
-                    className={`message message--${message.role}`}
-                  >
-                    <ChatMessageContent>
-                      <Bubble
-                        align={message.role === "user" ? "end" : "start"}
-                        variant={
-                          message.role === "user" ? "secondary" : "ghost"
-                        }
-                      >
-                        <BubbleContent>
-                          <span className="sr-only">
-                            {message.role === "user"
-                              ? "You"
-                              : message.role === "activity"
-                                ? "Activity"
-                                : label}
-                          </span>
-                          {message.content ? (
-                            <Suspense fallback={<span>{message.content}</span>}>
-                              <MessageContent
-                                content={message.content}
-                                messageRole={message.role}
-                                streaming={
-                                  message.role === "assistant" &&
-                                  isLatest &&
-                                  status === "streaming"
-                                }
-                              />
-                            </Suspense>
-                          ) : (
-                            isLatest &&
-                            (status === "submitting" ||
-                              status === "streaming") && (
-                              <span className="thinking" role="status">
-                                <span className="sr-only">
-                                  {label} is responding
-                                </span>
-                                <span aria-hidden="true" />
-                                <span aria-hidden="true" />
-                                <span aria-hidden="true" />
-                              </span>
-                            )
-                          )}
-                        </BubbleContent>
-                      </Bubble>
-                    </ChatMessageContent>
-                  </ChatMessage>
-                </MessageScrollerItem>
-              );
-            })}
-            {activities.map((activity) => (
-              <MessageScrollerItem key={activity.id} messageId={activity.id}>
-                <Suspense
-                  fallback={
-                    <SurfaceFallback label="Opening activity details" />
-                  }
-                >
-                  <ActivityCard
-                    activity={activity}
-                    {...(onFixFailure === undefined
-                      ? {}
-                      : { onFixInShape: onFixFailure })}
-                  />
-                </Suspense>
-              </MessageScrollerItem>
-            ))}
-          </MessageScrollerContent>
-        </MessageScrollerViewport>
-        <MessageScrollerButton direction="end" size="sm" variant="secondary">
-          Jump to latest
-        </MessageScrollerButton>
-      </MessageScroller>
-    </MessageScrollerProvider>
+    <AIConversation
+      aria-label={`${label} conversation`}
+      className="conversation conversation-shell"
+    >
+      <AIConversationContent
+        className="conversation__content"
+        scrollClassName="conversation__scroll"
+      >
+        {messages.length === 0 && activities.length === 0 && (
+          <ConversationEmptyState
+            className="conversation__empty"
+            description="Ask for a change, use the current interface, or call an approved action. Flect routes the work for you."
+            title="Build and use the product in one conversation."
+          />
+        )}
+        {messages.map((message, index) => {
+          const isLatest = index === messages.length - 1;
+          return (
+            <AIMessage
+              className={`message message--${message.role}`}
+              from={message.role === "user" ? "user" : "assistant"}
+              key={message.id}
+            >
+              <AIMessageContent>
+                <span className="sr-only">
+                  {message.role === "user"
+                    ? "You"
+                    : message.role === "activity"
+                      ? "Activity"
+                      : label}
+                </span>
+                {message.content ? (
+                  <Suspense fallback={<span>{message.content}</span>}>
+                    <MessageContent
+                      content={message.content}
+                      messageRole={message.role}
+                      streaming={
+                        message.role === "assistant" &&
+                        isLatest &&
+                        status === "streaming"
+                      }
+                    />
+                  </Suspense>
+                ) : (
+                  isLatest &&
+                  (status === "submitting" || status === "streaming") && (
+                    <Reasoning isStreaming>
+                      <ReasoningTrigger
+                        getThinkingMessage={() => `${label} is responding`}
+                      />
+                    </Reasoning>
+                  )
+                )}
+              </AIMessageContent>
+            </AIMessage>
+          );
+        })}
+        {activities.map((activity) => (
+          <div key={activity.id}>
+            <Suspense
+              fallback={<SurfaceFallback label="Opening activity details" />}
+            >
+              <ActivityCard
+                activity={activity}
+                {...(onFixFailure === undefined
+                  ? {}
+                  : { onFixInShape: onFixFailure })}
+              />
+            </Suspense>
+          </div>
+        ))}
+      </AIConversationContent>
+      <ConversationScrollButton aria-label="Jump to latest" />
+    </AIConversation>
   );
 }
 
