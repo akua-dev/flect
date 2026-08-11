@@ -46,7 +46,6 @@ import {
   Message as AIMessage,
   MessageContent as AIMessageContent,
 } from "./ai-elements/message";
-import { Reasoning, ReasoningTrigger } from "./ai-elements/reasoning";
 import { Composer } from "./composer";
 import type {
   DiagnosticsPanelProps,
@@ -82,6 +81,11 @@ const ExtensionReview = lazy(() =>
 const MessageContent = lazy(() =>
   import("./message-content").then((module) => ({
     default: module.MessageContent,
+  })),
+);
+const StreamingReasoning = lazy(() =>
+  import("./streaming-reasoning").then((module) => ({
+    default: module.StreamingReasoning,
   })),
 );
 const ProviderAuthPanel = lazy(() =>
@@ -555,11 +559,11 @@ function Conversation({
                 ) : (
                   isLatest &&
                   (status === "submitting" || status === "streaming") && (
-                    <Reasoning isStreaming>
-                      <ReasoningTrigger
-                        getThinkingMessage={() => `${label} is responding`}
-                      />
-                    </Reasoning>
+                    <Suspense
+                      fallback={<span>{`${label} is responding`}</span>}
+                    >
+                      <StreamingReasoning label={label} />
+                    </Suspense>
                   )
                 )}
               </AIMessageContent>
