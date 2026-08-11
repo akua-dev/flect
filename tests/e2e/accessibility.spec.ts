@@ -70,7 +70,7 @@ test("keeps first-run provider setup contained and immediately actionable", asyn
   await expect(page.getByRole("button", { name: "Diagnostics" })).toBeHidden();
 
   const geometry = await page.evaluate(() => {
-    const setup = document.querySelector<HTMLElement>(".runtime-alert--setup");
+    const setup = document.querySelector<HTMLElement>(".provider-setup");
     const composer = document.querySelector<HTMLElement>(".composer");
     if (setup === null || composer === null) {
       throw new Error("First-run surfaces are missing");

@@ -83,7 +83,7 @@ affordances, short labels, and restrained state motion.
 
 **Key Characteristics:**
 
-- Near-black neutral architecture with one precise rose signal.
+- Shadcn's neutral light and dark defaults, with no product accent color yet.
 - System typography tuned for calm density and high legibility.
 - Tonal layering before shadows; boundaries appear only when useful.
 - One centered agent composer that expands naturally into a conversation rail.
@@ -91,13 +91,13 @@ affordances, short labels, and restrained state motion.
 
 ### Component implementation
 
-Flect owns its component source. The protected workspace uses the Shadcn v4
-composition model with React Aria primitives where their interaction semantics
-materially improve keyboard, pointer, focus, or accessibility behavior. These
-are not a third-party visual theme: Flect's semantic OKLCH tokens, platform
-metrics, motion, density, and maximum 16px surface radius remain authoritative.
+Flect vendors the official Shadcn v4 component source. The protected workspace
+uses Shadcn's Radix primitives and official chat components for
+keyboard, pointer, focus, scrolling, and accessibility behavior. The initial
+visual baseline is Shadcn's neutral default; product-specific styling is a
+later, deliberate layer instead of a parallel component system.
 
-Tailwind v4 compiles only the owned workspace component sources. It does not
+Tailwind v4 compiles only the vendored workspace component sources. It does not
 enter the static Astro activation shell, does not replace the Effect workflow
 kernel, and does not authorize large registry-wide installs. Add primitives one
 at a time, keep them behind the island or feature boundary that needs them, and
