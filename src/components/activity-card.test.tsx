@@ -35,9 +35,9 @@ describe("ActivityCard", () => {
     );
 
     expect(screen.getByText("Bash")).toBeVisible();
-    expect(screen.getByText("Failed")).toBeVisible();
+    expect(screen.getByText("Error")).toBeVisible();
     await user.click(screen.getByRole("button", { name: /Bash details/i }));
-    expect(screen.getByText("bun test")).toBeVisible();
+    expect(screen.getAllByText("bun test")).toHaveLength(2);
     expect(screen.getByText("1 test failed")).toBeVisible();
     expect(screen.getByText("Exit 1")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Fix with Flect" }));

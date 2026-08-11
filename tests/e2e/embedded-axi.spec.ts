@@ -94,7 +94,7 @@ test("Flect validates and applies local edits while protected authority stays in
   await expect(activities).toHaveCount(2);
   await expect(activities.first()).toContainText("Completed");
   await expect(activities.first()).toContainText("40ms");
-  await expect(activities.last()).toContainText("Failed");
+  await expect(activities.last()).toContainText("Error");
   await expect(activities.last()).toContainText("2ms");
   await activities.first().click();
   await activities.last().click();
@@ -268,14 +268,15 @@ test("streamed embedded CLI activity does not steal manual scroll position", asy
   const conversation = page.getByRole("log", {
     name: "Flect conversation",
   });
+  const conversationScroll = conversation.locator(".conversation__scroll");
   await expect
     .poll(() =>
-      conversation.evaluate(
+      conversationScroll.evaluate(
         (element) => element.scrollHeight > element.clientHeight,
       ),
     )
     .toBe(true);
-  await conversation.evaluate((element) => {
+  await conversationScroll.evaluate((element) => {
     element.scrollTop = 0;
     element.dispatchEvent(new Event("scroll"));
   });
@@ -286,7 +287,7 @@ test("streamed embedded CLI activity does not steal manual scroll position", asy
     page.getByRole("button", { name: /Jump to latest/ }),
   ).toBeVisible();
   expect(
-    await conversation.evaluate((element) => element.scrollTop),
+    await conversationScroll.evaluate((element) => element.scrollTop),
   ).toBeLessThan(50);
   completedPromptPages.add(page);
 });

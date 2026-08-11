@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   AuthLoginEvent,
   AuthLoginReference,
@@ -14,19 +14,17 @@ import {
   type AgentSessionStatus,
   isAgentSessionActive,
 } from "../hooks/use-agent-session";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "./ai-elements/prompt-input";
 import { ComposerActionsMenu } from "./composer-actions-menu";
-import { ArrowUpIcon, StopIcon } from "./icons";
 import { ModelMenu } from "./model-menu";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "./ui/input-group";
-
-const MAX_COMPOSER_HEIGHT = 168;
-const MIN_COMPOSER_HEIGHT = 48;
 
 export interface ComposerProps {
   readonly mode: ShellMode;
@@ -136,10 +134,7 @@ export function Composer({
 }: ComposerProps) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const composingRef = useRef(false);
   const submittingRef = useRef(false);
-  const initialFocusAttemptedRef = useRef(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const helpId = useId();
   const draftKey = "accepted-use";
   const continuityKey: keyof ContinuityDrafts = "acceptedUse";
@@ -193,39 +188,6 @@ export function Composer({
     }));
   }, [persistedDrafts]);
 
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (
-      initialFocusAttemptedRef.current ||
-      textarea === null ||
-      inputUnavailable ||
-      globalThis.matchMedia?.("(pointer: coarse)").matches === true
-    ) {
-      return;
-    }
-    initialFocusAttemptedRef.current = true;
-    const active = textarea.ownerDocument.activeElement;
-    if (active === null || active === textarea.ownerDocument.body) {
-      textarea.focus({ preventScroll: true });
-    }
-  }, [inputUnavailable]);
-
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea === null) {
-      return;
-    }
-
-    textarea.style.height = "0px";
-    const measuredHeight = Math.max(textarea.scrollHeight, MIN_COMPOSER_HEIGHT);
-    textarea.style.height = `${Math.min(
-      measuredHeight,
-      MAX_COMPOSER_HEIGHT,
-    )}px`;
-    textarea.style.overflowY =
-      textarea.scrollHeight > MAX_COMPOSER_HEIGHT ? "auto" : "hidden";
-  });
-
   const submit = async () => {
     const nextPrompt = prompt.trim();
     if (
@@ -250,21 +212,20 @@ export function Composer({
   };
 
   return (
-    <form
+    <PromptInput
       aria-busy={isActive}
-      className="composer-form"
+      className="composer-form composer"
       data-composer-role="flect"
-      onSubmit={(event) => {
-        event.preventDefault();
+      onSubmit={() => {
         void submit();
       }}
     >
-      <InputGroup className="composer">
-        <InputGroupTextarea
+      <PromptInputBody>
+        <PromptInputTextarea
           aria-describedby={helpId}
           aria-label={`Message ${roleName}`}
+          autoFocus={!inputUnavailable}
           disabled={inputUnavailable}
-          name="prompt"
           onChange={(event) => {
             const value = event.target.value;
             setDrafts((current) => ({
@@ -273,104 +234,79 @@ export function Composer({
             }));
             void onDraftChange?.(continuityKey, value);
           }}
-          onCompositionEnd={() => {
-            composingRef.current = false;
-          }}
-          onCompositionStart={() => {
-            composingRef.current = true;
-          }}
-          onKeyDown={(event) => {
-            if (
-              event.key === "Enter" &&
-              !event.shiftKey &&
-              !composingRef.current
-            ) {
-              event.preventDefault();
-              void submit();
-            }
-          }}
           placeholder={placeholder}
-          ref={textareaRef}
           rows={1}
           value={prompt}
         />
+      </PromptInputBody>
 
-        <InputGroupAddon align="block-end" className="composer__rail">
-          <div className="composer__tools">
-            <ComposerActionsMenu
-              disabled={protectedActionsLocked}
-              externalExtensionsEnabled={externalExtensionsEnabled}
-              onExportRepository={onExportRepository}
-              onExportCapsule={onExportCapsule}
-              onImportCapsule={onImportCapsule}
-              onInstallCapsule={onInstallCapsule}
-              onImportWebProject={onImportWebProject}
-              onImportWebProjectArchive={onImportWebProjectArchive}
-              onImportWebProjectGit={onImportWebProjectGit}
-              onOpenShareSource={onOpenShareSource}
-              onOpenShareFile={onOpenShareFile}
-              onManageSharedSources={onManageSharedSources}
-              repository={repository}
-              onOpenSafeMode={onOpenSafeMode}
-              onRollback={onRollback}
-              onToggleExternalExtensions={onToggleExternalExtensions}
-              rollbackAvailable={rollbackAvailable}
-              rollbackDisabled={protectedActionsLocked}
-            />
-            {mode === "safe" && (
-              <span className="composer__safe-label">Safe mode</span>
-            )}
-            <ModelMenu
-              authEvent={authEvent}
-              providerAuthVisible={!providerSetupInline}
-              disabled={modelMenuDisabled}
-              favoriteKeys={modelFavorites}
-              models={models}
-              onCancelProviderAuth={onCancelProviderAuth}
-              onLoginProvider={onLoginProvider}
-              onLogoutProvider={onLogoutProvider}
-              onRefreshProviderAuth={onRefreshProviderAuth}
-              onReplyProviderAuth={onReplyProviderAuth}
-              onSelect={onSelectModel}
-              onSelectReasoning={onSelectReasoning}
-              onToggleFavorite={onToggleModelFavorite}
-              providers={providers}
-              reasoningLevel={reasoningLevel}
-              selectedModel={selectedModel}
-            />
-          </div>
+      <PromptInputFooter className="composer__rail">
+        <PromptInputTools className="composer__tools">
+          <ComposerActionsMenu
+            disabled={protectedActionsLocked}
+            externalExtensionsEnabled={externalExtensionsEnabled}
+            onExportRepository={onExportRepository}
+            onExportCapsule={onExportCapsule}
+            onImportCapsule={onImportCapsule}
+            onInstallCapsule={onInstallCapsule}
+            onImportWebProject={onImportWebProject}
+            onImportWebProjectArchive={onImportWebProjectArchive}
+            onImportWebProjectGit={onImportWebProjectGit}
+            onOpenShareSource={onOpenShareSource}
+            onOpenShareFile={onOpenShareFile}
+            onManageSharedSources={onManageSharedSources}
+            repository={repository}
+            onOpenSafeMode={onOpenSafeMode}
+            onRollback={onRollback}
+            onToggleExternalExtensions={onToggleExternalExtensions}
+            rollbackAvailable={rollbackAvailable}
+            rollbackDisabled={protectedActionsLocked}
+          />
+          {mode === "safe" && (
+            <span className="composer__safe-label">Safe mode</span>
+          )}
+          <ModelMenu
+            authEvent={authEvent}
+            providerAuthVisible={!providerSetupInline}
+            disabled={modelMenuDisabled}
+            favoriteKeys={modelFavorites}
+            models={models}
+            onCancelProviderAuth={onCancelProviderAuth}
+            onLoginProvider={onLoginProvider}
+            onLogoutProvider={onLogoutProvider}
+            onRefreshProviderAuth={onRefreshProviderAuth}
+            onReplyProviderAuth={onReplyProviderAuth}
+            onSelect={onSelectModel}
+            onSelectReasoning={onSelectReasoning}
+            onToggleFavorite={onToggleModelFavorite}
+            providers={providers}
+            reasoningLevel={reasoningLevel}
+            selectedModel={selectedModel}
+          />
+        </PromptInputTools>
 
-          <div className="composer__actions">
-            {isActive ? (
-              <InputGroupButton
-                aria-describedby={helpId}
-                aria-label={`Stop ${roleName}`}
-                disabled={status === "cancelling"}
-                onClick={() => void onCancel()}
-                size="icon-sm"
-                type="button"
-                variant="secondary"
-              >
-                <StopIcon />
-              </InputGroupButton>
-            ) : (
-              <InputGroupButton
-                aria-describedby={helpId}
-                aria-label={`Send to ${roleName}`}
-                disabled={!canSubmit}
-                size="icon-sm"
-                type="submit"
-                variant="default"
-              >
-                <ArrowUpIcon />
-              </InputGroupButton>
-            )}
-          </div>
-        </InputGroupAddon>
-      </InputGroup>
+        <div className="composer__actions">
+          <PromptInputSubmit
+            aria-describedby={helpId}
+            aria-label={isActive ? `Stop ${roleName}` : `Send to ${roleName}`}
+            className="submit-button"
+            disabled={isActive ? status === "cancelling" : !canSubmit}
+            onStop={() => void onCancel()}
+            status={
+              status === "streaming"
+                ? "streaming"
+                : status === "submitting" || status === "cancelling"
+                  ? "submitted"
+                  : status === "error"
+                    ? "error"
+                    : "ready"
+            }
+          />
+        </div>
+      </PromptInputFooter>
       <span className="sr-only" id={helpId}>
         {help}
       </span>
-    </form>
+    </PromptInput>
   );
 }

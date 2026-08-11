@@ -1110,7 +1110,7 @@ test("keeps one draft and one conversation while Flect routes product and edit w
   const failedActivity = page.getByRole("button", {
     name: "Trusted Pi extension details",
   });
-  await expect(failedActivity).toContainText("Failed");
+  await expect(failedActivity).toContainText("Error");
   await failedActivity.click();
   await expect(
     page.getByText("Disable trusted Pi extensions for this agent and retry."),
@@ -1442,14 +1442,15 @@ test("keeps a reader's position until they choose to jump to new activity", asyn
   const conversation = page.getByRole("log", {
     name: "Flect conversation",
   });
+  const conversationScroll = conversation.locator(".conversation__scroll");
   await expect
     .poll(() =>
-      conversation.evaluate(
+      conversationScroll.evaluate(
         (element) => element.scrollHeight > element.clientHeight,
       ),
     )
     .toBe(true);
-  await conversation.evaluate((element) => {
+  await conversationScroll.evaluate((element) => {
     element.scrollTop = 0;
     element.dispatchEvent(new Event("scroll"));
   });
@@ -1460,13 +1461,13 @@ test("keeps a reader's position until they choose to jump to new activity", asyn
     page.getByRole("button", { name: /Jump to latest/ }),
   ).toBeVisible();
   expect(
-    await conversation.evaluate((element) => element.scrollTop),
+    await conversationScroll.evaluate((element) => element.scrollTop),
   ).toBeLessThan(50);
 
   await page.getByRole("button", { name: /Jump to latest/ }).click();
   await expect
     .poll(() =>
-      conversation.evaluate(
+      conversationScroll.evaluate(
         (element) =>
           element.scrollHeight - element.clientHeight - element.scrollTop,
       ),

@@ -105,25 +105,12 @@ describe("Composer", () => {
     );
   });
 
-  it("grows with the draft and scrolls only after the height bound", () => {
+  it("uses the AI Elements field-sizing composer with a bounded height", () => {
     render(<Composer {...props()} />);
     const input = screen.getByRole("textbox", { name: "Message Flect" });
 
-    Object.defineProperty(input, "scrollHeight", {
-      configurable: true,
-      value: 96,
-    });
     fireEvent.change(input, { target: { value: "Two\nlines" } });
-    expect(input).toHaveStyle({ height: "96px", overflowY: "hidden" });
-
-    Object.defineProperty(input, "scrollHeight", {
-      configurable: true,
-      value: 240,
-    });
-    fireEvent.change(input, {
-      target: { value: "One\nTwo\nThree\nFour\nFive\nSix\nSeven" },
-    });
-    expect(input).toHaveStyle({ height: "168px", overflowY: "auto" });
+    expect(input).toHaveClass("field-sizing-content", "max-h-48");
   });
 
   it("exposes implemented protected actions without placeholder controls", async () => {

@@ -10,8 +10,8 @@ colors:
   muted: "oklch(0.690 0.012 340)"
   quiet: "oklch(0.500 0.012 340)"
   line: "oklch(0.300 0.010 340)"
-  flect-rose: "oklch(0.630 0.180 340)"
-  flect-rose-hover: "oklch(0.690 0.170 340)"
+  primary: "oklch(0.922 0 0)"
+  primary-hover: "oklch(0.870 0 0)"
   ready: "oklch(0.780 0.120 158)"
   danger: "oklch(0.660 0.170 27)"
 typography:
@@ -53,7 +53,7 @@ components:
     rounded: "{rounded.pill}"
     size: "40px"
   button-primary-hover:
-    backgroundColor: "{colors.flect-rose-hover}"
+    backgroundColor: "{colors.primary-hover}"
     textColor: "{colors.void}"
     rounded: "{rounded.pill}"
     size: "40px"
@@ -72,9 +72,9 @@ components:
 
 Flect feels like working at a black anodized drafting desk after everything
 unnecessary has been cleared away. The interface recedes so the person's intent
-and the surface being shaped remain central. One restrained rose signal carries
-identity; it appears as a precise indication of agency, never as ambient
-decoration.
+and the surface being shaped remain central. A neutral hierarchy carries the
+interface; state is communicated with contrast, type, icons, and copy rather
+than a decorative product accent.
 
 The system is familiar enough to trust immediately and exact enough to feel
 first-party. It rejects widget-dashboard density, chatbot sidecars,
@@ -92,8 +92,8 @@ affordances, short labels, and restrained state motion.
 ### Component implementation
 
 Flect vendors the official Shadcn v4 component source. The protected workspace
-uses Shadcn's Radix primitives and official chat components for
-keyboard, pointer, focus, scrolling, and accessibility behavior. The initial
+uses Shadcn's Radix primitives and the official AI Elements registry for the
+conversation, messages, composer, reasoning, and tool activity. The initial
 visual baseline is Shadcn's neutral default; product-specific styling is a
 later, deliberate layer instead of a parallel component system.
 
@@ -190,15 +190,15 @@ keyboard behavior, or a design that only works at the demo viewport.
 
 ## 3. Colors
 
-The palette is monochrome at rest and reveals color only when state or agency
-needs to be communicated.
+The palette is neutral by default. Color appears only for semantic success,
+warning, or failure states.
 
 ### Primary
 
-- **Flect Rose** (`oklch(0.630 0.180 340)`): focus, active agent state,
-  selected controls, and the rare brand signal.
-- **Flect Rose Hover** (`oklch(0.690 0.170 340)`): interactive emphasis when a
-  primary action needs more presence.
+- **Primary** (`oklch(0.922 0 0)` dark, `oklch(0.205 0 0)` light): actions,
+  focus, and selected controls using Shadcn's neutral defaults.
+- **Primary Hover**: a neighboring neutral tone that preserves contrast without
+  introducing a product accent.
 
 ### Secondary
 
@@ -223,8 +223,8 @@ needs to be communicated.
 
 ### Named Rules
 
-**The One Signal Rule.** Flect Rose occupies less than ten percent of a screen.
-Its rarity makes agency unmistakable.
+**The Semantic Color Rule.** Non-neutral color must communicate a named state
+and must never be the only carrier of meaning.
 
 ## 4. Typography
 
@@ -276,8 +276,9 @@ to communicate focus, movement, or temporary hierarchy.
 ### Buttons
 
 - **Shape:** circular for icon-only controls; 8px for labeled controls.
-- **Primary:** Ink fill with Void content, reversing to Flect Rose when active.
-- **Hover / Focus:** 180ms tonal transition and a visible 2px Flect Rose focus
+- **Primary:** Ink fill with Void content, using the neighboring neutral when
+  active.
+- **Hover / Focus:** 180ms tonal transition and a visible 2px primary focus
   ring with offset.
 - **Ghost:** transparent at rest, Raised Surface on hover, never a faint outline
   box.
@@ -285,8 +286,8 @@ to communicate focus, movement, or temporary hierarchy.
 ### Chips
 
 - **Style:** tonal Surface or Raised Surface background with Ink or Muted text.
-- **State:** selected chips use a low-chroma rose tint plus an explicit icon or
-  label change.
+- **State:** selected chips use neutral contrast plus an explicit icon or label
+  change.
 
 ### Cards / Containers
 
@@ -301,8 +302,8 @@ to communicate focus, movement, or temporary hierarchy.
 
 - **Style:** a 16px prompt surface without a resting outline. The text area and
   its action rail read as one instrument.
-- **Focus:** Flect Rose appears as a precise inner seam; Prompt Lift signals the
-  active surface.
+- **Focus:** Primary contrast appears as a precise inner seam; Prompt Lift
+  signals the active surface.
 - **Error / Disabled:** errors use Failure Red plus direct recovery copy;
   disabled controls retain readable text and expose their reason.
 
@@ -372,7 +373,8 @@ existing Surface, Raised Surface, Line, Ink, and Muted tokens; code is
 `0.875rem` mono and table content is `0.8125rem`. Their own viewports own
 horizontal overflow, while copy, wrap, and expand actions stay dense on
 desktop and reach `44px` at compact widths. Details remain native disclosures,
-links use Flect Rose only as an interaction cue, and footnotes remain subdued.
+links use underline and neutral contrast as interaction cues, and footnotes
+remain subdued.
 The complete rendering and trust contract lives in
 [`docs/superpowers/specs/2026-07-31-flect-chat-markdown-design.md`](docs/superpowers/specs/2026-07-31-flect-chat-markdown-design.md).
 
@@ -402,7 +404,7 @@ ordinary product surface into infrastructure chrome.
 ### Do:
 
 - **Do** keep the person's work and current prompt visually central.
-- **Do** reserve Flect Rose for focus, selection, and active shaping.
+- **Do** use neutral contrast for focus, selection, and active shaping.
 - **Do** use known platform affordances with visible keyboard focus.
 - **Do** use host-native surfaces when the WebView cannot meet the platform
   contract.

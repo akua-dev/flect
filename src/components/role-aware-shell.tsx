@@ -393,7 +393,7 @@ export function RoleAwareShell({
     queueMicrotask(() => {
       railContainerRef.current
         ?.querySelector<HTMLTextAreaElement>(
-          '.composer textarea[name="prompt"]',
+          '.composer textarea[name="message"]',
         )
         ?.focus({ preventScroll: true });
     });
