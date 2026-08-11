@@ -187,7 +187,7 @@ export function DiagnosticsPanel({
       {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
       <summary aria-label="Diagnostics" role="button">
         <span>Diagnostics</span>
-        <small>
+        <small aria-hidden="true">
           {storageSummary !== undefined
             ? storageSummary
             : control.enabled

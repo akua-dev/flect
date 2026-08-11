@@ -18,6 +18,12 @@ import { ComposerActionsMenu } from "./composer-actions-menu";
 import { ArrowUpIcon, StopIcon } from "./icons";
 import { ModelMenu } from "./model-menu";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "./ui/input-group";
 
 const MAX_COMPOSER_HEIGHT = 168;
 const MIN_COMPOSER_HEIGHT = 48;
@@ -246,118 +252,122 @@ export function Composer({
   return (
     <form
       aria-busy={isActive}
-      className={`composer${isActive ? " composer--active" : ""}`}
+      className="composer-form"
       data-composer-role="flect"
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
       }}
     >
-      <textarea
-        aria-describedby={helpId}
-        aria-label={`Message ${roleName}`}
-        disabled={inputUnavailable}
-        name="prompt"
-        onChange={(event) => {
-          const value = event.target.value;
-          setDrafts((current) => ({
-            ...current,
-            [draftKey]: value,
-          }));
-          void onDraftChange?.(continuityKey, value);
-        }}
-        onCompositionEnd={() => {
-          composingRef.current = false;
-        }}
-        onCompositionStart={() => {
-          composingRef.current = true;
-        }}
-        onKeyDown={(event) => {
-          if (
-            event.key === "Enter" &&
-            !event.shiftKey &&
-            !composingRef.current
-          ) {
-            event.preventDefault();
-            void submit();
-          }
-        }}
-        placeholder={placeholder}
-        ref={textareaRef}
-        rows={1}
-        value={prompt}
-      />
+      <InputGroup className="composer">
+        <InputGroupTextarea
+          aria-describedby={helpId}
+          aria-label={`Message ${roleName}`}
+          disabled={inputUnavailable}
+          name="prompt"
+          onChange={(event) => {
+            const value = event.target.value;
+            setDrafts((current) => ({
+              ...current,
+              [draftKey]: value,
+            }));
+            void onDraftChange?.(continuityKey, value);
+          }}
+          onCompositionEnd={() => {
+            composingRef.current = false;
+          }}
+          onCompositionStart={() => {
+            composingRef.current = true;
+          }}
+          onKeyDown={(event) => {
+            if (
+              event.key === "Enter" &&
+              !event.shiftKey &&
+              !composingRef.current
+            ) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+          placeholder={placeholder}
+          ref={textareaRef}
+          rows={1}
+          value={prompt}
+        />
 
-      <div className="composer__rail">
-        <div className="composer__tools">
-          <ComposerActionsMenu
-            disabled={protectedActionsLocked}
-            externalExtensionsEnabled={externalExtensionsEnabled}
-            onExportRepository={onExportRepository}
-            onExportCapsule={onExportCapsule}
-            onImportCapsule={onImportCapsule}
-            onInstallCapsule={onInstallCapsule}
-            onImportWebProject={onImportWebProject}
-            onImportWebProjectArchive={onImportWebProjectArchive}
-            onImportWebProjectGit={onImportWebProjectGit}
-            onOpenShareSource={onOpenShareSource}
-            onOpenShareFile={onOpenShareFile}
-            onManageSharedSources={onManageSharedSources}
-            repository={repository}
-            onOpenSafeMode={onOpenSafeMode}
-            onRollback={onRollback}
-            onToggleExternalExtensions={onToggleExternalExtensions}
-            rollbackAvailable={rollbackAvailable}
-            rollbackDisabled={protectedActionsLocked}
-          />
-          {mode === "safe" && (
-            <span className="composer__safe-label">Safe mode</span>
-          )}
-          <ModelMenu
-            authEvent={authEvent}
-            providerAuthVisible={!providerSetupInline}
-            disabled={modelMenuDisabled}
-            favoriteKeys={modelFavorites}
-            models={models}
-            onCancelProviderAuth={onCancelProviderAuth}
-            onLoginProvider={onLoginProvider}
-            onLogoutProvider={onLogoutProvider}
-            onRefreshProviderAuth={onRefreshProviderAuth}
-            onReplyProviderAuth={onReplyProviderAuth}
-            onSelect={onSelectModel}
-            onSelectReasoning={onSelectReasoning}
-            onToggleFavorite={onToggleModelFavorite}
-            providers={providers}
-            reasoningLevel={reasoningLevel}
-            selectedModel={selectedModel}
-          />
-        </div>
+        <InputGroupAddon align="block-end" className="composer__rail">
+          <div className="composer__tools">
+            <ComposerActionsMenu
+              disabled={protectedActionsLocked}
+              externalExtensionsEnabled={externalExtensionsEnabled}
+              onExportRepository={onExportRepository}
+              onExportCapsule={onExportCapsule}
+              onImportCapsule={onImportCapsule}
+              onInstallCapsule={onInstallCapsule}
+              onImportWebProject={onImportWebProject}
+              onImportWebProjectArchive={onImportWebProjectArchive}
+              onImportWebProjectGit={onImportWebProjectGit}
+              onOpenShareSource={onOpenShareSource}
+              onOpenShareFile={onOpenShareFile}
+              onManageSharedSources={onManageSharedSources}
+              repository={repository}
+              onOpenSafeMode={onOpenSafeMode}
+              onRollback={onRollback}
+              onToggleExternalExtensions={onToggleExternalExtensions}
+              rollbackAvailable={rollbackAvailable}
+              rollbackDisabled={protectedActionsLocked}
+            />
+            {mode === "safe" && (
+              <span className="composer__safe-label">Safe mode</span>
+            )}
+            <ModelMenu
+              authEvent={authEvent}
+              providerAuthVisible={!providerSetupInline}
+              disabled={modelMenuDisabled}
+              favoriteKeys={modelFavorites}
+              models={models}
+              onCancelProviderAuth={onCancelProviderAuth}
+              onLoginProvider={onLoginProvider}
+              onLogoutProvider={onLogoutProvider}
+              onRefreshProviderAuth={onRefreshProviderAuth}
+              onReplyProviderAuth={onReplyProviderAuth}
+              onSelect={onSelectModel}
+              onSelectReasoning={onSelectReasoning}
+              onToggleFavorite={onToggleModelFavorite}
+              providers={providers}
+              reasoningLevel={reasoningLevel}
+              selectedModel={selectedModel}
+            />
+          </div>
 
-        <div className="composer__actions">
-          {isActive ? (
-            <button
-              aria-describedby={helpId}
-              aria-label={`Stop ${roleName}`}
-              className="submit-button submit-button--stop"
-              disabled={status === "cancelling"}
-              onClick={() => void onCancel()}
-              type="button"
-            >
-              <StopIcon />
-            </button>
-          ) : (
-            <button
-              aria-describedby={helpId}
-              aria-label={`Send to ${roleName}`}
-              className="submit-button"
-              disabled={!canSubmit}
-              type="submit"
-            >
-              <ArrowUpIcon />
-            </button>
-          )}
-        </div>
-      </div>
+          <div className="composer__actions">
+            {isActive ? (
+              <InputGroupButton
+                aria-describedby={helpId}
+                aria-label={`Stop ${roleName}`}
+                disabled={status === "cancelling"}
+                onClick={() => void onCancel()}
+                size="icon-sm"
+                type="button"
+                variant="secondary"
+              >
+                <StopIcon />
+              </InputGroupButton>
+            ) : (
+              <InputGroupButton
+                aria-describedby={helpId}
+                aria-label={`Send to ${roleName}`}
+                disabled={!canSubmit}
+                size="icon-sm"
+                type="submit"
+                variant="default"
+              >
+                <ArrowUpIcon />
+              </InputGroupButton>
+            )}
+          </div>
+        </InputGroupAddon>
+      </InputGroup>
       <span className="sr-only" id={helpId}>
         {help}
       </span>

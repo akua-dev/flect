@@ -280,8 +280,12 @@ export function ModelMenu({
         ref={triggerRef}
         type="button"
       >
-        <span className="model-menu__selection">{selectedLabel}</span>
-        <span className="model-menu__source">via Pi</span>
+        <span aria-hidden="true" className="model-menu__selection">
+          {selectedLabel}
+        </span>
+        <span aria-hidden="true" className="model-menu__source">
+          via Pi
+        </span>
         <ChevronIcon className="model-menu__chevron" />
       </button>
 

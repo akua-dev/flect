@@ -34,7 +34,6 @@ import type {
 } from "../hooks/use-agent-session";
 import { isAgentSessionActive } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
-import { useStickyFollow } from "../hooks/use-sticky-follow";
 import type { WebProjectImportResult } from "../lib/web-project-import";
 import type { CapsuleReview } from "../lib/workspace-controller";
 import { Composer } from "./composer";
@@ -46,6 +45,26 @@ import type {
 import type { ExtensionReviewKey } from "./extension-review";
 import { PanelCloseIcon, RefreshIcon } from "./icons";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
+import { Bubble, BubbleContent } from "./ui/bubble";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import {
+  Message as ChatMessage,
+  MessageContent as ChatMessageContent,
+} from "./ui/message";
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from "./ui/message-scroller";
 
 const ActivityCard = lazy(() =>
   import("./activity-card").then((module) => ({
@@ -103,7 +122,7 @@ function DeferredDiagnosticsPanel(props: DiagnosticsPanelProps) {
             {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
             <summary aria-label="Diagnostics" role="button">
               <span>Diagnostics</span>
-              <small>
+              <small aria-hidden="true">
                 {diagnosticsLabel(props.control, props.persistence)}
               </small>
             </summary>
@@ -125,7 +144,9 @@ function DeferredDiagnosticsPanel(props: DiagnosticsPanelProps) {
       {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
       <summary aria-label="Diagnostics" role="button">
         <span>Diagnostics</span>
-        <small>{diagnosticsLabel(props.control, props.persistence)}</small>
+        <small aria-hidden="true">
+          {diagnosticsLabel(props.control, props.persistence)}
+        </small>
       </summary>
     </details>
   );
@@ -489,104 +510,107 @@ function Conversation({
   readonly label: string;
   readonly onFixFailure?: (activity: ToolActivity) => void;
 }) {
-  const lastMessage = messages.at(-1);
-  const lastActivity = activities.at(-1);
-  const follow = useStickyFollow(
-    label,
-    [
-      lastMessage?.id ?? "no-message",
-      lastMessage?.content.length ?? 0,
-      lastActivity?.id ?? "no-activity",
-      lastActivity?.phase ?? "",
-      lastActivity?.updatedAt ?? 0,
-    ].join(":"),
-  );
-
   return (
-    <div
-      aria-label={`${label} conversation`}
-      aria-live="polite"
-      className="conversation"
-      onScroll={follow.onScroll}
-      ref={follow.containerRef}
-      role="log"
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: the overflowing transcript must be keyboard-focusable so users can scroll it without a pointer.
-      tabIndex={0}
-    >
-      {messages.length === 0 && activities.length === 0 && (
-        <div className="conversation__empty">
-          <strong>Build and use the product in one conversation.</strong>
-          <p>
-            Ask for a change, use the current interface, or call an approved
-            action. Flect routes the work for you.
-          </p>
-        </div>
-      )}
-      {messages.map((message, index) => {
-        const isLatest = index === messages.length - 1;
-        return (
-          <article
-            className={`message message--${message.role}`}
-            key={message.id}
-          >
-            <span className="sr-only">
-              {message.role === "user"
-                ? "You"
-                : message.role === "activity"
-                  ? "Activity"
-                  : label}
-            </span>
-            {message.content ? (
-              <Suspense fallback={<span>{message.content}</span>}>
-                <MessageContent
-                  content={message.content}
-                  messageRole={message.role}
-                  streaming={
-                    message.role === "assistant" &&
-                    isLatest &&
-                    status === "streaming"
-                  }
-                />
-              </Suspense>
-            ) : (
-              isLatest &&
-              (status === "submitting" || status === "streaming") && (
-                <span className="thinking" role="status">
-                  <span className="sr-only">{label} is responding</span>
-                  <span aria-hidden="true" />
-                  <span aria-hidden="true" />
-                  <span aria-hidden="true" />
-                </span>
-              )
+    <MessageScrollerProvider autoScroll defaultScrollPosition="end">
+      <MessageScroller className="conversation-shell">
+        <MessageScrollerViewport
+          aria-label={`${label} conversation`}
+          className="conversation"
+          role="log"
+        >
+          <MessageScrollerContent className="conversation__content">
+            {messages.length === 0 && activities.length === 0 && (
+              <div className="conversation__empty">
+                <strong>Build and use the product in one conversation.</strong>
+                <p>
+                  Ask for a change, use the current interface, or call an
+                  approved action. Flect routes the work for you.
+                </p>
+              </div>
             )}
-          </article>
-        );
-      })}
-      {activities.map((activity) => (
-        <Suspense
-          fallback={<SurfaceFallback label="Opening activity details" />}
-          key={activity.id}
-        >
-          <ActivityCard
-            activity={activity}
-            {...(onFixFailure === undefined
-              ? {}
-              : { onFixInShape: onFixFailure })}
-          />
-        </Suspense>
-      ))}
-      {!follow.following && (
-        <button
-          className="jump-to-latest"
-          onClick={follow.jumpToLatest}
-          type="button"
-        >
-          {follow.unreadCount > 0
-            ? `Jump to latest (${follow.unreadCount})`
-            : "Jump to latest"}
-        </button>
-      )}
-    </div>
+            {messages.map((message, index) => {
+              const isLatest = index === messages.length - 1;
+              return (
+                <MessageScrollerItem
+                  key={message.id}
+                  messageId={message.id}
+                  scrollAnchor={message.role === "user"}
+                >
+                  <ChatMessage
+                    align={message.role === "user" ? "end" : "start"}
+                    className={`message message--${message.role}`}
+                  >
+                    <ChatMessageContent>
+                      <Bubble
+                        align={message.role === "user" ? "end" : "start"}
+                        variant={
+                          message.role === "user" ? "secondary" : "ghost"
+                        }
+                      >
+                        <BubbleContent>
+                          <span className="sr-only">
+                            {message.role === "user"
+                              ? "You"
+                              : message.role === "activity"
+                                ? "Activity"
+                                : label}
+                          </span>
+                          {message.content ? (
+                            <Suspense fallback={<span>{message.content}</span>}>
+                              <MessageContent
+                                content={message.content}
+                                messageRole={message.role}
+                                streaming={
+                                  message.role === "assistant" &&
+                                  isLatest &&
+                                  status === "streaming"
+                                }
+                              />
+                            </Suspense>
+                          ) : (
+                            isLatest &&
+                            (status === "submitting" ||
+                              status === "streaming") && (
+                              <span className="thinking" role="status">
+                                <span className="sr-only">
+                                  {label} is responding
+                                </span>
+                                <span aria-hidden="true" />
+                                <span aria-hidden="true" />
+                                <span aria-hidden="true" />
+                              </span>
+                            )
+                          )}
+                        </BubbleContent>
+                      </Bubble>
+                    </ChatMessageContent>
+                  </ChatMessage>
+                </MessageScrollerItem>
+              );
+            })}
+            {activities.map((activity) => (
+              <MessageScrollerItem key={activity.id} messageId={activity.id}>
+                <Suspense
+                  fallback={
+                    <SurfaceFallback label="Opening activity details" />
+                  }
+                >
+                  <ActivityCard
+                    activity={activity}
+                    {...(onFixFailure === undefined
+                      ? {}
+                      : { onFixInShape: onFixFailure })}
+                  />
+                </Suspense>
+              </MessageScrollerItem>
+            ))}
+          </MessageScrollerContent>
+        </MessageScrollerViewport>
+        <MessageScrollerButton direction="end" size="sm" variant="secondary">
+          Jump to latest
+        </MessageScrollerButton>
+      </MessageScroller>
+    </MessageScrollerProvider>
   );
 }
 
@@ -1327,30 +1351,36 @@ export function AgentRail({
         {controller.status === "setup-required" && (
           <section
             aria-labelledby="provider-setup-title"
-            className="runtime-alert runtime-alert--setup"
+            className="provider-setup"
           >
-            <div>
-              <h2 id="provider-setup-title">Connect an agent</h2>
-              <p>
-                Sign in once, then tell Flect what you want to make. Your draft
-                stays private until the connection succeeds.
-              </p>
-            </div>
-            <Suspense
-              fallback={<SurfaceFallback label="Opening provider setup" />}
-            >
-              <ProviderAuthPanel
-                authEvent={workspace.authEvent}
-                compact
-                disabled={operationActive}
-                onCancel={workspace.cancelProviderAuth}
-                onLogin={workspace.loginProvider}
-                onLogout={workspace.logoutProvider}
-                onRefresh={workspace.refreshProviderAuth}
-                onReply={workspace.replyProviderAuth}
-                providers={workspace.providers}
-              />
-            </Suspense>
+            <Card>
+              <CardHeader>
+                <CardTitle id="provider-setup-title">
+                  Connect an agent
+                </CardTitle>
+                <CardDescription>
+                  Sign in once, then tell Flect what you want to make. Your
+                  draft stays private until the connection succeeds.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Suspense
+                  fallback={<SurfaceFallback label="Opening provider setup" />}
+                >
+                  <ProviderAuthPanel
+                    authEvent={workspace.authEvent}
+                    compact
+                    disabled={operationActive}
+                    onCancel={workspace.cancelProviderAuth}
+                    onLogin={workspace.loginProvider}
+                    onLogout={workspace.logoutProvider}
+                    onRefresh={workspace.refreshProviderAuth}
+                    onReply={workspace.replyProviderAuth}
+                    providers={workspace.providers}
+                  />
+                </Suspense>
+              </CardContent>
+            </Card>
           </section>
         )}
 
