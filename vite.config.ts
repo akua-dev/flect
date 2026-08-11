@@ -1,4 +1,5 @@
 import { fileURLToPath, URL } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type UserConfig } from "vite";
 
@@ -68,7 +69,12 @@ export const browserExecutionHeaders = {
 
 export const flectViteConfig = {
   envPrefix: ["PUBLIC_", "VITE_"],
-  plugins: [react(), browserBundleAnalysis, immutablePreviewAssets],
+  plugins: [
+    react(),
+    tailwindcss(),
+    browserBundleAnalysis,
+    immutablePreviewAssets,
+  ],
   worker: {
     format: "es",
   },

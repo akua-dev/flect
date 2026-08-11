@@ -976,6 +976,7 @@ export function AgentRail({
       aria-label="Flect agent"
       className="agent-rail"
       data-mode={mode}
+      data-status={controller.status}
       tabIndex={-1}
     >
       <header className="agent-rail__header">
@@ -1324,12 +1325,15 @@ export function AgentRail({
         )}
 
         {controller.status === "setup-required" && (
-          <div className="runtime-alert runtime-alert--setup" role="alert">
+          <section
+            aria-labelledby="provider-setup-title"
+            className="runtime-alert runtime-alert--setup"
+          >
             <div>
-              <strong>Connect an agent</strong>
+              <h2 id="provider-setup-title">Connect an agent</h2>
               <p>
-                Choose a Pi-owned provider below. You can write your first
-                message now; Flect keeps it private until sign-in succeeds.
+                Sign in once, then tell Flect what you want to make. Your draft
+                stays private until the connection succeeds.
               </p>
             </div>
             <Suspense
@@ -1347,7 +1351,7 @@ export function AgentRail({
                 providers={workspace.providers}
               />
             </Suspense>
-          </div>
+          </section>
         )}
 
         {controller.status === "unavailable" && (

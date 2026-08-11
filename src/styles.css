@@ -1,3 +1,23 @@
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./components/ui";
+@source "./components/provider-auth-panel.tsx";
+
+@theme inline {
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
+  --color-primary: var(--flect-rose);
+  --color-primary-foreground: oklch(0.985 0.003 340);
+  --color-secondary: var(--surface-raised);
+  --color-secondary-foreground: var(--ink);
+  --color-muted: var(--surface-raised);
+  --color-muted-foreground: var(--muted);
+  --color-border: var(--line);
+  --color-ring: var(--flect-rose);
+  --color-destructive: var(--danger);
+  --radius-md: 0.625rem;
+}
+
 :root {
   color-scheme: dark;
   font-family:
@@ -90,8 +110,12 @@ textarea {
   font: inherit;
 }
 
-button {
+button:not([data-slot="button"]) {
   color: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+[data-slot="button"] {
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -963,6 +987,25 @@ textarea:focus-visible,
   transform: translate(-50%, 22px);
 }
 
+.role-shell--centered
+  .agent-rail-container:has(.agent-rail[data-status="setup-required"]) {
+  top: clamp(210px, 30dvh, 360px);
+  bottom: max(18px, env(safe-area-inset-bottom));
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  transform: translateX(-50%);
+}
+
+.role-shell:has(.agent-rail[data-status="setup-required"]) .workspace-canvas {
+  align-items: flex-start;
+}
+
+.role-shell:has(.agent-rail[data-status="setup-required"]) .blank-invitation {
+  padding-top: clamp(82px, 14dvh, 164px);
+  padding-bottom: 0;
+}
+
 .role-shell--collapsed .agent-rail-container {
   visibility: hidden;
   pointer-events: none;
@@ -980,6 +1023,11 @@ textarea:focus-visible,
 .role-shell--centered .agent-rail {
   height: auto;
   background: transparent;
+}
+
+.role-shell--centered .agent-rail[data-status="setup-required"] {
+  height: 100%;
+  min-height: 0;
 }
 
 .agent-rail__header {
@@ -2223,6 +2271,21 @@ textarea:focus-visible,
   padding: 0;
 }
 
+.role-shell--centered
+  .agent-rail[data-status="setup-required"]
+  .agent-rail__dock {
+  min-height: 0;
+  height: 100%;
+  align-content: end;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-gutter: stable;
+}
+
+.agent-rail[data-status="setup-required"] .diagnostics-panel {
+  display: none;
+}
+
 .composer {
   position: relative;
   width: 100%;
@@ -2697,9 +2760,7 @@ textarea:focus-visible,
   gap: 4px;
 }
 
-.model-menu__reasoning button,
-.provider-auth button,
-.provider-auth a {
+.model-menu__reasoning button {
   min-height: 28px;
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -2714,11 +2775,7 @@ textarea:focus-visible,
 
 .model-menu__reasoning button:hover,
 .model-menu__reasoning button:focus-visible,
-.model-menu__reasoning button[aria-checked="true"],
-.provider-auth button:hover:not(:disabled),
-.provider-auth button:focus-visible,
-.provider-auth a:hover,
-.provider-auth a:focus-visible {
+.model-menu__reasoning button[aria-checked="true"] {
   border-color: var(--accent-line);
   background: var(--accent-soft);
   color: var(--ink);
@@ -2726,12 +2783,13 @@ textarea:focus-visible,
 
 .provider-auth {
   display: grid;
-  max-height: 220px;
-  gap: 9px;
+  min-height: 0;
+  max-height: 230px;
+  gap: 10px;
   overflow-y: auto;
-  border-top: 1px solid var(--line);
-  padding: 11px 12px 12px;
+  padding: 2px;
   overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .provider-auth > header,
@@ -2761,10 +2819,11 @@ textarea:focus-visible,
 }
 
 .provider-auth__provider {
-  min-height: 42px;
-  border-radius: 9px;
-  padding: 6px 7px;
-  background: color-mix(in oklch, var(--surface-raised) 68%, transparent);
+  min-height: 52px;
+  border: 1px solid color-mix(in oklch, var(--line) 72%, transparent);
+  border-radius: 10px;
+  padding: 8px 9px;
+  background: color-mix(in oklch, var(--surface-raised) 42%, transparent);
 }
 
 .provider-auth__actions {
@@ -2815,11 +2874,6 @@ textarea:focus-visible,
   color: var(--ink);
   font-size: 12px;
   letter-spacing: 0.08em;
-}
-
-.provider-auth button:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
 }
 
 .role-switcher {
@@ -2925,12 +2979,23 @@ textarea:focus-visible,
 
 .runtime-alert--setup {
   grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+  gap: 14px;
+  border: 1px solid color-mix(in oklch, var(--line) 74%, transparent);
+  padding: 18px;
+  background: color-mix(in oklch, var(--surface) 94%, var(--canvas));
+  box-shadow: 0 18px 48px var(--shadow-float);
 }
 
 .runtime-alert--setup .provider-auth {
-  max-height: min(34dvh, 260px);
-  border-top: 1px solid var(--line);
-  padding: 10px 0 0;
+  max-height: min(30dvh, 250px);
+}
+
+.runtime-alert--setup h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 640;
+  letter-spacing: -0.012em;
 }
 
 .runtime-alert strong,
@@ -4029,6 +4094,26 @@ textarea:focus-visible,
   .model-menu__provider {
     min-height: 44px;
     flex-basis: 44px;
+  }
+}
+
+@media (max-height: 640px) {
+  .role-shell:has(.agent-rail[data-status="setup-required"]) .blank-invitation {
+    padding-top: 64px;
+  }
+
+  .role-shell--centered
+    .agent-rail-container:has(.agent-rail[data-status="setup-required"]) {
+    top: 72px;
+    bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .runtime-alert--setup {
+    padding: 14px;
+  }
+
+  .runtime-alert--setup .provider-auth {
+    max-height: min(34dvh, 190px);
   }
 }
 

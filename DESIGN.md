@@ -89,6 +89,22 @@ affordances, short labels, and restrained state motion.
 - One centered agent composer that expands naturally into a conversation rail.
 - Protected recovery controls that remain quiet but always reachable.
 
+### Component implementation
+
+Flect owns its component source. The protected workspace uses the Shadcn v4
+composition model with React Aria primitives where their interaction semantics
+materially improve keyboard, pointer, focus, or accessibility behavior. These
+are not a third-party visual theme: Flect's semantic OKLCH tokens, platform
+metrics, motion, density, and maximum 16px surface radius remain authoritative.
+
+Tailwind v4 compiles only the owned workspace component sources. It does not
+enter the static Astro activation shell, does not replace the Effect workflow
+kernel, and does not authorize large registry-wide installs. Add primitives one
+at a time, keep them behind the island or feature boundary that needs them, and
+measure both the initial protected workspace and the on-demand chunk. A native
+host control still wins whenever a WebView primitive fails the platform-native
+quality contract.
+
 ## 2. Platform-native quality contract
 
 Flect must feel like first-party software on every platform it claims to
