@@ -76,6 +76,10 @@ until that stylesheet has loaded and the island is ready. Compiler, package,
 shell, Worker, and Wasm substrates remain on demand until a typed operation
 needs them. Production Astro uses Preact's React compatibility renderer for the
 existing workspace components; the direct Vite SPA remains a React fallback.
+Owned Shadcn v4 components and their React Aria interaction primitives compile
+inside that deferred workspace stylesheet/chunk only; Flect tokens define the
+visual language, and the static Astro route carries none of the component
+runtime.
 The measured production gates and exact budgets are documented below.
 
 Flect remains under active development. The published v0.2.0 macOS preview is

@@ -48,6 +48,54 @@ test.beforeEach(async ({ page }) => {
   ).toBeEnabled();
 });
 
+test("keeps first-run provider setup contained and immediately actionable", async ({
+  page,
+}, testInfo) => {
+  await page.route("**/api/models", (route) => {
+    void route.fulfill({
+      body: JSON.stringify({ models: [], version: 1 }),
+      contentType: "application/json",
+      status: 200,
+    });
+  });
+  await page.setViewportSize({ width: 760, height: 560 });
+  await page.reload();
+
+  const setup = page.getByRole("region", { name: "Connect an agent" });
+  await expect(setup).toBeVisible();
+  await expect(page.getByRole("button", { name: "Connect" })).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Diagnostics" })).toBeHidden();
+
+  const geometry = await page.evaluate(() => {
+    const setup = document.querySelector<HTMLElement>(".runtime-alert--setup");
+    const composer = document.querySelector<HTMLElement>(".composer");
+    if (setup === null || composer === null) {
+      throw new Error("First-run surfaces are missing");
+    }
+    const setupBox = setup.getBoundingClientRect();
+    const composerBox = composer.getBoundingClientRect();
+    return {
+      composerBottom: composerBox.bottom,
+      composerLeft: composerBox.left,
+      composerRight: composerBox.right,
+      documentWidth: document.documentElement.scrollWidth,
+      setupTop: setupBox.top,
+      viewportHeight: window.innerHeight,
+      viewportWidth: window.innerWidth,
+    };
+  });
+  expect(geometry.documentWidth).toBe(geometry.viewportWidth);
+  expect(geometry.setupTop).toBeGreaterThanOrEqual(64);
+  expect(geometry.composerLeft).toBeGreaterThanOrEqual(0);
+  expect(geometry.composerRight).toBeLessThanOrEqual(geometry.viewportWidth);
+  expect(geometry.composerBottom).toBeLessThanOrEqual(geometry.viewportHeight);
+  await expectAccessible(page, "contained first-run provider setup");
+  await page.screenshot({ path: testInfo.outputPath("first-run-setup.png") });
+});
+
 test("gates blank, candidate, accepted, Diagnostics, model, and safe states", async ({
   page,
 }) => {

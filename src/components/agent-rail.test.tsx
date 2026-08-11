@@ -380,7 +380,9 @@ describe("AgentRail", () => {
       />,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Connect an agent");
+    expect(
+      screen.getByRole("region", { name: "Connect an agent" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Try again" }),
     ).not.toBeInTheDocument();
