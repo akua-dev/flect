@@ -38,7 +38,7 @@ textarea {
 .activation-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: 52px 1fr;
+  grid-template-rows: 64px 1fr;
 }
 
 .activation-shell[hidden],
@@ -52,14 +52,6 @@ textarea {
   padding: 0 22px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
   -webkit-app-region: drag;
-}
-
-.activation-shell__wordmark {
-  color: inherit;
-  font-size: 14px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  text-decoration: none;
 }
 
 .activation-shell__main {
@@ -200,7 +192,7 @@ textarea {
 
 @media (max-width: 600px) {
   .activation-shell {
-    grid-template-rows: 48px 1fr;
+    grid-template-rows: 56px 1fr;
   }
 
   .activation-shell__bar {

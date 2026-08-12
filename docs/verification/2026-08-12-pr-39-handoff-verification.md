@@ -45,6 +45,14 @@ baseline in
    verify geometry, compact behavior, and keyboard focus. The workspace also
    exposed an existing low-contrast failed-operation label; its semantic
    background and neutral text now pass the WCAG A/AA audit.
+5. The default interface exposed canvas-only actions before a canvas existed.
+   The starter state now asks only for the desired outcome, hides selection and
+   product-action affordances until a real interface is present, and gives the
+   static home page one concrete creation action. The left product surface no
+   longer carries a Flect wordmark; Flect remains identified in the agent rail.
+   The native drag region is now a clear 64 px strip above the product surface.
+   Targeted component and production-Chromium tests cover the starter state;
+   the ad-hoc macOS bundle and isolated native lifecycle verifier passed.
 
 ## Host limits and unproven gates
 

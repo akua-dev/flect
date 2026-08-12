@@ -359,11 +359,11 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
   ) {
     return (
       <div className="role-shell role-shell--loading">
-        <header className="topbar">
-          <a aria-label="Flect home" className="wordmark" href="/">
-            Flect
-          </a>
-        </header>
+        <div
+          aria-hidden="true"
+          className="window-drag-region"
+          data-tauri-drag-region
+        />
         <main aria-busy="true" className="workspace-canvas">
           <p className="shell-loading-status" role="status">
             Opening workspace
