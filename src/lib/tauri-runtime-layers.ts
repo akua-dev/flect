@@ -1,5 +1,5 @@
 import { Layer } from "effect";
-import { makeTauriNativePlatformLayer } from "./native-platform";
+import { makeTauriNativePlatformLayer } from "./tauri-native-platform";
 import {
   makeTauriFlectClientLayer,
   makeTauriWorkspaceControlTransportLayer,
