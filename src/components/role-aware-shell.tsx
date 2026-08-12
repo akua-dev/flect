@@ -34,6 +34,7 @@ import {
 import { PanelOpenIcon } from "./icons";
 import { type InterfaceAction, InterfaceRenderer } from "./interface-renderer";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
+import { WindowDragRegion } from "./window-drag-region";
 
 const ShareLibrary = lazy(() =>
   import("./share-library").then((module) => ({
@@ -618,11 +619,7 @@ export function RoleAwareShell({
       >
         {workbenchStatus}
       </div>
-      <div
-        aria-hidden="true"
-        className="window-drag-region"
-        data-tauri-drag-region
-      />
+      <WindowDragRegion />
       <header className="topbar">
         <div className="topbar__status">
           {phase === "safe" ? (

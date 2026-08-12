@@ -49,9 +49,26 @@ textarea {
 .activation-shell__bar {
   display: flex;
   align-items: center;
+  justify-content: center;
   padding: 0 22px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: grab;
+  user-select: none;
   -webkit-app-region: drag;
+  -webkit-user-select: none;
+}
+
+.activation-shell__bar::after {
+  width: 68px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  opacity: 0.32;
+}
+
+.activation-shell__bar:active {
+  cursor: grabbing;
 }
 
 .activation-shell__main {

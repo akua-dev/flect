@@ -238,7 +238,25 @@ textarea:focus-visible,
   right: 0;
   left: 0;
   height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  user-select: none;
   -webkit-app-region: drag;
+  -webkit-user-select: none;
+}
+
+.window-drag-region::after {
+  width: 68px;
+  height: 5px;
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--ink) 22%, transparent);
+  content: "";
+}
+
+.window-drag-region:active {
+  cursor: grabbing;
 }
 
 .topbar__status {

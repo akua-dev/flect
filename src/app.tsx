@@ -53,6 +53,7 @@ import { isRollbackAvailable } from "../shared/revisions";
 import { ShellPreferencesValue } from "../shared/shell-preferences";
 import type { ShapingController } from "./components/agent-rail";
 import { RoleAwareShell } from "./components/role-aware-shell";
+import { WindowDragRegion } from "./components/window-drag-region";
 import type {
   AgentWorkspaceController,
   ConversationMessage,
@@ -359,11 +360,7 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
   ) {
     return (
       <div className="role-shell role-shell--loading">
-        <div
-          aria-hidden="true"
-          className="window-drag-region"
-          data-tauri-drag-region
-        />
+        <WindowDragRegion />
         <main aria-busy="true" className="workspace-canvas">
           <p className="shell-loading-status" role="status">
             Opening workspace
