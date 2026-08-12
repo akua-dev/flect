@@ -1,13 +1,16 @@
 import { basename, dirname, join, resolve } from "node:path";
 import { parse } from "acorn";
+import { FlectPerformanceBudgets } from "../shared/performance-budgets";
 
 const DIST = join(import.meta.dir, "..", "dist");
 const ASSETS = join(DIST, "assets");
 const KIB = 1_024;
 const WORKSPACE_CSS_GZIP_BUDGET = 20 * KIB;
 const WORKSPACE_CSS_DECODED_BUDGET = 112 * KIB;
-const WORKSPACE_GZIP_BUDGET = 204 * KIB;
-const WORKSPACE_DECODED_BUDGET = 652 * KIB;
+const WORKSPACE_GZIP_BUDGET =
+  FlectPerformanceBudgets.browser.initialShellGzipBytes;
+const WORKSPACE_DECODED_BUDGET =
+  FlectPerformanceBudgets.browser.initialShellDecodedBytes;
 
 const fail = (message: string): never => {
   throw new Error(`Browser bundle gate failed: ${message}`);

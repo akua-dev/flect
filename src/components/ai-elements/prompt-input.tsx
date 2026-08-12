@@ -43,10 +43,11 @@ export const PromptInput = ({
     (event) => {
       event.preventDefault();
       const formData = new FormData(event.currentTarget);
+      const message = formData.get("message");
       onSubmit(
         {
           files: [],
-          text: (formData.get("message") as string) || "",
+          text: typeof message === "string" ? message : "",
         },
         event,
       );
@@ -99,9 +100,10 @@ export const PromptInputTextarea = ({
         return;
       }
       event.preventDefault();
-      const submitButton = event.currentTarget.form?.querySelector(
-        'button[type="submit"]',
-      ) as HTMLButtonElement | null;
+      const submitButton =
+        event.currentTarget.form?.querySelector<HTMLButtonElement>(
+          'button[type="submit"]',
+        );
       if (submitButton?.disabled !== true) {
         event.currentTarget.form?.requestSubmit();
       }
