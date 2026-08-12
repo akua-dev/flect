@@ -3,6 +3,16 @@ import { Effect } from "effect";
 let mounted = false;
 let opening: Promise<void> | undefined;
 
+if ("__TAURI_INTERNALS__" in globalThis) {
+  void import("@tauri-apps/api/window")
+    .then(({ getCurrentWindow }) => {
+      document.addEventListener("flect:start-window-drag", () => {
+        void getCurrentWindow().startDragging();
+      });
+    })
+    .catch(() => undefined);
+}
+
 const needsWorkspaceImmediately = () => {
   const query = new URLSearchParams(globalThis.location.search);
   return (

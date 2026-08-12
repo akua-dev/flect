@@ -333,6 +333,40 @@ test("gives the static home screen one clear starting action", async ({
   await expect(
     page.getByRole("button", { name: "Select element" }),
   ).toHaveCount(0);
+
+  const dragHandle = await page
+    .locator(".activation-shell__bar")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      const indicator = getComputedStyle(element, "::after");
+      return {
+        cursor: style.cursor,
+        height: Number.parseFloat(style.height),
+        indicatorWidth: Number.parseFloat(indicator.width),
+      };
+    });
+  expect(dragHandle.cursor).toBe("grab");
+  expect(dragHandle.height).toBeGreaterThanOrEqual(56);
+  expect(dragHandle.indicatorWidth).toBe(68);
+});
+
+test("keeps a visible, spacious drag handle above the workspace", async ({
+  page,
+}) => {
+  const dragHandle = await page
+    .locator(".window-drag-region")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      const indicator = getComputedStyle(element, "::after");
+      return {
+        cursor: style.cursor,
+        height: Number.parseFloat(style.height),
+        indicatorWidth: Number.parseFloat(indicator.width),
+      };
+    });
+  expect(dragHandle.cursor).toBe("grab");
+  expect(dragHandle.height).toBeGreaterThanOrEqual(64);
+  expect(dragHandle.indicatorWidth).toBe(68);
 });
 
 test("selects and directly edits the running canvas through the same agent", async ({

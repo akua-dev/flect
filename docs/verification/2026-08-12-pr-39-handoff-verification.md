@@ -63,6 +63,14 @@ baseline in
    The desktop development command now targets Astro's actual loopback dev
    origin (`127.0.0.1:4321`), so the development window automatically reloads
    interface changes instead of waiting for the unused port 5173.
+7. The title-area drag marker previously depended on a declarative region,
+   while the native build's unused-command hardening removed Tauri's
+   `start_dragging` command. The visible 64 px title-area handle now invokes
+   the narrowly permitted native window-drag operation on primary pointer
+   press, with the declarative region retained as a fallback. The build log
+   proves that `start_dragging` remains in the signed macOS app; the browser
+   contract covers the affordance's geometry and the component contract covers
+   primary versus secondary pointer behavior.
 
 ## Host limits and unproven gates
 
