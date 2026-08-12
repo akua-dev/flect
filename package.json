@@ -11,7 +11,7 @@
     "prepare": "./scripts/prepare-effect.sh",
     "dev": "concurrently --kill-others --names runtime,shell \"bun run dev:server\" \"bun run dev:web\"",
     "dev:server": "bun --watch server/index.ts",
-    "dev:web": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
+    "dev:web": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 127.0.0.1",
     "dev:desktop": "bun run build:sidecar && tauri dev",
     "build": "bun run build:product && tsc -b && ASTRO_TELEMETRY_DISABLED=1 astro build && bun run check:bundle",
     "build:spa": "bun run build:product && tsc -b && vite build --outDir dist-spa",
