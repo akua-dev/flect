@@ -132,12 +132,15 @@ export function Composer({
   externalExtensionsEnabled,
   onToggleExternalExtensions,
 }: ComposerProps) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
-  const helpId = useId();
   const draftKey = "accepted-use";
   const continuityKey: keyof ContinuityDrafts = "acceptedUse";
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => ({
+    [draftKey]: persistedDrafts?.acceptedUse ?? "",
+  }));
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const hasLocalDraftRef = useRef(false);
+  const helpId = useId();
   const prompt = mode === "safe" ? "" : (drafts[draftKey] ?? "");
   const isActive = isAgentSessionActive(status);
   const protectedActionsLocked = submitting || isActive;
@@ -179,12 +182,10 @@ export function Composer({
                     : "Press Enter to send. Press Shift Enter for a new line.");
 
   useEffect(() => {
-    if (persistedDrafts === undefined) {
-      return;
-    }
+    if (persistedDrafts === undefined || hasLocalDraftRef.current) return;
     setDrafts((current) => ({
       ...current,
-      "accepted-use": persistedDrafts.acceptedUse,
+      [draftKey]: persistedDrafts.acceptedUse,
     }));
   }, [persistedDrafts]);
 
@@ -228,6 +229,7 @@ export function Composer({
           disabled={inputUnavailable}
           onChange={(event) => {
             const value = event.target.value;
+            hasLocalDraftRef.current = true;
             setDrafts((current) => ({
               ...current,
               [draftKey]: value,

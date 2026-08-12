@@ -1,4 +1,4 @@
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { parse } from "acorn";
 import { FlectPerformanceBudgets } from "../shared/performance-budgets";
 
@@ -70,6 +70,23 @@ const graphSize = async (paths: ReadonlySet<string>) => {
     gzip += current.gzip;
   }
   return { decoded, gzip };
+};
+
+const graphDependencies = async (paths: ReadonlySet<string>) => {
+  const dependencies: Array<{
+    readonly asset: string;
+    readonly decoded: number;
+    readonly gzip: number;
+  }> = [];
+  for (const path of [...paths].sort((left, right) =>
+    left.localeCompare(right),
+  )) {
+    dependencies.push({
+      asset: relative(DIST, path),
+      ...(await size(path)),
+    });
+  }
+  return dependencies;
 };
 
 const htmlPath = join(DIST, "index.html");
@@ -229,6 +246,20 @@ console.log(
         ...workspace,
         modules: workspaceGraph.size,
       },
+      islands: [
+        {
+          name: "flect-workspace",
+          entryAssets: [
+            relative(DIST, assetPath(componentReference)),
+            relative(DIST, assetPath(rendererReference)),
+            relative(
+              DIST,
+              assetPath(`/assets/${workspaceActivationReference}`),
+            ),
+          ].sort((left, right) => left.localeCompare(right)),
+          dependencies: await graphDependencies(workspaceGraph),
+        },
+      ],
       onDemandBoundaries: ["shell", "compiler", "package", "worker", "wasm"],
     },
     undefined,
