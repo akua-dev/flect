@@ -53,6 +53,16 @@ baseline in
    The native drag region is now a clear 64 px strip above the product surface.
    Targeted component and production-Chromium tests cover the starter state;
    the ad-hoc macOS bundle and isolated native lifecycle verifier passed.
+6. A generic native-button colour rule could override the primary recovery
+   action's foreground token. In one appearance this produced light text on a
+   light `Restore interface` button. Primary decision actions now carry the
+   intended semantic foreground with matching selector specificity. Production
+   Chromium checks every enabled recovery decision action in light and dark
+   appearance, runs Axe's WCAG A/AA audit, and measures the rendered text and
+   background contrast before and during the primary action's hover state.
+   The desktop development command now targets Astro's actual loopback dev
+   origin (`127.0.0.1:4321`), so the development window automatically reloads
+   interface changes instead of waiting for the unused port 5173.
 
 ## Host limits and unproven gates
 
@@ -78,3 +88,10 @@ The hosted required quality gate still must pass on the final pushed revision
 before merging. Its browser phase supplies the authoritative shared-runner
 coverage; this report's live Pi verification deliberately stores no private
 transcript.
+
+## Current repair validation
+
+On the working tree containing the recovery-contrast repair, `bun run check`
+passed with 893 tests and one intentional skip. The focused production-browser
+command `bun run test:e2e -- tests/e2e/accessibility.spec.ts` passed all eight
+workflows, including the new light/dark recovery contrast and hover checks.

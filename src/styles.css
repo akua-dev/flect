@@ -3968,14 +3968,18 @@ textarea:focus-visible,
   gap: 7px;
 }
 
-.decision-button--primary {
-  background: var(--ink);
-  color: var(--void);
+button.decision-button--primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
 }
 
-.decision-button--primary:hover:not(:disabled) {
-  background: var(--primary);
-  color: var(--void);
+button.decision-button--primary:hover:not(:disabled) {
+  background: color-mix(
+    in oklch,
+    var(--primary) 92%,
+    var(--primary-foreground)
+  );
+  color: var(--primary-foreground);
 }
 
 .decision-button:disabled {

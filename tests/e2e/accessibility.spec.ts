@@ -27,6 +27,47 @@ const expectAccessible = async (page: Page, state: string) => {
   ).toEqual([]);
 };
 
+const decisionButtonContrast = async (page: Page) =>
+  page.locator(".decision-button:not(:disabled)").evaluateAll((buttons) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (context === null) {
+      throw new Error("Canvas context is unavailable");
+    }
+    const toRgb = (color: string) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
+    };
+    const luminance = (color: ReadonlyArray<number>) => {
+      const channel = (value: number) => {
+        const normalized = value / 255;
+        return normalized <= 0.04045
+          ? normalized / 12.92
+          : ((normalized + 0.055) / 1.055) ** 2.4;
+      };
+      return (
+        0.2126 * channel(color[0] ?? 0) +
+        0.7152 * channel(color[1] ?? 0) +
+        0.0722 * channel(color[2] ?? 0)
+      );
+    };
+    return buttons.map((button) => {
+      const style = getComputedStyle(button);
+      const foreground = luminance(toRgb(style.color));
+      const background = luminance(toRgb(style.backgroundColor));
+      return {
+        label: button.textContent?.trim() ?? "Unnamed decision",
+        ratio:
+          (Math.max(foreground, background) + 0.05) /
+          (Math.min(foreground, background) + 0.05),
+      };
+    });
+  });
+
 const shapeCandidate = async (page: Page) => {
   await expect(page.locator("html")).toHaveAttribute(
     "data-flect-state",
@@ -148,6 +189,37 @@ test.describe("adaptive appearances", () => {
       await page.screenshot({
         path: testInfo.outputPath(`${colorScheme}-candidate.png`),
       });
+    });
+  }
+});
+
+test.describe("recovery action visibility", () => {
+  for (const colorScheme of ["dark", "light"] as const) {
+    test(`${colorScheme} recovery controls keep their text legible in every state`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.goto("/?safe=1");
+      const restore = page.getByRole("button", { name: "Restore interface" });
+      await expect(restore).toBeVisible();
+      await expectAccessible(page, `${colorScheme} protected recovery`);
+
+      for (const button of await decisionButtonContrast(page)) {
+        expect(
+          button.ratio,
+          `${colorScheme} ${button.label} must meet WCAG AA text contrast`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+
+      await restore.hover();
+      const hoveredRestore = (await decisionButtonContrast(page)).find(
+        (button) => button.label === "Restore interface",
+      );
+      expect(hoveredRestore).toBeDefined();
+      expect(
+        hoveredRestore?.ratio,
+        `${colorScheme} Restore interface must remain legible on hover`,
+      ).toBeGreaterThanOrEqual(4.5);
     });
   }
 });
