@@ -1704,7 +1704,7 @@ test("uses right and full-height sheets at compact breakpoints", async ({
   }
 });
 
-test("uses the canvas as a full-height Settings workspace", async ({
+test("keeps Settings in a foreground overlay above the running canvas", async ({
   page,
 }) => {
   await shapeFirstInterface(page);
@@ -1718,8 +1718,11 @@ test("uses the canvas as a full-height Settings workspace", async ({
   const railBox = await rail.boundingBox();
   expect(settingsBox).not.toBeNull();
   expect(railBox).not.toBeNull();
-  expect(settingsBox?.x).toBe(0);
-  expect(settingsBox?.width ?? 0).toBeCloseTo(railBox?.x ?? 0, -1);
+  expect(settingsBox?.x ?? 0).toBeGreaterThan(0);
+  expect(settingsBox?.width ?? 0).toBeLessThan(railBox?.x ?? 0);
+  await expect(
+    page.getByRole("heading", { name: "Focused project overview" }),
+  ).toBeVisible();
 
   await page.getByRole("button", { name: "Close settings" }).click();
   await expect(

@@ -210,7 +210,7 @@ textarea:focus-visible,
 }
 
 .role-shell--split:not(.role-shell--collapsed) {
-  grid-template-columns: minmax(0, 1fr) var(--flect-rail-width);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .topbar {
@@ -307,10 +307,16 @@ textarea:focus-visible,
 }
 
 .workspace-canvas--settings {
-  align-items: stretch;
-  justify-content: stretch;
-  overflow: hidden;
-  padding: 64px 0 0;
+  overflow: auto;
+}
+
+.workspace-canvas--settings::before {
+  position: fixed;
+  z-index: var(--z-backdrop);
+  inset: 0;
+  background: color-mix(in oklch, var(--void) 28%, transparent);
+  content: "";
+  pointer-events: none;
 }
 
 .role-shell--preview .workspace-canvas {
@@ -1061,12 +1067,15 @@ textarea:focus-visible,
 }
 
 .agent-rail-container {
-  position: relative;
-  z-index: 35;
-  min-width: 0;
-  height: 100dvh;
+  position: fixed;
+  z-index: var(--z-sheet);
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  width: var(--flect-rail-width);
+  min-width: min(340px, calc(100vw - 32px));
+  height: auto;
   container-type: inline-size;
-  grid-column: 2;
 }
 
 .role-shell--centered .agent-rail-container {
@@ -1118,12 +1127,19 @@ textarea:focus-visible,
   height: 100%;
   min-height: 0;
   flex-direction: column;
-  background: color-mix(in oklch, var(--surface-raised) 70%, var(--canvas));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 18px 42px var(--shadow-strong);
 }
 
 .role-shell--centered .agent-rail {
   height: auto;
+  border: 0;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
 }
 
 .role-shell--centered .agent-rail[data-status="setup-required"] {
@@ -2075,14 +2091,21 @@ textarea:focus-visible,
 }
 
 .diagnostics-panel--workspace {
+  position: fixed;
+  z-index: calc(var(--z-sheet) + 1);
+  top: max(16px, env(safe-area-inset-top));
+  bottom: max(16px, env(safe-area-inset-bottom));
+  left: max(16px, env(safe-area-inset-left));
   display: flex;
-  width: 100%;
-  height: 100%;
+  width: min(720px, calc(100vw - var(--flect-rail-width) - 48px));
+  height: auto;
   min-height: 0;
   flex-direction: column;
-  border: 0;
-  border-radius: 0;
-  background: var(--canvas);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 18px 42px var(--shadow-strong);
 }
 
 .diagnostics-panel__workspace-header {
@@ -3886,6 +3909,16 @@ textarea:focus-visible,
 }
 
 @media (max-width: 760px) {
+  .diagnostics-panel--workspace {
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
   .capsule-review .reference-product-diagnostic__results {
     grid-template-columns: 1fr;
   }
@@ -4050,8 +4083,7 @@ button.decision-button--primary:hover:not(:disabled) {
   }
 
   .role-shell--settings .workspace-canvas {
-    grid-column: 1 / -1;
-    padding: 64px 0 0;
+    padding: 88px 32px 48px;
   }
 
   .role-shell--split:not(.role-shell--collapsed) {
@@ -4075,6 +4107,7 @@ button.decision-button--primary:hover:not(:disabled) {
     right: 0;
     width: min(var(--flect-rail-width), calc(100vw - 24px));
     height: 100dvh;
+    border-radius: 0;
     box-shadow: -8px 0 8px var(--shadow-float);
   }
 
@@ -4255,6 +4288,11 @@ button.decision-button--primary:hover:not(:disabled) {
 
 .role-shell--settings .topbar {
   padding-right: 24px;
+}
+
+.role-shell--settings .agent-rail-container {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 @media (max-width: 760px) {

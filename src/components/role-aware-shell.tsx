@@ -892,10 +892,10 @@ export function RoleAwareShell({
       </main>
 
       <div
-        aria-hidden={collapsed || shareReviewObscuresRail}
+        aria-hidden={collapsed || shareReviewObscuresRail || settingsOpen}
         className="agent-rail-container"
         data-layout={docked ? "rail" : "center"}
-        inert={collapsed || shareReviewObscuresRail}
+        inert={collapsed || shareReviewObscuresRail || settingsOpen}
         onKeyDown={handleRailKeyDown}
         ref={railContainerRef}
       >
