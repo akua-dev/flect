@@ -365,7 +365,7 @@ describe("RoleAwareShell", () => {
     );
   });
 
-  it("shows one history and one stop control during internal work", () => {
+  it("shows one history and one stop control during internal work", async () => {
     const controller = workspace({
       app: {
         ...appRole(),
@@ -384,8 +384,8 @@ describe("RoleAwareShell", () => {
       <ShellHarness phase="accepted" workspaceController={controller} />,
     );
 
-    expect(screen.getByText("App history")).toBeVisible();
-    expect(screen.getByText("Shaper history")).toBeVisible();
+    expect(await screen.findByText("App history")).toBeVisible();
+    expect(await screen.findByText("Shaper history")).toBeVisible();
 
     rerender(
       <ShellHarness

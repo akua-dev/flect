@@ -28,24 +28,11 @@ import {
   ProductCapabilityDenyChoice,
 } from "../../shared/product-capability";
 import type { RevisionId } from "../../shared/revisions";
-import type {
-  AgentWorkspaceController,
-  ConversationMessage,
-} from "../hooks/use-agent-session";
+import type { AgentWorkspaceController } from "../hooks/use-agent-session";
 import { isAgentSessionActive } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
 import type { WebProjectImportResult } from "../lib/web-project-import";
 import type { CapsuleReview } from "../lib/workspace-controller";
-import {
-  Conversation as AIConversation,
-  ConversationContent as AIConversationContent,
-  ConversationEmptyState,
-  ConversationScrollButton,
-} from "./ai-elements/conversation";
-import {
-  Message as AIMessage,
-  MessageContent as AIMessageContent,
-} from "./ai-elements/message";
 import { Composer } from "./composer";
 import type {
   DiagnosticsPanelProps,
@@ -63,11 +50,6 @@ import {
   CardTitle,
 } from "./ui/card";
 
-const ActivityCard = lazy(() =>
-  import("./activity-card").then((module) => ({
-    default: module.ActivityCard,
-  })),
-);
 const DiagnosticsPanel = lazy(() =>
   import("./diagnostics-panel").then((module) => ({
     default: module.DiagnosticsPanel,
@@ -78,19 +60,14 @@ const ExtensionReview = lazy(() =>
     default: module.ExtensionReview,
   })),
 );
-const MessageContent = lazy(() =>
-  import("./message-content").then((module) => ({
-    default: module.MessageContent,
-  })),
-);
-const StreamingReasoning = lazy(() =>
-  import("./streaming-reasoning").then((module) => ({
-    default: module.StreamingReasoning,
-  })),
-);
 const ProviderAuthPanel = lazy(() =>
   import("./provider-auth-panel").then((module) => ({
     default: module.ProviderAuthPanel,
+  })),
+);
+const ConversationTimeline = lazy(() =>
+  import("./conversation-timeline").then((module) => ({
+    default: module.ConversationTimeline,
   })),
 );
 
@@ -497,96 +474,29 @@ export function ProductCapabilities({
   );
 }
 
-function Conversation({
-  messages,
-  activities,
-  status,
-  label,
-  onFixFailure,
-}: {
-  readonly messages: ReadonlyArray<ConversationMessage>;
-  readonly activities: NonNullable<
-    AgentWorkspaceController["app"]["activities"]
-  >;
-  readonly status: AgentWorkspaceController["app"]["status"];
-  readonly label: string;
-  readonly onFixFailure?: (activity: ToolActivity) => void;
-}) {
+function EmptyConversation({ label }: { readonly label: string }) {
   return (
-    <AIConversation
+    <div
       aria-label={`${label} conversation`}
       className="conversation conversation-shell"
+      role="log"
     >
-      <AIConversationContent
-        className="conversation__content"
-        scrollClassName="conversation__scroll"
-      >
-        {messages.length === 0 && activities.length === 0 && (
-          <ConversationEmptyState
-            className="conversation__empty"
-            description="Ask for a change, use the current interface, or call an approved action. Flect routes the work for you."
-            title="Build and use the product in one conversation."
-          />
-        )}
-        {messages.map((message, index) => {
-          const isLatest = index === messages.length - 1;
-          return (
-            <AIMessage
-              className={`message message--${message.role}`}
-              from={message.role === "user" ? "user" : "assistant"}
-              key={message.id}
-            >
-              <AIMessageContent>
-                <span className="sr-only">
-                  {message.role === "user"
-                    ? "You"
-                    : message.role === "activity"
-                      ? "Activity"
-                      : label}
-                </span>
-                {message.content ? (
-                  <Suspense fallback={<span>{message.content}</span>}>
-                    <MessageContent
-                      content={message.content}
-                      messageRole={message.role}
-                      streaming={
-                        message.role === "assistant" &&
-                        isLatest &&
-                        status === "streaming"
-                      }
-                    />
-                  </Suspense>
-                ) : (
-                  isLatest &&
-                  (status === "submitting" || status === "streaming") && (
-                    <Suspense
-                      fallback={<span>{`${label} is responding`}</span>}
-                    >
-                      <StreamingReasoning label={label} />
-                    </Suspense>
-                  )
-                )}
-              </AIMessageContent>
-            </AIMessage>
-          );
-        })}
-        {activities.map((activity) => (
-          <div key={activity.id}>
-            <Suspense
-              fallback={<SurfaceFallback label="Opening activity details" />}
-            >
-              <ActivityCard
-                activity={activity}
-                {...(onFixFailure === undefined
-                  ? {}
-                  : { onFixInShape: onFixFailure })}
-              />
-            </Suspense>
+      <div className="conversation__scroll">
+        <div className="conversation__content flex min-h-full flex-col gap-8 p-4">
+          <div className="conversation__empty flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+            <div className="space-y-1">
+              <h3 className="font-medium text-sm">
+                Build and use the product in one conversation.
+              </h3>
+              <p className="text-muted-foreground text-sm">
+                Ask for a change, use the current interface, or call an approved
+                action. Flect routes the work for you.
+              </p>
+            </div>
           </div>
-        ))}
-      </AIConversationContent>
-      <ConversationScrollButton aria-label="Jump to latest" />
-    </AIConversation>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -625,7 +535,7 @@ export function AgentRail({
     workspace.app,
     workspace.previewApp,
     workspace.shaper,
-  ] as const;
+  ];
   const preferredController = preview
     ? workspace.previewApp
     : useDisabled
@@ -997,13 +907,19 @@ export function AgentRail({
         </div>
       </header>
 
-      <Conversation
-        activities={activities}
-        label={roleLabel}
-        messages={messages}
-        status={controller.status}
-        onFixFailure={(activity) => void shaping.fixFailure(activity)}
-      />
+      {messages.length === 0 && activities.length === 0 ? (
+        <EmptyConversation label={roleLabel} />
+      ) : (
+        <Suspense fallback={<SurfaceFallback label="Opening conversation" />}>
+          <ConversationTimeline
+            activities={activities}
+            label={roleLabel}
+            messages={messages}
+            status={controller.status}
+            onFixFailure={(activity) => void shaping.fixFailure(activity)}
+          />
+        </Suspense>
+      )}
 
       <div className="agent-rail__dock">
         {build !== undefined && build.phase !== "succeeded" && (
