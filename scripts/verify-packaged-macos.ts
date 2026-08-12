@@ -90,15 +90,32 @@ const numberPair = (value: string) => {
   return [first, second] as const;
 };
 
+const textareaOperation = (pid: number, operation: string) =>
+  appleScript(`
+tell application "System Events"
+  tell (first process whose unix id is ${pid})
+    tell front window
+      set composer to missing value
+      repeat with candidate in (get entire contents)
+        try
+          if (role of candidate is "AXTextArea") and (name of candidate is "Message Flect") then
+            set composer to contents of candidate
+            exit repeat
+          end if
+        end try
+      end repeat
+      if composer is missing value then error "The protected composer is missing from the accessibility tree."
+      tell composer to ${operation}
+    end tell
+  end tell
+end tell
+`);
+
 const textarea = (pid: number, operation: string) =>
-  appleScript(
-    `${appProcess(pid)} to tell front window to tell group 1 to tell group 1 to tell scroll area 1 to tell UI element 1 to tell group "Flect agent" to tell group 3 to ${operation} of text area "Message Flect"`,
-  );
+  textareaOperation(pid, operation);
 
 const setTextareaValue = (pid: number, value: string) =>
-  appleScript(
-    `${appProcess(pid)} to tell front window to tell group 1 to tell group 1 to tell scroll area 1 to tell UI element 1 to tell group "Flect agent" to tell group 3 to set value of text area "Message Flect" to "${value}"`,
-  );
+  textareaOperation(pid, `set value to "${value}"`);
 
 const terminate = async (pid: number | undefined, signal: NodeJS.Signals) => {
   if (pid === undefined) return;

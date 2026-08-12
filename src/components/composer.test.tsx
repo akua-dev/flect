@@ -105,6 +105,34 @@ describe("Composer", () => {
     );
   });
 
+  it("does not replace an in-progress draft with a stale persistence update", async () => {
+    const user = userEvent.setup();
+    const initial = props({
+      drafts: {
+        acceptedUse: "",
+        candidateUse: "",
+        shape: "",
+      },
+    });
+    const { rerender } = render(<Composer {...initial} />);
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
+
+    await user.type(input, "Current draft");
+    rerender(
+      <Composer
+        {...props({
+          drafts: {
+            acceptedUse: "Current",
+            candidateUse: "",
+            shape: "",
+          },
+        })}
+      />,
+    );
+
+    expect(input).toHaveValue("Current draft");
+  });
+
   it("uses the AI Elements field-sizing composer with a bounded height", () => {
     render(<Composer {...props()} />);
     const input = screen.getByRole("textbox", { name: "Message Flect" });

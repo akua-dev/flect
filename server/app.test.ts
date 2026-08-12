@@ -182,6 +182,31 @@ describe("Flect HTTP application", () => {
       }),
   );
 
+  it.effect("accepts the Astro development origin", () =>
+    Effect.gen(function* () {
+      const app = yield* useApp(createFakeRuntime());
+      const response = yield* send(
+        app,
+        request(
+          "/api/sessions",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              model: { provider: "openai-codex", id: "gpt-5.6" },
+            }),
+          },
+          "http://localhost:4321",
+        ),
+      );
+
+      expect(response.status).toBe(201);
+      expect(yield* readJson(response)).toEqual({
+        version: 1,
+        sessionId: "session-1",
+      });
+    }),
+  );
+
   it.effect(
     "ends a revoked browser command poll with an empty successful response",
     () =>
