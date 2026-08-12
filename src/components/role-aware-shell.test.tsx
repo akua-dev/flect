@@ -11,6 +11,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ControlStateSnapshot } from "../../shared/control";
 import { InterfaceDocument } from "../../shared/interface-document";
 import { ShellPreferencesValue } from "../../shared/shell-preferences";
 import type {
@@ -19,7 +20,7 @@ import type {
 } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
 import type { ShapingController } from "./agent-rail";
-import { RoleAwareShell } from "./role-aware-shell";
+import { RoleAwareShell, type RoleAwareShellProps } from "./role-aware-shell";
 
 afterEach(cleanup);
 
@@ -138,6 +139,7 @@ function ShellHarness({
   shapingController = shaping(),
   controlledMode,
   onModeChange,
+  diagnostics,
 }: {
   readonly initialCollapsed?: boolean;
   readonly initialWidth?: number;
@@ -146,6 +148,7 @@ function ShellHarness({
   readonly shapingController?: ShapingController;
   readonly controlledMode?: "edit" | "run";
   readonly onModeChange?: (mode: "edit" | "run") => Promise<void>;
+  readonly diagnostics?: RoleAwareShellProps["diagnostics"];
 }) {
   const [value, setValue] = useState(
     ShellPreferencesValue.make({
@@ -174,6 +177,7 @@ function ShellHarness({
     <RoleAwareShell
       controlledMode={controlledMode}
       document={documentWithoutPrompt}
+      diagnostics={diagnostics}
       onOpenSafeMode={vi.fn()}
       onModeChange={onModeChange}
       onRestoreSafeMode={vi.fn(() => Promise.resolve())}
@@ -187,6 +191,42 @@ function ShellHarness({
 }
 
 describe("RoleAwareShell", () => {
+  it("opens Settings across the canvas instead of inside the agent rail", async () => {
+    const user = userEvent.setup();
+    render(
+      <ShellHarness
+        diagnostics={{
+          control: ControlStateSnapshot.make({ enabled: false, clients: [] }),
+          onToggleControl: vi.fn(() => Promise.resolve()),
+          operations: [],
+        }}
+      />,
+    );
+
+    const [trigger] = screen.getAllByRole("button", {
+      name: "Open settings",
+    });
+    await user.click(trigger);
+
+    expect(
+      await screen.findByRole("heading", { name: "Settings" }),
+    ).toBeVisible();
+    expect(document.querySelector(".workspace-canvas")).toHaveClass(
+      "workspace-canvas--settings",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Close settings" }),
+      ).toHaveFocus(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(
+      screen.queryByRole("heading", { name: "Settings" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("announces the active agent and protected workbench state atomically", () => {
     const { rerender } = render(<ShellHarness phase="accepted" />);
 

@@ -291,7 +291,7 @@ describe("App", () => {
       ),
     ).toBe(false);
 
-    await user.click(screen.getByRole("button", { name: "Diagnostics" }));
+    await user.click(screen.getByRole("button", { name: "Open settings" }));
     await user.click(
       await screen.findByRole("button", { name: "Enable local control" }),
     );

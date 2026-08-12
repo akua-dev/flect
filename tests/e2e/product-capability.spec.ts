@@ -134,12 +134,12 @@ test.beforeEach(async ({ page }) => {
   await expect(
     page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeEnabled();
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Enable local control" }).click();
   await expect(
     page.getByRole("button", { name: "Disable local control" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
 });
 
 test.afterEach(async ({ page }) => {
@@ -242,12 +242,12 @@ test("drives digest-bound permission lifecycle through protected UI, controller,
   ).toBeVisible();
 
   await page.reload();
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Enable local control" }).click();
   await expect(
     page.getByRole("button", { name: "Disable local control" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await page.getByRole("button", { name: "Close settings" }).click();
   await page.getByText("Product capabilities").click();
   await expect(
     page.getByText("Required · Granted · Always allow"),

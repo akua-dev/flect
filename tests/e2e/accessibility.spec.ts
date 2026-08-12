@@ -67,7 +67,9 @@ test("keeps first-run provider setup contained and immediately actionable", asyn
   await expect(
     page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toBeHidden();
 
   const geometry = await page.evaluate(() => {
     const setup = document.querySelector<HTMLElement>(".provider-setup");
@@ -108,15 +110,15 @@ test("gates blank, candidate, accepted, Diagnostics, model, and safe states", as
   await expectAccessible(page, "extension and recovery actions menu");
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await page.getByRole("button", { name: "Open settings" }).click();
   await expect(page.getByText("Workspace storage")).toBeVisible();
   await expect(
     page.getByText(
       "Source history and compiled interfaces are durable in this browser.",
     ),
   ).toBeVisible();
-  await expectAccessible(page, "Diagnostics disclosure");
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await expectAccessible(page, "Settings workspace");
+  await page.getByRole("button", { name: "Close settings" }).click();
 
   await page.getByRole("button", { name: "Model: Auto via Pi" }).click();
   await expectAccessible(page, "model chooser dialog");
