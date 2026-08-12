@@ -449,9 +449,9 @@ test("retains, previews, exports, removes, and explicitly deletes a real Git sha
       .getByRole("dialog", { name: "Shared sources" })
       .getByText("No shared sources yet"),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("prepares and activates an exact fast-forward update from real Git history", async ({
@@ -504,9 +504,9 @@ test("prepares and activates an exact fast-forward update from real Git history"
     fixtures.compatibleUpdate.commit,
   );
   await library.getByRole("button", { name: "Close shared sources" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("routes fork personalization through one composer and activates a real two-parent merge", async ({
@@ -579,9 +579,9 @@ test("routes fork personalization through one composer and activates a real two-
   expect(exported.upstream).toContain("refreshed: true");
   expect(exported.decoded.manifest.signatures).toEqual([]);
   await library.getByRole("button", { name: "Close shared sources" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("resolves a real Git conflict with Flect and activates only the explicit resolution", async ({
@@ -684,9 +684,9 @@ test("resolves a real Git conflict with Flect and activates only the explicit re
   expect(exported.weather).toContain("warning: true");
   expect(exported.decoded.manifest.signatures).toEqual([]);
   await library.getByRole("button", { name: "Close shared sources" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("reviews a credential-free HTTPS share through the same inactive boundary", async ({
@@ -725,9 +725,9 @@ test("reviews a credential-free HTTPS share through the same inactive boundary",
     review.getByText("Inactive until you activate it"),
   ).toBeVisible();
   await review.getByRole("button", { name: "Discard shared source" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("clones and reviews an exact public Git descriptor through wasm-git", async ({
@@ -799,9 +799,9 @@ test("clones and reviews an exact public Git descriptor through wasm-git", async
     await page.unroute(pattern);
     await rm(root, { force: true, recursive: true });
   }
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("opens a host-composed private adapter without exposing its credential closure", async ({
@@ -855,9 +855,9 @@ test("opens a host-composed private adapter without exposing its credential clos
     ),
   ).toBe(false);
   await review.getByRole("button", { name: "Discard shared source" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("sharing review and source library remain contained at 320px and 200 percent text", async ({
@@ -982,7 +982,7 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
   ).toBeVisible();
   await expect(failure).not.toBeVisible();
   await page.getByRole("button", { name: "Discard shared source" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });

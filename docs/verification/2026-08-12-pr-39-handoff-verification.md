@@ -37,6 +37,14 @@ baseline in
    local edit began. Local typing now owns the visible draft for that mounted
    composer; an asynchronous persistence update cannot overwrite it. A
    component regression test covers the race.
+4. Protected Flect controls were cramped into the conversation rail. Settings
+   now opens as a dedicated full-height workspace: it fills the left canvas at
+   wide sizes while the conversation remains on the right, and it takes the
+   complete viewport at compact sizes. The close action restores focus to the
+   Settings trigger. A component regression test and production-Chromium flow
+   verify geometry, compact behavior, and keyboard focus. The workspace also
+   exposed an existing low-contrast failed-operation label; its semantic
+   background and neutral text now pass the WCAG A/AA audit.
 
 ## Host limits and unproven gates
 

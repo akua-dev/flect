@@ -34,11 +34,7 @@ import type { ShellPreferencesController } from "../hooks/use-shell-preferences"
 import type { WebProjectImportResult } from "../lib/web-project-import";
 import type { CapsuleReview } from "../lib/workspace-controller";
 import { Composer } from "./composer";
-import type {
-  DiagnosticsPanelProps,
-  NativeSetupView,
-  NativeUpdateView,
-} from "./diagnostics-panel";
+import type { NativeSetupView, NativeUpdateView } from "./diagnostics-panel";
 import type { ExtensionReviewKey } from "./extension-review";
 import { PanelCloseIcon, RefreshIcon } from "./icons";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
@@ -50,11 +46,6 @@ import {
   CardTitle,
 } from "./ui/card";
 
-const DiagnosticsPanel = lazy(() =>
-  import("./diagnostics-panel").then((module) => ({
-    default: module.DiagnosticsPanel,
-  })),
-);
 const ExtensionReview = lazy(() =>
   import("./extension-review").then((module) => ({
     default: module.ExtensionReview,
@@ -77,59 +68,18 @@ const SurfaceFallback = ({ label }: { readonly label: string }) => (
   </span>
 );
 
-const diagnosticsLabel = (
-  control: DiagnosticsPanelProps["control"],
-  persistence: DiagnosticsPanelProps["persistence"],
-) =>
-  persistence?.source !== "durable"
-    ? "Storage unavailable"
-    : persistence.capsule === "session"
-      ? "Session-only storage"
-      : persistence.capsule === "unavailable"
-        ? "Storage degraded"
-        : control.enabled
-          ? `${control.clients.length} client${control.clients.length === 1 ? "" : "s"}`
-          : "Local control off";
-
-function DeferredDiagnosticsPanel(props: DiagnosticsPanelProps) {
-  const [requested, setRequested] = useState(false);
-  if (requested) {
-    return (
-      <Suspense
-        fallback={
-          <details className="diagnostics-panel" open>
-            {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
-            <summary aria-label="Diagnostics" role="button">
-              <span>Diagnostics</span>
-              <small aria-hidden="true">
-                {diagnosticsLabel(props.control, props.persistence)}
-              </small>
-            </summary>
-            <SurfaceFallback label="Opening diagnostics" />
-          </details>
-        }
-      >
-        <DiagnosticsPanel {...props} defaultOpen />
-      </Suspense>
-    );
-  }
-  return (
-    <details
-      className="diagnostics-panel"
-      onToggle={(event) => {
-        if (event.currentTarget.open) setRequested(true);
-      }}
-    >
-      {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
-      <summary aria-label="Diagnostics" role="button">
-        <span>Diagnostics</span>
-        <small aria-hidden="true">
-          {diagnosticsLabel(props.control, props.persistence)}
-        </small>
-      </summary>
-    </details>
-  );
-}
+const settingsSummary = (diagnostics: AgentRailProps["diagnostics"]) =>
+  diagnostics === undefined
+    ? undefined
+    : diagnostics.persistence?.source !== "durable"
+      ? "Storage unavailable"
+      : diagnostics.persistence?.capsule === "session"
+        ? "Session-only storage"
+        : diagnostics.persistence?.capsule === "unavailable"
+          ? "Storage degraded"
+          : diagnostics.control.enabled
+            ? `${diagnostics.control.clients.length} client${diagnostics.control.clients.length === 1 ? "" : "s"}`
+            : "Local control off";
 
 export interface ShapingController {
   readonly status: "idle" | "shaping" | "preview" | "error";
@@ -175,6 +125,8 @@ export interface AgentRailProps {
   readonly onOpenShareSource?: () => void;
   readonly onOpenShareFile?: () => void;
   readonly onManageSharedSources?: () => void;
+  readonly onOpenSettings?: () => void;
+  readonly settingsInDock?: boolean;
   readonly onRestoreSafeMode: () => Promise<void>;
   readonly onDecideProductCapability?: (
     capsuleId: string,
@@ -520,6 +472,8 @@ export function AgentRail({
   onOpenShareSource,
   onOpenShareFile,
   onManageSharedSources,
+  onOpenSettings,
+  settingsInDock = false,
   onRestoreSafeMode,
   onDecideProductCapability,
   onRevokeProductCapability,
@@ -566,6 +520,7 @@ export function AgentRail({
     isAgentSessionActive(workspace.previewApp.status) ||
     isAgentSessionActive(workspace.shaper.status) ||
     shaping.status === "shaping";
+  const settingsStatus = settingsSummary(diagnostics);
   const cancel = async () => {
     const active = conversationControllers.filter((entry) =>
       isAgentSessionActive(entry.status),
@@ -895,6 +850,22 @@ export function AgentRail({
           <span>{mode === "safe" ? "Protected shell" : "Live canvas"}</span>
         </div>
         <div className="agent-rail__header-actions">
+          {!settingsInDock &&
+            diagnostics !== undefined &&
+            onOpenSettings !== undefined && (
+              <button
+                aria-label="Open settings"
+                className="agent-rail__settings"
+                data-settings-trigger
+                onClick={onOpenSettings}
+                type="button"
+              >
+                <span>Settings</span>
+                {settingsStatus !== undefined && (
+                  <small>{settingsStatus}</small>
+                )}
+              </button>
+            )}
           <RuntimeState status={controller.status} />
           <button
             aria-label="Collapse agent"
@@ -1310,16 +1281,21 @@ export function AgentRail({
           </div>
         )}
 
-        {diagnostics !== undefined && (
-          <DeferredDiagnosticsPanel
-            control={diagnostics.control}
-            onToggleControl={diagnostics.onToggleControl}
-            operations={diagnostics.operations}
-            persistence={diagnostics.persistence}
-            setup={diagnostics.setup}
-            update={diagnostics.update}
-          />
-        )}
+        {settingsInDock &&
+          diagnostics !== undefined &&
+          onOpenSettings !== undefined &&
+          controller.status !== "setup-required" && (
+            <button
+              aria-label="Open settings"
+              className="agent-rail__settings agent-rail__settings--dock"
+              data-settings-trigger
+              onClick={onOpenSettings}
+              type="button"
+            >
+              <span>Settings</span>
+              {settingsStatus !== undefined && <small>{settingsStatus}</small>}
+            </button>
+          )}
 
         <Composer
           disabled={mode === "safe"}

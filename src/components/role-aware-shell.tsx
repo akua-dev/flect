@@ -55,6 +55,11 @@ const CapsuleFrame = lazy(() =>
     default: module.CapsuleFrame,
   })),
 );
+const DiagnosticsPanel = lazy(() =>
+  import("./diagnostics-panel").then((module) => ({
+    default: module.DiagnosticsPanel,
+  })),
+);
 
 const ShareSurfaceFallback = () => (
   <span className="sr-only" role="status">
@@ -195,6 +200,7 @@ export function RoleAwareShell({
   );
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareLibraryOpen, setShareLibraryOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareFileError, setShareFileError] = useState<string>();
   const [selectionMode, setSelectionMode] = useState(false);
   const [canvasSelection, setCanvasSelection] = useState<CanvasSelection>();
@@ -385,6 +391,19 @@ export function RoleAwareShell({
     void preferences.setRailCollapsed(false);
   }, [preferences]);
 
+  const openSettings = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    queueMicrotask(() => {
+      railContainerRef.current
+        ?.querySelector<HTMLButtonElement>("[data-settings-trigger]")
+        ?.focus();
+    });
+  }, []);
+
   const focusComposer = useCallback(() => {
     if (preferences.value.railCollapsed) {
       shouldFocusRailRef.current = true;
@@ -557,7 +576,7 @@ export function RoleAwareShell({
 
   return (
     <div
-      className={`role-shell${docked ? " role-shell--split" : " role-shell--centered"}${collapsed ? " role-shell--collapsed" : ""}${preview ? " role-shell--preview" : ""}`}
+      className={`role-shell${docked ? " role-shell--split" : " role-shell--centered"}${collapsed ? " role-shell--collapsed" : ""}${preview ? " role-shell--preview" : ""}${settingsOpen ? " role-shell--settings" : ""}`}
       data-mode={mode}
       data-phase={phase}
       data-active-revision={activeRevisionId}
@@ -669,161 +688,183 @@ export function RoleAwareShell({
           </Suspense>
         )}
 
-      <main className="workspace-canvas">
-        {docked && phase === "accepted" && !preview && (
-          <div
-            aria-label="Canvas editing"
-            className="canvas-edit-toolbar"
-            role="toolbar"
-          >
-            <button
-              aria-pressed={selectionMode}
-              className="canvas-edit-toolbar__select"
-              disabled={operationActive}
-              onClick={() => setSelectionMode((current) => !current)}
-              type="button"
-            >
-              {selectionMode ? "Choose an element" : "Select element"}
-            </button>
-            {canvasSelection !== undefined && (
-              <>
-                <span className="canvas-edit-toolbar__selection" role="status">
-                  {canvasSelection.label}
-                </span>
-                <div className="canvas-edit-toolbar__actions">
-                  <button
-                    disabled={operationActive}
-                    onClick={() =>
-                      applyDirectManipulation(
-                        "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
-                      )
-                    }
-                    type="button"
-                  >
-                    Move earlier
-                  </button>
-                  <button
-                    disabled={operationActive}
-                    onClick={() =>
-                      applyDirectManipulation(
-                        "Move the selected element one position later in its current layout while preserving responsive behavior.",
-                      )
-                    }
-                    type="button"
-                  >
-                    Move later
-                  </button>
-                  <button
-                    disabled={operationActive}
-                    onClick={() =>
-                      applyDirectManipulation(
-                        "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
-                      )
-                    }
-                    type="button"
-                  >
-                    Smaller
-                  </button>
-                  <button
-                    disabled={operationActive}
-                    onClick={() =>
-                      applyDirectManipulation(
-                        "Make the selected element slightly larger using its existing responsive layout and design tokens.",
-                      )
-                    }
-                    type="button"
-                  >
-                    Larger
-                  </button>
-                  <button
-                    aria-label="Clear canvas selection"
-                    onClick={() => chooseCanvasSelection(undefined)}
-                    type="button"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-        {!preview &&
-          shareReview !== undefined &&
-          onRetainShare !== undefined &&
-          onPrepareShareUpdate !== undefined &&
-          onActivateShare !== undefined &&
-          onRejectShare !== undefined && (
-            <Suspense fallback={<ShareSurfaceFallback />}>
-              <ShareReview
-                busy={operationActive}
-                {...(shareInstallation === undefined
-                  ? {}
-                  : { installedVersion: shareInstallation.version })}
-                onActivate={onActivateShare}
-                onContinueFork={onContinueShareFork}
-                onOpenConflictInShape={onOpenShareConflictInShape}
-                {...(onOpenShareUrl === undefined ||
-                onOpenShareGit === undefined
-                  ? {}
-                  : { onOpenSource: () => setShareDialogOpen(true) })}
-                {...(onOpenShareFile === undefined
-                  ? {}
-                  : { onOpenFile: () => shareFileRef.current?.click() })}
-                onPrepareUpdate={onPrepareShareUpdate}
-                onReject={onRejectShare}
-                onRetain={onRetainShare}
-                pending={shareInstallation?.pending !== undefined}
-                retained={shareInstallation !== undefined}
-                review={shareReview}
-              />
-            </Suspense>
-          )}
-        {!docked ? (
-          <section className="blank-invitation">
-            <h1>What do you want to make?</h1>
-          </section>
-        ) : compiledCapsule !== undefined ? (
+      <main
+        className={`workspace-canvas${settingsOpen ? " workspace-canvas--settings" : ""}`}
+      >
+        {settingsOpen && diagnostics !== undefined ? (
           <Suspense fallback={<ShareSurfaceFallback />}>
-            <CapsuleFrame
-              assets={compiledCapsule.assets}
-              entrypointPath={compiledCapsule.entrypointPath}
-              html={compiledCapsule.html}
-              onDirectManipulation={(kind, deltaX, deltaY) =>
-                applyDirectManipulation(
-                  kind === "move"
-                    ? `Move the selected element ${Math.abs(Math.round(deltaX))} pixels ${deltaX < 0 ? "left" : "right"} and ${Math.abs(Math.round(deltaY))} pixels ${deltaY < 0 ? "up" : "down"} in the current view. Translate that gesture into responsive layout source instead of storing fixed canvas coordinates.`
-                    : `Resize the selected element by approximately ${Math.round(deltaX)} pixels in width and ${Math.round(deltaY)} pixels in height in the current view. Translate that gesture into responsive layout source and preserve accessible content reflow.`,
-                )
-              }
-              onIntent={onCapsuleIntent}
-              onSelectionChange={(selection) =>
-                chooseCanvasSelection(selection)
-              }
-              selection={canvasSelection}
-              selectionMode={selectionMode}
-              title={compiledCapsule.name}
+            <DiagnosticsPanel
+              control={diagnostics.control}
+              onClose={closeSettings}
+              onToggleControl={diagnostics.onToggleControl}
+              operations={diagnostics.operations}
+              persistence={diagnostics.persistence}
+              presentation="workspace"
+              setup={diagnostics.setup}
+              update={diagnostics.update}
             />
           </Suspense>
         ) : (
-          <InterfaceRenderer
-            actions={actions}
-            document={document}
-            onAction={handleInterfaceAction}
-            onSelectionChange={(selection, nodeId) =>
-              chooseCanvasSelection(selection, nodeId)
-            }
-            renderPrompt={() => (
-              <button
-                className="canvas-agent-entry"
-                onClick={expand}
-                type="button"
+          <>
+            {docked && phase === "accepted" && !preview && (
+              <div
+                aria-label="Canvas editing"
+                className="canvas-edit-toolbar"
+                role="toolbar"
               >
-                Open Flect
-              </button>
+                <button
+                  aria-pressed={selectionMode}
+                  className="canvas-edit-toolbar__select"
+                  disabled={operationActive}
+                  onClick={() => setSelectionMode((current) => !current)}
+                  type="button"
+                >
+                  {selectionMode ? "Choose an element" : "Select element"}
+                </button>
+                {canvasSelection !== undefined && (
+                  <>
+                    <span
+                      className="canvas-edit-toolbar__selection"
+                      role="status"
+                    >
+                      {canvasSelection.label}
+                    </span>
+                    <div className="canvas-edit-toolbar__actions">
+                      <button
+                        disabled={operationActive}
+                        onClick={() =>
+                          applyDirectManipulation(
+                            "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
+                          )
+                        }
+                        type="button"
+                      >
+                        Move earlier
+                      </button>
+                      <button
+                        disabled={operationActive}
+                        onClick={() =>
+                          applyDirectManipulation(
+                            "Move the selected element one position later in its current layout while preserving responsive behavior.",
+                          )
+                        }
+                        type="button"
+                      >
+                        Move later
+                      </button>
+                      <button
+                        disabled={operationActive}
+                        onClick={() =>
+                          applyDirectManipulation(
+                            "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
+                          )
+                        }
+                        type="button"
+                      >
+                        Smaller
+                      </button>
+                      <button
+                        disabled={operationActive}
+                        onClick={() =>
+                          applyDirectManipulation(
+                            "Make the selected element slightly larger using its existing responsive layout and design tokens.",
+                          )
+                        }
+                        type="button"
+                      >
+                        Larger
+                      </button>
+                      <button
+                        aria-label="Clear canvas selection"
+                        onClick={() => chooseCanvasSelection(undefined)}
+                        type="button"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
-            selectedNodeId={selectedNodeId}
-            selectionMode={selectionMode}
-          />
+            {!preview &&
+              shareReview !== undefined &&
+              onRetainShare !== undefined &&
+              onPrepareShareUpdate !== undefined &&
+              onActivateShare !== undefined &&
+              onRejectShare !== undefined && (
+                <Suspense fallback={<ShareSurfaceFallback />}>
+                  <ShareReview
+                    busy={operationActive}
+                    {...(shareInstallation === undefined
+                      ? {}
+                      : { installedVersion: shareInstallation.version })}
+                    onActivate={onActivateShare}
+                    onContinueFork={onContinueShareFork}
+                    onOpenConflictInShape={onOpenShareConflictInShape}
+                    {...(onOpenShareUrl === undefined ||
+                    onOpenShareGit === undefined
+                      ? {}
+                      : { onOpenSource: () => setShareDialogOpen(true) })}
+                    {...(onOpenShareFile === undefined
+                      ? {}
+                      : { onOpenFile: () => shareFileRef.current?.click() })}
+                    onPrepareUpdate={onPrepareShareUpdate}
+                    onReject={onRejectShare}
+                    onRetain={onRetainShare}
+                    pending={shareInstallation?.pending !== undefined}
+                    retained={shareInstallation !== undefined}
+                    review={shareReview}
+                  />
+                </Suspense>
+              )}
+            {!docked ? (
+              <section className="blank-invitation">
+                <h1>What do you want to make?</h1>
+              </section>
+            ) : compiledCapsule !== undefined ? (
+              <Suspense fallback={<ShareSurfaceFallback />}>
+                <CapsuleFrame
+                  assets={compiledCapsule.assets}
+                  entrypointPath={compiledCapsule.entrypointPath}
+                  html={compiledCapsule.html}
+                  onDirectManipulation={(kind, deltaX, deltaY) =>
+                    applyDirectManipulation(
+                      kind === "move"
+                        ? `Move the selected element ${Math.abs(Math.round(deltaX))} pixels ${deltaX < 0 ? "left" : "right"} and ${Math.abs(Math.round(deltaY))} pixels ${deltaY < 0 ? "up" : "down"} in the current view. Translate that gesture into responsive layout source instead of storing fixed canvas coordinates.`
+                        : `Resize the selected element by approximately ${Math.round(deltaX)} pixels in width and ${Math.round(deltaY)} pixels in height in the current view. Translate that gesture into responsive layout source and preserve accessible content reflow.`,
+                    )
+                  }
+                  onIntent={onCapsuleIntent}
+                  onSelectionChange={(selection) =>
+                    chooseCanvasSelection(selection)
+                  }
+                  selection={canvasSelection}
+                  selectionMode={selectionMode}
+                  title={compiledCapsule.name}
+                />
+              </Suspense>
+            ) : (
+              <InterfaceRenderer
+                actions={actions}
+                document={document}
+                onAction={handleInterfaceAction}
+                onSelectionChange={(selection, nodeId) =>
+                  chooseCanvasSelection(selection, nodeId)
+                }
+                renderPrompt={() => (
+                  <button
+                    className="canvas-agent-entry"
+                    onClick={expand}
+                    type="button"
+                  >
+                    Open Flect
+                  </button>
+                )}
+                selectedNodeId={selectedNodeId}
+                selectionMode={selectionMode}
+              />
+            )}
+          </>
         )}
       </main>
 
@@ -866,6 +907,8 @@ export function RoleAwareShell({
           useDisabled={useDisabled || phase === "blank"}
           onCollapse={collapse}
           onOpenSafeMode={onOpenSafeMode}
+          onOpenSettings={openSettings}
+          settingsInDock={!docked}
           {...(onOpenShareUrl === undefined || onOpenShareGit === undefined
             ? {}
             : { onOpenShareSource: () => setShareDialogOpen(true) })}

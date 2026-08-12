@@ -1645,6 +1645,34 @@ test("uses right and full-height sheets at compact breakpoints", async ({
   }
 });
 
+test("uses the canvas as a full-height Settings workspace", async ({
+  page,
+}) => {
+  await shapeFirstInterface(page);
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+
+  const settings = page.locator(".diagnostics-panel--workspace");
+  const rail = page.locator(".agent-rail-container");
+  const settingsBox = await settings.boundingBox();
+  const railBox = await rail.boundingBox();
+  expect(settingsBox).not.toBeNull();
+  expect(railBox).not.toBeNull();
+  expect(settingsBox?.x).toBe(0);
+  expect(settingsBox?.width ?? 0).toBeCloseTo(railBox?.x ?? 0, -1);
+
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toBeFocused();
+
+  await page.setViewportSize({ width: 720, height: 780 });
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await expect(settings).toHaveCSS("width", "720px");
+  await expect(rail).toBeHidden();
+});
+
 test("keeps safe mode and promptless products inside the protected shell", async ({
   page,
 }) => {
@@ -1789,11 +1817,12 @@ test("supports keyboard shaping and reduced motion", async ({ page }) => {
 test("lets an outside agent drive the same reactive workspace through flect", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Enable local control" }).click();
   await expect(
     page.getByRole("button", { name: "Disable local control" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Close settings" }).click();
 
   await expect
     .poll(async () => {
@@ -1870,6 +1899,7 @@ test("lets an outside agent drive the same reactive workspace through flect", as
     })
     .not.toBe(enteredSafeMode.acceptedCommit);
   await runFlect("control", "disable");
+  await page.getByRole("button", { name: "Open settings" }).click();
   await expect(
     page.getByRole("button", { name: "Enable local control" }),
   ).toBeVisible();
