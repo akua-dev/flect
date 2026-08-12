@@ -3,6 +3,13 @@
 import "@testing-library/jest-dom/vitest";
 import { fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+const runPromise = vi.hoisted(() => vi.fn(() => Promise.resolve()));
+
+vi.mock("../lib/runtime", () => ({
+  browserRuntime: { runPromise },
+}));
+
 import { WindowDragRegion } from "./window-drag-region";
 
 afterEach(() => {
@@ -15,14 +22,10 @@ describe("WindowDragRegion", () => {
     const region = container.querySelector(".window-drag-region");
     expect(region).not.toBeNull();
     if (region === null) return;
-    const dragRequested = vi.fn();
-    globalThis.addEventListener("flect:start-window-drag", dragRequested, {
-      once: true,
-    });
 
     fireEvent.pointerDown(region, { button: 0 });
 
-    expect(dragRequested).toHaveBeenCalledOnce();
+    expect(runPromise).toHaveBeenCalledOnce();
   });
 
   it("does not take over a secondary pointer press", () => {
@@ -30,13 +33,9 @@ describe("WindowDragRegion", () => {
     const region = container.querySelector(".window-drag-region");
     expect(region).not.toBeNull();
     if (region === null) return;
-    const dragRequested = vi.fn();
-    globalThis.addEventListener("flect:start-window-drag", dragRequested, {
-      once: true,
-    });
 
     fireEvent.pointerDown(region, { button: 2 });
 
-    expect(dragRequested).not.toHaveBeenCalled();
+    expect(runPromise).not.toHaveBeenCalled();
   });
 });

@@ -1,8 +1,15 @@
+import { Effect } from "effect";
 import type { PointerEvent } from "react";
+import { NativePlatform } from "../lib/native-platform";
+import { browserRuntime } from "../lib/runtime";
 
 const startDrag = (event: PointerEvent<HTMLDivElement>) => {
   if (event.button !== 0) return;
-  globalThis.dispatchEvent(new Event("flect:start-window-drag"));
+  void browserRuntime.runPromise(
+    Effect.flatMap(NativePlatform, (platform) => platform.startWindowDrag).pipe(
+      Effect.catch(() => Effect.void),
+    ),
+  );
 };
 
 /** Native window movement remains available above every product workspace. */

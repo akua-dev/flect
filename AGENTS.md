@@ -149,6 +149,11 @@ Repository-wide constraints:
 - Keep platform behavior behind Effect services and Layers. The browser,
   Tauri host, and macOS Swift code are adapters to shared application
   capabilities, not alternate homes for product workflows or interface state.
+- Every user-triggered native operation, including window chrome such as
+  dragging or resizing, must enter through a named Effect capability and its
+  provided runtime. React components and page scripts must not import or call
+  `@tauri-apps/api/*` directly; only the named platform Layer may adapt that
+  API. Tests provide that capability through a test Layer.
 - Test observable behavior through exported contracts, HTTP requests, and the
   rendered interface. Do not assert that source files contain selected text.
 - Treat documentation as guidance, not proof that a boundary or lifecycle is
