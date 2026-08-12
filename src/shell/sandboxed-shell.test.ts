@@ -3,6 +3,7 @@ import { Deferred, Effect, Fiber, Layer, Ref } from "effect";
 import { BunCommandResult } from "../../shared/bun-command";
 import { type BunOperationCall, makeBunCommandTestLayer } from "./bun-command";
 import {
+  makeLiveRoleSandboxedShellLayer,
   makeRoleSandboxedShellLayer,
   makeRoleSandboxedShellService,
   makeSandboxedShellLayer,
@@ -18,6 +19,24 @@ const operationResult = (operation: string) =>
   });
 
 describe("SandboxedShell", () => {
+  it.effect("runs a basic command through the live role workspace", () =>
+    Effect.gen(function* () {
+      const shellLayer = makeLiveRoleSandboxedShellLayer({
+        app: { files: {} },
+        previewApp: { files: {} },
+        shaper: { files: {} },
+      });
+      const result = yield* Effect.gen(function* () {
+        const shell = yield* SandboxedShell;
+        return yield* shell.execute("shaper", "printf ready");
+      }).pipe(Effect.provide(shellLayer));
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.strictEqual(result.stdout, "ready");
+      assert.strictEqual(result.stderr, "");
+    }),
+  );
+
   it.effect(
     "keeps accepted App, candidate App, and Shaper filesystems isolated",
     () =>

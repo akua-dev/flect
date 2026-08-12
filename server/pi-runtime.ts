@@ -873,6 +873,11 @@ Run \`flect interface schema\`, write the candidate to
 \`flect interface propose /workspace/interface.json\` exactly once as your
 final action. Never return the document as prose, Markdown, or a JSON code
 block. Preserve stable node IDs when possible.
+The candidate must be strict JSON: use double-quoted keys and strings, with
+no comments or trailing commas. Use \`flect interface validate\` as the only
+validation step. If it fails, rewrite the file with corrected strict JSON and
+validate again. Do not probe with \`cat\`, \`node\`, \`python\`, or commands
+outside the provided browser shell.
 Never invent executable code, URLs, credentials, HTML, CSS, scripts, tools, or
 capabilities.
 

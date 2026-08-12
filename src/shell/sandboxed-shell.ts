@@ -1,5 +1,5 @@
 import type { Fetcher } from "@riftydev/npm-client";
-import { MemoryVfs, OpfsVfs } from "@riftydev/vfs";
+import { MemoryVfs } from "@riftydev/vfs";
 import {
   Effect,
   Layer,
@@ -535,16 +535,10 @@ export const makeLiveRoleSandboxedShellLayer = (options: {
   Layer.effect(
     SandboxedShell,
     Effect.gen(function* () {
-      const vfs = yield* Effect.promise(async () => {
-        if (OpfsVfs.isSupported()) {
-          try {
-            const opfs = new OpfsVfs();
-            await opfs.init();
-            return opfs;
-          } catch {}
-        }
-        return new MemoryVfs();
-      });
+      // Role workspaces are deliberately disposable. They must not share the
+      // canonical browser persistence surface used by accepted interface and
+      // repository state.
+      const vfs = new MemoryVfs();
       const workspaceId = options.workspaceId ?? "default";
       const makeFs = (
         workspace: SandboxedShellWorkspace,
