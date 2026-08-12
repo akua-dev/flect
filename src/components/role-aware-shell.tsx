@@ -146,6 +146,25 @@ const focusableSelector = [
 const initialMode = (phase: WorkspacePhase): ShellMode =>
   phase === "accepted" ? "run" : phase === "safe" ? "safe" : "edit";
 
+const isStarterInterface = (document: InterfaceDocument) => {
+  const root = document.root;
+  const actions =
+    root.type === "stack"
+      ? root.children.flatMap((node) =>
+          node.type === "stack" ? node.children : [node],
+        )
+      : [];
+  return (
+    document.name === "Flect" &&
+    actions.some(
+      (node) =>
+        node.type === "button" &&
+        node.id === "shape-interface" &&
+        node.label === "Start building",
+    )
+  );
+};
+
 export function RoleAwareShell({
   build,
   phase,
@@ -235,6 +254,7 @@ export function RoleAwareShell({
     workspace.shaper.messages.length > 0 || shaping.status !== "idle";
   const docked =
     phase === "accepted" || phase === "preview" || hasShaperActivity;
+  const starterWorkspace = phase === "blank" || isStarterInterface(document);
   const compiledCapsule =
     phase === "safe"
       ? undefined
@@ -598,10 +618,12 @@ export function RoleAwareShell({
       >
         {workbenchStatus}
       </div>
+      <div
+        aria-hidden="true"
+        className="window-drag-region"
+        data-tauri-drag-region
+      />
       <header className="topbar">
-        <a aria-label="Flect home" className="wordmark" href="/">
-          Flect
-        </a>
         <div className="topbar__status">
           {phase === "safe" ? (
             <span className="safe-mode">Safe mode</span>
@@ -706,86 +728,89 @@ export function RoleAwareShell({
           </Suspense>
         ) : (
           <>
-            {docked && phase === "accepted" && !preview && (
-              <div
-                aria-label="Canvas editing"
-                className="canvas-edit-toolbar"
-                role="toolbar"
-              >
-                <button
-                  aria-pressed={selectionMode}
-                  className="canvas-edit-toolbar__select"
-                  disabled={operationActive}
-                  onClick={() => setSelectionMode((current) => !current)}
-                  type="button"
+            {docked &&
+              !starterWorkspace &&
+              phase === "accepted" &&
+              !preview && (
+                <div
+                  aria-label="Canvas editing"
+                  className="canvas-edit-toolbar"
+                  role="toolbar"
                 >
-                  {selectionMode ? "Choose an element" : "Select element"}
-                </button>
-                {canvasSelection !== undefined && (
-                  <>
-                    <span
-                      className="canvas-edit-toolbar__selection"
-                      role="status"
-                    >
-                      {canvasSelection.label}
-                    </span>
-                    <div className="canvas-edit-toolbar__actions">
-                      <button
-                        disabled={operationActive}
-                        onClick={() =>
-                          applyDirectManipulation(
-                            "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
-                          )
-                        }
-                        type="button"
+                  <button
+                    aria-pressed={selectionMode}
+                    className="canvas-edit-toolbar__select"
+                    disabled={operationActive}
+                    onClick={() => setSelectionMode((current) => !current)}
+                    type="button"
+                  >
+                    {selectionMode ? "Choose an element" : "Select element"}
+                  </button>
+                  {canvasSelection !== undefined && (
+                    <>
+                      <span
+                        className="canvas-edit-toolbar__selection"
+                        role="status"
                       >
-                        Move earlier
-                      </button>
-                      <button
-                        disabled={operationActive}
-                        onClick={() =>
-                          applyDirectManipulation(
-                            "Move the selected element one position later in its current layout while preserving responsive behavior.",
-                          )
-                        }
-                        type="button"
-                      >
-                        Move later
-                      </button>
-                      <button
-                        disabled={operationActive}
-                        onClick={() =>
-                          applyDirectManipulation(
-                            "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
-                          )
-                        }
-                        type="button"
-                      >
-                        Smaller
-                      </button>
-                      <button
-                        disabled={operationActive}
-                        onClick={() =>
-                          applyDirectManipulation(
-                            "Make the selected element slightly larger using its existing responsive layout and design tokens.",
-                          )
-                        }
-                        type="button"
-                      >
-                        Larger
-                      </button>
-                      <button
-                        aria-label="Clear canvas selection"
-                        onClick={() => chooseCanvasSelection(undefined)}
-                        type="button"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+                        {canvasSelection.label}
+                      </span>
+                      <div className="canvas-edit-toolbar__actions">
+                        <button
+                          disabled={operationActive}
+                          onClick={() =>
+                            applyDirectManipulation(
+                              "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
+                            )
+                          }
+                          type="button"
+                        >
+                          Move earlier
+                        </button>
+                        <button
+                          disabled={operationActive}
+                          onClick={() =>
+                            applyDirectManipulation(
+                              "Move the selected element one position later in its current layout while preserving responsive behavior.",
+                            )
+                          }
+                          type="button"
+                        >
+                          Move later
+                        </button>
+                        <button
+                          disabled={operationActive}
+                          onClick={() =>
+                            applyDirectManipulation(
+                              "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
+                            )
+                          }
+                          type="button"
+                        >
+                          Smaller
+                        </button>
+                        <button
+                          disabled={operationActive}
+                          onClick={() =>
+                            applyDirectManipulation(
+                              "Make the selected element slightly larger using its existing responsive layout and design tokens.",
+                            )
+                          }
+                          type="button"
+                        >
+                          Larger
+                        </button>
+                        <button
+                          aria-label="Clear canvas selection"
+                          onClick={() => chooseCanvasSelection(undefined)}
+                          type="button"
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
             {!preview &&
               shareReview !== undefined &&
               onRetainShare !== undefined &&
@@ -817,9 +842,10 @@ export function RoleAwareShell({
                   />
                 </Suspense>
               )}
-            {!docked ? (
+            {starterWorkspace ? (
               <section className="blank-invitation">
                 <h1>What do you want to make?</h1>
+                <p>Describe the outcome in the message box to start.</p>
               </section>
             ) : compiledCapsule !== undefined ? (
               <Suspense fallback={<ShareSurfaceFallback />}>
@@ -854,10 +880,10 @@ export function RoleAwareShell({
                 renderPrompt={() => (
                   <button
                     className="canvas-agent-entry"
-                    onClick={expand}
+                    onClick={focusComposer}
                     type="button"
                   >
-                    Open Flect
+                    Ask Flect about this interface
                   </button>
                 )}
                 selectedNodeId={selectedNodeId}

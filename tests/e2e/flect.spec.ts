@@ -310,6 +310,31 @@ test("shapes a blank workspace in one continuous live canvas", async ({
   await expect(page.locator(".composer")).toHaveCount(1);
 });
 
+test("gives the static home screen one clear starting action", async ({
+  page,
+}) => {
+  await page.goto("/?view=1");
+
+  await expect(
+    page.getByRole("heading", { name: "Describe the app you want to make." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toHaveAttribute(
+    "placeholder",
+    "For example: a calm project planner for this week",
+  );
+  await expect(
+    page.getByRole("button", { name: "Create with Flect" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start building" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Select element" }),
+  ).toHaveCount(0);
+});
+
 test("selects and directly edits the running canvas through the same agent", async ({
   page,
 }) => {

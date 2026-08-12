@@ -12,7 +12,10 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ControlStateSnapshot } from "../../shared/control";
-import { InterfaceDocument } from "../../shared/interface-document";
+import {
+  defaultInterfaceDocument,
+  InterfaceDocument,
+} from "../../shared/interface-document";
 import { ShellPreferencesValue } from "../../shared/shell-preferences";
 import type {
   AgentSessionStatus,
@@ -140,6 +143,7 @@ function ShellHarness({
   controlledMode,
   onModeChange,
   diagnostics,
+  document = documentWithoutPrompt,
 }: {
   readonly initialCollapsed?: boolean;
   readonly initialWidth?: number;
@@ -149,6 +153,7 @@ function ShellHarness({
   readonly controlledMode?: "edit" | "run";
   readonly onModeChange?: (mode: "edit" | "run") => Promise<void>;
   readonly diagnostics?: RoleAwareShellProps["diagnostics"];
+  readonly document?: InterfaceDocument;
 }) {
   const [value, setValue] = useState(
     ShellPreferencesValue.make({
@@ -176,7 +181,7 @@ function ShellHarness({
   return (
     <RoleAwareShell
       controlledMode={controlledMode}
-      document={documentWithoutPrompt}
+      document={document}
       diagnostics={diagnostics}
       onOpenSafeMode={vi.fn()}
       onModeChange={onModeChange}
@@ -191,6 +196,35 @@ function ShellHarness({
 }
 
 describe("RoleAwareShell", () => {
+  it("keeps the starter workspace free of canvas-only actions", () => {
+    render(
+      <ShellHarness document={defaultInterfaceDocument} phase="accepted" />,
+    );
+
+    expect(screen.getByText("What do you want to make?")).toBeVisible();
+    expect(
+      screen.getByText("Describe the outcome in the message box to start."),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Select element" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start building" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Ask Flect about this interface",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Flect home" }),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".window-drag-region")).toHaveAttribute(
+      "data-tauri-drag-region",
+      "true",
+    );
+  });
+
   it("opens Settings across the canvas instead of inside the agent rail", async () => {
     const user = userEvent.setup();
     render(
