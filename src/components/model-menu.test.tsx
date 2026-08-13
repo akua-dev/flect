@@ -1,7 +1,13 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ModelSummary } from "../../shared/contracts";
@@ -150,7 +156,33 @@ describe("ModelMenu", () => {
     expect(
       screen.queryByRole("dialog", { name: "Choose model" }),
     ).not.toBeInTheDocument();
-    expect(trigger).toHaveFocus();
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
+  it("uses the native top layer and dismisses from its backdrop", async () => {
+    const user = userEvent.setup();
+    render(
+      <ModelMenu
+        {...defaults}
+        disabled={false}
+        models={[model]}
+        onSelect={vi.fn()}
+        selectedModel={undefined}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", {
+      name: "Model: Auto via Pi",
+    });
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Choose model" });
+    expect(dialog).toHaveAttribute("open");
+    fireEvent.pointerDown(dialog);
+
+    expect(
+      screen.queryByRole("dialog", { name: "Choose model" }),
+    ).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
   });
 
   it("cannot open while model changes are disabled", async () => {

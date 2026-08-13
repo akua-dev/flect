@@ -2780,19 +2780,21 @@ textarea:focus-visible,
 }
 
 .composer-popover--models {
-  right: 0;
+  position: fixed;
+  top: auto;
+  right: max(24px, env(safe-area-inset-right));
+  bottom: max(150px, calc(env(safe-area-inset-bottom) + 134px));
+  left: auto;
   display: flex;
   width: min(360px, calc(100vw - 32px));
   max-height: min(480px, calc(100dvh - 120px));
+  margin: 0;
   padding: 0;
+  color: var(--ink);
 }
 
-@media (min-width: 981px) {
-  .role-shell--split:not(.role-shell--collapsed) .composer-popover--models {
-    position: fixed;
-    right: max(24px, env(safe-area-inset-right));
-    bottom: max(150px, calc(env(safe-area-inset-bottom) + 134px));
-  }
+.composer-popover--models::backdrop {
+  background: color-mix(in oklch, var(--sheet-backdrop) 42%, transparent);
 }
 
 .composer-popover__context {
