@@ -211,6 +211,8 @@ describe("CapsuleFrame", () => {
     vi.stubGlobal("MessageChannel", FakeMessageChannel);
     const onSelectionChange = vi.fn();
     const onDirectManipulation = vi.fn();
+    const onSelectionAction = vi.fn();
+    const onClearSelection = vi.fn();
     const selection = CanvasSelection.make({
       version: 1,
       semanticId: "delivery-card",
@@ -236,7 +238,9 @@ describe("CapsuleFrame", () => {
     const rendered = render(
       <CapsuleFrame
         html="<article>Late delivery</article>"
+        onClearSelection={onClearSelection}
         onDirectManipulation={onDirectManipulation}
+        onSelectionAction={onSelectionAction}
         onSelectionChange={onSelectionChange}
         selectionMode
       />,
@@ -265,22 +269,30 @@ describe("CapsuleFrame", () => {
     rendered.rerender(
       <CapsuleFrame
         html="<article>Late delivery</article>"
+        onClearSelection={onClearSelection}
         onDirectManipulation={onDirectManipulation}
+        onSelectionAction={onSelectionAction}
         onSelectionChange={onSelectionChange}
         selection={selection}
       />,
     );
 
-    expect(screen.getByText("Late delivery").parentElement).toHaveClass(
-      "canvas-selection-outline",
-    );
     const outline = screen.getByRole("group", {
       name: "Selected element: Late delivery. Drag to move.",
     });
+    expect(outline).toHaveClass("canvas-selection-outline");
     fireEvent.pointerDown(outline, { pointerId: 7, clientX: 20, clientY: 20 });
     fireEvent.pointerMove(outline, { pointerId: 7, clientX: 44, clientY: 31 });
     fireEvent.pointerUp(outline, { pointerId: 7, clientX: 44, clientY: 31 });
     expect(onDirectManipulation).toHaveBeenCalledWith("move", 24, 11);
+    fireEvent.click(screen.getByRole("button", { name: "Move later" }));
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Clear selection: Late delivery",
+      }),
+    );
+    expect(onSelectionAction).toHaveBeenCalledWith("move-later");
+    expect(onClearSelection).toHaveBeenCalledTimes(1);
     expect(FakeMessageChannel.created).toBe(createdBeforeSelection);
     expect(channel?.port1.posted).toContainEqual({
       version: 1,

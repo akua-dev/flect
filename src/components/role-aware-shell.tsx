@@ -31,8 +31,9 @@ import {
   type AgentRailProps,
   type ShapingController,
 } from "./agent-rail";
+import type { CanvasEditAction } from "./canvas-edit-palette";
 import { PanelOpenIcon } from "./icons";
-import { type InterfaceAction, InterfaceRenderer } from "./interface-renderer";
+import type { InterfaceAction } from "./interface-renderer";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
 import { WindowDragRegion } from "./window-drag-region";
 
@@ -56,6 +57,8 @@ const CapsuleFrame = lazy(() =>
     default: module.CapsuleFrame,
   })),
 );
+const CanvasEditPalette = lazy(() => import("./canvas-edit-palette"));
+const InterfaceRenderer = lazy(() => import("./interface-renderer"));
 const DiagnosticsPanel = lazy(() =>
   import("./diagnostics-panel").then((module) => ({
     default: module.DiagnosticsPanel,
@@ -472,6 +475,23 @@ export function RoleAwareShell({
     [canvasSelection, operationActive, selectedNodeId, shaping],
   );
 
+  const applyCanvasEditAction = useCallback(
+    (action: CanvasEditAction) => {
+      const instructions: Record<CanvasEditAction, string> = {
+        "move-earlier":
+          "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
+        "move-later":
+          "Move the selected element one position later in its current layout while preserving responsive behavior.",
+        smaller:
+          "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
+        larger:
+          "Make the selected element slightly larger using its existing responsive layout and design tokens.",
+      };
+      applyDirectManipulation(instructions[action]);
+    },
+    [applyDirectManipulation],
+  );
+
   useEffect(() => {
     if (!compactViewport || !docked || collapsed) {
       return;
@@ -728,84 +748,20 @@ export function RoleAwareShell({
               !starterWorkspace &&
               phase === "accepted" &&
               !preview && (
-                <div
-                  aria-label="Canvas editing"
-                  className="canvas-edit-toolbar"
-                  role="toolbar"
+                <button
+                  aria-label={
+                    selectionMode
+                      ? "Cancel element selection"
+                      : "Select element"
+                  }
+                  aria-pressed={selectionMode}
+                  className="canvas-edit-trigger"
+                  disabled={operationActive}
+                  onClick={() => setSelectionMode((current) => !current)}
+                  type="button"
                 >
-                  <button
-                    aria-pressed={selectionMode}
-                    className="canvas-edit-toolbar__select"
-                    disabled={operationActive}
-                    onClick={() => setSelectionMode((current) => !current)}
-                    type="button"
-                  >
-                    {selectionMode ? "Choose an element" : "Select element"}
-                  </button>
-                  {canvasSelection !== undefined && (
-                    <>
-                      <span
-                        className="canvas-edit-toolbar__selection"
-                        role="status"
-                      >
-                        {canvasSelection.label}
-                      </span>
-                      <div className="canvas-edit-toolbar__actions">
-                        <button
-                          disabled={operationActive}
-                          onClick={() =>
-                            applyDirectManipulation(
-                              "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
-                            )
-                          }
-                          type="button"
-                        >
-                          Move earlier
-                        </button>
-                        <button
-                          disabled={operationActive}
-                          onClick={() =>
-                            applyDirectManipulation(
-                              "Move the selected element one position later in its current layout while preserving responsive behavior.",
-                            )
-                          }
-                          type="button"
-                        >
-                          Move later
-                        </button>
-                        <button
-                          disabled={operationActive}
-                          onClick={() =>
-                            applyDirectManipulation(
-                              "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
-                            )
-                          }
-                          type="button"
-                        >
-                          Smaller
-                        </button>
-                        <button
-                          disabled={operationActive}
-                          onClick={() =>
-                            applyDirectManipulation(
-                              "Make the selected element slightly larger using its existing responsive layout and design tokens.",
-                            )
-                          }
-                          type="button"
-                        >
-                          Larger
-                        </button>
-                        <button
-                          aria-label="Clear canvas selection"
-                          onClick={() => chooseCanvasSelection(undefined)}
-                          type="button"
-                        >
-                          Clear
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                  <span className="canvas-edit-trigger__glyph" />
+                </button>
               )}
             {!preview &&
               shareReview !== undefined &&
@@ -860,34 +816,52 @@ export function RoleAwareShell({
                     )
                   }
                   onIntent={onCapsuleIntent}
+                  onClearSelection={() => chooseCanvasSelection(undefined)}
+                  onSelectionAction={applyCanvasEditAction}
                   onSelectionChange={(selection) =>
                     chooseCanvasSelection(selection)
                   }
                   selection={canvasSelection}
+                  selectionBusy={operationActive}
                   selectionMode={selectionMode}
                   title={compiledCapsule.name}
                 />
               </Suspense>
             ) : (
-              <InterfaceRenderer
-                actions={actions}
-                document={document}
-                onAction={handleInterfaceAction}
-                onSelectionChange={(selection, nodeId) =>
-                  chooseCanvasSelection(selection, nodeId)
-                }
-                renderPrompt={() => (
-                  <button
-                    className="canvas-agent-entry"
-                    onClick={focusComposer}
-                    type="button"
-                  >
-                    Ask Flect about this interface
-                  </button>
+              <>
+                <Suspense fallback={<ShareSurfaceFallback />}>
+                  <InterfaceRenderer
+                    actions={actions}
+                    document={document}
+                    onAction={handleInterfaceAction}
+                    onSelectionChange={(selection, nodeId) =>
+                      chooseCanvasSelection(selection, nodeId)
+                    }
+                    renderPrompt={() => (
+                      <button
+                        className="canvas-agent-entry"
+                        onClick={focusComposer}
+                        type="button"
+                      >
+                        Ask Flect about this interface
+                      </button>
+                    )}
+                    selectedNodeId={selectedNodeId}
+                    selectionMode={selectionMode}
+                  />
+                </Suspense>
+                {canvasSelection !== undefined && (
+                  <Suspense fallback={null}>
+                    <CanvasEditPalette
+                      busy={operationActive}
+                      label={canvasSelection.label}
+                      onAction={applyCanvasEditAction}
+                      onClear={() => chooseCanvasSelection(undefined)}
+                      rect={canvasSelection.rect}
+                    />
+                  </Suspense>
                 )}
-                selectedNodeId={selectedNodeId}
-                selectionMode={selectionMode}
-              />
+              </>
             )}
           </>
         )}
