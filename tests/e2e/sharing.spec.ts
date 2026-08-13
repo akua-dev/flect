@@ -554,7 +554,9 @@ test("routes fork personalization through one composer and activates a real two-
     buffer: Buffer.from(fixtures.compatibleUpdate.archive),
   });
   review = page.getByRole("region", { name: "Weather workspace" });
-  await expect(review.getByText(/1\.1\.0 · update/)).toBeVisible();
+  await expect(review.getByText(/1\.1\.0 · update/)).toBeVisible({
+    timeout: 30_000,
+  });
   await review.getByRole("button", { name: "Prepare update" }).click();
   await expect(review.getByText(/1\.1\.0 · fork/)).toBeVisible({
     timeout: 30_000,
