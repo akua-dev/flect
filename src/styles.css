@@ -1328,27 +1328,104 @@ textarea:focus-visible,
 .conversation__scroll {
   overflow-anchor: none;
   overflow-y: auto;
-  padding: 24px 20px;
+  padding: 22px 18px 32px;
   overscroll-behavior: contain;
+}
+
+.conversation__content {
+  gap: 20px;
+}
+
+.message {
+  line-height: 1.55;
+}
+
+.message--user {
+  max-width: 88%;
+}
+
+.message--user > div {
+  border: 1px solid color-mix(in oklch, var(--line) 72%, transparent);
+  border-radius: 14px 14px 4px 14px;
+  padding: 9px 12px;
+  background: color-mix(in oklch, var(--surface-raised) 72%, transparent);
+  box-shadow: 0 1px 0 color-mix(in oklch, var(--ink) 4%, transparent);
+}
+
+.message--assistant {
+  max-width: 100%;
+}
+
+.message--assistant > div {
+  width: 100%;
+}
+
+.work-log {
+  display: grid;
+  gap: 3px;
+  color: var(--muted);
+}
+
+.work-log__header {
+  display: flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 3px;
+  font-size: 0.6875rem;
+}
+
+.work-log__header strong {
+  color: var(--ink);
+  font-weight: 560;
+}
+
+.work-log__header > span:last-child {
+  color: var(--quiet);
+}
+
+.work-log__mark {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ready);
+}
+
+.work-log:has(.activity-card--running) .work-log__mark {
+  animation: activity-pulse 1.4s ease-in-out infinite;
+  background: var(--primary);
+}
+
+.work-log--failed .work-log__mark {
+  background: var(--danger);
+}
+
+.work-log__entries {
+  display: grid;
+  gap: 1px;
 }
 
 .activity-card {
   position: relative;
-  border: 1px solid color-mix(in oklch, var(--line) 78%, transparent);
-  border-radius: 12px;
-  background: color-mix(in oklch, var(--surface) 76%, transparent);
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
 }
 
 .activity-card__disclosure {
+  margin-bottom: 0;
+  border: 0;
   border-radius: inherit;
+  background: transparent;
 }
 
 .activity-card__fix {
-  width: 100%;
-  min-height: 36px;
+  width: calc(100% - 28px);
+  min-height: 30px;
   border: 0;
-  border-top: 1px solid var(--line);
-  padding: 0 10px;
+  border-radius: 6px;
+  margin: 0 0 4px 28px;
+  padding: 0 7px;
   background: transparent;
   color: var(--ink);
   cursor: pointer;
@@ -1366,17 +1443,45 @@ textarea:focus-visible,
 .activity-card__summary {
   display: grid;
   width: 100%;
-  min-height: 42px;
+  min-height: 30px;
   align-items: center;
   border: 0;
-  padding: 8px 10px;
+  padding: 4px 5px;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  gap: 8px;
+  gap: 6px;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   list-style: none;
   text-align: start;
+}
+
+.activity-card__summary:hover,
+.activity-card__summary:focus-visible {
+  background: color-mix(in oklch, var(--surface-raised) 52%, transparent);
+}
+
+.activity-card__summary > div:first-child {
+  gap: 6px;
+}
+
+.activity-card__summary [data-slot="badge"] {
+  height: auto;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+.activity-card__summary > div:last-child {
+  gap: 4px;
+}
+
+.activity-card__summary .lucide {
+  width: 12px;
+  height: 12px;
 }
 
 .activity-card__summary::-webkit-details-marker,
@@ -1387,7 +1492,7 @@ textarea:focus-visible,
 .activity-card__summary strong {
   overflow: hidden;
   font-size: 0.75rem;
-  font-weight: 590;
+  font-weight: 520;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1400,8 +1505,8 @@ textarea:focus-visible,
 }
 
 .activity-card__dot {
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: var(--quiet);
 }
@@ -1422,8 +1527,15 @@ textarea:focus-visible,
 .activity-card__details {
   display: grid;
   gap: 10px;
-  border-top: 1px solid var(--line);
-  padding: 10px;
+  border: 1px solid color-mix(in oklch, var(--line) 72%, transparent);
+  border-radius: 8px;
+  margin: 2px 0 5px 28px;
+  padding: 9px;
+  background: color-mix(in oklch, var(--canvas) 64%, transparent);
+}
+
+.activity-card__details[data-state="closed"] {
+  display: none;
 }
 
 .activity-card__details section {
@@ -1947,8 +2059,17 @@ textarea:focus-visible,
 }
 
 .composer {
+  border-color: color-mix(in oklch, var(--line) 84%, transparent);
   border-radius: var(--radius);
   background: var(--card);
+  box-shadow:
+    0 1px 0 color-mix(in oklch, var(--ink) 4%, transparent),
+    0 8px 24px color-mix(in oklch, var(--shadow-soft) 72%, transparent);
+}
+
+.composer textarea {
+  min-height: 44px;
+  padding: 10px 12px 4px;
 }
 
 .capsule-notice {
