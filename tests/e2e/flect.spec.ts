@@ -1329,6 +1329,13 @@ test("normalizes an interrupted Shaper turn without restoring partial output", a
   await input.fill("Create a candidate that will be cancelled");
   completedShapePages.add(page);
   await input.press("Enter");
+  const conversation = page.getByRole("log", { name: "Flect conversation" });
+  await expect(conversation).toContainText(
+    "Create a candidate that will be cancelled",
+  );
+  await expect(
+    page.getByRole("status", { name: "Workbench status" }),
+  ).toContainText("Flect is responding");
   await expect(page.getByRole("button", { name: "Stop Flect" })).toBeVisible();
 
   await page.reload();

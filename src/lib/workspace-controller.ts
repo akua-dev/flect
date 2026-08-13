@@ -1,6 +1,7 @@
 import {
   Context,
   Effect,
+  Fiber,
   Layer,
   Option,
   PubSub,
@@ -1212,6 +1213,30 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 
     const unchanged = (current: FlectWorkspaceSnapshot) => current;
 
+    const syncAgentProjection = Effect.fn(
+      "Flect.Workspace.syncAgentProjection",
+    )(function* () {
+      const next = yield* agent.snapshot;
+      yield* transition(systemSource, "state-changed", (current) =>
+        evolveWorkspaceSnapshot(current, { agent: next }),
+      );
+      const current = yield* SubscriptionRef.get(state);
+      yield* persistContinuity(next, current.shaping);
+    });
+
+    const runProjectedAgentTurn = Effect.fn(
+      "Flect.Workspace.runProjectedAgentTurn",
+    )(function* <A, E, R>(turn: Effect.Effect<A, E, R>) {
+      const fiber = yield* turn.pipe(
+        Effect.forkChild({ startImmediately: true }),
+      );
+      yield* Effect.yieldNow;
+      yield* syncAgentProjection();
+      return yield* Fiber.join(fiber).pipe(
+        Effect.ensuring(syncAgentProjection()),
+      );
+    });
+
     const reportBuild = (
       envelope: FlectCommandEnvelope,
       operationId: string,
@@ -2364,13 +2389,15 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         );
         const candidate = yield* withNestedAgentCommands(
           operationId,
-          agent.submitShaperInstruction(
-            operationContext(envelope, operationId),
-            handoff === undefined
-              ? instruction
-              : boundedHandoffInstruction(handoff),
-            shaping.proposal?.document ?? shaping.active.document,
-            instruction,
+          runProjectedAgentTurn(
+            agent.submitShaperInstruction(
+              operationContext(envelope, operationId),
+              handoff === undefined
+                ? instruction
+                : boundedHandoffInstruction(handoff),
+              shaping.proposal?.document ?? shaping.active.document,
+              instruction,
+            ),
           ),
         );
         if (extensionCatalog !== undefined) {
@@ -2460,10 +2487,12 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       );
       yield* withNestedAgentCommands(
         operationId,
-        agent.submitShaperInstruction(
-          operationContext(envelope, operationId),
-          instruction,
-          shaping.proposal?.document ?? shaping.active.document,
+        runProjectedAgentTurn(
+          agent.submitShaperInstruction(
+            operationContext(envelope, operationId),
+            instruction,
+            shaping.proposal?.document ?? shaping.active.document,
+          ),
         ),
       );
       const latest = yield* kernel.snapshot;
@@ -4451,17 +4480,19 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           }
           const outcome = yield* withNestedAgentCommands(
             operationId,
-            current.shaping.proposal === undefined
-              ? agent.submitAppPrompt(
-                  operationContext(envelope, operationId),
-                  command.text,
-                )
-              : agent.submitPreviewPrompt(
-                  operationContext(envelope, operationId),
-                  command.text,
-                  current.shaping.proposal.document,
-                  current.shaping.proposal.id,
-                ),
+            runProjectedAgentTurn(
+              current.shaping.proposal === undefined
+                ? agent.submitAppPrompt(
+                    operationContext(envelope, operationId),
+                    command.text,
+                  )
+                : agent.submitPreviewPrompt(
+                    operationContext(envelope, operationId),
+                    command.text,
+                    current.shaping.proposal.document,
+                    current.shaping.proposal.id,
+                  ),
+            ),
           );
           yield* transition(
             envelope.source,
