@@ -15,6 +15,11 @@ must stay within these user-visible classes:
   initial CSS at or below 25 KiB gzip;
 - composer p95 acknowledgement within 50 ms and ordinary interaction within
   100 ms;
+- after Send, the submitted message, responding state, and cancellation control
+  appear within 100 ms; deterministic agent activity appears within 500 ms;
+- a deterministic schema-interface request visibly changes the running canvas
+  within 2,500 ms, including controller, sandbox, validation, checkpoint, and
+  render work;
 - text/CSS patch within 150 ms and component patch within 500 ms;
 - external candidate rebuild and representative complete Markdown within
   1,000 ms;
@@ -29,8 +34,9 @@ must stay within these user-visible classes:
   the release repetition run.
 
 The budgets include Flect orchestration and rendering, not provider inference
-latency. Model latency is reported separately and never hidden by extending a
-spinner budget.
+latency. The deterministic canvas-change fixture supplies bounded agent events
+without a provider call. Live model latency is reported separately and never
+hidden by extending a spinner budget.
 
 ## Measurement contract
 
@@ -49,6 +55,11 @@ credentials, URLs, or tool content. Each mandatory interaction is exercised
 at least once per gate. Warm target switching uses multiple samples and fails
 on the worst sample; release dogfood records three native samples and uses the
 median while also rejecting any sample above 150 percent of its budget.
+
+Logical time-dependent Effect workflows use Effect test services such as
+`TestClock`. User-visible acknowledgement, activity, and canvas-change budgets
+use Chromium's monotonic `performance.now()` around rendered DOM observations;
+advancing a simulated clock cannot prove a paint or interaction deadline.
 
 The dedicated supported-device browser run and release dogfood fail warm
 activation at the exact 300 ms product threshold. Shared hosted CI cannot be a

@@ -141,6 +141,112 @@ const shape = async (page: Page, instruction: string, enforceBudget = true) => {
   };
 };
 
+const measureVisibleShapeResponse = async (page: Page) => {
+  const instruction = "Create a focused project overview";
+  const input = page.getByRole("textbox", { name: "Message Flect" });
+  await input.fill(instruction);
+  return input.evaluate(
+    (element, expectedInstruction) =>
+      new Promise<{
+        readonly canvasChangeMs: number;
+        readonly firstActivityMs: number;
+        readonly sendAcknowledgeMs: number;
+      }>((resolve, reject) => {
+        if (!(element instanceof HTMLTextAreaElement)) {
+          reject(new Error("Flect composer is not a textarea."));
+          return;
+        }
+        const form = element.closest("form");
+        const send = form?.querySelector('button[aria-label="Send to Flect"]');
+        const shell = document.querySelector(".role-shell");
+        if (
+          !(form instanceof HTMLFormElement) ||
+          !(send instanceof HTMLButtonElement) ||
+          !(shell instanceof HTMLElement)
+        ) {
+          reject(new Error("Flect visible send controls are unavailable."));
+          return;
+        }
+        const revisionBefore = shell.dataset.activeRevision;
+        const startedAt = performance.now();
+        let sendAcknowledgeMs: number | undefined;
+        let firstActivityMs: number | undefined;
+        let canvasChangeMs: number | undefined;
+        const visible = (candidate: Element | null) =>
+          candidate instanceof HTMLElement &&
+          candidate.getClientRects().length > 0 &&
+          getComputedStyle(candidate).visibility !== "hidden";
+        const sample = () => {
+          const elapsedMs = performance.now() - startedAt;
+          const conversation = document.querySelector(
+            '[role="log"][aria-label="Flect conversation"]',
+          );
+          const workbench = document.querySelector(
+            '[role="status"][aria-label="Workbench status"]',
+          );
+          const stop = document.querySelector(
+            'button[aria-label="Stop Flect"]',
+          );
+          if (
+            sendAcknowledgeMs === undefined &&
+            conversation?.textContent?.includes(expectedInstruction) === true &&
+            workbench?.textContent?.includes("Flect is responding") === true &&
+            visible(stop)
+          ) {
+            sendAcknowledgeMs = elapsedMs;
+          }
+          const activity = document.querySelector(
+            ".work-log, article.activity-card",
+          );
+          if (firstActivityMs === undefined && visible(activity)) {
+            firstActivityMs = elapsedMs;
+          }
+          const heading = [...document.querySelectorAll("h1, h2, h3")].find(
+            (candidate) =>
+              candidate.textContent?.trim() === "Focused project overview",
+          );
+          if (
+            canvasChangeMs === undefined &&
+            visible(heading ?? null) &&
+            shell.dataset.activeRevision !== revisionBefore
+          ) {
+            canvasChangeMs = elapsedMs;
+          }
+          if (
+            sendAcknowledgeMs !== undefined &&
+            firstActivityMs !== undefined &&
+            canvasChangeMs !== undefined
+          ) {
+            observer.disconnect();
+            clearTimeout(timeout);
+            resolve({
+              canvasChangeMs,
+              firstActivityMs,
+              sendAcknowledgeMs,
+            });
+          }
+        };
+        const observer = new MutationObserver(sample);
+        const timeout = setTimeout(() => {
+          observer.disconnect();
+          reject(
+            new Error(
+              "Flect did not visibly acknowledge, show activity, and change the canvas.",
+            ),
+          );
+        }, 10_000);
+        observer.observe(document.documentElement, {
+          attributes: true,
+          childList: true,
+          subtree: true,
+        });
+        send.click();
+        sample();
+      }),
+    instruction,
+  );
+};
+
 test.beforeEach(async ({ page }) => {
   await resetBrowserWorkspace(page, { viewOnly: true });
   await expect(
@@ -274,6 +380,42 @@ test("enforces the static Astro shell and cold/warm interaction budgets", async 
     modelMenuMs: Math.round(modelMenu.durationMs),
     warmActivationLimitMs,
     warmActivationMs: Math.round(warmActivationMs),
+  });
+});
+
+test("visibly responds to Send before completing the canvas change", async ({
+  page,
+}) => {
+  await activate(page);
+  const metrics = await measureVisibleShapeResponse(page);
+
+  expect(
+    metrics.sendAcknowledgeMs,
+    "visible send acknowledgement milliseconds",
+  ).toBeLessThan(budget.sendVisualAcknowledgeMs);
+  expect(
+    metrics.firstActivityMs,
+    "first visible agent activity milliseconds",
+  ).toBeLessThan(budget.firstVisibleActivityMs);
+  expect(
+    metrics.canvasChangeMs,
+    "deterministic visible canvas change milliseconds",
+  ).toBeLessThan(budget.deterministicCanvasChangeMs);
+  // React may commit acknowledgement and activity in the same render. The
+  // contract is that acknowledgement is already visible by completion, not
+  // that separate commits must be observable on every machine.
+  expect(metrics.sendAcknowledgeMs).toBeLessThanOrEqual(metrics.canvasChangeMs);
+  expect(metrics.firstActivityMs).toBeLessThanOrEqual(metrics.canvasChangeMs);
+  await expect(
+    page.getByRole("heading", { name: "Focused project overview" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("status", { name: "Workbench status" }),
+  ).toContainText("Flect is ready");
+  report({
+    canvasChangeMs: Math.round(metrics.canvasChangeMs),
+    firstVisibleActivityMs: Math.round(metrics.firstActivityMs),
+    sendVisualAcknowledgeMs: Math.round(metrics.sendAcknowledgeMs),
   });
 });
 
