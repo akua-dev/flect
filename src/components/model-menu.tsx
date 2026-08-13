@@ -1,6 +1,7 @@
 import {
   type KeyboardEvent,
   lazy,
+  type PointerEvent,
   Suspense,
   useCallback,
   useEffect,
@@ -55,7 +56,7 @@ export const modelValue = (model: ModelSummary) =>
 
 const FAVORITES_FILTER = "favorites";
 
-const selectableItems = (menu: HTMLDivElement) =>
+const selectableItems = (menu: HTMLElement) =>
   Array.from(
     menu.querySelectorAll<HTMLButtonElement>('[role="radio"]:not(:disabled)'),
   );
@@ -88,9 +89,8 @@ export function ModelMenu({
 }: ModelMenuProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDialogElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
@@ -166,17 +166,24 @@ export function ModelMenu({
       return;
     }
 
+    const dialog = menuRef.current;
+    if (dialog !== null && !dialog.open) {
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+    }
     queueMicrotask(() => searchRef.current?.focus());
-    const dismissOutside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !rootRef.current?.contains(event.target)
-      ) {
-        setOpen(false);
+    return () => {
+      if (dialog?.open) {
+        if (typeof dialog.close === "function") {
+          dialog.close();
+        } else {
+          dialog.removeAttribute("open");
+        }
       }
     };
-    document.addEventListener("pointerdown", dismissOutside);
-    return () => document.removeEventListener("pointerdown", dismissOutside);
   }, [open]);
 
   useEffect(() => {
@@ -202,6 +209,12 @@ export function ModelMenu({
     queueMicrotask(() => triggerRef.current?.focus());
   };
 
+  const dismissFromBackdrop = (event: PointerEvent<HTMLDialogElement>) => {
+    if (event.target === event.currentTarget) {
+      closeAndFocusTrigger();
+    }
+  };
+
   const select = (model: ModelSummary | undefined) => {
     closeAndFocusTrigger();
     onSelect(model);
@@ -221,7 +234,7 @@ export function ModelMenu({
     setOpen(true);
   };
 
-  const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleMenuKeyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
       closeAndFocusTrigger();
@@ -266,7 +279,7 @@ export function ModelMenu({
           : `No models available from ${providerFilter}`;
 
   return (
-    <div className="model-menu" ref={rootRef}>
+    <div className="model-menu">
       <button
         aria-controls={open ? menuId : undefined}
         aria-expanded={open}
@@ -290,13 +303,17 @@ export function ModelMenu({
       </button>
 
       {open && (
-        <div
+        <dialog
           aria-label="Choose model"
           className="composer-popover composer-popover--models"
           id={menuId}
+          onCancel={(event) => {
+            event.preventDefault();
+            closeAndFocusTrigger();
+          }}
           onKeyDown={handleMenuKeyDown}
+          onPointerDown={dismissFromBackdrop}
           ref={menuRef}
-          role="dialog"
         >
           {!normalizedQuery && (
             <nav
@@ -486,7 +503,7 @@ export function ModelMenu({
                 </Suspense>
               )}
           </div>
-        </div>
+        </dialog>
       )}
     </div>
   );
