@@ -327,6 +327,8 @@ test("gates the static Astro shell on Fast and Slow 4G with 4x CPU", async ({
     readonly reportPrefix: string;
   }> = [];
   let warmFast4gActivationMs = Number.POSITIVE_INFINITY;
+  let warmFast4gActivationMinMs = Number.POSITIVE_INFINITY;
+  let warmFast4gActivationMaxMs = Number.POSITIVE_INFINITY;
 
   try {
     await session.send("Network.enable");
@@ -391,8 +393,20 @@ test("gates the static Astro shell on Fast and Slow 4G with 4x CPU", async ({
         });
         await page.goto(viewUrl("fast4g-warmup"));
         await activate(page);
-        await page.goto(viewUrl("fast4g-warm"));
-        warmFast4gActivationMs = await activate(page);
+        const warmSamples: Array<number> = [];
+        for (let sample = 0; sample < 3; sample += 1) {
+          await page.goto(viewUrl(`fast4g-warm-${sample + 1}`));
+          warmSamples.push(await activate(page));
+        }
+        const orderedWarmSamples = warmSamples.toSorted(
+          (left, right) => left - right,
+        );
+        warmFast4gActivationMs =
+          orderedWarmSamples[1] ?? Number.POSITIVE_INFINITY;
+        warmFast4gActivationMinMs =
+          orderedWarmSamples[0] ?? Number.POSITIVE_INFINITY;
+        warmFast4gActivationMaxMs =
+          orderedWarmSamples[2] ?? Number.POSITIVE_INFINITY;
       }
     }
   } finally {
@@ -409,6 +423,8 @@ test("gates the static Astro shell on Fast and Slow 4G with 4x CPU", async ({
 
   const reported: Record<string, number> = {
     warmFast4gActivationMs: Math.round(warmFast4gActivationMs),
+    warmFast4gActivationMaxMs: Math.round(warmFast4gActivationMaxMs),
+    warmFast4gActivationMinMs: Math.round(warmFast4gActivationMinMs),
   };
   for (const result of results) {
     const profile = networkProfiles.find(
