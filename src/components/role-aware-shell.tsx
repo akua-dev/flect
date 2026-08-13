@@ -251,11 +251,10 @@ export function RoleAwareShell({
     "--flect-rail-width": `${preferences.value.railWidth}px`,
   };
 
+  const starterWorkspace = phase === "blank" || isStarterInterface(document);
   const hasShaperActivity =
     workspace.shaper.messages.length > 0 || shaping.status !== "idle";
-  const docked =
-    phase === "accepted" || phase === "preview" || hasShaperActivity;
-  const starterWorkspace = phase === "blank" || isStarterInterface(document);
+  const docked = !starterWorkspace || hasShaperActivity || phase === "preview";
   const compiledCapsule =
     phase === "safe"
       ? undefined
