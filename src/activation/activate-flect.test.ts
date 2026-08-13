@@ -5,12 +5,14 @@ import { fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   installFlectActivation,
+  isFlectDesktop,
   shouldActivateFlectImmediately,
 } from "./activate-flect";
 
 afterEach(() => {
   document.body.innerHTML = "";
   document.documentElement.removeAttribute("data-flect-state");
+  Reflect.deleteProperty(globalThis, "isTauri");
 });
 
 const shell = () => {
@@ -27,6 +29,14 @@ const shell = () => {
 };
 
 describe("Flect activation boundary", () => {
+  it("recognizes the native host marker exposed by Tauri isolation", () => {
+    Reflect.set(globalThis, "isTauri", true);
+
+    expect(isFlectDesktop({ hostname: "127.0.0.1", protocol: "http:" })).toBe(
+      true,
+    );
+  });
+
   it("keeps an ordinary browser view static until the user activates it", async () => {
     shell();
     const mountFlect = vi.fn(() => Promise.resolve());
