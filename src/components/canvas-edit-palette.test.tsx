@@ -52,7 +52,7 @@ describe("CanvasEditPalette", () => {
 
     await user.click(screen.getByRole("button", { name: "Move later" }));
     await user.click(
-      screen.getByRole("button", { name: "Clear selection: Project heading" }),
+      screen.getByRole("button", { name: "Clear canvas selection" }),
     );
 
     expect(onAction).toHaveBeenCalledWith("move-later");

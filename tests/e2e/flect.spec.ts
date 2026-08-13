@@ -1977,6 +1977,6 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   await page.reload();
   await expect(page.locator(".topbar .safe-mode")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "What do you want to make?" }),
+    page.getByRole("heading", { name: "What do you need?" }),
   ).toBeVisible();
 });

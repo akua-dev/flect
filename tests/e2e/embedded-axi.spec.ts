@@ -228,7 +228,7 @@ test("Flect authority and reserved-command identity fail closed", async ({
   completedPromptPages.add(page);
 });
 
-test("role workspace source persists through OPFS across a page restart", async ({
+test("role workspace source is discarded across a page restart", async ({
   page,
 }) => {
   await acceptAndRun(page);
@@ -245,11 +245,11 @@ test("role workspace source persists through OPFS across a page restart", async 
   await composer.fill("Read persistent workspace marker");
   await composer.press("Enter");
   const activity = page.getByRole("button", { name: "Bash details" }).last();
-  await expect(activity).toContainText("Completed");
+  await expect(activity).toContainText("Error");
   await activity.click();
   await expect(
     page.locator(".activity-card__details pre").last(),
-  ).toContainText("opfs-role-workspace");
+  ).not.toContainText("opfs-role-workspace");
   completedPromptPages.add(page);
 });
 
