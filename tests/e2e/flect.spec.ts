@@ -1191,10 +1191,14 @@ test("keeps one draft and one conversation while Flect routes product and edit w
   await expect(fix).toBeVisible();
   await fix.click();
   await page.getByRole("button", { name: "Actions" }).click();
-  await expect(
-    page.getByRole("menuitem", { name: "Disable trusted Pi extensions" }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
+  const disableExtensions = page.getByRole("menuitem", {
+    name: "Disable trusted Pi extensions",
+  });
+  await expect(disableExtensions).toBeVisible();
+  await disableExtensions.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Flect actions" })).toHaveCount(
+    0,
+  );
   await expect(page.getByText("Fail candidate extension")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Fix with Flect" }).last(),
@@ -1252,9 +1256,15 @@ test("keeps one chronological conversation across internal routing and reload", 
   await appInput.fill("Open the latest project");
   await appInput.press("Enter");
   await expect(page.getByText("The product action completed.")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Bash details" }).first(),
-  ).toContainText("Completed");
+  const latestWork = page.getByRole("region", { name: "1 tool call" }).last();
+  await expect(latestWork).toContainText("Worked");
+  const bashDetails = latestWork.getByRole("button", {
+    name: "Bash details",
+  });
+  await expect(bashDetails).toContainText("Completed");
+  await expect(latestWork.locator(".activity-card__details")).toBeHidden();
+  await bashDetails.click();
+  await expect(latestWork.locator(".activity-card__details")).toBeVisible();
   completedPromptPages.add(page);
   await expect(
     page.getByText("Change complete: Focused project overview"),
