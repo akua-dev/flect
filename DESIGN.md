@@ -381,11 +381,19 @@ The complete rendering and trust contract lives in
 ### Activity, Follow, and Diagnostics
 
 Tool use is a compact instrument in the conversation timeline, not a generic assistant
-sentence and not a developer-console dump. A card always names the tool and
-shows queued, running, completed, or failed state. Duration stays visible;
+sentence and not a developer-console dump. An expanded row names the action
+and shows queued, running, completed, or failed state. Duration stays visible;
 bounded commands, output, exit status, preview links, validation paths, and
 operation identifiers live in a native disclosure. Ready Mint and Failure Red
 support the label but never carry meaning alone.
+
+Completed work is collapsed by default into one quiet turn-level disclosure
+such as “Worked for 1.4 s.” The final assistant message remains visible. A
+running turn uses the same line-level treatment, and individual commands appear
+as borderless rows only after disclosure; command output uses a subtle inset
+rule rather than nested cards. Failed work that ends the turn opens for
+attention. Raw tool names, repeated completion badges, and one duration column
+per command must not dominate the ordinary conversation.
 
 Conversation follow respects the reader. Content follows while the viewport is
 within 48px of its bottom. Once the person scrolls away, streaming and tool

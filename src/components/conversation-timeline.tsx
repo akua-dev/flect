@@ -1,4 +1,5 @@
-import { lazy, Suspense } from "react";
+import { ChevronDownIcon } from "lucide-react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { ToolActivity } from "../../shared/control";
 import type {
   AgentWorkspaceController,
@@ -35,6 +36,86 @@ const SurfaceFallback = ({ label }: { readonly label: string }) => (
     {label}
   </span>
 );
+
+const formatWorkDuration = (durationMs: number | undefined) => {
+  if (durationMs === undefined) return undefined;
+  if (durationMs < 1_000) return `${durationMs} ms`;
+  const seconds = durationMs / 1_000;
+  return `${seconds < 10 ? seconds.toFixed(1).replace(/\.0$/, "") : Math.round(seconds)} s`;
+};
+
+function WorkLog({
+  activities,
+  needsAttention,
+  onFixFailure,
+}: {
+  readonly activities: NonNullable<
+    AgentWorkspaceController["app"]["activities"]
+  >;
+  readonly needsAttention: boolean;
+  readonly onFixFailure?: (activity: ToolActivity) => void;
+}) {
+  const running = activities.some(
+    (activity) => activity.phase === "queued" || activity.phase === "running",
+  );
+  const [expanded, setExpanded] = useState(needsAttention);
+  useEffect(() => {
+    if (needsAttention) setExpanded(true);
+  }, [needsAttention]);
+  const count = activities.length;
+  const duration = formatWorkDuration(
+    activities.every((activity) => activity.durationMs !== undefined)
+      ? activities.reduce(
+          (total, activity) => total + (activity.durationMs ?? 0),
+          0,
+        )
+      : undefined,
+  );
+  const stateLabel = running
+    ? "Working"
+    : needsAttention
+      ? "Needs attention"
+      : duration === undefined
+        ? "Worked"
+        : `Worked for ${duration}`;
+  const action = expanded ? "Hide" : "Show";
+  const state = running ? "active" : needsAttention ? "failed" : "complete";
+
+  return (
+    <section
+      aria-label={`${count} tool ${count === 1 ? "call" : "calls"}`}
+      className={`work-log work-log--${state}`}
+    >
+      <button
+        aria-expanded={expanded}
+        aria-label={`${action} ${count} ${running ? "active" : "completed"} ${count === 1 ? "step" : "steps"}`}
+        className="work-log__summary"
+        onClick={() => setExpanded((current) => !current)}
+        type="button"
+      >
+        <span aria-hidden="true" className="work-log__mark" />
+        <strong>{stateLabel}</strong>
+        <span>{`${count} ${count === 1 ? "step" : "steps"}`}</span>
+        <ChevronDownIcon aria-hidden="true" />
+      </button>
+      <div className="work-log__entries" hidden={!expanded}>
+        {activities.map((activity) => (
+          <Suspense
+            fallback={<SurfaceFallback label="Opening activity details" />}
+            key={activity.id}
+          >
+            <ActivityCard
+              activity={activity}
+              {...(onFixFailure === undefined
+                ? {}
+                : { onFixInShape: onFixFailure })}
+            />
+          </Suspense>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 type TimelineEntry =
   | {
@@ -127,50 +208,17 @@ export function ConversationTimeline({
       >
         {entries.map((entry) => {
           if (entry.kind === "activities") {
-            const running = entry.activities.some(
-              (activity) =>
-                activity.phase === "queued" || activity.phase === "running",
-            );
             const failed = entry.activities.some(
               (activity) => activity.phase === "failed",
             );
             const needsAttention = failed && status === "error";
-            const count = entry.activities.length;
             return (
-              <section
-                aria-label={`${count} tool ${count === 1 ? "call" : "calls"}`}
-                className={`work-log${needsAttention ? " work-log--failed" : ""}`}
+              <WorkLog
+                activities={entry.activities}
                 key={`activities-${entry.activities[0].id}`}
-              >
-                <div className="work-log__header">
-                  <span aria-hidden="true" className="work-log__mark" />
-                  <strong>
-                    {running
-                      ? "Working"
-                      : needsAttention
-                        ? "Needs attention"
-                        : "Worked"}
-                  </strong>
-                  <span>{`${count} ${count === 1 ? "tool" : "tools"}`}</span>
-                </div>
-                <div className="work-log__entries">
-                  {entry.activities.map((activity) => (
-                    <Suspense
-                      fallback={
-                        <SurfaceFallback label="Opening activity details" />
-                      }
-                      key={activity.id}
-                    >
-                      <ActivityCard
-                        activity={activity}
-                        {...(onFixFailure === undefined
-                          ? {}
-                          : { onFixInShape: onFixFailure })}
-                      />
-                    </Suspense>
-                  ))}
-                </div>
-              </section>
+                needsAttention={needsAttention}
+                {...(onFixFailure === undefined ? {} : { onFixFailure })}
+              />
             );
           }
           const { message } = entry;

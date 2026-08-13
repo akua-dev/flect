@@ -324,7 +324,7 @@ describe("App", () => {
     render(<App runtime={runtime} />);
 
     expect(
-      await screen.findByText("Custom interface state is bypassed."),
+      await screen.findByText("Your interface is protected."),
     ).toBeVisible();
     expect(
       screen.getByRole("textbox", { name: "Message Flect" }),

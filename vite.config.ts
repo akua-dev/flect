@@ -69,6 +69,12 @@ export const browserExecutionHeaders = {
 
 export const flectViteConfig = {
   envPrefix: ["PUBLIC_", "VITE_"],
+  optimizeDeps: {
+    // The Git worker is loaded only after the workspace island hydrates. Warm
+    // its browser entry before Astro serves the native shell so Vite does not
+    // invalidate the module graph while Tauri is opening the workspace.
+    include: ["wasm-git/lg2_opfs_async.js"],
+  },
   plugins: [
     react(),
     tailwindcss(),

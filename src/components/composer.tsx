@@ -290,7 +290,7 @@ export function Composer({
             rollbackDisabled={protectedActionsLocked}
           />
           {mode === "safe" && (
-            <span className="composer__safe-label">Safe mode</span>
+            <span className="composer__safe-label">Recovery mode</span>
           )}
           <ModelMenu
             authEvent={authEvent}

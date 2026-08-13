@@ -488,9 +488,7 @@ describe("AgentRail", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Custom interface state is bypassed."),
-    ).toBeVisible();
+    expect(screen.getByText("Your interface is protected.")).toBeVisible();
     expect(
       screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeDisabled();
