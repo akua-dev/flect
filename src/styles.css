@@ -310,6 +310,10 @@ textarea:focus-visible,
   overflow: auto;
 }
 
+.role-shell--split:not(.role-shell--collapsed) .workspace-canvas--starter {
+  padding-right: calc(var(--flect-rail-width) + 64px);
+}
+
 .workspace-canvas--settings::before {
   position: fixed;
   z-index: var(--z-backdrop);
@@ -4131,6 +4135,13 @@ button.decision-button--primary:hover:not(:disabled) {
   .workspace-canvas {
     padding-right: 32px;
     padding-left: 32px;
+  }
+
+  .role-shell--split:not(.role-shell--collapsed) .workspace-canvas--starter {
+    padding-right: min(
+      calc(var(--flect-rail-width) + 32px),
+      calc(100vw - 56px)
+    );
   }
 
   .role-shell--split:not(.role-shell--collapsed) .canvas-edit-toolbar {
