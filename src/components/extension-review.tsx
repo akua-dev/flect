@@ -281,7 +281,7 @@ function ExtensionRoleReview({
             id={`${id}-fork`}
             maxLength={120}
             onChange={(event) => setForkRevision(event.currentTarget.value)}
-            pattern="[A-Za-z0-9._/-]+"
+            pattern={"[A-Za-z0-9._\\/\\-]+"}
             value={forkRevision}
           />
           <button
