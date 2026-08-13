@@ -428,9 +428,11 @@ describe("RoleAwareShell", () => {
 
     const composer = screen.getByRole("textbox", { name: "Message Flect" });
     await waitFor(() => expect(composer).toHaveFocus());
-    expect(
-      document.querySelector(".canvas-edit-toolbar__selection"),
-    ).toHaveTextContent("Projects");
+    await waitFor(() =>
+      expect(
+        document.querySelector(".canvas-edit-palette__target"),
+      ).toHaveTextContent("Projects"),
+    );
     await user.type(composer, "Make this calmer{Enter}");
 
     expect(requestTargeted).toHaveBeenCalledWith(

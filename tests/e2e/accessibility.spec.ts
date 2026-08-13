@@ -179,15 +179,40 @@ test.describe("adaptive appearances", () => {
       await shapeCandidate(page);
       await expectAccessible(page, `${colorScheme} live canvas workbench`);
 
-      const geometry = await page.evaluate(() => ({
-        colorScheme: getComputedStyle(document.documentElement).colorScheme,
-        documentWidth: document.documentElement.scrollWidth,
-        viewportWidth: window.innerWidth,
-      }));
+      await page.getByRole("button", { name: "Select element" }).click();
+      const heading = page.getByRole("heading", {
+        name: "Focused project overview",
+      });
+      await heading.hover();
+      await expect(heading).toHaveCSS("outline-style", "dashed");
+      await heading.click();
+      const editPalette = page.getByRole("toolbar", {
+        name: "Edit Focused project overview",
+      });
+      await expect(editPalette).toBeVisible();
+
+      const geometry = await editPalette.evaluate((palette) => {
+        const rect = palette.getBoundingClientRect();
+        return {
+          bottom: rect.bottom,
+          colorScheme: getComputedStyle(document.documentElement).colorScheme,
+          documentWidth: document.documentElement.scrollWidth,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          viewportHeight: window.innerHeight,
+          viewportWidth: window.innerWidth,
+        };
+      });
       expect(geometry.colorScheme).toContain(colorScheme);
       expect(geometry.documentWidth).toBe(geometry.viewportWidth);
+      expect(geometry.left).toBeGreaterThanOrEqual(0);
+      expect(geometry.top).toBeGreaterThanOrEqual(0);
+      expect(geometry.right).toBeLessThanOrEqual(geometry.viewportWidth);
+      expect(geometry.bottom).toBeLessThanOrEqual(geometry.viewportHeight);
+      await expectAccessible(page, `${colorScheme} contextual edit overlay`);
       await page.screenshot({
-        path: testInfo.outputPath(`${colorScheme}-candidate.png`),
+        path: testInfo.outputPath(`${colorScheme}-selection-overlay.png`),
       });
     });
   }
