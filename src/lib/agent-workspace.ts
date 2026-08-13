@@ -329,10 +329,12 @@ const message = (
   content: string,
   source: FlectCommandSource,
   createdAt: number,
+  turnId: string,
 ) =>
   ConversationMessage.make({
     version: 1,
     id: `message-${crypto.randomUUID()}`,
+    turnId,
     role,
     content,
     createdAt,
@@ -683,6 +685,7 @@ export const AgentWorkspaceLive = Layer.effect(
               id: existing?.id ?? `activity-${crypto.randomUUID()}`,
               callId: event.callId,
               operationId: operation.operationId,
+              turnId: operation.operationId,
               role,
               toolName: event.toolName,
               phase: "running",
@@ -701,6 +704,7 @@ export const AgentWorkspaceLive = Layer.effect(
                   id: `activity-${crypto.randomUUID()}`,
                   callId: event.callId,
                   operationId: operation.operationId,
+                  turnId: operation.operationId,
                   role,
                   toolName: event.toolName,
                   phase: "running",
@@ -723,6 +727,7 @@ export const AgentWorkspaceLive = Layer.effect(
                   id: `activity-${crypto.randomUUID()}`,
                   callId: event.callId,
                   operationId: operation.operationId,
+                  turnId: operation.operationId,
                   role,
                   toolName: event.toolName,
                   phase: "running",
@@ -805,6 +810,7 @@ export const AgentWorkspaceLive = Layer.effect(
         id: `activity-${crypto.randomUUID()}`,
         callId: event.failureId,
         operationId: operation.operationId,
+        turnId: operation.operationId,
         role,
         toolName: "Trusted Pi extension",
         phase: "failed",
@@ -862,6 +868,7 @@ export const AgentWorkspaceLive = Layer.effect(
               id: `activity-${crypto.randomUUID()}`,
               callId: event.requestId,
               operationId: operation.operationId,
+              turnId: operation.operationId,
               role,
               toolName: "bash",
               phase: "running",
@@ -957,6 +964,7 @@ export const AgentWorkspaceLive = Layer.effect(
         id: `activity-${crypto.randomUUID()}`,
         callId: `proposal-validation-${event.attempt}-${crypto.randomUUID()}`,
         operationId: operation.operationId,
+        turnId: operation.operationId,
         role: "shaper",
         toolName: "flect",
         phase: "failed",
@@ -1284,6 +1292,7 @@ export const AgentWorkspaceLive = Layer.effect(
       prompt: string,
       source: FlectCommandSource,
       includeAssistant: boolean,
+      turnId: string,
     ) {
       const now = yield* Clock.currentTimeMillis;
       const assistantId = `message-${crypto.randomUUID()}`;
@@ -1295,13 +1304,14 @@ export const AgentWorkspaceLive = Layer.effect(
         ) {
           return [false, current];
         }
-        const user = message("user", prompt, source, now);
+        const user = message("user", prompt, source, now, turnId);
         const nextMessages = includeAssistant
           ? [
               user,
               ConversationMessage.make({
                 version: 1,
                 id: assistantId,
+                turnId,
                 role: "assistant",
                 content: "",
                 createdAt: now,
@@ -1356,6 +1366,7 @@ export const AgentWorkspaceLive = Layer.effect(
           prompt,
           operation.source,
           true,
+          operation.operationId,
         );
         yield* appendJournal(operation, {
           category: "turn",
@@ -1477,6 +1488,7 @@ export const AgentWorkspaceLive = Layer.effect(
         prompt,
         operation.source,
         true,
+        operation.operationId,
       );
       yield* appendJournal(operation, {
         category: "turn",
@@ -1616,6 +1628,7 @@ export const AgentWorkspaceLive = Layer.effect(
         visibleInstruction?.trim() || prompt,
         operation.source,
         false,
+        operation.operationId,
       );
       yield* appendJournal(operation, {
         category: "turn",
@@ -1681,6 +1694,7 @@ export const AgentWorkspaceLive = Layer.effect(
                 `Change complete: ${candidate.name}`,
                 operation.source,
                 now,
+                operation.operationId,
               ),
             ]),
           }),

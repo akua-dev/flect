@@ -122,6 +122,7 @@ type TimelineEntry =
       readonly kind: "message";
       readonly message: ConversationMessage;
       readonly timestamp: number | undefined;
+      readonly turnId: string | undefined;
     }
   | {
       readonly activities: NonNullable<
@@ -129,7 +130,34 @@ type TimelineEntry =
       >;
       readonly kind: "activities";
       readonly timestamp: number;
+      readonly turnId: string | undefined;
     };
+
+interface TimelineTurn {
+  readonly entries: ReadonlyArray<TimelineEntry>;
+  readonly key: string;
+  readonly turnId: string | undefined;
+}
+
+const turnEntryOrder = (entry: TimelineEntry) => {
+  if (entry.kind === "activities") return 1;
+  return entry.message.role === "user" ? 0 : 2;
+};
+
+const orderTurnEntries = (
+  entries: ReadonlyArray<TimelineEntry>,
+): ReadonlyArray<TimelineEntry> =>
+  entries
+    .map((entry, sequence) => ({ entry, sequence }))
+    .sort(
+      (left, right) =>
+        turnEntryOrder(left.entry) - turnEntryOrder(right.entry) ||
+        left.sequence - right.sequence,
+    )
+    .map(({ entry }) => entry);
+
+const timelineEntryKey = (entry: TimelineEntry) =>
+  entry.kind === "message" ? entry.message.id : entry.activities[0].id;
 
 const timelineEntries = (
   messages: ReadonlyArray<ConversationMessage>,
@@ -160,11 +188,15 @@ const timelineEntries = (
         kind: "message",
         message: entry.message,
         timestamp: entry.timestamp,
+        turnId: entry.message.turnId,
       });
       return entries;
     }
     const previous = entries.at(-1);
-    if (previous?.kind === "activities") {
+    if (
+      previous?.kind === "activities" &&
+      previous.turnId === entry.activity.turnId
+    ) {
       entries[entries.length - 1] = {
         ...previous,
         activities: [...previous.activities, entry.activity],
@@ -175,10 +207,175 @@ const timelineEntries = (
       activities: [entry.activity],
       kind: "activities",
       timestamp: entry.timestamp,
+      turnId: entry.activity.turnId,
     });
     return entries;
   }, []);
 };
+
+const timelineTurns = (
+  messages: ReadonlyArray<ConversationMessage>,
+  activities: NonNullable<AgentWorkspaceController["app"]["activities"]>,
+): ReadonlyArray<TimelineTurn> =>
+  timelineEntries(messages, activities).reduce<Array<TimelineTurn>>(
+    (turns, entry) => {
+      if (entry.turnId === undefined) {
+        turns.push({
+          entries: [entry],
+          key:
+            entry.kind === "message"
+              ? `legacy-${entry.message.id}`
+              : `legacy-${entry.activities[0].id}`,
+          turnId: undefined,
+        });
+        return turns;
+      }
+      const existingIndex = turns.findIndex(
+        (turn) => turn.turnId === entry.turnId,
+      );
+      if (existingIndex === -1) {
+        turns.push({
+          entries: [entry],
+          key: entry.turnId,
+          turnId: entry.turnId,
+        });
+        return turns;
+      }
+      const existing = turns[existingIndex];
+      turns[existingIndex] = {
+        ...existing,
+        entries: orderTurnEntries([...existing.entries, entry]),
+      };
+      return turns;
+    },
+    [],
+  );
+
+function TimelineEntryView({
+  entry,
+  label,
+  latestMessageId,
+  onFixFailure,
+  status,
+}: {
+  readonly entry: TimelineEntry;
+  readonly label: string;
+  readonly latestMessageId: string | undefined;
+  readonly onFixFailure?: (activity: ToolActivity) => void;
+  readonly status: AgentWorkspaceController["app"]["status"];
+}) {
+  if (entry.kind === "activities") {
+    const failed = entry.activities.some(
+      (activity) => activity.phase === "failed",
+    );
+    return (
+      <WorkLog
+        activities={entry.activities}
+        needsAttention={failed && status === "error"}
+        {...(onFixFailure === undefined ? {} : { onFixFailure })}
+      />
+    );
+  }
+  const { message } = entry;
+  const isLatest = message.id === latestMessageId;
+  return (
+    <Message
+      className={`message message--${message.role}`}
+      from={message.role === "user" ? "user" : "assistant"}
+    >
+      <AIMessageContent>
+        <span className="sr-only">
+          {message.role === "user" ? "You" : label}
+        </span>
+        {message.content ? (
+          <Suspense fallback={<span>{message.content}</span>}>
+            <MessageContent
+              content={message.content}
+              messageRole={message.role}
+              streaming={
+                message.role === "assistant" &&
+                isLatest &&
+                status === "streaming"
+              }
+            />
+          </Suspense>
+        ) : (
+          isLatest &&
+          (status === "submitting" || status === "streaming") && (
+            <Suspense fallback={<span>{`${label} is responding`}</span>}>
+              <StreamingReasoning label={label} />
+            </Suspense>
+          )
+        )}
+      </AIMessageContent>
+    </Message>
+  );
+}
+
+function HistoricalTurn({
+  entries,
+  label,
+  latestMessageId,
+  onFixFailure,
+  prompt,
+  status,
+}: {
+  readonly entries: ReadonlyArray<TimelineEntry>;
+  readonly label: string;
+  readonly latestMessageId: string | undefined;
+  readonly onFixFailure?: (activity: ToolActivity) => void;
+  readonly prompt: string;
+  readonly status: AgentWorkspaceController["app"]["status"];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = prompt.replace(/\s+/g, " ").trim().slice(0, 120);
+  const context = entries.filter(
+    (entry) => entry.kind !== "message" || entry.message.role !== "assistant",
+  );
+  const answers = entries.filter(
+    (entry) => entry.kind === "message" && entry.message.role === "assistant",
+  );
+  return (
+    <section
+      aria-label={`Earlier turn: ${summary}`}
+      className="historical-turn"
+    >
+      <button
+        aria-expanded={expanded}
+        aria-label={`${expanded ? "Hide" : "Show"} earlier request: ${summary}`}
+        className="historical-turn__summary"
+        onClick={() => setExpanded((current) => !current)}
+        type="button"
+      >
+        <span>Asked</span>
+        <strong>{summary}</strong>
+        <ChevronDownIcon aria-hidden="true" />
+      </button>
+      <div className="historical-turn__context" hidden={!expanded}>
+        {context.map((entry) => (
+          <TimelineEntryView
+            entry={entry}
+            key={timelineEntryKey(entry)}
+            label={label}
+            latestMessageId={latestMessageId}
+            status={status}
+            {...(onFixFailure === undefined ? {} : { onFixFailure })}
+          />
+        ))}
+      </div>
+      {answers.map((entry) => (
+        <TimelineEntryView
+          entry={entry}
+          key={timelineEntryKey(entry)}
+          label={label}
+          latestMessageId={latestMessageId}
+          status={status}
+          {...(onFixFailure === undefined ? {} : { onFixFailure })}
+        />
+      ))}
+    </section>
+  );
+}
 
 export function ConversationTimeline({
   messages,
@@ -195,7 +392,7 @@ export function ConversationTimeline({
   readonly label: string;
   readonly onFixFailure?: (activity: ToolActivity) => void;
 }) {
-  const entries = timelineEntries(messages, activities);
+  const turns = timelineTurns(messages, activities);
   const latestMessageId = messages.at(-1)?.id;
   return (
     <Conversation
@@ -206,62 +403,45 @@ export function ConversationTimeline({
         className="conversation__content"
         scrollClassName="conversation__scroll"
       >
-        {entries.map((entry) => {
-          if (entry.kind === "activities") {
-            const failed = entry.activities.some(
-              (activity) => activity.phase === "failed",
-            );
-            const needsAttention = failed && status === "error";
+        {turns.map((turn, turnIndex) => {
+          const prompt = turn.entries.find(
+            (entry) =>
+              entry.kind === "message" && entry.message.role === "user",
+          );
+          const hasAnswer = turn.entries.some(
+            (entry) =>
+              entry.kind === "message" &&
+              entry.message.role === "assistant" &&
+              entry.message.content.length > 0,
+          );
+          const historical =
+            turn.turnId !== undefined &&
+            turnIndex < turns.length - 1 &&
+            prompt?.kind === "message" &&
+            hasAnswer;
+          if (historical) {
             return (
-              <WorkLog
-                activities={entry.activities}
-                key={`activities-${entry.activities[0].id}`}
-                needsAttention={needsAttention}
+              <HistoricalTurn
+                entries={turn.entries}
+                key={turn.key}
+                label={label}
+                latestMessageId={latestMessageId}
+                prompt={prompt.message.content}
+                status={status}
                 {...(onFixFailure === undefined ? {} : { onFixFailure })}
               />
             );
           }
-          const { message } = entry;
-          const isLatest = message.id === latestMessageId;
-          return (
-            <Message
-              className={`message message--${message.role}`}
-              from={message.role === "user" ? "user" : "assistant"}
-              key={message.id}
-            >
-              <AIMessageContent>
-                <span className="sr-only">
-                  {message.role === "user"
-                    ? "You"
-                    : message.role === "activity"
-                      ? "Activity"
-                      : label}
-                </span>
-                {message.content ? (
-                  <Suspense fallback={<span>{message.content}</span>}>
-                    <MessageContent
-                      content={message.content}
-                      messageRole={message.role}
-                      streaming={
-                        message.role === "assistant" &&
-                        isLatest &&
-                        status === "streaming"
-                      }
-                    />
-                  </Suspense>
-                ) : (
-                  isLatest &&
-                  (status === "submitting" || status === "streaming") && (
-                    <Suspense
-                      fallback={<span>{`${label} is responding`}</span>}
-                    >
-                      <StreamingReasoning label={label} />
-                    </Suspense>
-                  )
-                )}
-              </AIMessageContent>
-            </Message>
-          );
+          return turn.entries.map((entry) => (
+            <TimelineEntryView
+              entry={entry}
+              key={`${turn.key}-${timelineEntryKey(entry)}`}
+              label={label}
+              latestMessageId={latestMessageId}
+              status={status}
+              {...(onFixFailure === undefined ? {} : { onFixFailure })}
+            />
+          ));
         })}
       </ConversationContent>
       <ConversationScrollButton aria-label="Jump to latest" />

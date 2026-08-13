@@ -37,6 +37,7 @@ const conversation = (
       ConversationMessage.make({
         version: 1,
         id: `${prefix}-user`,
+        turnId: `operation-${prefix}-turn-0001`,
         role: "user",
         content: `${prefix} question`,
         createdAt: 1,
@@ -45,6 +46,7 @@ const conversation = (
       ConversationMessage.make({
         version: 1,
         id: `${prefix}-assistant`,
+        turnId: `operation-${prefix}-turn-0001`,
         role: "assistant",
         content: `${prefix} partial answer`,
         createdAt: 2,
@@ -103,6 +105,24 @@ const shaping = (candidateId?: string) =>
   });
 
 describe("role continuity projection", () => {
+  it("preserves typed turn identity across durable projection and restore", () => {
+    const projected = projectAgentContinuity(
+      agent,
+      shaping("revision-candidate"),
+      emptyRoleContinuityRecord(0),
+    );
+    const restored = restoreAgentContinuity(agent, projected, shaping());
+
+    expect(projected.app.map((message) => message.turnId)).toEqual([
+      "operation-app-turn-0001",
+      "operation-app-turn-0001",
+    ]);
+    expect(restored.app.messages.map((message) => message.turnId)).toEqual([
+      "operation-app-turn-0001",
+      "operation-app-turn-0001",
+    ]);
+  });
+
   it("persists completed projections and omits an active partial assistant", () => {
     const projected = projectAgentContinuity(
       agent,

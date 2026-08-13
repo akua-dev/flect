@@ -1366,6 +1366,29 @@ test("keeps one chronological conversation across internal routing and reload", 
   await expect(
     page.getByText("Change complete: Focused project overview"),
   ).toBeVisible();
+  const earlierTurn = page.getByRole("region", {
+    name: "Earlier turn: Create a focused project overview",
+  });
+  await expect(earlierTurn).toBeVisible();
+  await expect(
+    earlierTurn.getByRole("button", {
+      name: "Show earlier request: Create a focused project overview",
+    }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    earlierTurn.locator(".historical-turn__context .message--user"),
+  ).toBeHidden();
+  await expect(
+    earlierTurn.getByText("Change complete: Focused project overview"),
+  ).toBeVisible();
+  await earlierTurn
+    .getByRole("button", {
+      name: "Show earlier request: Create a focused project overview",
+    })
+    .click();
+  await expect(
+    earlierTurn.locator(".historical-turn__context .message--user"),
+  ).toBeVisible();
   const conversation = page.getByRole("log", { name: "Flect conversation" });
   await expect(conversation).toContainText("Create a focused project overview");
   await expect(conversation).toContainText("Open the latest project");

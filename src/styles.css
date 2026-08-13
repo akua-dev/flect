@@ -1368,6 +1368,73 @@ textarea:focus-visible,
   color: var(--muted);
 }
 
+.historical-turn {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.historical-turn__summary {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  align-items: center;
+  border: 0;
+  border-radius: 7px;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  text-align: start;
+}
+
+.historical-turn__summary:hover,
+.historical-turn__summary:focus-visible {
+  background: color-mix(in oklch, var(--surface-raised) 42%, transparent);
+}
+
+.historical-turn__summary > span {
+  color: var(--muted-strong);
+}
+
+.historical-turn__summary > strong {
+  overflow: hidden;
+  color: var(--muted);
+  font-weight: 450;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historical-turn__summary > svg {
+  width: 13px;
+  height: 13px;
+  transition: transform 140ms ease;
+}
+
+.historical-turn__summary[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.historical-turn__context {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--line);
+}
+
+.historical-turn__context[hidden] {
+  display: none;
+}
+
+.historical-turn__context .message--user {
+  max-width: 100%;
+}
+
 .work-log__summary {
   display: grid;
   width: 100%;

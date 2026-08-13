@@ -71,6 +71,7 @@ export interface AppProps {
 const toMessages = (
   messages: ReadonlyArray<{
     readonly id: string;
+    readonly turnId?: string;
     readonly role: "user" | "assistant";
     readonly content: string;
     readonly createdAt: number;
@@ -78,6 +79,7 @@ const toMessages = (
 ): ReadonlyArray<ConversationMessage> =>
   messages.map((message) => ({
     id: message.id,
+    ...(message.turnId === undefined ? {} : { turnId: message.turnId }),
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,

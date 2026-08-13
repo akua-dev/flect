@@ -535,6 +535,18 @@ describe("AgentWorkspace", () => {
           snapshot.shaper.messages.map((message) => message.content),
           ["Change the interface", `Change complete: ${document.name}`],
         );
+        assert.deepStrictEqual(
+          snapshot.app.messages.map((message) => message.turnId),
+          ["operation-agent-workspace-1", "operation-agent-workspace-1"],
+        );
+        assert.deepStrictEqual(
+          snapshot.shaper.messages.map((message) => message.turnId),
+          ["operation-agent-workspace-2", "operation-agent-workspace-2"],
+        );
+        assert.deepStrictEqual(
+          snapshot.shaper.activities.map((activity) => activity.turnId),
+          ["operation-agent-workspace-2"],
+        );
         assert.include(
           String(vi.mocked(client.shape).mock.calls[0]?.[1]),
           "Protected selection context: headline",

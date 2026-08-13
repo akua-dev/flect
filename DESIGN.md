@@ -395,6 +395,14 @@ rule rather than nested cards. Failed work that ends the turn opens for
 attention. Raw tool names, repeated completion badges, and one duration column
 per command must not dominate the ordinary conversation.
 
+Every submitted request, its tool activity, and its final response share one
+typed turn identity. Once a newer turn begins, the older request and work fold
+behind one quiet `Asked …` line while that turn's final assistant response
+remains visible. Expanding the line restores the complete request and work in
+place. Historical user prompts must not remain as a stack of dominant cards,
+and legacy records without turn identity remain readable rather than being
+guessed into the wrong turn.
+
 Conversation follow respects the reader. Content follows while the viewport is
 within 48px of its bottom. Once the person scrolls away, streaming and tool
 updates preserve that position and surface a quiet, keyboard-operable **Jump
