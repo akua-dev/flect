@@ -527,37 +527,74 @@ describe("reserved browser flect command", () => {
       }),
   );
 
-  it.effect("validates and proposes a workspace interface only as Shaper", () =>
-    Effect.gen(function* () {
-      yield* respondToReads;
-      const shell = yield* SandboxedShell;
-      const validated = yield* shell.execute(
-        "shaper",
-        "flect interface validate ./interface.json",
-        { agentContext: context },
-      );
-      const proposed = yield* shell.execute(
-        "shaper",
-        "flect interface propose /workspace/interface.json",
-        { agentContext: { ...context, requestId: "tool-propose" } },
-      );
-      const escaped = yield* shell.execute(
-        "shaper",
-        "flect interface validate ../outside.json",
-        { agentContext: { ...context, requestId: "tool-escape" } },
-      );
-      assert.strictEqual(validated.exitCode, 0);
-      assert.include(validated.stdout, "status: valid");
-      assert.strictEqual(proposed.exitCode, 0);
-      assert.include(proposed.stdout, "status: proposed");
-      assert.strictEqual(escaped.exitCode, 1);
-      assert.include(escaped.stdout, "code: unauthorized");
-    }).pipe(
-      Effect.provide(
-        makeLayer("shaper", {
-          "/workspace/interface.json": JSON.stringify(defaultInterfaceDocument),
-        }),
+  it.effect(
+    "describes, validates, and proposes an interface only as Shaper",
+    () =>
+      Effect.gen(function* () {
+        yield* respondToReads;
+        const shell = yield* SandboxedShell;
+        const schema = yield* shell.execute(
+          "shaper",
+          "flect interface schema",
+          { agentContext: { ...context, requestId: "tool-schema" } },
+        );
+        const candidate = JSON.stringify({
+          version: 2,
+          name: "Visible canvas",
+          root: {
+            id: "root",
+            type: "stack",
+            direction: "column",
+            gap: "md",
+            children: [
+              {
+                id: "headline",
+                type: "text",
+                text: "Visible canvas",
+                style: "headline",
+              },
+            ],
+          },
+        });
+        const written = yield* shell.execute(
+          "shaper",
+          `printf '%s' '${candidate}' > /workspace/interface.json`,
+          { agentContext: { ...context, requestId: "tool-write" } },
+        );
+        const validated = yield* shell.execute(
+          "shaper",
+          "flect interface validate ./interface.json",
+          { agentContext: context },
+        );
+        const proposed = yield* shell.execute(
+          "shaper",
+          "flect interface propose /workspace/interface.json",
+          { agentContext: { ...context, requestId: "tool-propose" } },
+        );
+        const escaped = yield* shell.execute(
+          "shaper",
+          "flect interface validate ../outside.json",
+          { agentContext: { ...context, requestId: "tool-escape" } },
+        );
+        assert.strictEqual(schema.exitCode, 0);
+        assert.include(schema.stdout, "direction");
+        assert.include(schema.stdout, "children");
+        assert.include(schema.stdout, "headline");
+        assert.strictEqual(written.exitCode, 0);
+        assert.strictEqual(validated.exitCode, 0);
+        assert.include(validated.stdout, "status: valid");
+        assert.strictEqual(proposed.exitCode, 0);
+        assert.include(proposed.stdout, "status: proposed");
+        assert.strictEqual(escaped.exitCode, 1);
+        assert.include(escaped.stdout, "code: unauthorized");
+      }).pipe(
+        Effect.provide(
+          makeLayer("shaper", {
+            "/workspace/interface.json": JSON.stringify(
+              defaultInterfaceDocument,
+            ),
+          }),
+        ),
       ),
-    ),
   );
 });

@@ -393,6 +393,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                   return next;
                 });
                 const proposalCommands = [
+                  "flect interface schema",
                   `printf %s ${shellQuote(JSON.stringify(candidate))} > /workspace/interface.json`,
                   "flect interface validate /workspace/interface.json",
                   "flect interface propose /workspace/interface.json",

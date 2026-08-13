@@ -69,6 +69,74 @@ const fallbackFailure = (format: AxiFormat) =>
     stderr: "",
   });
 
+const interfaceAuthoringContract = {
+  version: 2,
+  strict: true,
+  document: {
+    required: ["version", "name", "root"],
+    version: 2,
+    name: "non-empty string, at most 80 characters",
+    root: "one interface node",
+  },
+  commonNode: {
+    required: ["id", "type"],
+    id: "unique lowercase identifier matching ^[a-z][a-z0-9-]*$, at most 64 characters",
+  },
+  nodes: {
+    stack: {
+      required: ["id", "type", "direction", "gap", "children"],
+      direction: ["row", "column"],
+      gap: ["sm", "md", "lg"],
+      children: "0 to 30 interface nodes",
+    },
+    text: {
+      required: ["id", "type", "text", "style"],
+      text: "non-empty string, at most 2000 characters",
+      style: ["headline", "body", "muted"],
+    },
+    prompt: {
+      required: ["id", "type", "placeholder"],
+      placeholder: "non-empty string, at most 120 characters",
+    },
+    button: {
+      required: ["id", "type", "label", "action"],
+      label: "non-empty string, at most 80 characters",
+      action: [
+        "shape",
+        "safe-mode",
+        "accept-revision",
+        "reject-revision",
+        "rollback-revision",
+      ],
+    },
+    divider: { required: ["id", "type"] },
+    "agent-panel": {
+      required: ["id", "type", "title"],
+      title: "non-empty string, at most 80 characters",
+    },
+  },
+  limits: { treeDepth: 10, treeNodes: 100 },
+  example: {
+    version: 2,
+    name: "Example",
+    root: {
+      id: "root",
+      type: "stack",
+      direction: "column",
+      gap: "md",
+      children: [
+        {
+          id: "headline",
+          type: "text",
+          text: "Example",
+          style: "headline",
+        },
+      ],
+    },
+  },
+  next: "Write strict JSON, then run `flect interface validate <path>` before proposing it.",
+};
+
 const failure = (error: AxiPublicError, format: AxiFormat, exitCode: 1 | 2) =>
   renderAxiFailure(error, format, exitCode).pipe(
     Effect.orElseSucceed(() => fallbackFailure(format)),
@@ -564,18 +632,7 @@ const execute = Effect.fn("Flect.Axi.execute")(function* (
     case "interface-inspect":
       return (yield* gateway.inspect).document;
     case "interface-schema":
-      return {
-        version: 2,
-        nodeTypes: [
-          "stack",
-          "text",
-          "prompt",
-          "button",
-          "divider",
-          "agent-panel",
-        ],
-        note: "Use `flect interface validate <path>` before proposing a candidate.",
-      };
+      return interfaceAuthoringContract;
     case "revision-list": {
       const shaping = (yield* gateway.inspect).shaping;
       const revisions = [

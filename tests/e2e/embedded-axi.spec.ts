@@ -100,7 +100,16 @@ test("Flect validates and applies local edits while protected authority stays in
   await activities.last().click();
   await expect(
     page.locator(".activity-card__details code").first(),
+  ).toContainText("flect interface schema");
+  await expect(
+    page.locator(".activity-card__details code").first(),
   ).toContainText("flect interface validate /workspace/interface.json");
+  await expect(
+    page.locator(".activity-card__details pre").first(),
+  ).toContainText("treeDepth");
+  await expect(
+    page.locator(".activity-card__details pre").first(),
+  ).toContainText("direction");
   await expect(
     page.locator(".activity-card__details pre").first(),
   ).toContainText("status: proposed");
