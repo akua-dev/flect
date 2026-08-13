@@ -232,6 +232,22 @@ describe("RoleAwareShell", () => {
     );
   });
 
+  it("keeps an untouched starter workspace centered until work begins", () => {
+    const { container } = render(
+      <ShellHarness document={defaultInterfaceDocument} phase="accepted" />,
+    );
+
+    expect(container.querySelector(".role-shell")).toHaveClass(
+      "role-shell--centered",
+    );
+    expect(
+      container.querySelector('.agent-rail-container[data-layout="center"]'),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("separator", { name: "Resize agent panel" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens Settings across the canvas instead of inside the agent rail", async () => {
     const user = userEvent.setup();
     render(
