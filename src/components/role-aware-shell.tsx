@@ -707,7 +707,7 @@ export function RoleAwareShell({
         )}
 
       <main
-        className={`workspace-canvas${settingsOpen ? " workspace-canvas--settings" : ""}`}
+        className={`workspace-canvas${starterWorkspace ? " workspace-canvas--starter" : ""}${settingsOpen ? " workspace-canvas--settings" : ""}`}
       >
         {settingsOpen && diagnostics !== undefined ? (
           <Suspense fallback={<ShareSurfaceFallback />}>

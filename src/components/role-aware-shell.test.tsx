@@ -243,6 +243,9 @@ describe("RoleAwareShell", () => {
     expect(
       container.querySelector('.agent-rail-container[data-layout="center"]'),
     ).toBeVisible();
+    expect(container.querySelector(".workspace-canvas")).toHaveClass(
+      "workspace-canvas--starter",
+    );
     expect(
       screen.queryByRole("separator", { name: "Resize agent panel" }),
     ).not.toBeInTheDocument();

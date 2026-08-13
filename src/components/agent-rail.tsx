@@ -522,6 +522,7 @@ export function AgentRail({
     isAgentSessionActive(workspace.previewApp.status) ||
     isAgentSessionActive(workspace.shaper.status) ||
     shaping.status === "shaping";
+  const showStarterPrompts = starter && messages.length === 0;
   const settingsStatus = settingsSummary(diagnostics);
   const cancel = async () => {
     const active = conversationControllers.filter((entry) =>
@@ -1343,7 +1344,7 @@ export function AgentRail({
           onToggleModelFavorite={preferences.toggleModelFavorite}
           placeholder="Build, change, use, or connect anything"
           starterPrompts={
-            starter
+            showStarterPrompts
               ? [
                   "A calm project planner for this week",
                   "A simple place to track my reading",
