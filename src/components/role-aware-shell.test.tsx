@@ -201,9 +201,16 @@ describe("RoleAwareShell", () => {
       <ShellHarness document={defaultInterfaceDocument} phase="accepted" />,
     );
 
-    expect(screen.getByText("What do you want to make?")).toBeVisible();
+    expect(screen.getByText("What do you need?")).toBeVisible();
     expect(
-      screen.getByText("Describe the outcome in the message box to start."),
+      screen.getByText(
+        "Flect makes a live interface from your outcome. You can keep using and changing it here.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Try A calm project planner for this week",
+      }),
     ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Select element" }),
@@ -341,7 +348,7 @@ describe("RoleAwareShell", () => {
     const { container } = render(<MovingHarness />);
     const input = screen.getByRole("textbox", { name: "Message Flect" });
     const originalComposer = input.closest(".composer");
-    expect(screen.getByText("What do you want to make?")).toBeVisible();
+    expect(screen.getByText("What do you need?")).toBeVisible();
     expect(
       container.querySelector(".role-shell--centered"),
     ).toBeInTheDocument();

@@ -295,7 +295,7 @@ test("shapes a blank workspace in one continuous live canvas", async ({
   page,
 }) => {
   await expect(
-    page.getByRole("heading", { name: "What do you want to make?" }),
+    page.getByRole("heading", { name: "What do you need?" }),
   ).toBeVisible();
 
   await shapeFirstInterface(page);
@@ -326,6 +326,15 @@ test("gives the static home screen one clear starting action", async ({
   );
   await expect(
     page.getByRole("button", { name: "Create with Flect" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "A calm project planner for this week" })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toHaveValue("A calm project planner for this week");
+  await expect(
+    page.getByRole("heading", { name: "Describe the app you want to make." }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Start building" }),

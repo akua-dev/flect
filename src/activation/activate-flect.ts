@@ -147,6 +147,22 @@ export const installFlectActivation = (
   document.addEventListener("pointerdown", (event) =>
     activateFromTarget(event.target),
   );
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const example = target.closest<HTMLElement>("[data-flect-example]");
+    const prompt = example?.dataset.flectExample;
+    if (prompt === undefined || prompt.length === 0) return;
+    const input = shell.querySelector<HTMLTextAreaElement>(
+      'textarea[name="prompt"]',
+    );
+    if (input === null) return;
+    input.value = prompt;
+    input.focus();
+    if (status !== null) {
+      status.textContent = "Edit this idea or describe the outcome you need.";
+    }
+  });
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (

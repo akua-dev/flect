@@ -112,6 +112,7 @@ export interface AgentRailProps {
   readonly useDisabled?: boolean;
   readonly canvasSelection?: CanvasSelection;
   readonly selectedNodeId?: string;
+  readonly starter?: boolean;
   readonly document: InterfaceDocument;
   readonly workspace: AgentWorkspaceController;
   readonly shaping: ShapingController;
@@ -463,6 +464,7 @@ export function AgentRail({
   useDisabled = false,
   canvasSelection,
   selectedNodeId,
+  starter = false,
   document,
   workspace,
   shaping,
@@ -1340,6 +1342,15 @@ export function AgentRail({
           onSubmit={submit}
           onToggleModelFavorite={preferences.toggleModelFavorite}
           placeholder="Build, change, use, or connect anything"
+          starterPrompts={
+            starter
+              ? [
+                  "A calm project planner for this week",
+                  "A simple place to track my reading",
+                  "A clear view of today's deliveries",
+                ]
+              : undefined
+          }
           rollbackAvailable={shaping.rollbackAvailable}
           selectedModel={workspace.selectedModel}
           status={controller.status}

@@ -94,6 +94,37 @@ describe("Flect activation boundary", () => {
     expect(await submitted).toBe("Make a calm notes app");
   });
 
+  it("fills a starter idea before the user decides to submit it", () => {
+    shell();
+    const load = vi.fn(() =>
+      Promise.resolve({ mountFlect: vi.fn(() => Promise.resolve()) }),
+    );
+    installFlectActivation({
+      document,
+      location: {
+        href: "https://flect.local/?view=1",
+        hostname: "flect.local",
+        protocol: "https:",
+      },
+      testMode: false,
+      desktop: false,
+      load,
+    });
+    const form = document.querySelector("form");
+    const prompt = document.querySelector("textarea");
+    expect(form).not.toBeNull();
+    expect(prompt).not.toBeNull();
+    if (form === null || prompt === null) return;
+
+    const example = document.createElement("button");
+    example.dataset.flectExample = "A calm project planner for this week";
+    form.append(example);
+    fireEvent.click(example);
+
+    expect(prompt).toHaveValue("A calm project planner for this week");
+    expect(load).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["test", { href: "https://flect.local/", testMode: true, desktop: false }],
     ["desktop", { href: "tauri://localhost/", testMode: false, desktop: true }],
