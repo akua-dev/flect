@@ -159,6 +159,7 @@ import {
   OperationContext,
   type ProviderAuthUiState,
 } from "./agent-workspace";
+import { isNativeHost } from "./native-host";
 import {
   OperationJournal,
   OperationJournalInput,
@@ -305,7 +306,7 @@ export interface CapsuleReview {
 }
 
 const currentCapsulePlatform = () => {
-  if (!("__TAURI_INTERNALS__" in globalThis)) return "browser" as const;
+  if (!isNativeHost()) return "browser" as const;
   const platform = globalThis.navigator?.platform.toLowerCase() ?? "";
   if (platform.includes("mac")) return "macos" as const;
   if (platform.includes("win")) return "windows" as const;

@@ -1,4 +1,5 @@
 import { Effect } from "effect";
+import { isNativeHost } from "./lib/native-host";
 
 let mounted = false;
 let opening: Promise<void> | undefined;
@@ -7,8 +8,7 @@ const needsWorkspaceImmediately = () => {
   const query = new URLSearchParams(globalThis.location.search);
   return (
     import.meta.env.VITE_FLECT_TEST_MODE === "1" ||
-    "__TAURI_INTERNALS__" in globalThis ||
-    globalThis.location.protocol === "tauri:" ||
+    isNativeHost() ||
     query.get("safe") === "1" ||
     [...query.keys()].some((key) => key.endsWith("-diagnostic"))
   );

@@ -313,7 +313,9 @@ test("shapes a blank workspace in one continuous live canvas", async ({
 test("gives the static home screen one clear starting action", async ({
   page,
 }) => {
-  await page.goto("/?view=1");
+  const staticView = new URL(page.url());
+  staticView.searchParams.set("view", "1");
+  await page.goto(staticView.href);
 
   await expect(
     page.getByRole("heading", { name: "Describe the app you want to make." }),
@@ -357,6 +359,14 @@ test("gives the static home screen one clear starting action", async ({
   expect(dragHandle.cursor).toBe("grab");
   expect(dragHandle.height).toBeGreaterThanOrEqual(56);
   expect(dragHandle.indicatorWidth).toBe(68);
+
+  completedShapePages.add(page);
+  await page.getByRole("button", { name: "Create with Flect" }).click();
+  await expect(page.locator("#flect-static-shell")).toBeHidden();
+  await expect(page.locator(".role-shell")).toHaveClass(/role-shell--split/);
+  await expect(
+    page.getByRole("heading", { name: "Focused project overview" }),
+  ).toBeVisible();
 });
 
 test("keeps a visible, spacious drag handle above the workspace", async ({

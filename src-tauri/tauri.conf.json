@@ -40,6 +40,18 @@
         "base-uri": "'none'",
         "frame-ancestors": "'none'"
       },
+      "devCsp": {
+        "default-src": "'self' flect-capsule: http://flect-capsule.localhost",
+        "script-src": "'self' 'wasm-unsafe-eval'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data:",
+        "font-src": "'self'",
+        "connect-src": "ipc: http://ipc.localhost http://127.0.0.1:4321 ws://127.0.0.1:4321",
+        "worker-src": "'self'",
+        "object-src": "'none'",
+        "base-uri": "'none'",
+        "frame-ancestors": "'none'"
+      },
       "pattern": {
         "use": "isolation",
         "options": {

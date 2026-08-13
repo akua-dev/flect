@@ -1,4 +1,11 @@
-import { Effect } from "effect";
+import { type Duration, Effect, Schema } from "effect";
+
+export class WorkspaceActivationError extends Schema.TaggedErrorClass<WorkspaceActivationError>()(
+  "WorkspaceActivationError",
+  {
+    reason: Schema.Literals(["hydration-failed", "timed-out"]),
+  },
+) {}
 
 interface WorkspaceClientModule {
   readonly mountFlect: (root: HTMLElement) => Promise<void>;
@@ -12,14 +19,18 @@ interface ActivateWorkspaceOptions {
   readonly onError: () => void;
 }
 
-const errorFrom = (error: unknown, fallback: string) =>
-  error instanceof Error ? error : new Error(fallback);
-
-const waitForAstroIsland = (document: Document) =>
-  Effect.callback<void, Error>((resume) => {
+export const waitForAstroIsland = (
+  document: Document,
+  timeout: Duration.Input = "20 seconds",
+) =>
+  Effect.callback<void, WorkspaceActivationError>((resume) => {
     const ready = () => resume(Effect.void);
     const failed = () =>
-      resume(Effect.fail(new Error("Flect workspace hydration failed.")));
+      resume(
+        Effect.fail(
+          WorkspaceActivationError.make({ reason: "hydration-failed" }),
+        ),
+      );
     document.addEventListener("flect:workspace-ready", ready, { once: true });
     document.addEventListener("flect:workspace-error", failed, { once: true });
     document.documentElement.dataset.flectOpenRequested = "true";
@@ -28,7 +39,12 @@ const waitForAstroIsland = (document: Document) =>
       document.removeEventListener("flect:workspace-ready", ready);
       document.removeEventListener("flect:workspace-error", failed);
     });
-  });
+  }).pipe(
+    Effect.timeout(timeout),
+    Effect.catchTag("TimeoutError", () =>
+      Effect.fail(WorkspaceActivationError.make({ reason: "timed-out" })),
+    ),
+  );
 
 export const activateWorkspace = ({
   document,
@@ -45,8 +61,8 @@ export const activateWorkspace = ({
             const { mountFlect } = await load();
             await mountFlect(root);
           },
-          catch: (error) =>
-            errorFrom(error, "Flect client module failed to load."),
+          catch: () =>
+            WorkspaceActivationError.make({ reason: "hydration-failed" }),
         })
     ).pipe(
       Effect.tap(() => Effect.sync(onReady)),
