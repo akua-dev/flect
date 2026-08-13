@@ -37,6 +37,8 @@ export interface ComposerProps {
   /** @deprecated Routing is automatic. */
   readonly useDisabled?: boolean;
   readonly placeholder: string;
+  /** Outcome-oriented examples for a blank Flect workspace. */
+  readonly starterPrompts?: ReadonlyArray<string>;
   readonly disabled?: boolean;
   readonly disabledReason?: string;
   readonly drafts?: ContinuityDrafts;
@@ -93,6 +95,7 @@ export interface ComposerProps {
 export function Composer({
   mode,
   placeholder,
+  starterPrompts = [],
   disabled = false,
   disabledReason,
   drafts: persistedDrafts,
@@ -212,6 +215,12 @@ export function Composer({
     }
   };
 
+  const chooseStarterPrompt = (starterPrompt: string) => {
+    hasLocalDraftRef.current = true;
+    setDrafts((current) => ({ ...current, [draftKey]: starterPrompt }));
+    void onDraftChange?.(continuityKey, starterPrompt);
+  };
+
   return (
     <PromptInput
       aria-busy={isActive}
@@ -240,6 +249,22 @@ export function Composer({
           rows={1}
           value={prompt}
         />
+        {starterPrompts.length > 0 && (
+          <fieldset className="composer__starter-prompts">
+            <legend className="sr-only">Starter ideas</legend>
+            {starterPrompts.map((starterPrompt) => (
+              <button
+                aria-label={`Try ${starterPrompt}`}
+                className="composer__starter-prompt"
+                key={starterPrompt}
+                onClick={() => chooseStarterPrompt(starterPrompt)}
+                type="button"
+              >
+                {starterPrompt}
+              </button>
+            ))}
+          </fieldset>
+        )}
       </PromptInputBody>
 
       <PromptInputFooter className="composer__rail">

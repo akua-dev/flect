@@ -841,8 +841,11 @@ export function RoleAwareShell({
               )}
             {starterWorkspace ? (
               <section className="blank-invitation">
-                <h1>What do you want to make?</h1>
-                <p>Describe the outcome in the message box to start.</p>
+                <h1>What do you need?</h1>
+                <p>
+                  Flect makes a live interface from your outcome. You can keep
+                  using and changing it here.
+                </p>
               </section>
             ) : compiledCapsule !== undefined ? (
               <Suspense fallback={<ShareSurfaceFallback />}>
@@ -927,6 +930,7 @@ export function RoleAwareShell({
           preview={preview}
           candidateRevisionId={candidateRevisionId}
           selectedNodeId={selectedNodeId}
+          starter={starterWorkspace}
           useDisabled={useDisabled || phase === "blank"}
           onCollapse={collapse}
           onOpenSafeMode={onOpenSafeMode}
