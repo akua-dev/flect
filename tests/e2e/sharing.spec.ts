@@ -312,7 +312,15 @@ const expectAccessible = async (page: Page, include: string) => {
     .include(include)
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
-  expect(result.violations.map((violation) => violation.id)).toEqual([]);
+  expect(
+    result.violations.map((violation) => ({
+      id: violation.id,
+      nodes: violation.nodes.map((node) => ({
+        summary: node.failureSummary,
+        target: node.target,
+      })),
+    })),
+  ).toEqual([]);
 };
 
 test.beforeEach(async ({ page }) => {
@@ -946,7 +954,7 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
   ).toBeEnabled();
   await review.getByRole("button", { name: "Discard shared source" }).click();
   await expect(
-    page.getByRole("heading", { name: "What do you want to make?" }),
+    page.getByRole("heading", { name: "What do you need?" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Actions" }).click();
@@ -965,7 +973,7 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
     /The shared file could not be reviewed safely/,
   );
   await expect(
-    page.getByRole("heading", { name: "What do you want to make?" }),
+    page.getByRole("heading", { name: "What do you need?" }),
   ).toBeVisible();
   await expect(page.getByText("private archive detail")).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText(

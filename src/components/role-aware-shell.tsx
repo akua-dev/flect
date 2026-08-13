@@ -318,7 +318,7 @@ export function RoleAwareShell({
       shouldFocusRailRef.current = false;
       queueMicrotask(() => {
         railContainerRef.current
-          ?.querySelector<HTMLElement>(".agent-rail button:not(:disabled)")
+          ?.querySelector<HTMLElement>('[aria-label="Collapse agent"]')
           ?.focus();
       });
     }
@@ -729,7 +729,7 @@ export function RoleAwareShell({
       <main
         className={`workspace-canvas${starterWorkspace ? " workspace-canvas--starter" : ""}${settingsOpen ? " workspace-canvas--settings" : ""}`}
       >
-        {settingsOpen && diagnostics !== undefined ? (
+        {settingsOpen && diagnostics !== undefined && (
           <Suspense fallback={<ShareSurfaceFallback />}>
             <DiagnosticsPanel
               control={diagnostics.control}
@@ -742,126 +742,118 @@ export function RoleAwareShell({
               update={diagnostics.update}
             />
           </Suspense>
+        )}
+        {docked && !starterWorkspace && phase === "accepted" && !preview && (
+          <button
+            aria-label={
+              selectionMode ? "Cancel element selection" : "Select element"
+            }
+            aria-pressed={selectionMode}
+            className="canvas-edit-trigger"
+            disabled={operationActive}
+            onClick={() => setSelectionMode((current) => !current)}
+            type="button"
+          >
+            <span className="canvas-edit-trigger__glyph" />
+          </button>
+        )}
+        {!preview &&
+          shareReview !== undefined &&
+          onRetainShare !== undefined &&
+          onPrepareShareUpdate !== undefined &&
+          onActivateShare !== undefined &&
+          onRejectShare !== undefined && (
+            <Suspense fallback={<ShareSurfaceFallback />}>
+              <ShareReview
+                busy={operationActive}
+                {...(shareInstallation === undefined
+                  ? {}
+                  : { installedVersion: shareInstallation.version })}
+                onActivate={onActivateShare}
+                onContinueFork={onContinueShareFork}
+                onOpenConflictInShape={onOpenShareConflictInShape}
+                {...(onOpenShareUrl === undefined ||
+                onOpenShareGit === undefined
+                  ? {}
+                  : { onOpenSource: () => setShareDialogOpen(true) })}
+                {...(onOpenShareFile === undefined
+                  ? {}
+                  : { onOpenFile: () => shareFileRef.current?.click() })}
+                onPrepareUpdate={onPrepareShareUpdate}
+                onReject={onRejectShare}
+                onRetain={onRetainShare}
+                pending={shareInstallation?.pending !== undefined}
+                retained={shareInstallation !== undefined}
+                review={shareReview}
+              />
+            </Suspense>
+          )}
+        {starterWorkspace ? (
+          <section className="blank-invitation">
+            <h1>What do you need?</h1>
+            <p>
+              Flect makes a live interface from your outcome. You can keep using
+              and changing it here.
+            </p>
+          </section>
+        ) : compiledCapsule !== undefined ? (
+          <Suspense fallback={<ShareSurfaceFallback />}>
+            <CapsuleFrame
+              assets={compiledCapsule.assets}
+              entrypointPath={compiledCapsule.entrypointPath}
+              html={compiledCapsule.html}
+              onDirectManipulation={(kind, deltaX, deltaY) =>
+                applyDirectManipulation(
+                  kind === "move"
+                    ? `Move the selected element ${Math.abs(Math.round(deltaX))} pixels ${deltaX < 0 ? "left" : "right"} and ${Math.abs(Math.round(deltaY))} pixels ${deltaY < 0 ? "up" : "down"} in the current view. Translate that gesture into responsive layout source instead of storing fixed canvas coordinates.`
+                    : `Resize the selected element by approximately ${Math.round(deltaX)} pixels in width and ${Math.round(deltaY)} pixels in height in the current view. Translate that gesture into responsive layout source and preserve accessible content reflow.`,
+                )
+              }
+              onIntent={onCapsuleIntent}
+              onClearSelection={() => chooseCanvasSelection(undefined)}
+              onSelectionAction={applyCanvasEditAction}
+              onSelectionChange={(selection) =>
+                chooseCanvasSelection(selection)
+              }
+              selection={canvasSelection}
+              selectionBusy={operationActive}
+              selectionMode={selectionMode}
+              title={compiledCapsule.name}
+            />
+          </Suspense>
         ) : (
           <>
-            {docked &&
-              !starterWorkspace &&
-              phase === "accepted" &&
-              !preview && (
-                <button
-                  aria-label={
-                    selectionMode
-                      ? "Cancel element selection"
-                      : "Select element"
-                  }
-                  aria-pressed={selectionMode}
-                  className="canvas-edit-trigger"
-                  disabled={operationActive}
-                  onClick={() => setSelectionMode((current) => !current)}
-                  type="button"
-                >
-                  <span className="canvas-edit-trigger__glyph" />
-                </button>
-              )}
-            {!preview &&
-              shareReview !== undefined &&
-              onRetainShare !== undefined &&
-              onPrepareShareUpdate !== undefined &&
-              onActivateShare !== undefined &&
-              onRejectShare !== undefined && (
-                <Suspense fallback={<ShareSurfaceFallback />}>
-                  <ShareReview
-                    busy={operationActive}
-                    {...(shareInstallation === undefined
-                      ? {}
-                      : { installedVersion: shareInstallation.version })}
-                    onActivate={onActivateShare}
-                    onContinueFork={onContinueShareFork}
-                    onOpenConflictInShape={onOpenShareConflictInShape}
-                    {...(onOpenShareUrl === undefined ||
-                    onOpenShareGit === undefined
-                      ? {}
-                      : { onOpenSource: () => setShareDialogOpen(true) })}
-                    {...(onOpenShareFile === undefined
-                      ? {}
-                      : { onOpenFile: () => shareFileRef.current?.click() })}
-                    onPrepareUpdate={onPrepareShareUpdate}
-                    onReject={onRejectShare}
-                    onRetain={onRetainShare}
-                    pending={shareInstallation?.pending !== undefined}
-                    retained={shareInstallation !== undefined}
-                    review={shareReview}
-                  />
-                </Suspense>
-              )}
-            {starterWorkspace ? (
-              <section className="blank-invitation">
-                <h1>What do you need?</h1>
-                <p>
-                  Flect makes a live interface from your outcome. You can keep
-                  using and changing it here.
-                </p>
-              </section>
-            ) : compiledCapsule !== undefined ? (
-              <Suspense fallback={<ShareSurfaceFallback />}>
-                <CapsuleFrame
-                  assets={compiledCapsule.assets}
-                  entrypointPath={compiledCapsule.entrypointPath}
-                  html={compiledCapsule.html}
-                  onDirectManipulation={(kind, deltaX, deltaY) =>
-                    applyDirectManipulation(
-                      kind === "move"
-                        ? `Move the selected element ${Math.abs(Math.round(deltaX))} pixels ${deltaX < 0 ? "left" : "right"} and ${Math.abs(Math.round(deltaY))} pixels ${deltaY < 0 ? "up" : "down"} in the current view. Translate that gesture into responsive layout source instead of storing fixed canvas coordinates.`
-                        : `Resize the selected element by approximately ${Math.round(deltaX)} pixels in width and ${Math.round(deltaY)} pixels in height in the current view. Translate that gesture into responsive layout source and preserve accessible content reflow.`,
-                    )
-                  }
-                  onIntent={onCapsuleIntent}
-                  onClearSelection={() => chooseCanvasSelection(undefined)}
-                  onSelectionAction={applyCanvasEditAction}
-                  onSelectionChange={(selection) =>
-                    chooseCanvasSelection(selection)
-                  }
-                  selection={canvasSelection}
-                  selectionBusy={operationActive}
-                  selectionMode={selectionMode}
-                  title={compiledCapsule.name}
+            <Suspense fallback={<ShareSurfaceFallback />}>
+              <InterfaceRenderer
+                actions={actions}
+                document={document}
+                onAction={handleInterfaceAction}
+                onSelectionChange={(selection, nodeId) =>
+                  chooseCanvasSelection(selection, nodeId)
+                }
+                renderPrompt={() => (
+                  <button
+                    className="canvas-agent-entry"
+                    onClick={focusComposer}
+                    type="button"
+                  >
+                    Ask Flect about this interface
+                  </button>
+                )}
+                selectedNodeId={selectedNodeId}
+                selectionMode={selectionMode}
+              />
+            </Suspense>
+            {canvasSelection !== undefined && (
+              <Suspense fallback={null}>
+                <CanvasEditPalette
+                  busy={operationActive}
+                  label={canvasSelection.label}
+                  onAction={applyCanvasEditAction}
+                  onClear={() => chooseCanvasSelection(undefined)}
+                  rect={canvasSelection.rect}
                 />
               </Suspense>
-            ) : (
-              <>
-                <Suspense fallback={<ShareSurfaceFallback />}>
-                  <InterfaceRenderer
-                    actions={actions}
-                    document={document}
-                    onAction={handleInterfaceAction}
-                    onSelectionChange={(selection, nodeId) =>
-                      chooseCanvasSelection(selection, nodeId)
-                    }
-                    renderPrompt={() => (
-                      <button
-                        className="canvas-agent-entry"
-                        onClick={focusComposer}
-                        type="button"
-                      >
-                        Ask Flect about this interface
-                      </button>
-                    )}
-                    selectedNodeId={selectedNodeId}
-                    selectionMode={selectionMode}
-                  />
-                </Suspense>
-                {canvasSelection !== undefined && (
-                  <Suspense fallback={null}>
-                    <CanvasEditPalette
-                      busy={operationActive}
-                      label={canvasSelection.label}
-                      onAction={applyCanvasEditAction}
-                      onClear={() => chooseCanvasSelection(undefined)}
-                      rect={canvasSelection.rect}
-                    />
-                  </Suspense>
-                )}
-              </>
             )}
           </>
         )}

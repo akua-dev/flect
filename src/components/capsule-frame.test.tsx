@@ -288,7 +288,7 @@ describe("CapsuleFrame", () => {
     fireEvent.click(screen.getByRole("button", { name: "Move later" }));
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Clear selection: Late delivery",
+        name: "Clear canvas selection",
       }),
     );
     expect(onSelectionAction).toHaveBeenCalledWith("move-later");

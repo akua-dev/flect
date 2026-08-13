@@ -117,7 +117,7 @@ export function CanvasEditPalette({
         Larger
       </button>
       <button
-        aria-label={`Clear selection: ${label}`}
+        aria-label="Clear canvas selection"
         onClick={onClear}
         type="button"
       >
