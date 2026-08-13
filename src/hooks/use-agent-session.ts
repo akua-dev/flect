@@ -45,6 +45,7 @@ export const isAgentSessionActive = (status: AgentSessionStatus) =>
 
 export interface ConversationMessage {
   readonly id: string;
+  readonly turnId?: string;
   readonly role: "user" | "assistant" | "activity";
   readonly content: string;
   readonly createdAt?: number;
@@ -146,6 +147,7 @@ const activityMessage = (
   activity: RoleConversationSnapshot["activities"][number],
 ): ConversationMessage => ({
   id: activity.id,
+  ...(activity.turnId === undefined ? {} : { turnId: activity.turnId }),
   role: "activity",
   createdAt: activity.updatedAt,
   content:
@@ -162,6 +164,7 @@ const conversationMessages = (
   [
     ...conversation.messages.map((message) => ({
       id: message.id,
+      ...(message.turnId === undefined ? {} : { turnId: message.turnId }),
       role: message.role,
       content: message.content,
       createdAt: message.createdAt,

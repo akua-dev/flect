@@ -38,6 +38,7 @@ const projectMessages = (
       ContinuityMessage.make({
         version: 1,
         id: candidate.id,
+        ...(candidate.turnId === undefined ? {} : { turnId: candidate.turnId }),
         role: candidate.role,
         content,
         createdAt: candidate.createdAt,
@@ -59,6 +60,7 @@ const restoreConversation = (
     ConversationMessage.make({
       version: 1,
       id: candidate.id,
+      ...(candidate.turnId === undefined ? {} : { turnId: candidate.turnId }),
       role: candidate.role,
       content: candidate.content,
       createdAt: candidate.createdAt,

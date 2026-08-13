@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ConversationMessage,
   ToolActivity,
@@ -11,7 +11,112 @@ import {
 } from "../../shared/control";
 import { ConversationTimeline } from "./conversation-timeline";
 
+afterEach(cleanup);
+
 describe("ConversationTimeline", () => {
+  it("folds historical request context while keeping every final answer visible", async () => {
+    const source = UserCommandSource.make({ kind: "user" });
+    render(
+      <ConversationTimeline
+        activities={[
+          ToolActivity.make({
+            version: 1,
+            id: "activity-history-1",
+            callId: "tool-call-history-1",
+            operationId: "operation-history-0001",
+            turnId: "operation-history-0001",
+            role: "app",
+            toolName: "bash",
+            phase: "succeeded",
+            startedAt: 20,
+            updatedAt: 21,
+            durationMs: 10,
+          }),
+        ]}
+        label="Flect"
+        messages={[
+          ConversationMessage.make({
+            version: 1,
+            id: "message-history-user",
+            turnId: "operation-history-0001",
+            role: "user",
+            content: "Build the first project dashboard with a long request",
+            createdAt: 10,
+            source,
+          }),
+          ConversationMessage.make({
+            version: 1,
+            id: "message-history-assistant",
+            turnId: "operation-history-0001",
+            role: "assistant",
+            content: "The first dashboard is ready.",
+            createdAt: 30,
+            source,
+          }),
+          ConversationMessage.make({
+            version: 1,
+            id: "message-current-user",
+            turnId: "operation-current-0001",
+            role: "user",
+            content: "Make the current dashboard calmer",
+            createdAt: 40,
+            source,
+          }),
+          ConversationMessage.make({
+            version: 1,
+            id: "message-current-assistant",
+            turnId: "operation-current-0001",
+            role: "assistant",
+            content: "The calmer dashboard is ready.",
+            createdAt: 50,
+            source,
+          }),
+        ]}
+        status="ready"
+      />,
+    );
+
+    const historical = screen.getByRole("region", {
+      name: "Earlier turn: Build the first project dashboard with a long request",
+    });
+    expect(
+      within(historical).getByRole("button", {
+        name: "Show earlier request: Build the first project dashboard with a long request",
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(
+      within(historical).getByText("The first dashboard is ready."),
+    ).toBeVisible();
+    expect(screen.getByText("The calmer dashboard is ready.")).toBeVisible();
+    expect(
+      within(historical).getByText(
+        "Build the first project dashboard with a long request",
+        { selector: ".message--user *" },
+      ),
+    ).not.toBeVisible();
+    expect(
+      within(historical).getByRole("region", {
+        hidden: true,
+        name: "1 tool call",
+      }),
+    ).not.toBeVisible();
+
+    await userEvent.click(
+      within(historical).getByRole("button", {
+        name: "Show earlier request: Build the first project dashboard with a long request",
+      }),
+    );
+    expect(
+      within(historical).getByText(
+        "Build the first project dashboard with a long request",
+        { selector: ".message--user *" },
+      ),
+    ).toBeVisible();
+    expect(
+      within(historical).getByRole("region", { name: "1 tool call" }),
+    ).toBeVisible();
+  });
+
   it("keeps compact tool work inside the turn that produced it", async () => {
     render(
       <ConversationTimeline
@@ -21,6 +126,7 @@ describe("ConversationTimeline", () => {
             id: "activity-timeline-read-1",
             callId: "tool-call-timeline-read-1",
             operationId: "operation-timeline-read-1",
+            turnId: "operation-timeline-turn-1",
             role: "app",
             toolName: "flect",
             phase: "succeeded",
@@ -33,6 +139,7 @@ describe("ConversationTimeline", () => {
             id: "activity-timeline-build-1",
             callId: "tool-call-timeline-build-1",
             operationId: "operation-timeline-build-1",
+            turnId: "operation-timeline-turn-1",
             role: "app",
             toolName: "bash",
             phase: "succeeded",
@@ -46,6 +153,7 @@ describe("ConversationTimeline", () => {
           ConversationMessage.make({
             version: 1,
             id: "message-user",
+            turnId: "operation-timeline-turn-1",
             role: "user",
             content: "Make it calmer",
             createdAt: 10,
@@ -54,6 +162,7 @@ describe("ConversationTimeline", () => {
           ConversationMessage.make({
             version: 1,
             id: "message-assistant",
+            turnId: "operation-timeline-turn-1",
             role: "assistant",
             content: "I softened the interface.",
             createdAt: 30,
