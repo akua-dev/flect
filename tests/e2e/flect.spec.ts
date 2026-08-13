@@ -310,6 +310,84 @@ test("shapes a blank workspace in one continuous live canvas", async ({
   await expect(page.locator(".composer")).toHaveCount(1);
 });
 
+test("keeps completed agent work quiet behind the final answer", async ({
+  page,
+}) => {
+  await shapeFirstInterface(page);
+
+  const work = page.getByRole("region", { name: "2 tool calls" });
+  await expect(work).toContainText("Worked for 42 ms");
+  await expect(work).toContainText("2 steps");
+  await expect(
+    work.getByRole("button", { name: "Show 2 completed steps" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(work.locator(".work-log__entries")).toBeHidden();
+  await expect(
+    page.getByText("Change complete: Focused project overview"),
+  ).toBeVisible();
+
+  await work.getByRole("button", { name: "Show 2 completed steps" }).click();
+  const commandRows = work.locator(".activity-card__summary");
+  await expect(commandRows).toHaveCount(2);
+  await expect(commandRows.first()).toBeVisible();
+  const expandedLayout = await work.evaluate((region) => {
+    const bounds = region.getBoundingClientRect();
+    const rows = [
+      ...region.querySelectorAll<HTMLElement>(".activity-card__summary"),
+    ];
+    return rows.map((row) => {
+      const rowBounds = row.getBoundingClientRect();
+      const style = getComputedStyle(row);
+      return {
+        borderWidth: style.borderTopWidth,
+        contained: rowBounds.right <= bounds.right + 0.5,
+        scrollContained: row.scrollWidth <= row.clientWidth,
+      };
+    });
+  });
+  expect(expandedLayout).toEqual([
+    { borderWidth: "0px", contained: true, scrollContained: true },
+    { borderWidth: "0px", contained: true, scrollContained: true },
+  ]);
+
+  await commandRows.first().click();
+  const commandDetails = work.locator(".activity-card__details").first();
+  await expect(commandDetails).toBeVisible();
+  const detailsLayout = await commandDetails.evaluate((details) => {
+    const style = getComputedStyle(details);
+    return {
+      borderBottomWidth: style.borderBottomWidth,
+      borderLeftWidth: style.borderLeftWidth,
+      borderRightWidth: style.borderRightWidth,
+      borderTopWidth: style.borderTopWidth,
+      contained: details.scrollWidth <= details.clientWidth,
+    };
+  });
+  expect(detailsLayout).toEqual({
+    borderBottomWidth: "0px",
+    borderLeftWidth: "1px",
+    borderRightWidth: "0px",
+    borderTopWidth: "0px",
+    contained: true,
+  });
+
+  const railLayout = await page.locator(".agent-rail").evaluate((rail) => {
+    const railStyle = getComputedStyle(rail);
+    const workLog = rail.querySelector(".work-log");
+    const workStyle = workLog === null ? undefined : getComputedStyle(workLog);
+    return {
+      borderLeftWidth: railStyle.borderLeftWidth,
+      railContained: rail.scrollWidth <= rail.clientWidth,
+      workBorderWidth: workStyle?.borderTopWidth,
+    };
+  });
+  expect(railLayout).toEqual({
+    borderLeftWidth: "0px",
+    railContained: true,
+    workBorderWidth: "0px",
+  });
+});
+
 test("gives the static home screen one clear starting action", async ({
   page,
 }) => {
@@ -1105,11 +1183,9 @@ test("previews and accepts compiled UI only inside the isolated capsule frame", 
   if (exported === null) throw new Error("Compiled capsule was not exported.");
   expect(await readFile(exported)).toEqual(Buffer.from(archive));
 
-  await page.getByRole("button", { name: "Safe mode" }).click();
+  await page.getByRole("button", { name: "Open recovery mode" }).click();
   await expect(page.locator('iframe[title="Compiled fixture"]')).toHaveCount(0);
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toBeVisible();
+  await expect(page.getByText("Your interface is protected.")).toBeVisible();
 });
 
 test("restores a compiled candidate for review without replacing accepted state", async ({
@@ -1185,10 +1261,18 @@ test("keeps one draft and one conversation while Flect routes product and edit w
     .click();
   await composer.fill("Fail candidate extension");
   await composer.press("Enter");
+  await expect(page.locator("form.composer")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  const failedWork = page.getByRole("region", { name: "1 tool call" }).last();
+  await failedWork
+    .getByRole("button", { name: "Show 1 completed step" })
+    .click();
   const failedActivity = page.getByRole("button", {
     name: "Trusted Pi extension details",
   });
-  await expect(failedActivity).toContainText("Error");
+  await expect(failedActivity).toContainText("Failed");
   await failedActivity.click();
   await expect(
     page.getByText("Disable trusted Pi extensions for this agent and retry."),
@@ -1267,7 +1351,10 @@ test("keeps one chronological conversation across internal routing and reload", 
   await appInput.press("Enter");
   await expect(page.getByText("The product action completed.")).toBeVisible();
   const latestWork = page.getByRole("region", { name: "1 tool call" }).last();
-  await expect(latestWork).toContainText("Worked");
+  await expect(latestWork).toContainText("Worked for 10 ms");
+  await latestWork
+    .getByRole("button", { name: "Show 1 completed step" })
+    .click();
   const bashDetails = latestWork.getByRole("button", {
     name: "Bash details",
   });
@@ -1383,8 +1470,12 @@ test("rejects a stale draft writer across two real same-origin tabs", async ({
     await page.evaluate(() => localStorage.getItem("flect.role-continuity.v1")),
   ).not.toContain("Stale draft from the second tab");
 
-  await second.getByRole("button", { name: "Safe mode" }).click();
-  await expect(second.getByText(/stale-write/)).toBeVisible();
+  await second.getByRole("button", { name: "Open recovery mode" }).click();
+  await expect(
+    second.getByText(
+      "Saved conversation data needs repair before it can be restored.",
+    ),
+  ).toBeVisible();
   await second.close();
 });
 
@@ -1416,8 +1507,12 @@ test("preserves the prior continuity record when browser quota rejects a write",
   const input = page.getByRole("textbox", { name: "Message Flect" });
   await expect(input).toHaveValue("Last durable draft");
   await input.fill("This write exceeds quota");
-  await page.getByRole("button", { name: "Safe mode" }).click();
-  await expect(page.getByText(/storage-unavailable/)).toBeVisible();
+  await page.getByRole("button", { name: "Open recovery mode" }).click();
+  await expect(
+    page.getByText(
+      "Saved conversation data needs repair before it can be restored.",
+    ),
+  ).toBeVisible();
   expect(
     await page.evaluate(() => localStorage.getItem("flect.role-continuity.v1")),
   ).toBe(durable);
@@ -1722,8 +1817,13 @@ test("uses right and full-height sheets at compact breakpoints", async ({
     ),
   ).toBe(false);
 
+  await page
+    .getByRole("region", { name: "2 tool calls" })
+    .getByRole("button", { name: "Show 2 completed steps" })
+    .click();
+
   for (const name of [
-    "Safe mode",
+    "Open recovery mode",
     "Select element",
     "Collapse agent",
     "Fix with Flect",
@@ -1851,11 +1951,9 @@ test("keeps safe mode and promptless products inside the protected shell", async
 
   await page.goto("/?safe=1");
   await expect(
-    page.locator(".topbar").getByText("Safe mode", { exact: true }),
+    page.locator(".topbar").getByText("Recovery mode", { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toBeVisible();
+  await expect(page.getByText("Your interface is protected.")).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeDisabled();
@@ -1863,31 +1961,27 @@ test("keeps safe mode and promptless products inside the protected shell", async
     page.getByRole("textbox", { name: "Message Flect" }),
   ).toHaveValue("");
   await expect(
-    page.getByRole("button", { name: "Restore interface" }),
+    page.getByRole("button", { name: "Restore working interface" }),
   ).toBeVisible();
   const downloadEvent = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export session continuity" }).click();
+  await page.getByRole("button", { name: "Download recovery backup" }).click();
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe("flect-role-continuity.json");
   await page
-    .getByRole("button", { name: "Discard session continuity" })
+    .getByRole("button", { name: "Discard saved conversation" })
     .click();
   await expect
     .poll(() =>
       page.evaluate(() => localStorage.getItem("flect.role-continuity.v1")),
     )
     .toBeNull();
-  await page.getByRole("button", { name: "Restore interface" }).click();
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Restore working interface" }).click();
+  await expect(page.getByText("Your interface is protected.")).toHaveCount(0);
   await expect
     .poll(() => new URL(page.url()).searchParams.has("safe"))
     .toBe(false);
   await page.reload();
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toHaveCount(0);
+  await expect(page.getByText("Your interface is protected.")).toHaveCount(0);
 });
 
 test("supports keyboard shaping and reduced motion", async ({ page }) => {
@@ -1940,9 +2034,6 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   await expect(
     page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Bash details" }).first(),
-  ).toContainText("Completed");
 
   const repository = (await runFlect("repository", "status")) as {
     readonly acceptedCommit?: string;
@@ -1956,9 +2047,6 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   await runFlect("prompt", "Open the latest project");
   completedPromptPages.add(page);
   await expect(page.getByText("The product action completed.")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Bash details" }).first(),
-  ).toContainText("Completed");
 
   const logs = (await runFlect("logs")) as {
     readonly operations?: ReadonlyArray<{
@@ -1987,7 +2075,9 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   expect(enteredSafeMode.acceptedCommit).toBe(beforeSafeMode.acceptedCommit);
   await runFlect("safe", "restore");
   await expect(page.locator(".topbar .safe-mode")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Safe mode" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open recovery mode" }),
+  ).toBeVisible();
   await expect
     .poll(async () => {
       const restored = (await runFlect("repository", "status")) as {

@@ -34,8 +34,8 @@ describe("ActivityCard", () => {
       />,
     );
 
-    expect(screen.getByText("Bash")).toBeVisible();
-    expect(screen.getByText("Error")).toBeVisible();
+    expect(screen.getByText("Command failed")).toBeVisible();
+    expect(screen.queryByText("Error")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /Bash details/i }));
     expect(screen.getAllByText("bun test")).toHaveLength(2);
     expect(screen.getByText("1 test failed")).toBeVisible();

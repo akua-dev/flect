@@ -914,21 +914,25 @@ export function AgentRail({
         {mode === "safe" && (
           <section className="recovery-banner" role="status">
             <div>
-              <strong>Custom interface state is bypassed.</strong>
-              <p>Restore the last-known-good revision to return.</p>
+              <strong>Your interface is protected.</strong>
+              <p>
+                Flect temporarily hid custom changes. Restore the last working
+                interface when you are ready.
+              </p>
               <small>
                 {workspace.continuity?.recovery === undefined
-                  ? `Session continuity generation ${workspace.continuity?.generation ?? 0}, revision ${workspace.continuity?.revisionSequence ?? 0}.`
-                  : `Session continuity needs recovery: ${workspace.continuity.recovery}.`}
+                  ? "Your saved conversation and drafts are available."
+                  : "Saved conversation data needs repair before it can be restored."}
               </small>
             </div>
             <div className="revision-banner__actions">
               <button
+                aria-label="Restore working interface"
                 className="decision-button decision-button--primary"
                 onClick={() => void onRestoreSafeMode()}
                 type="button"
               >
-                Restore interface
+                Restore working interface
               </button>
               <button
                 className="decision-button"
@@ -936,14 +940,14 @@ export function AgentRail({
                 onClick={() => void exportContinuity()}
                 type="button"
               >
-                Export session continuity
+                Download recovery backup
               </button>
               <button
                 className="decision-button"
                 onClick={() => void workspace.discardContinuity?.()}
                 type="button"
               >
-                Discard session continuity
+                Discard saved conversation
               </button>
               {workspace.continuity?.recovery !== undefined && (
                 <button
@@ -951,7 +955,7 @@ export function AgentRail({
                   onClick={() => void workspace.retryContinuity?.()}
                   type="button"
                 >
-                  Retry session continuity
+                  Retry recovery
                 </button>
               )}
             </div>

@@ -1172,7 +1172,7 @@ textarea:focus-visible,
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--line);
+  border: 0;
   border-radius: 16px;
   background: var(--surface);
   box-shadow: 0 18px 42px var(--shadow-strong);
@@ -1362,26 +1362,56 @@ textarea:focus-visible,
 
 .work-log {
   display: grid;
-  gap: 3px;
+  min-width: 0;
+  gap: 2px;
+  border: 0;
   color: var(--muted);
 }
 
-.work-log__header {
-  display: flex;
-  min-height: 24px;
+.work-log__summary {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
   align-items: center;
+  border: 0;
+  border-radius: 6px;
   gap: 7px;
-  padding: 0 3px;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  padding: 3px 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
   font-size: 0.6875rem;
+  text-align: start;
 }
 
-.work-log__header strong {
+.work-log__summary:hover,
+.work-log__summary:focus-visible {
+  background: color-mix(in oklch, var(--surface-raised) 42%, transparent);
+}
+
+.work-log__summary strong {
   color: var(--ink);
   font-weight: 560;
+  white-space: nowrap;
 }
 
-.work-log__header > span:last-child {
+.work-log__summary > span:nth-child(3) {
+  overflow: hidden;
   color: var(--quiet);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.work-log__summary .lucide {
+  width: 12px;
+  height: 12px;
+  transition: transform var(--state-motion);
+}
+
+.work-log__summary[aria-expanded="true"] .lucide {
+  transform: rotate(180deg);
 }
 
 .work-log__mark {
@@ -1391,7 +1421,7 @@ textarea:focus-visible,
   background: var(--ready);
 }
 
-.work-log:has(.activity-card--running) .work-log__mark {
+.work-log--active .work-log__mark {
   animation: activity-pulse 1.4s ease-in-out infinite;
   background: var(--primary);
 }
@@ -1402,7 +1432,13 @@ textarea:focus-visible,
 
 .work-log__entries {
   display: grid;
+  min-width: 0;
   gap: 1px;
+  margin-left: 4px;
+}
+
+.work-log__entries[hidden] {
+  display: none;
 }
 
 .activity-card {
@@ -1443,15 +1479,17 @@ textarea:focus-visible,
 .activity-card__summary {
   display: grid;
   width: 100%;
+  min-width: 0;
   min-height: 30px;
   align-items: center;
   border: 0;
-  padding: 4px 5px;
+  border-radius: 6px;
+  padding: 4px;
   background: transparent;
   color: inherit;
   cursor: pointer;
-  gap: 6px;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  gap: 5px;
+  grid-template-columns: 20px auto minmax(0, 1fr) 16px auto 16px;
   list-style: none;
   text-align: start;
 }
@@ -1459,24 +1497,6 @@ textarea:focus-visible,
 .activity-card__summary:hover,
 .activity-card__summary:focus-visible {
   background: color-mix(in oklch, var(--surface-raised) 52%, transparent);
-}
-
-.activity-card__summary > div:first-child {
-  gap: 6px;
-}
-
-.activity-card__summary [data-slot="badge"] {
-  height: auto;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 0.6875rem;
-  font-weight: 500;
-}
-
-.activity-card__summary > div:last-child {
-  gap: 4px;
 }
 
 .activity-card__summary .lucide {
@@ -1490,48 +1510,64 @@ textarea:focus-visible,
 }
 
 .activity-card__summary strong {
-  overflow: hidden;
   font-size: 0.75rem;
   font-weight: 520;
+  white-space: nowrap;
+}
+
+.activity-card__summary > code {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  font-weight: 430;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.activity-card__summary > span:not(.activity-card__dot),
-.activity-card__summary time,
-.activity-card__summary small {
-  color: var(--muted);
-  font-size: 0.6875rem;
+.activity-card__tool,
+.activity-card__phase {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: var(--quiet);
 }
 
-.activity-card__dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--quiet);
+.activity-card__summary time {
+  color: var(--quiet);
+  font-size: 0.625rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
-.activity-card--running .activity-card__dot {
+.activity-card--running .activity-card__phase {
   animation: activity-pulse 1.4s ease-in-out infinite;
-  background: var(--primary);
+  color: var(--ink);
 }
 
-.activity-card--succeeded .activity-card__dot {
-  background: var(--ready);
+.activity-card--failed .activity-card__phase {
+  color: var(--danger);
 }
 
-.activity-card--failed .activity-card__dot {
-  background: var(--danger);
+.activity-card__chevron {
+  color: var(--quiet);
+  transition: transform var(--state-motion);
+}
+
+.activity-card__summary[data-state="open"] .activity-card__chevron {
+  transform: rotate(180deg);
 }
 
 .activity-card__details {
   display: grid;
+  min-width: 0;
   gap: 10px;
-  border: 1px solid color-mix(in oklch, var(--line) 72%, transparent);
-  border-radius: 8px;
-  margin: 2px 0 5px 28px;
-  padding: 9px;
-  background: color-mix(in oklch, var(--canvas) 64%, transparent);
+  border: 0;
+  border-left: 1px solid color-mix(in oklch, var(--line) 56%, transparent);
+  margin: 2px 0 6px 14px;
+  padding: 5px 4px 5px 14px;
+  background: transparent;
 }
 
 .activity-card__details[data-state="closed"] {
@@ -1584,13 +1620,15 @@ textarea:focus-visible,
   display: flex;
   min-width: 0;
   align-items: center;
-  justify-content: space-between;
+  flex-wrap: wrap;
   gap: 8px;
   color: var(--quiet);
   font-size: 0.625rem;
 }
 
 .activity-card__details footer code {
+  min-width: 0;
+  flex: 1 1 120px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -4534,7 +4572,8 @@ button.decision-button--primary:hover:not(:disabled) {
   }
 
   .thinking span,
-  .activity-card--running .activity-card__dot {
+  .activity-card--running .activity-card__phase,
+  .work-log--active .work-log__mark {
     animation: none;
   }
 }
@@ -4573,7 +4612,7 @@ button.decision-button--primary:hover:not(:disabled) {
     --focus-ring: 0 0 0 3px Highlight;
   }
 
-  .activity-card__dot,
+  .work-log__mark,
   .runtime-state__dot {
     border: 1px solid CanvasText;
   }

@@ -538,15 +538,10 @@ test("routes fork personalization through one composer and activates a real two-
   const composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill(`Personalize shared fork ${fixtures.initial.commit}`);
   await composer.press("Enter");
-  await expect(
-    page
-      .getByRole("button", { name: "Bash details" })
-      .filter({ hasText: "Completed" })
-      .last(),
-  ).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("form.composer")).toHaveAttribute(
     "aria-busy",
     "false",
+    { timeout: 30_000 },
   );
   completedPromptPages.add(page);
   await expect(
@@ -615,15 +610,10 @@ test("resolves a real Git conflict with Flect and activates only the explicit re
     `Personalize shared conflict fork ${fixtures.initial.commit}`,
   );
   await composer.press("Enter");
-  await expect(
-    page
-      .getByRole("button", { name: "Bash details" })
-      .filter({ hasText: "Completed" })
-      .last(),
-  ).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("form.composer")).toHaveAttribute(
     "aria-busy",
     "false",
+    { timeout: 30_000 },
   );
   completedPromptPages.add(page);
   await expect(

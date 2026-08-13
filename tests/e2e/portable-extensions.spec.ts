@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { portableExtensionCapsule } from "../fixtures/portable-extensions/capsules";
 import { resetBrowserWorkspace } from "./reset-browser-workspace";
+import { revealActivity } from "./reveal-activity";
 
 const browserFailures = new WeakMap<Page, Array<string>>();
 
@@ -117,8 +118,9 @@ test("reviews, tests, activates, discovers, disables, and removes role-scoped pa
   const candidatePromptFinished = promptFinished(page);
   await previewComposer.press("Enter");
   const candidateActivity = page
-    .getByRole("button", { name: "Bash details" })
+    .locator('button[aria-label="Bash details"]')
     .last();
+  await revealActivity(candidateActivity.locator("xpath=ancestor::article"));
   await expect(candidateActivity).toContainText("Completed", {
     timeout: 30_000,
   });
@@ -141,7 +143,8 @@ test("reviews, tests, activates, discovers, disables, and removes role-scoped pa
   await composer.fill("Inspect portable extensions");
   const acceptedPromptFinished = promptFinished(page);
   await composer.press("Enter");
-  const activity = page.getByRole("button", { name: "Bash details" }).last();
+  const activity = page.locator('button[aria-label="Bash details"]').last();
+  await revealActivity(activity.locator("xpath=ancestor::article"));
   await expect(activity).toContainText("Completed", { timeout: 30_000 });
   await activity.click();
   const output = page.locator(".activity-card__details pre").last();

@@ -311,7 +311,7 @@ describe("RoleAwareShell", () => {
     rerender(<ShellHarness phase="safe" />);
     expect(
       screen.getByRole("status", { name: "Workbench status" }),
-    ).toHaveTextContent("Safe mode. Customized interface state is bypassed.");
+    ).toHaveTextContent("Recovery mode. Custom interface changes are hidden.");
   });
 
   it("does not expose internal mode controls", () => {

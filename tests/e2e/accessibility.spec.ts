@@ -165,7 +165,7 @@ test("gates blank, candidate, accepted, Diagnostics, model, and safe states", as
   await expectAccessible(page, "model chooser dialog");
   await page.keyboard.press("Escape");
 
-  await page.getByRole("button", { name: "Safe mode" }).click();
+  await page.getByRole("button", { name: "Open recovery mode" }).click();
   await expectAccessible(page, "protected recovery");
 });
 
@@ -225,7 +225,9 @@ test.describe("recovery action visibility", () => {
     }) => {
       await page.emulateMedia({ colorScheme });
       await page.goto("/?safe=1");
-      const restore = page.getByRole("button", { name: "Restore interface" });
+      const restore = page.getByRole("button", {
+        name: "Restore working interface",
+      });
       await expect(restore).toBeVisible();
       await expectAccessible(page, `${colorScheme} protected recovery`);
 
@@ -238,12 +240,12 @@ test.describe("recovery action visibility", () => {
 
       await restore.hover();
       const hoveredRestore = (await decisionButtonContrast(page)).find(
-        (button) => button.label === "Restore interface",
+        (button) => button.label === "Restore working interface",
       );
       expect(hoveredRestore).toBeDefined();
       expect(
         hoveredRestore?.ratio,
-        `${colorScheme} Restore interface must remain legible on hover`,
+        `${colorScheme} Restore working interface must remain legible on hover`,
       ).toBeGreaterThanOrEqual(4.5);
     });
   }

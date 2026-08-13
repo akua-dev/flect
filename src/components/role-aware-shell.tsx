@@ -277,7 +277,7 @@ export function RoleAwareShell({
     !(shareReview.lineage === "conflict" && target === "shape");
   const workbenchStatus =
     phase === "safe"
-      ? "Safe mode. Customized interface state is bypassed. Restore, export, discard, or retry continuity from the protected shell."
+      ? "Recovery mode. Custom interface changes are hidden. Restore the last working interface or manage the recovery backup from the protected shell."
       : shaping.status === "preview"
         ? `Imported candidate ${document.name} validated. Review its authority changes, then activate or discard it.`
         : operationActive
@@ -642,14 +642,16 @@ export function RoleAwareShell({
       <header className="topbar">
         <div className="topbar__status">
           {phase === "safe" ? (
-            <span className="safe-mode">Safe mode</span>
+            <span className="safe-mode">Recovery mode</span>
           ) : (
             <button
+              aria-label="Open recovery mode"
               className="safe-mode-link"
               onClick={onOpenSafeMode}
+              title="Open protected recovery"
               type="button"
             >
-              Safe mode
+              Recovery
             </button>
           )}
         </div>

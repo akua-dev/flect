@@ -2,6 +2,7 @@
 
 import "@testing-library/jest-dom/vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import {
   ConversationMessage,
@@ -25,6 +26,7 @@ describe("ConversationTimeline", () => {
             phase: "succeeded",
             startedAt: 20,
             updatedAt: 21,
+            durationMs: 12,
           }),
           ToolActivity.make({
             version: 1,
@@ -36,6 +38,7 @@ describe("ConversationTimeline", () => {
             phase: "succeeded",
             startedAt: 22,
             updatedAt: 23,
+            durationMs: 18,
           }),
         ]}
         label="Flect"
@@ -65,8 +68,8 @@ describe("ConversationTimeline", () => {
     expect(
       await screen.findByRole("region", { name: "2 tool calls" }),
     ).toBeVisible();
-    expect(screen.getByText("Worked")).toBeVisible();
-    expect(screen.getByText("2 tools")).toBeVisible();
+    expect(screen.getByText("Worked for 30 ms")).toBeVisible();
+    expect(screen.getByText("2 steps")).toBeVisible();
 
     const userMessage = screen.getByText("Make it calmer");
     const work = screen.getByRole("region", { name: "2 tool calls" });
@@ -79,9 +82,19 @@ describe("ConversationTimeline", () => {
       work.compareDocumentPosition(assistantMessage) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    expect(
-      await screen.findAllByRole("button", { name: /details/i }),
-    ).toHaveLength(2);
+    const details = await screen.findAllByRole("button", {
+      hidden: true,
+      name: /details/i,
+    });
+    expect(details).toHaveLength(2);
+    expect(details[0]).not.toBeVisible();
+    expect(details[1]).not.toBeVisible();
+
+    await userEvent.click(
+      within(work).getByRole("button", { name: "Show 2 completed steps" }),
+    );
+    expect(details[0]).toBeVisible();
+    expect(details[1]).toBeVisible();
   });
 
   it("only asks for attention when the complete turn failed", async () => {

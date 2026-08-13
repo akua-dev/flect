@@ -1,10 +1,18 @@
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  CircleIcon,
+  ClockIcon,
+  TerminalIcon,
+  WrenchIcon,
+  XIcon,
+} from "lucide-react";
 import type { ToolActivity } from "../../shared/control";
 import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  type ToolPart,
-} from "./ai-elements/tool";
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./ui/collapsible";
 
 const label = (toolName: string) =>
   toolName === "bash" ? "Bash" : toolName === "flect" ? "Flect" : toolName;
@@ -18,14 +26,27 @@ const phaseLabel = (phase: ToolActivity["phase"]) =>
         ? "Failed"
         : "Queued";
 
-const toolState = (phase: ToolActivity["phase"]): ToolPart["state"] =>
-  phase === "running"
-    ? "input-available"
-    : phase === "succeeded"
-      ? "output-available"
-      : phase === "failed"
-        ? "output-error"
-        : "input-streaming";
+const actionLabel = (activity: ToolActivity) => {
+  if (activity.toolName !== "bash") return label(activity.toolName);
+  return activity.phase === "running"
+    ? "Running command"
+    : activity.phase === "succeeded"
+      ? "Ran command"
+      : activity.phase === "failed"
+        ? "Command failed"
+        : "Command queued";
+};
+
+const PhaseIcon = ({ phase }: { readonly phase: ToolActivity["phase"] }) =>
+  phase === "running" ? (
+    <ClockIcon />
+  ) : phase === "succeeded" ? (
+    <CheckIcon />
+  ) : phase === "failed" ? (
+    <XIcon />
+  ) : (
+    <CircleIcon />
+  );
 
 export function ActivityCard({
   activity,
@@ -43,21 +64,27 @@ export function ActivityCard({
 
   return (
     <article className={`activity-card activity-card--${activity.phase}`}>
-      <Tool className="activity-card__disclosure">
-        <ToolHeader
+      <Collapsible className="activity-card__disclosure">
+        <CollapsibleTrigger
           aria-label={`${label(activity.toolName)} details`}
           className="activity-card__summary"
-          description={activity.command}
-          meta={
-            activity.durationMs === undefined
-              ? undefined
-              : `${activity.durationMs}ms`
-          }
-          state={toolState(activity.phase)}
-          title={label(activity.toolName)}
-        />
+        >
+          <span className="activity-card__tool" aria-hidden="true">
+            {activity.toolName === "bash" ? <TerminalIcon /> : <WrenchIcon />}
+          </span>
+          <strong>{actionLabel(activity)}</strong>
+          {activity.command !== undefined && <code>{activity.command}</code>}
+          <span className="activity-card__phase">
+            <PhaseIcon phase={activity.phase} />
+            <span className="sr-only">{phaseLabel(activity.phase)}</span>
+          </span>
+          {activity.durationMs !== undefined && (
+            <time>{`${activity.durationMs} ms`}</time>
+          )}
+          <ChevronDownIcon className="activity-card__chevron" />
+        </CollapsibleTrigger>
         {detail && (
-          <ToolContent className="activity-card__details">
+          <CollapsibleContent className="activity-card__details">
             {activity.command !== undefined && (
               <section>
                 <span>Command</span>
@@ -102,9 +129,9 @@ export function ActivityCard({
                 </a>
               )}
             </footer>
-          </ToolContent>
+          </CollapsibleContent>
         )}
-      </Tool>
+      </Collapsible>
       {activity.phase === "failed" && onFixInShape !== undefined && (
         <button
           className="activity-card__fix"
