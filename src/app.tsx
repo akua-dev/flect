@@ -44,6 +44,7 @@ import {
   SetRailCollapsed,
   SetRailWidth,
   SubmitAppPrompt,
+  SubmitConversationPrompt,
   SubmitShaperInstruction,
   TestPortableExtension,
   WorkbenchHandoff,
@@ -153,15 +154,10 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
     }
     initialPromptSent.current = true;
     void command(
-      workspacePhase(snapshot.shaping, false) === "blank"
-        ? SubmitShaperInstruction.make({
-            type: "submit-shaper-instruction",
-            instruction: initialPrompt,
-          })
-        : SubmitAppPrompt.make({
-            type: "submit-app-prompt",
-            text: initialPrompt,
-          }),
+      SubmitConversationPrompt.make({
+        type: "submit-conversation-prompt",
+        text: initialPrompt,
+      }),
     );
   }, [command, initialPrompt, snapshot]);
 
@@ -241,6 +237,13 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
             type: "set-external-extensions",
             role: interactiveRole,
             enabled: !snapshot.agent.externalExtensions[interactiveRole],
+          }),
+        ),
+      submitConversation: (text) =>
+        command(
+          SubmitConversationPrompt.make({
+            type: "submit-conversation-prompt",
+            text,
           }),
         ),
       app: {

@@ -550,9 +550,8 @@ export function AgentRail({
         : preview && candidateRevisionId !== undefined
           ? (text: string) =>
               workspace.previewApp.submit(text, document, candidateRevisionId)
-          : useDisabled
-            ? shaping.request
-            : workspace.app.submit;
+          : (workspace.submitConversation ??
+            (useDisabled ? shaping.request : workspace.app.submit));
   const externalExtensionsEnabled =
     workspace.externalExtensions.app && workspace.externalExtensions.shaper;
   const toggleExternalExtensions = async () => {

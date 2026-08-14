@@ -158,7 +158,8 @@ const makeRuntime = (safeMode = false) => {
           const sequence = current.sequence + 1;
           const command = envelope.command;
           const next =
-            command.type === "submit-shaper-instruction"
+            command.type === "submit-shaper-instruction" ||
+            command.type === "submit-conversation-prompt"
               ? (() => {
                   const proposal = InterfaceRevision.make({
                     version: 1,
@@ -273,7 +274,8 @@ describe("App", () => {
     await waitFor(() =>
       expect(
         dispatch.mock.calls.some(
-          ([envelope]) => envelope.command.type === "submit-shaper-instruction",
+          ([envelope]) =>
+            envelope.command.type === "submit-conversation-prompt",
         ),
       ).toBe(true),
     );

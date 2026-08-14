@@ -1303,6 +1303,35 @@ describe("FlectRuntimeLive", () => {
     }).pipe(Effect.provide(fake.layer));
   });
 
+  it.effect("aborts a Shaper that stalls while generating a tool call", () => {
+    const promptStarted = Deferred.makeUnsafe<void>();
+    const promptGate = Deferred.makeUnsafe<void>();
+    const fake = createFakePi({
+      shaperPromptStarted: promptStarted,
+      shaperPromptGate: promptGate,
+    });
+
+    return Effect.gen(function* () {
+      const runtime = yield* FlectRuntime;
+      const sessionId = yield* runtime.createSession(new SessionSelection({}));
+      const shapeFiber = yield* runtime
+        .shape(sessionId, "Shape this", defaultInterfaceDocument)
+        .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+      yield* Deferred.await(promptStarted);
+
+      yield* TestClock.adjust("60 seconds");
+      const error = yield* Fiber.join(shapeFiber).pipe(Effect.flip);
+
+      expect(error).toEqual(
+        new PiOperationFailed({
+          operation: "shape",
+          message: "The model runtime could not complete the request.",
+        }),
+      );
+      expect(fake.shaperAbort).toHaveBeenCalledOnce();
+    }).pipe(Effect.provide(fake.layer));
+  });
+
   it.effect("does not treat Shaper prose as an interface document", () => {
     const fake = createFakePi({
       promptResponse: '{"version":2,"name":"Unsafe","root":{"type":"script"}}',

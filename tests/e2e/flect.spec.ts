@@ -1317,19 +1317,44 @@ test("routes product questions and typed edit requests without exposing agent mo
   await shapeFirstInterface(page);
   const appInput = page.getByRole("textbox", { name: "Message Flect" });
   await appInput.fill("Which interface is active?");
+  completedPromptPages.add(page);
   await appInput.press("Enter");
   await expect(page.getByText("The product action completed.")).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
 
-  await appInput.fill("Explicitly change the interface");
+  const activeRevision = await page
+    .locator(".role-shell")
+    .getAttribute("data-active-revision");
+  await appInput.fill(
+    "Build a premium Northstar AI meeting-notes page: nav, hero, dashboard, CTAs, logos, 3 features.",
+  );
   await appInput.press("Enter");
   await expect(
     page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", {
+      name: "Meetings, remembered. Work, unblocked.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start free" })).toBeVisible();
+  await expect(
+    page.getByText("Live capture · Instant summaries · Action tracking", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".role-shell")).not.toHaveAttribute(
+    "data-active-revision",
+    activeRevision ?? "",
+  );
   await expect(appInput).toBeEnabled();
-  await expect(page.getByText("Explicitly change the interface")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Build a premium Northstar AI meeting-notes page: nav, hero, dashboard, CTAs, logos, 3 features.",
+    ),
+  ).toBeVisible();
 });
 
 test("keeps essential composer qualifiers at AA contrast", async ({ page }) => {

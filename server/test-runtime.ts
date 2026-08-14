@@ -76,44 +76,110 @@ This fixture is reproducible.[^1]
 
 <script>window.__flectUnsafeMarkdown = true</script>`;
 
-const shapedDocument = (_current: InterfaceDocument): InterfaceDocument =>
-  InterfaceDocumentSchema.make({
-    version: 2,
-    name: "Focused project overview",
-    root: {
-      id: "root",
-      type: "stack",
-      direction: "column",
-      gap: "lg",
-      children: [
-        {
-          id: "headline",
-          type: "text",
-          text: "Focused project overview",
-          style: "headline",
-        },
-        {
-          id: "prompt",
-          type: "prompt",
-          placeholder: "Ask Flect to shape this workspace",
-        },
-        {
-          id: "secondary-actions",
+const shapedDocument = (
+  _current: InterfaceDocument,
+  instruction = "",
+): InterfaceDocument =>
+  instruction.includes("Northstar AI meeting-notes page")
+    ? InterfaceDocumentSchema.make({
+        version: 2,
+        name: "Northstar AI meeting notes",
+        root: {
+          id: "northstar-root",
           type: "stack",
-          direction: "row",
-          gap: "sm",
+          direction: "column",
+          gap: "lg",
           children: [
             {
-              id: "shape-interface",
-              type: "button",
-              label: "Shape interface",
-              action: "shape",
+              id: "northstar-nav",
+              type: "text",
+              text: "Northstar · Product · Customers · Pricing",
+              style: "body",
+            },
+            {
+              id: "northstar-hero",
+              type: "text",
+              text: "Meetings, remembered. Work, unblocked.",
+              style: "headline",
+            },
+            {
+              id: "northstar-copy",
+              type: "text",
+              text: "AI meeting notes that turn every conversation into clear decisions, owners, and next steps.",
+              style: "body",
+            },
+            {
+              id: "northstar-actions",
+              type: "stack",
+              direction: "row",
+              gap: "sm",
+              children: [
+                {
+                  id: "northstar-start",
+                  type: "button",
+                  label: "Start free",
+                  action: "shape",
+                },
+                {
+                  id: "northstar-demo",
+                  type: "button",
+                  label: "Watch demo",
+                  action: "shape",
+                },
+              ],
+            },
+            {
+              id: "northstar-proof",
+              type: "text",
+              text: "Trusted by Linear · Vercel · Loom · Notion",
+              style: "body",
+            },
+            {
+              id: "northstar-features",
+              type: "text",
+              text: "Live capture · Instant summaries · Action tracking",
+              style: "body",
             },
           ],
         },
-      ],
-    },
-  });
+      })
+    : InterfaceDocumentSchema.make({
+        version: 2,
+        name: "Focused project overview",
+        root: {
+          id: "root",
+          type: "stack",
+          direction: "column",
+          gap: "lg",
+          children: [
+            {
+              id: "headline",
+              type: "text",
+              text: "Focused project overview",
+              style: "headline",
+            },
+            {
+              id: "prompt",
+              type: "prompt",
+              placeholder: "Ask Flect to shape this workspace",
+            },
+            {
+              id: "secondary-actions",
+              type: "stack",
+              direction: "row",
+              gap: "sm",
+              children: [
+                {
+                  id: "shape-interface",
+                  type: "button",
+                  label: "Shape interface",
+                  action: "shape",
+                },
+              ],
+            },
+          ],
+        },
+      });
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
 
@@ -380,7 +446,7 @@ export const FlectTestRuntimeLive = Layer.effect(
           : Stream.unwrap(
               Effect.gen(function* () {
                 const document = yield* validateInterfaceDocument(input);
-                const candidate = shapedDocument(document);
+                const candidate = shapedDocument(document, instruction);
                 const requestId = `shell-${crypto.randomUUID()}`;
                 const deniedRequestId = `shell-${crypto.randomUUID()}`;
                 const startedAt = Date.now();

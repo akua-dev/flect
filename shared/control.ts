@@ -317,6 +317,13 @@ export class SubmitAppPrompt extends Schema.Class<SubmitAppPrompt>(
   text: BoundedText(1, 100_000),
 }) {}
 
+export class SubmitConversationPrompt extends Schema.Class<SubmitConversationPrompt>(
+  "SubmitConversationPrompt",
+)({
+  type: Schema.Literal("submit-conversation-prompt"),
+  text: BoundedText(1, 100_000),
+}) {}
+
 export class SubmitShaperInstruction extends Schema.Class<SubmitShaperInstruction>(
   "SubmitShaperInstruction",
 )({
@@ -528,6 +535,7 @@ export const FlectCommand = Schema.Union([
   RemovePortableExtension,
   InvokePortableExtension,
   SubmitAppPrompt,
+  SubmitConversationPrompt,
   SubmitShaperInstruction,
   RequestShapeHandoff,
   CancelRole,

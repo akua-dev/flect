@@ -223,6 +223,28 @@ export interface FlectWorkspaceControllerShape {
   readonly disconnectClient: (clientId: string) => Effect.Effect<void>;
 }
 
+type ConversationPromptRoute = "app" | "shaper";
+
+const interfaceChangeVerb =
+  /\b(?:add|adjust|build|change|create|design|edit|fix|improve|make|redesign|remove|replace|restyle|style|update)\b/i;
+const interfaceSurface =
+  /\b(?:button|card|color|dashboard|design|form|footer|header|hero|interface|landing page|layout|navigation|navbar|page|screen|section|site|style|theme|typography|ui|website)\b/i;
+
+const classifyConversationPrompt = Effect.fn(
+  "Flect.Workspace.classifyConversationPrompt",
+)(
+  (
+    text: string,
+    workbenchTarget: WorkbenchSnapshot["target"],
+  ): Effect.Effect<ConversationPromptRoute> =>
+    Effect.succeed(
+      workbenchTarget === "shape" ||
+        (interfaceChangeVerb.test(text) && interfaceSurface.test(text))
+        ? "shaper"
+        : "app",
+    ),
+);
+
 interface ShareCandidateState {
   readonly material: ShareCandidateMaterial;
   readonly origin: ShareInstallationSource;
@@ -2447,6 +2469,64 @@ export const FlectWorkspaceControllerLive = Layer.effect(
       },
     );
 
+    const submitAppConversation = Effect.fn(
+      "Flect.Workspace.submitAppConversation",
+    )(function* (
+      envelope: FlectCommandEnvelope,
+      operationId: string,
+      text: string,
+    ) {
+      const current = yield* SubscriptionRef.get(state);
+      const workbench =
+        current.workbench ?? initialWorkbenchState(current.shaping);
+      if (current.shaping.safeMode || workbench.target !== "use") {
+        return yield* Effect.fail(
+          commandRejected(
+            current.shaping.safeMode
+              ? "Leave safe mode before using the App Agent."
+              : "Select Use before sending an App Agent message.",
+          ),
+        );
+      }
+      const outcome = yield* withNestedAgentCommands(
+        operationId,
+        runProjectedAgentTurn(
+          current.shaping.proposal === undefined
+            ? agent.submitAppPrompt(
+                operationContext(envelope, operationId),
+                text,
+              )
+            : agent.submitPreviewPrompt(
+                operationContext(envelope, operationId),
+                text,
+                current.shaping.proposal.document,
+                current.shaping.proposal.id,
+              ),
+        ),
+      );
+      yield* transition(envelope.source, "turn-completed", unchanged, {
+        operationId,
+        commandId: envelope.commandId,
+        role: "app",
+      });
+      if (outcome.editRequest !== undefined) {
+        const latest = yield* SubscriptionRef.get(state);
+        const revisionId =
+          latest.shaping.proposal?.id ?? latest.shaping.active.id;
+        const handoff = WorkbenchHandoff.make({
+          version: 1,
+          instruction: outcome.editRequest.instruction,
+          revisionId,
+        });
+        yield* shapeInstruction(
+          envelope,
+          operationId,
+          outcome.editRequest.instruction,
+          handoff,
+        );
+      }
+    });
+
     const runShareConflictShaper = Effect.fn(
       "Flect.Workspace.runShareConflictShaper",
     )(function* (
@@ -4465,62 +4545,24 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             intents: result.intents,
           };
         }
-        case "submit-app-prompt": {
+        case "submit-conversation-prompt": {
           const current = yield* SubscriptionRef.get(state);
           const workbench =
             current.workbench ?? initialWorkbenchState(current.shaping);
-          if (current.shaping.safeMode || workbench.target !== "use") {
-            return yield* Effect.fail(
-              commandRejected(
-                current.shaping.safeMode
-                  ? "Leave safe mode before using the App Agent."
-                  : "Select Use before sending an App Agent message.",
-              ),
-            );
-          }
-          const outcome = yield* withNestedAgentCommands(
+          const route = yield* classifyConversationPrompt(
+            command.text,
+            workbench.target,
+          );
+          return route === "shaper"
+            ? yield* shapeInstruction(envelope, operationId, command.text)
+            : yield* submitAppConversation(envelope, operationId, command.text);
+        }
+        case "submit-app-prompt": {
+          return yield* submitAppConversation(
+            envelope,
             operationId,
-            runProjectedAgentTurn(
-              current.shaping.proposal === undefined
-                ? agent.submitAppPrompt(
-                    operationContext(envelope, operationId),
-                    command.text,
-                  )
-                : agent.submitPreviewPrompt(
-                    operationContext(envelope, operationId),
-                    command.text,
-                    current.shaping.proposal.document,
-                    current.shaping.proposal.id,
-                  ),
-            ),
+            command.text,
           );
-          yield* transition(
-            envelope.source,
-            "turn-completed",
-            (current) => current,
-            {
-              operationId,
-              commandId: envelope.commandId,
-              role: "app",
-            },
-          );
-          if (outcome.editRequest !== undefined) {
-            const latest = yield* SubscriptionRef.get(state);
-            const revisionId =
-              latest.shaping.proposal?.id ?? latest.shaping.active.id;
-            const handoff = WorkbenchHandoff.make({
-              version: 1,
-              instruction: outcome.editRequest.instruction,
-              revisionId,
-            });
-            yield* shapeInstruction(
-              envelope,
-              operationId,
-              outcome.editRequest.instruction,
-              handoff,
-            );
-          }
-          return;
         }
         case "submit-shaper-instruction": {
           return yield* shapeInstruction(
@@ -5019,7 +5061,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             trustedHandoff,
           );
         }
-        case "cancel-role":
+        case "cancel-role": {
           if (
             command.role === "app" &&
             (yield* SubscriptionRef.get(state)).shaping.proposal !== undefined
@@ -5028,13 +5070,20 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           } else {
             yield* agent.cancel(command.role);
           }
-          yield* transition(envelope.source, "turn-completed", unchanged, {
-            operationId,
-            commandId: envelope.commandId,
-            role: command.role,
-            message: "Cancelled",
-          });
+          const latest = yield* kernel.snapshot;
+          yield* transition(
+            envelope.source,
+            "turn-completed",
+            (snapshot) => applyShapingSnapshot(snapshot, latest),
+            {
+              operationId,
+              commandId: envelope.commandId,
+              role: command.role,
+              message: "Cancelled",
+            },
+          );
           return;
+        }
         case "invoke-interface-action": {
           const current = yield* SubscriptionRef.get(state);
           const action = findInterfaceAction(
