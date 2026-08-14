@@ -230,6 +230,8 @@ const appSystemPrompt =
 const shaperSystemPrompt =
   "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may use the bash tool only inside Flect's disposable browser workspace. It cannot access the host filesystem, credentials, parent UI, canonical workspace, or ambient network; the reserved compatible bun command provides bounded run, build, package, preview, and stop operations. You cannot activate revisions, modify Guardian or safe mode, or load user resources.";
 
+const SHAPER_GENERATION_TIMEOUT = "60 seconds";
+
 const systemPrompt = (policy: PiSessionPolicy) => {
   const extensionBoundary =
     policy.extensions === "enabled"
@@ -878,6 +880,8 @@ no comments or trailing commas. Use \`flect interface validate\` as the only
 validation step. If it fails, rewrite the file with corrected strict JSON and
 validate again. Do not probe with \`cat\`, \`node\`, \`python\`, or commands
 outside the provided browser shell.
+Keep the candidate compact (at most 18 nodes), combine related detail into text
+nodes, and complete every Bash tool argument promptly.
 Never invent executable code, URLs, credentials, HTML, CSS, scripts, tools, or
 capabilities.
 
@@ -1373,9 +1377,19 @@ export const FlectRuntimeLive = Layer.effect(
                     },
                   );
 
-                  yield* record.shaper
+                  const completion = yield* record.shaper
                     .prompt(promptText)
-                    .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
+                    .pipe(
+                      Effect.timeoutOption(SHAPER_GENERATION_TIMEOUT),
+                      Effect.ensuring(Effect.sync(() => unsubscribe())),
+                    );
+
+                  if (Option.isNone(completion)) {
+                    yield* record.shaper
+                      .abort()
+                      .pipe(Effect.catch(() => Effect.void));
+                    return yield* Effect.fail(piFailure("shape"));
+                  }
 
                   if (response.isExceeded()) {
                     return yield* Effect.fail(piFailure("shape"));

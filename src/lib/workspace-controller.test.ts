@@ -60,6 +60,7 @@ import {
   SetRailCollapsed,
   SetRailWidth,
   SubmitAppPrompt,
+  SubmitConversationPrompt,
   SubmitShaperInstruction,
   TestPortableExtension,
   UserCommandSource,
@@ -3182,6 +3183,50 @@ describe("FlectWorkspaceController", () => {
   );
 
   it.effect(
+    "routes an explicit landing-page build request directly to Shaper",
+    () => {
+      const { layer, submitAppPrompt, submitShaperInstruction } = makeLayer();
+      return Effect.gen(function* () {
+        const controller = yield* FlectWorkspaceController;
+        yield* controller.dispatch(
+          envelope(
+            59,
+            SubmitShaperInstruction.make({
+              type: "submit-shaper-instruction",
+              instruction: "Create a focused product",
+            }),
+          ),
+        );
+        const before = yield* controller.snapshot;
+        const instruction =
+          "Build a premium Northstar AI meeting-notes page: nav, hero, dashboard, CTAs, logos, 3 features.";
+
+        yield* controller.dispatch(
+          envelope(
+            60,
+            SubmitConversationPrompt.make({
+              type: "submit-conversation-prompt",
+              text: instruction,
+            }),
+          ),
+        );
+
+        const after = yield* controller.snapshot;
+        assert.strictEqual(submitAppPrompt.mock.calls.length, 0);
+        assert.strictEqual(
+          submitShaperInstruction.mock.calls.at(-1)?.[3],
+          instruction,
+        );
+        assert.notStrictEqual(
+          after.shaping.active.id,
+          before.shaping.active.id,
+        );
+        assert.strictEqual(after.workbench?.target, "use");
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.effect(
     "keeps internal routing behind one continuously active product",
     () => {
       const { layer, submitAppPrompt, submitPreviewPrompt } = makeLayer();
@@ -3250,6 +3295,47 @@ describe("FlectWorkspaceController", () => {
           corrected.shaping.active.id,
           first.shaping.active.id,
         );
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.effect(
+    "returns a cancelled Shaper turn to a usable terminal state",
+    () => {
+      const { layer } = makeLayer();
+      return Effect.gen(function* () {
+        const controller = yield* FlectWorkspaceController;
+        yield* controller.dispatch(
+          envelope(
+            64,
+            SubmitShaperInstruction.make({
+              type: "submit-shaper-instruction",
+              instruction: "Create a focused product",
+            }),
+          ),
+        );
+        yield* controller.dispatch(
+          envelope(
+            65,
+            SelectWorkbenchTarget.make({
+              type: "select-workbench-target",
+              target: "shape",
+            }),
+          ),
+        );
+
+        yield* controller.dispatch(
+          envelope(
+            66,
+            CancelRole.make({ type: "cancel-role", role: "shaper" }),
+          ),
+        );
+
+        const cancelled = yield* controller.snapshot;
+        assert.strictEqual(cancelled.phase, "ready");
+        assert.strictEqual(cancelled.mode, "run");
+        assert.strictEqual(cancelled.workbench?.target, "use");
+        assert.strictEqual(cancelled.agent.shaper.status, "ready");
       }).pipe(Effect.provide(layer));
     },
   );

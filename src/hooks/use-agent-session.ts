@@ -121,6 +121,7 @@ export interface AgentWorkspaceController {
   readonly toggleExternalExtensions: (
     role: InteractiveAgentRole,
   ) => Promise<void>;
+  readonly submitConversation?: (text: string) => Promise<void>;
   readonly app: AppConversationController;
   readonly previewApp: PreviewAppConversationController;
   readonly shaper: ShaperConversationController;
