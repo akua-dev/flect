@@ -44,6 +44,29 @@ const formatWorkDuration = (durationMs: number | undefined) => {
   return `${seconds < 10 ? seconds.toFixed(1).replace(/\.0$/, "") : Math.round(seconds)} s`;
 };
 
+const workSpanMs = (
+  activities: NonNullable<AgentWorkspaceController["app"]["activities"]>,
+) => {
+  let earliestStart: number | undefined;
+  let latestEnd: number | undefined;
+  for (const activity of activities) {
+    const end =
+      activity.completedAt ??
+      (activity.durationMs === undefined
+        ? undefined
+        : activity.startedAt + activity.durationMs);
+    if (end === undefined) return undefined;
+    earliestStart =
+      earliestStart === undefined
+        ? activity.startedAt
+        : Math.min(earliestStart, activity.startedAt);
+    latestEnd = latestEnd === undefined ? end : Math.max(latestEnd, end);
+  }
+  return earliestStart === undefined || latestEnd === undefined
+    ? undefined
+    : latestEnd - earliestStart;
+};
+
 function WorkLog({
   activities,
   needsAttention,
@@ -63,14 +86,7 @@ function WorkLog({
     if (needsAttention) setExpanded(true);
   }, [needsAttention]);
   const count = activities.length;
-  const duration = formatWorkDuration(
-    activities.every((activity) => activity.durationMs !== undefined)
-      ? activities.reduce(
-          (total, activity) => total + (activity.durationMs ?? 0),
-          0,
-        )
-      : undefined,
-  );
+  const duration = formatWorkDuration(workSpanMs(activities));
   const stateLabel = running
     ? "Working"
     : needsAttention

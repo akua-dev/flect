@@ -1319,7 +1319,7 @@ describe("FlectRuntimeLive", () => {
         .pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
       yield* Deferred.await(promptStarted);
 
-      yield* TestClock.adjust("60 seconds");
+      yield* TestClock.adjust("180 seconds");
       const error = yield* Fiber.join(shapeFiber).pipe(Effect.flip);
 
       expect(error).toEqual(

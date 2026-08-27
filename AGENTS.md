@@ -9,6 +9,8 @@ Before changing Flect:
   `AGENTS.md` covering the files in scope.
 - Read `.agents/skills/effect-ts/SKILL.md` and the relevant references it
   routes to before changing application architecture or Effect code.
+- Read `.agents/skills/flect-ui-state/SKILL.md` before adding or changing
+  React components, hooks, or any Effect-to-React state wiring.
 - Run `bun run prepare` if `.repos/effect` is missing, then use that pinned
   checkout as the primary Effect API reference.
 - Inspect the worktree and preserve unrelated or unfinished work.

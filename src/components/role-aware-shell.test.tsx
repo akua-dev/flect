@@ -108,7 +108,12 @@ const workspace = (
   },
   shaper: {
     ...shaperRole(),
-    shape: vi.fn(() => Promise.resolve(documentWithoutPrompt)),
+    shape: vi.fn(() =>
+      Promise.resolve({
+        kind: "document" as const,
+        document: documentWithoutPrompt,
+      }),
+    ),
   },
   diagnoseRecovery: vi.fn(() =>
     Promise.resolve({
@@ -479,7 +484,12 @@ describe("RoleAwareShell", () => {
         messages: [
           { id: "shape-1", role: "assistant", content: "Shaper history" },
         ],
-        shape: vi.fn(() => Promise.resolve(documentWithoutPrompt)),
+        shape: vi.fn(() =>
+          Promise.resolve({
+            kind: "document" as const,
+            document: documentWithoutPrompt,
+          }),
+        ),
       },
     });
     const { rerender } = render(

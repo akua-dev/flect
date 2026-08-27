@@ -55,12 +55,28 @@ export class FlectCommandGateway extends Context.Service<
   FlectCommandGatewayShape
 >()("flect/FlectCommandGateway") {}
 
+export interface AuthoredAppSummary {
+  readonly name: string;
+  readonly kind: string;
+  readonly entrypoint: string;
+  readonly includedFiles: number;
+  readonly warnings: ReadonlyArray<string>;
+}
+
 export interface FlectInterfaceCommandGatewayShape {
   readonly validate: (
     path: string,
   ) => Effect.Effect<InterfaceDocument, FlectGatewayError>;
   readonly propose: (
     path: string,
+  ) => Effect.Effect<unknown, FlectGatewayError | FlectCommandError>;
+  readonly validateApp: (
+    directory: string,
+    name?: string,
+  ) => Effect.Effect<AuthoredAppSummary, FlectGatewayError>;
+  readonly proposeApp: (
+    directory: string,
+    name?: string,
   ) => Effect.Effect<unknown, FlectGatewayError | FlectCommandError>;
 }
 

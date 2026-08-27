@@ -517,7 +517,7 @@ describe("AgentWorkspace", () => {
         proposal.connect(workspace);
         yield* workspace.refresh;
         yield* workspace.submitAppPrompt(userOperation(1), "Use the product");
-        const document = yield* workspace.submitShaperInstruction(
+        const outcome = yield* workspace.submitShaperInstruction(
           userOperation(2),
           "Change the interface\n\nProtected selection context: headline",
           defaultInterfaceDocument,
@@ -525,7 +525,10 @@ describe("AgentWorkspace", () => {
         );
         const snapshot = yield* workspace.snapshot;
 
-        assert.deepStrictEqual(document, defaultInterfaceDocument);
+        assert.deepStrictEqual(outcome, {
+          kind: "document",
+          document: defaultInterfaceDocument,
+        });
         assert.strictEqual(createSession.mock.calls.length, 1);
         assert.deepStrictEqual(
           snapshot.app.messages.map((message) => message.content),
@@ -533,7 +536,10 @@ describe("AgentWorkspace", () => {
         );
         assert.deepStrictEqual(
           snapshot.shaper.messages.map((message) => message.content),
-          ["Change the interface", `Change complete: ${document.name}`],
+          [
+            "Change the interface",
+            `Change complete: ${defaultInterfaceDocument.name}`,
+          ],
         );
         assert.deepStrictEqual(
           snapshot.app.messages.map((message) => message.turnId),
@@ -822,7 +828,10 @@ describe("AgentWorkspace", () => {
           ),
         );
 
-        assert.deepStrictEqual(shaped, candidate);
+        assert.deepStrictEqual(shaped, {
+          kind: "document",
+          document: candidate,
+        });
         assert.strictEqual(vi.mocked(client.shape).mock.calls.length, 1);
         assert.strictEqual(afterTurn._tag, "Failure");
       }).pipe(Effect.provide(layer));

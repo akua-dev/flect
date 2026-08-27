@@ -316,7 +316,7 @@ test("keeps completed agent work quiet behind the final answer", async ({
   await shapeFirstInterface(page);
 
   const work = page.getByRole("region", { name: "2 tool calls" });
-  await expect(work).toContainText("Worked for 42 ms");
+  await expect(work).toContainText("Worked for 44 ms");
   await expect(work).toContainText("2 steps");
   await expect(
     work.getByRole("button", { name: "Show 2 completed steps" }),
@@ -1355,6 +1355,45 @@ test("routes product questions and typed edit requests without exposing agent mo
       "Build a premium Northstar AI meeting-notes page: nav, hero, dashboard, CTAs, logos, 3 features.",
     ),
   ).toBeVisible();
+});
+
+test("authors a real landing page website into the isolated canvas without ceremony", async ({
+  page,
+}) => {
+  const input = page.getByRole("textbox", { name: "Message Flect" });
+  await input.fill("Make a landing page website for Driftwood Coffee.");
+  completedShapePages.add(page);
+  await input.press("Enter");
+
+  const frame = page.frameLocator(".capsule-frame");
+  await expect(
+    frame.getByRole("heading", { name: "Driftwood Coffee", level: 1 }),
+  ).toBeVisible();
+  await expect(frame.getByRole("link", { name: "See the menu" })).toBeVisible();
+  await expect(frame.getByText("Signature Drift Latte")).toBeVisible();
+
+  // A conversationally authored app is a local edit: no Activate/Discard
+  // ceremony, the running canvas simply becomes the website.
+  await expect(
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Activate app" })).toHaveCount(
+    0,
+  );
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-phase",
+    "accepted",
+  );
+  await expect(
+    page.getByText("Change complete: Driftwood Coffee"),
+  ).toBeVisible();
+
+  // The website owns its own visual ground inside the isolated frame instead
+  // of inheriting the shell background.
+  const background = await frame
+    .locator("body")
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(background).toBe("rgb(250, 246, 240)");
 });
 
 test("keeps essential composer qualifiers at AA contrast", async ({ page }) => {

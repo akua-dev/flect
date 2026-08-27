@@ -118,7 +118,9 @@ const workspace: AgentWorkspaceController = {
     messages: [{ id: "s", role: "assistant", content: "Shaper only" }],
     lastPrompt: "",
     error: undefined,
-    shape: vi.fn(() => Promise.resolve(document)),
+    shape: vi.fn(() =>
+      Promise.resolve({ kind: "document" as const, document }),
+    ),
     cancel: vi.fn(() => Promise.resolve()),
   },
   diagnoseRecovery: vi.fn(() =>

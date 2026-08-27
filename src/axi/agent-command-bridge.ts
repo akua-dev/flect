@@ -80,6 +80,31 @@ export const AgentCommandBridgeLive = Layer.effect(
                 }),
               );
             return;
+          case "propose-app":
+            yield* agent
+              .proposeShaperApp(
+                request.source,
+                request.operation.archive,
+                request.operation.name,
+              )
+              .pipe(
+                Effect.matchEffect({
+                  onFailure: (error) =>
+                    Deferred.fail(request.response, error).pipe(Effect.asVoid),
+                  onSuccess: (proposal) =>
+                    complete(
+                      request,
+                      AgentGatewayResult.make({
+                        type: "propose-app",
+                        value: {
+                          status: proposal.status,
+                          name: proposal.name,
+                        },
+                      }),
+                    ),
+                }),
+              );
+            return;
           case "command": {
             const snapshot = yield* controller.snapshot;
             const envelope = FlectCommandEnvelope.make({

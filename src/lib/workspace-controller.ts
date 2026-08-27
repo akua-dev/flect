@@ -60,7 +60,7 @@ import {
   UserCommandSource,
   WorkbenchHandoff,
   WorkbenchSnapshot,
-  WorkspaceBuildSnapshot,
+  type WorkspaceBuildSnapshot,
   WorkspacePersistenceSnapshot,
 } from "../../shared/control";
 import type { PortableExtensionPackage } from "../../shared/extensions";
@@ -71,7 +71,7 @@ import {
 } from "../../shared/interface-actions";
 import {
   defaultInterfaceDocument,
-  InterfaceDocument,
+  type InterfaceDocument,
   type InterfaceNode,
   validateInterfaceDocument,
 } from "../../shared/interface-document";
@@ -105,7 +105,6 @@ import {
   ShareUrlInstallationSource,
 } from "../../shared/share-installation";
 import { ShellPreferencesValue } from "../../shared/shell-preferences";
-import { buildFrameworkCapsule } from "../build/framework-capsule";
 import { ProposalBuild } from "../build/proposal-build-service";
 import { ProductCapabilityRegistry } from "../capabilities/product-capability-registry";
 import {
@@ -2409,7 +2408,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             role: "shaper",
           },
         );
-        const candidate = yield* withNestedAgentCommands(
+        const outcome = yield* withNestedAgentCommands(
           operationId,
           runProjectedAgentTurn(
             agent.submitShaperInstruction(
@@ -2442,6 +2441,21 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             ? {}
             : { lastKnownGoodReview: current.lastKnownGoodReview }),
         }));
+        if (outcome.kind === "app") {
+          if (shaping.proposal !== undefined) {
+            return yield* Effect.fail(
+              commandRejected(
+                "Resolve the current preview before authoring an app.",
+              ),
+            );
+          }
+          yield* stageCapsuleProposal(envelope, operationId, outcome.archive, {
+            proposer: "shaper",
+            finalize: "local",
+          });
+          return;
+        }
+        const candidate = outcome.document;
         if (shaping.proposal === undefined) {
           // A typed local edit cannot add host authority. Commit it as one
           // accepted Git transition so the live canvas stays fast and its
@@ -2978,6 +2992,53 @@ export const FlectWorkspaceControllerLive = Layer.effect(
         );
       }).pipe(Effect.catch(() => Effect.void));
     }
+
+    const stageCapsuleProposal = Effect.fn(
+      "Flect.Workspace.stageCapsuleProposal",
+    )(function* (
+      envelope: FlectCommandEnvelope,
+      operationId: string,
+      archive: Uint8Array,
+      options: {
+        readonly proposer: "user" | "shaper";
+        readonly finalize: "candidate" | "local";
+      },
+    ) {
+      // The staging pipeline runs only while importing or authoring an app;
+      // loading it on demand keeps it out of the protected pre-tool workspace
+      // budget.
+      const staging = yield* Effect.tryPromise({
+        try: () => import("./capsule-staging"),
+        catch: () =>
+          commandRejected(
+            "The capsule staging pipeline could not load safely.",
+          ),
+      });
+      yield* staging.stageCapsuleProposal(
+        {
+          kernel,
+          git,
+          proposalBuild,
+          extensionCatalog,
+          capsulePresentation,
+          flectVersion: packageMetadata.version,
+          currentCapsulePlatform,
+          reviewDecodedCapsule,
+          compiledCapsulePresentation,
+          updateCapsulePresentation,
+          restoreCapsulePresentation,
+          reportBuild,
+          transitionShaping,
+          acceptProposal,
+          syncExtensionSnapshot,
+          releasePreview: agent.releasePreview,
+        },
+        envelope,
+        operationId,
+        archive,
+        options,
+      );
+    });
 
     const runCommand: (
       envelope: FlectCommandEnvelope,
@@ -4572,433 +4633,10 @@ export const FlectWorkspaceControllerLive = Layer.effect(
           );
         }
         case "import-capsule": {
-          const current = yield* kernel.snapshot;
-          if (current.proposal !== undefined) {
-            return yield* Effect.fail(
-              commandRejected(
-                "Activate or discard the current candidate before importing.",
-              ),
-            );
-          }
-          const capsule = yield* decodeCapsule(command.archive).pipe(
-            Effect.mapError((error) => commandRejected(error.message)),
-          );
-          let candidateReview = yield* reviewDecodedCapsule(
-            capsule,
-            command.archive,
-          );
-          const plainWebSource = capsule.manifest.entrypoints.some(
-            (entry) => entry.id === "plain-web",
-          );
-          const browserSource = capsule.manifest.entrypoints.find(
-            (entry) => entry.id === "browser-source",
-          );
-          const entrypoint = capsule.manifest.entrypoints.find(
-            (entry) => entry.id === "flect-interface",
-          );
-          const file = capsule.files.find(
-            (candidate) => candidate.path === entrypoint?.path,
-          );
-          let document: InterfaceDocument;
-          let compiledPresentation: CompiledCapsulePresentation | undefined;
-          if (entrypoint !== undefined && file !== undefined) {
-            const input = yield* Effect.try({
-              try: (): unknown =>
-                JSON.parse(
-                  new TextDecoder("utf-8", { fatal: true }).decode(
-                    file.contents,
-                  ),
-                ),
-              catch: () => commandRejected("The capsule interface is invalid."),
-            });
-            document = yield* validateInterfaceDocument(input).pipe(
-              Effect.mapError(() =>
-                commandRejected("The capsule interface is invalid."),
-              ),
-            );
-          } else if (browserSource === undefined) {
-            const compiledEntry = capsule.manifest.entrypoints.find(
-              (candidate) => candidate.path.endsWith(".html"),
-            );
-            const compiledFile = capsule.files.find(
-              (candidate) => candidate.path === compiledEntry?.path,
-            );
-            if (compiledEntry === undefined || compiledFile === undefined) {
-              return yield* Effect.fail(
-                commandRejected(
-                  "This capsule has no supported interface entrypoint.",
-                ),
-              );
-            }
-            const html = yield* Effect.try({
-              try: () =>
-                new TextDecoder("utf-8", { fatal: true }).decode(
-                  compiledFile.contents,
-                ),
-              catch: () =>
-                commandRejected("The capsule entrypoint is invalid."),
-            });
-            document = InterfaceDocument.make({
-              version: 2,
-              name: capsule.manifest.name,
-              root: {
-                id: "root",
-                type: "stack",
-                direction: "column",
-                gap: "lg",
-                children: [
-                  {
-                    id: "capsule-title",
-                    type: "text",
-                    text: capsule.manifest.name,
-                    style: "headline",
-                  },
-                  {
-                    id: "capsule-agent",
-                    type: "agent-panel",
-                    title: "App Agent",
-                  },
-                ],
-              },
-            });
-            compiledPresentation = {
-              id: capsule.manifest.id,
-              name: capsule.manifest.name,
-              html,
-              entrypointPath: compiledEntry.path,
-              assets: capsule.files
-                .filter((candidate) => candidate.path !== compiledEntry.path)
-                .map((candidate) => ({
-                  path: candidate.path,
-                  contents: candidate.contents.slice(),
-                })),
-              archive: command.archive.slice(),
-            };
-          } else {
-            document = InterfaceDocument.make({
-              version: 2,
-              name: capsule.manifest.name,
-              root: {
-                id: "root",
-                type: "stack",
-                direction: "column",
-                gap: "lg",
-                children: [
-                  {
-                    id: "capsule-title",
-                    type: "text",
-                    text: capsule.manifest.name,
-                    style: "headline",
-                  },
-                  {
-                    id: "capsule-agent",
-                    type: "agent-panel",
-                    title: "App Agent",
-                  },
-                ],
-              },
-            });
-          }
-          const proposal = yield* kernel.propose(document, "user");
-          let preview = yield* kernel.preview(proposal.id);
-          let sourceProposalBranch: string | undefined;
-          if (
-            (plainWebSource || browserSource !== undefined) &&
-            git !== undefined
-          ) {
-            const checkpointSource = Effect.gen(function* () {
-              yield* git.open({ workspaceId: "default" });
-              const repository = yield* git.status({
-                proposalBranch: `flect/proposal/${preview.id}`,
-              });
-              if (
-                repository.acceptedCommit === undefined ||
-                repository.lastKnownGoodCommit === undefined ||
-                repository.proposalBranch === undefined ||
-                repository.proposalCommit === undefined
-              ) {
-                return yield* Effect.fail(
-                  GitWorkspaceFailure.make({
-                    operation: "status",
-                    reason: "invalid-ref",
-                    message: "The imported project Git refs are unavailable.",
-                  }),
-                );
-              }
-              yield* git.checkpoint({
-                branch: "flect/authoring",
-                ...(repository.authoringCommit === undefined
-                  ? { baseCommit: repository.acceptedCommit }
-                  : { expectedCommit: repository.authoringCommit }),
-                files: capsule.files.map((source) => ({
-                  path: `project/${source.path}`,
-                  contents: source.contents,
-                })),
-                guards: [
-                  {
-                    branch: "flect/accepted",
-                    commit: repository.acceptedCommit,
-                  },
-                  {
-                    branch: "flect/last-known-good",
-                    commit: repository.lastKnownGoodCommit,
-                  },
-                  {
-                    branch: repository.proposalBranch,
-                    commit: repository.proposalCommit,
-                  },
-                ],
-                message: `Import ${capsule.manifest.name} ${capsule.manifest.version}`,
-              });
-              return repository.proposalBranch;
-            }).pipe(
-              Effect.tapError(() =>
-                kernel.reject(preview.id).pipe(Effect.ignore),
-              ),
-              Effect.mapError(() =>
-                commandRejected(
-                  "The imported project could not be checkpointed safely.",
-                ),
-              ),
-            );
-            sourceProposalBranch = yield* checkpointSource;
-            preview = yield* kernel.supersede(preview.id, document, "user");
-          }
-          if (browserSource !== undefined) {
-            if (git === undefined || proposalBuild === undefined) {
-              yield* kernel.reject(preview.id).pipe(Effect.ignore);
-              return yield* Effect.fail(
-                commandRejected(
-                  "Portable framework builds are unavailable in this host.",
-                ),
-              );
-            }
-            const builtArchive = yield* Effect.gen(function* () {
-              let repository = yield* git.status({
-                proposalBranch:
-                  sourceProposalBranch ?? `flect/proposal/${preview.id}`,
-              });
-              const requestFor = (
-                status: typeof repository,
-              ): Effect.Effect<ProposalBuildRequest, FlectCommandError> =>
-                status.acceptedCommit === undefined ||
-                status.lastKnownGoodCommit === undefined ||
-                status.proposalBranch === undefined ||
-                status.proposalCommit === undefined
-                  ? Effect.fail(
-                      commandRejected(
-                        "The exact imported project proposal is unavailable.",
-                      ),
-                    )
-                  : Effect.succeed(
-                      ProposalBuildRequest.make({
-                        proposalBranch: status.proposalBranch,
-                        proposalCommit: status.proposalCommit,
-                        acceptedCommit: status.acceptedCommit,
-                        lastKnownGoodCommit: status.lastKnownGoodCommit,
-                        entrypoint: browserSource.path,
-                      }),
-                    );
-              let buildRequest = yield* requestFor(repository);
-              yield* reportBuild(
-                envelope,
-                operationId,
-                WorkspaceBuildSnapshot.make({
-                  version: 1,
-                  phase: "resolving-dependencies",
-                  message: "Resolving portable dependencies",
-                  sourceRevision: buildRequest.proposalCommit,
-                }),
-              );
-              const resolvedLock = yield* proposalBuild
-                .resolvePackageLock(buildRequest)
-                .pipe(
-                  Effect.mapError((error) => commandRejected(error.message)),
-                );
-              if (resolvedLock?.needsCheckpoint === true) {
-                if (repository.authoringCommit === undefined) {
-                  return yield* Effect.fail(
-                    commandRejected(
-                      "The imported project authoring checkpoint is unavailable.",
-                    ),
-                  );
-                }
-                yield* reportBuild(
-                  envelope,
-                  operationId,
-                  WorkspaceBuildSnapshot.make({
-                    version: 1,
-                    phase: "checkpointing-lock",
-                    message: "Checkpointing dependency lock",
-                    sourceRevision: buildRequest.proposalCommit,
-                  }),
-                );
-                yield* git
-                  .checkpoint({
-                    branch: "flect/authoring",
-                    expectedCommit: repository.authoringCommit,
-                    files: [
-                      {
-                        path: "project/package-lock.json",
-                        contents: resolvedLock.contents,
-                      },
-                    ],
-                    guards: [
-                      {
-                        branch: "flect/accepted",
-                        commit: buildRequest.acceptedCommit,
-                      },
-                      {
-                        branch: "flect/last-known-good",
-                        commit: buildRequest.lastKnownGoodCommit,
-                      },
-                      {
-                        branch: buildRequest.proposalBranch,
-                        commit: buildRequest.proposalCommit,
-                      },
-                    ],
-                    message: "Lock portable browser dependencies",
-                  })
-                  .pipe(
-                    Effect.mapError(() =>
-                      commandRejected(
-                        "The generated package lock could not be checkpointed safely.",
-                      ),
-                    ),
-                  );
-                preview = yield* kernel.supersede(preview.id, document, "user");
-                repository = yield* git.status({
-                  proposalBranch: buildRequest.proposalBranch,
-                });
-                buildRequest = yield* requestFor(repository);
-              }
-              yield* reportBuild(
-                envelope,
-                operationId,
-                WorkspaceBuildSnapshot.make({
-                  version: 1,
-                  phase: "compiling",
-                  message: "Compiling exact proposal",
-                  sourceRevision: buildRequest.proposalCommit,
-                }),
-              );
-              const artifact = yield* proposalBuild
-                .compile(buildRequest)
-                .pipe(
-                  Effect.mapError((error) => commandRejected(error.message)),
-                );
-              yield* reportBuild(
-                envelope,
-                operationId,
-                WorkspaceBuildSnapshot.make({
-                  version: 1,
-                  phase: "packaging",
-                  message: "Packaging verified outputs",
-                  buildId: artifact.buildId,
-                  sourceRevision: artifact.sourceRevision,
-                  artifactDigest: artifact.artifactDigest,
-                }),
-              );
-              const archive = yield* buildFrameworkCapsule({
-                sourceArchive: command.archive,
-                artifact,
-              }).pipe(
-                Effect.mapError((error) => commandRejected(error.message)),
-              );
-              yield* reportBuild(
-                envelope,
-                operationId,
-                WorkspaceBuildSnapshot.make({
-                  version: 1,
-                  phase: "succeeded",
-                  message: "Portable browser build verified",
-                  buildId: artifact.buildId,
-                  sourceRevision: artifact.sourceRevision,
-                  artifactDigest: artifact.artifactDigest,
-                }),
-              );
-              return archive;
-            }).pipe(
-              Effect.tapError(() =>
-                reportBuild(
-                  envelope,
-                  operationId,
-                  WorkspaceBuildSnapshot.make({
-                    version: 1,
-                    phase: "failed",
-                    message: "Portable browser build failed safely",
-                  }),
-                ),
-              ),
-              Effect.tapError(() =>
-                kernel.reject(preview.id).pipe(Effect.ignore),
-              ),
-            );
-            const builtCapsule = yield* decodeCapsule(builtArchive).pipe(
-              Effect.mapError((error) => commandRejected(error.message)),
-            );
-            candidateReview = yield* reviewDecodedCapsule(
-              builtCapsule,
-              builtArchive,
-            );
-            compiledPresentation =
-              yield* compiledCapsulePresentation(builtArchive);
-            if (compiledPresentation === undefined) {
-              yield* kernel.reject(preview.id).pipe(Effect.ignore);
-              return yield* Effect.fail(
-                commandRejected(
-                  "The verified framework build has no portable preview.",
-                ),
-              );
-            }
-          }
-          if (extensionCatalog !== undefined) {
-            const reviewedCapsule = yield* decodeCapsule(
-              candidateReview.archive,
-            ).pipe(Effect.mapError((error) => commandRejected(error.message)));
-            yield* extensionCatalog
-              .stageCandidate({
-                capsuleId: reviewedCapsule.manifest.id,
-                packages: reviewedCapsule.manifest.extensions ?? [],
-                flectVersion: packageMetadata.version,
-                platform: currentCapsulePlatform(),
-              })
-              .pipe(
-                Effect.tapError(() =>
-                  kernel.reject(preview.id).pipe(Effect.ignore),
-                ),
-                Effect.mapError((error) => commandRejected(error.message)),
-              );
-            yield* syncExtensionSnapshot();
-          }
-          yield* updateCapsulePresentation((presentation) => ({
-            ...(presentation.accepted === undefined
-              ? {}
-              : { accepted: presentation.accepted }),
-            ...(presentation.lastKnownGood === undefined
-              ? {}
-              : { lastKnownGood: presentation.lastKnownGood }),
-            ...(presentation.acceptedReview === undefined
-              ? {}
-              : { acceptedReview: presentation.acceptedReview }),
-            ...(presentation.lastKnownGoodReview === undefined
-              ? {}
-              : {
-                  lastKnownGoodReview: presentation.lastKnownGoodReview,
-                }),
-            candidateReview,
-            ...(compiledPresentation === undefined
-              ? {}
-              : { candidate: compiledPresentation }),
-          }));
-          const next = yield* kernel.snapshot;
-          yield* transitionShaping(
-            envelope,
-            operationId,
-            "revision-previewed",
-            next,
-            preview.id,
-          );
+          yield* stageCapsuleProposal(envelope, operationId, command.archive, {
+            proposer: "user",
+            finalize: "candidate",
+          });
           return;
         }
         case "request-shape-handoff": {

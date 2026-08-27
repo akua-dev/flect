@@ -24,7 +24,9 @@ export class ProjectImportReport extends Schema.Class<ProjectImportReport>(
   ]),
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(80)),
   entrypoint: Path,
-  source: Schema.optionalKey(Schema.Literals(["directory", "archive", "git"])),
+  source: Schema.optionalKey(
+    Schema.Literals(["directory", "archive", "git", "conversation"]),
+  ),
   revision: Schema.optionalKey(Text),
   includedFiles: Schema.Int.check(
     Schema.isBetween({ minimum: 1, maximum: 256 }),

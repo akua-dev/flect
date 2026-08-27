@@ -355,8 +355,11 @@ The repository now implements the continuous live-canvas loop in the browser
 and the shared macOS Tauri frontend: one visible conversation and draft, no
 Edit/Run or agent-role switcher, direct validated local UI changes without
 Keep/Reject ceremony, responsive protected controls, quiet Git-backed history,
-and deterministic last-known-good recovery. External capsules, shared code,
-and authority changes remain explicit Activate/Discard decisions.
+and deterministic last-known-good recovery. A conversational request for a
+real website or app makes the agent author complete web source in its sandbox;
+the validated result compiles and runs in a true isolated browser frame as the
+canvas and accepts automatically like any other local edit. External capsules,
+shared code, and authority changes remain explicit Activate/Discard decisions.
 
 An Astro static document sits on Vite. Focus and pointer intent arm a tiny
 coordinator; submitting the first prompt, using the keyboard shortcut, or
