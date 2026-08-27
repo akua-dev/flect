@@ -11,12 +11,12 @@ is in [`reference-product.test.ts`](./reference-product.test.ts).
 
 ## What it exposes
 
-| Operation | Transport | Product authority |
-| --- | --- | --- |
-| `reference.status` | Offline Effect | Read local product status |
-| `reference.projects.list` | Fixed GraphQL query | Read one workspace summary |
-| `reference.projects.archive` | Fixed GraphQL mutation | Write project `alpha` |
-| `reference.projects.subscribe` | Bounded Effect Stream | Read ordered workspace events |
+| Operation                      | Transport              | Product authority             |
+| ------------------------------ | ---------------------- | ----------------------------- |
+| `reference.status`             | Offline Effect         | Read local product status     |
+| `reference.projects.list`      | Fixed GraphQL query    | Read one workspace summary    |
+| `reference.projects.archive`   | Fixed GraphQL mutation | Write project `alpha`         |
+| `reference.projects.subscribe` | Bounded Effect Stream  | Read ordered workspace events |
 
 Callers receive JSON or a schema-backed public failure. They cannot supply an
 endpoint, GraphQL document, transport header, credential, socket, retry loop, or
@@ -29,25 +29,23 @@ the resulting Layer wherever Flect's `ProductCapabilityRegistry` and
 `ProductEventRegistry` are used:
 
 ```ts
-import { Effect, Layer } from "effect";
-import { ProductCapabilityDecisionStore } from
-  "../../src/capabilities/product-capability-decision-store";
-import { makeReferenceProductLayer } from "./reference-product";
+import { Effect, Layer } from 'effect';
+import { ProductCapabilityDecisionStore } from '../../src/capabilities/product-capability-decision-store';
+import { makeReferenceProductLayer } from './reference-product';
 
 const decisionStore = Layer.succeed(ProductCapabilityDecisionStore)({
-  load: () => Effect.succeed({ decisions: [] }),
-  save: () => Effect.void,
+	load: () => Effect.succeed({ decisions: [] }),
+	save: () => Effect.void
 });
 
 const ReferenceProductLive = makeReferenceProductLayer({
-  inferenceOwner: "user",
-  credentialHeaders: (policyId) =>
-    policyId === "reference.projects.archive.v1"
-      ? readCredentialFromProductHost()
-      : Effect.succeed([]),
-  authorize: ({ operationId, input }) =>
-    productPolicyAllows(operationId, input),
-  eventConnector: productEventConnector,
+	inferenceOwner: 'user',
+	credentialHeaders: (policyId) =>
+		policyId === 'reference.projects.archive.v1'
+			? readCredentialFromProductHost()
+			: Effect.succeed([]),
+	authorize: ({ operationId, input }) => productPolicyAllows(operationId, input),
+	eventConnector: productEventConnector
 }).pipe(Layer.provide(decisionStore));
 ```
 
@@ -66,14 +64,16 @@ The user first grants a requested capability through the protected broker. A
 trusted caller can then invoke a named operation:
 
 ```ts
-const projects = yield* registry.invoke(
-  referenceProductContext,
-  ProductOperationInvocation.make({
-    version: 1,
-    operationId: "reference.projects.list",
-    input: { workspaceId: "reference-workspace" },
-  }),
-);
+const projects =
+	yield *
+	registry.invoke(
+		referenceProductContext,
+		ProductOperationInvocation.make({
+			version: 1,
+			operationId: 'reference.projects.list',
+			input: { workspaceId: 'reference-workspace' }
+		})
+	);
 ```
 
 A user grant never overrides product policy. If `authorize` returns `false`, the
@@ -101,6 +101,6 @@ transport access.
 Run the focused proof with:
 
 ```sh
-bunx vitest run examples/product-adapter/reference-product.test.ts \
+./node_modules/.bin/vitest run examples/product-adapter/reference-product.test.ts \
   tests/fixtures/reference-product-capsule.test.ts
 ```

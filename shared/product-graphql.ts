@@ -1,1 +1,1 @@
-export * from "../packages/product/src/product-graphql";
+export * from '../packages/product/src/product-graphql';

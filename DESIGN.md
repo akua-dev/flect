@@ -3,68 +3,68 @@ name: Flect
 description: The interface that takes your shape.
 colors:
   # Dark-mode values as shipped in src/styles.css; light-mode noted inline.
-  void: "oklch(0.145 0 0)" # light: oklch(1 0 0)
-  canvas: "oklch(0.145 0 0)" # aliases void; light: oklch(1 0 0)
-  surface: "oklch(0.205 0 0)" # light: oklch(1 0 0)
-  surface-raised: "oklch(0.269 0 0)" # light: oklch(0.97 0 0)
-  ink: "oklch(0.985 0 0)" # light: oklch(0.145 0 0)
-  muted: "oklch(0.708 0 0)" # light: oklch(0.45 0 0)
-  quiet: "oklch(0.708 0 0)" # aliases muted; light: oklch(0.45 0 0)
-  line: "oklch(1 0 0 / 10%)" # light: oklch(0.922 0 0)
-  primary: "oklch(0.922 0 0)" # light: oklch(0.205 0 0)
-  primary-hover: "oklch(0.922 0 0)" # light: oklch(0.205 0 0)
-  ready: "oklch(0.985 0 0)" # aliases ink until a mint accent ships; light: oklch(0.145 0 0)
-  danger: "oklch(0.704 0.191 22.216)" # light: oklch(0.577 0.245 27.325)
+  void: 'oklch(0.145 0 0)' # light: oklch(1 0 0)
+  canvas: 'oklch(0.145 0 0)' # aliases void; light: oklch(1 0 0)
+  surface: 'oklch(0.205 0 0)' # light: oklch(1 0 0)
+  surface-raised: 'oklch(0.269 0 0)' # light: oklch(0.97 0 0)
+  ink: 'oklch(0.985 0 0)' # light: oklch(0.145 0 0)
+  muted: 'oklch(0.708 0 0)' # light: oklch(0.45 0 0)
+  quiet: 'oklch(0.708 0 0)' # aliases muted; light: oklch(0.45 0 0)
+  line: 'oklch(1 0 0 / 10%)' # light: oklch(0.922 0 0)
+  primary: 'oklch(0.922 0 0)' # light: oklch(0.205 0 0)
+  primary-hover: 'oklch(0.922 0 0)' # light: oklch(0.205 0 0)
+  ready: 'oklch(0.985 0 0)' # aliases ink until a mint accent ships; light: oklch(0.145 0 0)
+  danger: 'oklch(0.704 0.191 22.216)' # light: oklch(0.577 0.245 27.325)
 typography:
   headline:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, Inter, sans-serif"
-    fontSize: "2rem"
+    fontFamily: '-apple-system, BlinkMacSystemFont, SF Pro Display, Inter, sans-serif'
+    fontSize: '2rem'
     fontWeight: 590
     lineHeight: 1.15
-    letterSpacing: "-0.025em"
+    letterSpacing: '-0.025em'
   body:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Inter, sans-serif"
-    fontSize: "1rem"
+    fontFamily: '-apple-system, BlinkMacSystemFont, SF Pro Text, Inter, sans-serif'
+    fontSize: '1rem'
     fontWeight: 430
     lineHeight: 1.5
-    letterSpacing: "-0.01em"
+    letterSpacing: '-0.01em'
   label:
-    fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Text, Inter, sans-serif"
-    fontSize: "0.8125rem"
+    fontFamily: '-apple-system, BlinkMacSystemFont, SF Pro Text, Inter, sans-serif'
+    fontSize: '0.8125rem'
     fontWeight: 520
     lineHeight: 1.25
-    letterSpacing: "-0.005em"
+    letterSpacing: '-0.005em'
 rounded:
-  control: "8px"
-  surface: "12px"
-  prompt: "16px"
-  pill: "999px"
+  control: '8px'
+  surface: '12px'
+  prompt: '16px'
+  pill: '999px'
 spacing:
   # hairline is 1px logically; on 2dppx+ displays structural separators render
   # at 0.5px via the --hairline token, restored to 1px under prefers-contrast.
-  hairline: "1px"
-  xs: "4px"
-  sm: "8px"
-  md: "12px"
-  lg: "16px"
-  xl: "24px"
-  xxl: "32px"
+  hairline: '1px'
+  xs: '4px'
+  sm: '8px'
+  md: '12px'
+  lg: '16px'
+  xl: '24px'
+  xxl: '32px'
 components:
   button-primary:
-    backgroundColor: "{colors.ink}"
-    textColor: "{colors.void}"
-    rounded: "{rounded.pill}"
-    size: "40px"
+    backgroundColor: '{colors.ink}'
+    textColor: '{colors.void}'
+    rounded: '{rounded.pill}'
+    size: '40px'
   button-primary-hover:
-    backgroundColor: "{colors.primary-hover}"
-    textColor: "{colors.void}"
-    rounded: "{rounded.pill}"
-    size: "40px"
+    backgroundColor: '{colors.primary-hover}'
+    textColor: '{colors.void}'
+    rounded: '{rounded.pill}'
+    size: '40px'
   prompt-surface:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.ink}"
-    rounded: "{rounded.prompt}"
-    padding: "16px"
+    backgroundColor: '{colors.surface}'
+    textColor: '{colors.ink}'
+    rounded: '{rounded.prompt}'
+    padding: '16px'
 ---
 
 # Design System: Flect

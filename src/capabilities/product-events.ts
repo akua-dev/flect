@@ -1,1 +1,1 @@
-export * from "../../packages/product/src/host/product-events";
+export * from '../../packages/product/src/host/product-events';

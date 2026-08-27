@@ -1,1 +1,1 @@
-export * from "../packages/product/src/extensions";
+export * from '../packages/product/src/extensions';

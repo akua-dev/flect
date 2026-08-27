@@ -1,41 +1,41 @@
 // @vitest-environment jsdom
 
-import "@testing-library/jest-dom/vitest";
-import { fireEvent, render } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import '@testing-library/jest-dom/vitest';
+import { fireEvent, render } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const runPromise = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 
-vi.mock("../lib/runtime", () => ({
-  browserRuntime: { runPromise },
+vi.mock('../lib/runtime', () => ({
+	browserRuntime: { runPromise }
 }));
 
-import { WindowDragRegion } from "./window-drag-region";
+import { WindowDragRegion } from './window-drag-region';
 
 afterEach(() => {
-  vi.clearAllMocks();
+	vi.clearAllMocks();
 });
 
-describe("WindowDragRegion", () => {
-  it("starts the native drag operation on primary pointer press", () => {
-    const { container } = render(<WindowDragRegion />);
-    const region = container.querySelector(".window-drag-region");
-    expect(region).not.toBeNull();
-    if (region === null) return;
+describe('WindowDragRegion', () => {
+	it('starts the native drag operation on primary pointer press', () => {
+		const { container } = render(<WindowDragRegion />);
+		const region = container.querySelector('.window-drag-region');
+		expect(region).not.toBeNull();
+		if (region === null) return;
 
-    fireEvent.pointerDown(region, { button: 0 });
+		fireEvent.pointerDown(region, { button: 0 });
 
-    expect(runPromise).toHaveBeenCalledOnce();
-  });
+		expect(runPromise).toHaveBeenCalledOnce();
+	});
 
-  it("does not take over a secondary pointer press", () => {
-    const { container } = render(<WindowDragRegion />);
-    const region = container.querySelector(".window-drag-region");
-    expect(region).not.toBeNull();
-    if (region === null) return;
+	it('does not take over a secondary pointer press', () => {
+		const { container } = render(<WindowDragRegion />);
+		const region = container.querySelector('.window-drag-region');
+		expect(region).not.toBeNull();
+		if (region === null) return;
 
-    fireEvent.pointerDown(region, { button: 2 });
+		fireEvent.pointerDown(region, { button: 2 });
 
-    expect(runPromise).not.toHaveBeenCalled();
-  });
+		expect(runPromise).not.toHaveBeenCalled();
+	});
 });

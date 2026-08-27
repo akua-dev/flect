@@ -41,7 +41,7 @@ inactive review before any retain or activation decision.
 Run the complete public-boundary proof:
 
 ```bash
-bunx vitest run examples/product-sdk/reference-products.test.ts
+./node_modules/.bin/vitest run examples/product-sdk/reference-products.test.ts
 ```
 
 The suite proves operation behavior, recommended capsule/extension decoding,

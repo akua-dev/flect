@@ -1,21 +1,21 @@
 :root {
-  color-scheme: light;
-  font-family: system-ui, sans-serif;
+	color-scheme: light;
+	font-family: system-ui, sans-serif;
 }
 
 body {
-  min-height: 100vh;
-  margin: 0;
-  display: grid;
-  place-items: center;
-  background: #f5f6f8;
+	min-height: 100vh;
+	margin: 0;
+	display: grid;
+	place-items: center;
+	background: #f5f6f8;
 }
 
 button {
-  border: 0;
-  border-radius: 999px;
-  padding: 0.8rem 1.2rem;
-  background: #1857d2;
-  color: white;
-  font: inherit;
+	border: 0;
+	border-radius: 999px;
+	padding: 0.8rem 1.2rem;
+	background: #1857d2;
+	color: white;
+	font: inherit;
 }

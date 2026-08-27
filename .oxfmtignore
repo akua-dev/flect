@@ -1,0 +1,35 @@
+# Package managers / lockfiles
+bun.lock
+bun.lockb
+
+# Dependencies and build outputs
+**/node_modules/**
+**/dist/**
+**/dist-spa/**
+**/coverage/**
+**/playwright-report/**
+**/test-results/**
+**/.astro/**
+**/.repos/**
+src-tauri/target/**
+src-tauri/gen/**
+src-tauri/binaries/**
+src-tauri/icons/**
+
+# Historical engineering records — imported as-is, never reflowed
+docs
+
+# CI / editor config hand-edited with comments and anchors Oxfmt strips
+.github/**
+.vscode/**
+
+# Vendored and generated agent skills (hash-locked via skills-lock.json)
+.agents/skills/**
+
+# Written-through installer artifact: must stay byte-identical to the
+# OPENCODE_PLUGIN_SOURCE string in src/lib/agent-integration.ts
+assets/agent-integrations/**
+
+# Tsconfigs use jsonc with comments / trailing commas — leave as-is
+**/tsconfig.json
+**/tsconfig*.json

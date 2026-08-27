@@ -1,1 +1,1 @@
-export * from "../packages/product/src/share";
+export * from '../packages/product/src/share';
