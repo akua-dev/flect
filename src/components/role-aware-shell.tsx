@@ -616,7 +616,7 @@ export function RoleAwareShell({
 
   return (
     <div
-      className={`role-shell${docked ? " role-shell--split" : " role-shell--centered"}${collapsed ? " role-shell--collapsed" : ""}${preview ? " role-shell--preview" : ""}${settingsOpen ? " role-shell--settings" : ""}`}
+      className={`role-shell${docked ? " role-shell--split" : " role-shell--centered"}${collapsed ? " role-shell--collapsed" : ""}${preview ? " role-shell--preview" : ""}${settingsOpen ? " role-shell--settings" : ""}${!starterWorkspace && compiledCapsule !== undefined ? " role-shell--app" : ""}`}
       data-mode={mode}
       data-phase={phase}
       data-active-revision={activeRevisionId}
@@ -729,7 +729,7 @@ export function RoleAwareShell({
         )}
 
       <main
-        className={`workspace-canvas${starterWorkspace ? " workspace-canvas--starter" : ""}${settingsOpen ? " workspace-canvas--settings" : ""}`}
+        className={`workspace-canvas${starterWorkspace ? " workspace-canvas--starter" : ""}${settingsOpen ? " workspace-canvas--settings" : ""}${!starterWorkspace && compiledCapsule !== undefined ? " workspace-canvas--app" : ""}`}
       >
         {settingsOpen && diagnostics !== undefined && (
           <Suspense fallback={<ShareSurfaceFallback />}>

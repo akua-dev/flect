@@ -11,10 +11,16 @@ import {
 } from "../../shared/control-channel";
 import { validateInterfaceDocument } from "../../shared/interface-document";
 import {
+  importWebProject,
+  type WebProjectFile,
+  type WebProjectImportResult,
+} from "../lib/web-project-import";
+import {
   AgentCommandBus,
   type AgentCommandBusError,
 } from "./agent-command-bus";
 import {
+  type AuthoredAppSummary,
   FlectCommandGateway,
   FlectGatewayError,
   FlectInterfaceCommandGateway,
@@ -41,6 +47,9 @@ const mapBusError = (
 export const makeAgentFlectCommandGatewayLayer = (
   source: AgentCommandSource,
   readInterface?: (path: string) => Effect.Effect<unknown, FlectGatewayError>,
+  readAppSource?: (
+    directory: string,
+  ) => Effect.Effect<ReadonlyArray<WebProjectFile>, FlectGatewayError>,
 ) => {
   const commandLayer = Layer.effect(
     FlectCommandGateway,
@@ -114,6 +123,41 @@ export const makeAgentFlectCommandGatewayLayer = (
         ),
       ),
   );
+  const packageApp = Effect.fn("Flect.AgentGateway.packageApp")(function* (
+    directory: string,
+    name: string | undefined,
+  ) {
+    if (readAppSource === undefined) {
+      return yield* Effect.fail(
+        FlectGatewayError.make({
+          reason: "unsupported",
+          message: "App source packaging requires the sandbox adapter.",
+        }),
+      );
+    }
+    const files = yield* readAppSource(directory);
+    return yield* importWebProject(files, {
+      source: "conversation",
+      revision: "conversation",
+      ...(name === undefined ? {} : { name }),
+    }).pipe(
+      Effect.mapError((error) =>
+        FlectGatewayError.make({
+          reason: "invalid-response",
+          message: error.message.slice(0, 500),
+        }),
+      ),
+    );
+  });
+  const appSummary = (
+    report: WebProjectImportResult["report"],
+  ): AuthoredAppSummary => ({
+    name: report.name,
+    kind: report.kind,
+    entrypoint: report.entrypoint,
+    includedFiles: report.includedFiles,
+    warnings: [...report.warnings],
+  });
   const interfaceLayer = Layer.effect(
     FlectInterfaceCommandGateway,
     Effect.gen(function* () {
@@ -127,6 +171,23 @@ export const makeAgentFlectCommandGatewayLayer = (
             ),
             Effect.map((result) => result.value),
             Effect.mapError(mapBusError),
+          ),
+        validateApp: (directory: string, name?: string) =>
+          packageApp(directory, name).pipe(
+            Effect.map((result) => appSummary(result.report)),
+          ),
+        proposeApp: (directory: string, name?: string) =>
+          packageApp(directory, name).pipe(
+            Effect.flatMap((result) =>
+              bus
+                .submit(source, {
+                  type: "propose-app",
+                  archive: result.archive,
+                  name: result.report.name,
+                })
+                .pipe(Effect.mapError(mapBusError)),
+            ),
+            Effect.map((result) => result.value),
           ),
       };
     }),

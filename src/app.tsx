@@ -278,7 +278,7 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
               instruction,
             }),
           );
-          return snapshot.document;
+          return { kind: "document" as const, document: snapshot.document };
         },
       },
       diagnoseRecovery: async () => ({

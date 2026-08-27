@@ -38,6 +38,7 @@ Use the public `flect` command. Treat it as the authoritative command surface fo
 | `flect product invoke <operation-id> [--input <json>]` | Invoke a registered product operation without raw HTTP access. | outside agent, App Agent |
 | `flect permissions list\|revoke <decision-id>` | Inspect product permission lifecycle or revoke a visible decision; grants remain protected UI decisions. | outside agent, App Agent, Shaper |
 | `flect interface inspect\|schema\|validate\|propose` | Inspect or propose interface documents inside Shaper's sandbox. | Shaper |
+| `flect app validate\|propose <sandbox-dir> [--name <text>]` | Package authored web app source from Shaper's sandbox and propose it as the running canvas. | Shaper |
 | `flect proposal accept\|reject` | Resolve the current validated preview as a protected user decision. | outside agent, App Agent |
 | `flect revision list\|rollback` | Inspect revision state or request deterministic rollback. | outside agent, App Agent |
 | `flect repository status` | Inspect canonical Git refs, isolation, and conflict state. | outside agent, App Agent, Shaper |

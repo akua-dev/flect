@@ -28,7 +28,10 @@ import { BunCommand } from "./bun-command";
 import { makeShellBunCommandLiveLayer } from "./bun-command-live";
 import { makeFlectCommand } from "./flect-command";
 import { makeGitCommand } from "./git-command";
-import { makePersistentWorkspaceFs } from "./persistent-workspace-fs";
+import {
+  makePersistentWorkspaceFs,
+  snapshotWorkspaceFiles,
+} from "./persistent-workspace-fs";
 import {
   type FlectAgentRole,
   type SandboxedAgentContext,
@@ -224,6 +227,14 @@ const makeSandboxedShellWorkspace = Effect.fn(
     bus,
     context: () => agentContext,
     readFile: (path) => fileSystem.readFileBuffer(path),
+    readTree: async (directory) => {
+      const prefix = `${directory.replace(/\/$/, "").slice(`${WORKSPACE_ROOT}/`.length)}/`;
+      return (await snapshotWorkspaceFiles(fileSystem)).flatMap((file) =>
+        file.path.startsWith(prefix)
+          ? [{ path: file.path.slice(prefix.length), contents: file.contents }]
+          : [],
+      );
+    },
   });
   const gitCommand = makeGitCommand({
     role: options.role,

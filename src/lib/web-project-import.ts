@@ -22,9 +22,10 @@ export interface WebProjectImportResult {
 }
 
 export interface WebProjectImportOptions {
-  readonly source: "directory" | "archive" | "git";
+  readonly source: "directory" | "archive" | "git" | "conversation";
   readonly revision: string;
   readonly sourceLabel?: string;
+  readonly name?: string;
 }
 
 export class WebProjectImportFailure extends Schema.TaggedErrorClass<WebProjectImportFailure>()(
@@ -345,7 +346,10 @@ export const importWebProject = Effect.fn("Flect.WebProject.import")(function* (
           : dependencies.includes("react") || dependencies.includes("react-dom")
             ? ("vite-react" as const)
             : ("vite" as const);
-  const name = projectName(stripRoot ? firstRoot : "web-project");
+  const displayName =
+    options.name?.trim().slice(0, 80) ||
+    (stripRoot ? firstRoot.slice(0, 80) : "Web project");
+  const name = projectName(options.name ?? (stripRoot ? firstRoot : ""));
   const compatibilityReport = compatibility(
     included,
     sourceEntrypoint !== undefined,
@@ -364,7 +368,7 @@ export const importWebProject = Effect.fn("Flect.WebProject.import")(function* (
   const report = ProjectImportReport.make({
     version: 1,
     kind,
-    name: stripRoot ? firstRoot : "web-project",
+    name: displayName,
     entrypoint: sourceEntrypoint ?? "index.html",
     source: options.source,
     revision: options.revision,
@@ -377,7 +381,7 @@ export const importWebProject = Effect.fn("Flect.WebProject.import")(function* (
     manifest: {
       formatVersion: 1,
       id: `local.flect.${name}`,
-      name: stripRoot ? firstRoot.slice(0, 80) : "Web project",
+      name: displayName,
       version: "1.0.0",
       entrypoints: [
         ...(sourceEntrypoint === undefined

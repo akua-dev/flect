@@ -213,12 +213,13 @@ const makeLayer = (options?: {
   const submitShaperInstruction = vi.fn<
     AgentWorkspaceShape["submitShaperInstruction"]
   >((_operation, _instruction, document) =>
-    Effect.succeed(
-      InterfaceDocument.make({
+    Effect.succeed({
+      kind: "document",
+      document: InterfaceDocument.make({
         ...document,
         name: "Controller proposal",
       }),
-    ),
+    }),
   );
   const agentLayer = Layer.effect(
     AgentWorkspace,
@@ -242,6 +243,8 @@ const makeLayer = (options?: {
         setExternalExtensions,
         proposeShaperInterface: (_source, document) =>
           Effect.succeed({ status: "proposed", document }),
+        proposeShaperApp: (_source, _archive, name) =>
+          Effect.succeed({ status: "proposed", name }),
         submitAppPrompt,
         submitPreviewPrompt,
         submitShaperInstruction,
@@ -2701,6 +2704,69 @@ describe("FlectWorkspaceController", () => {
               file.path === "project/package-lock.json" &&
               file.contents === generatedLock,
           ),
+        );
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.effect(
+    "accepts a conversationally authored web app as a local revision without ceremony",
+    () => {
+      const { layer, submitShaperInstruction } = makeLayer();
+      return Effect.gen(function* () {
+        const authored = yield* importWebProject(
+          [
+            {
+              path: "index.html",
+              contents: new TextEncoder().encode(
+                '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head><body><h1>Driftwood Coffee</h1></body></html>',
+              ),
+            },
+            {
+              path: "styles.css",
+              contents: new TextEncoder().encode("body{background:#faf6f0}"),
+            },
+          ],
+          {
+            source: "conversation",
+            revision: "conversation",
+            name: "Driftwood Coffee",
+          },
+        );
+        submitShaperInstruction.mockImplementationOnce(() =>
+          Effect.succeed({
+            kind: "app",
+            archive: authored.archive,
+            name: authored.report.name,
+          }),
+        );
+        const controller = yield* FlectWorkspaceController;
+        yield* controller.dispatch(
+          envelope(
+            801,
+            SubmitShaperInstruction.make({
+              type: "submit-shaper-instruction",
+              instruction: "Make a landing page website",
+            }),
+          ),
+        );
+        const snapshot = yield* controller.snapshot;
+        const presentation = yield* controller.capsulePresentation ??
+          Effect.succeed<CapsulePresentationState>({});
+
+        assert.strictEqual(snapshot.shaping.proposal, undefined);
+        assert.strictEqual(snapshot.phase, "ready");
+        assert.strictEqual(snapshot.shaping.active.source, "shaper");
+        assert.strictEqual(
+          snapshot.shaping.active.document.name,
+          "Driftwood Coffee",
+        );
+        assert.strictEqual(presentation.accepted?.name, "Driftwood Coffee");
+        assert.strictEqual(presentation.candidate, undefined);
+        assert.strictEqual(presentation.candidateReview, undefined);
+        assert.strictEqual(
+          presentation.acceptedReview?.id,
+          "local.flect.driftwood-coffee",
         );
       }).pipe(Effect.provide(layer));
     },

@@ -29,6 +29,7 @@ import {
   type AgentWorkspaceShape,
   OperationContext,
   type ProviderAuthUiState,
+  type ShaperTurnOutcome,
 } from "../lib/agent-workspace";
 import { FlectUnavailableError } from "../lib/api";
 import { browserRuntime } from "../lib/runtime";
@@ -81,7 +82,7 @@ export interface ShaperConversationController extends RoleConversationState {
   readonly shape: (
     instruction: string,
     document: InterfaceDocument,
-  ) => Promise<InterfaceDocument>;
+  ) => Promise<ShaperTurnOutcome>;
 }
 
 export interface AgentWorkspaceController {
@@ -198,7 +199,7 @@ export function useAgentSession(
   readonly shape: (
     instruction: string,
     document: InterfaceDocument,
-  ) => Promise<InterfaceDocument>;
+  ) => Promise<ShaperTurnOutcome>;
   readonly cancel: () => Promise<void>;
 } {
   const [snapshot, setSnapshot] = useState<AgentWorkspaceSnapshot>();

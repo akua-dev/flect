@@ -91,6 +91,8 @@ process arguments.
 | `flect interface schema` | Read the closed interface vocabulary. |
 | `flect interface validate <path>` | Validate a Shaper sandbox file. |
 | `flect interface propose <path>` | Submit a validated Shaper sandbox file. |
+| `flect app validate <sandbox-dir> [--name <text>]` | Package and check authored web app source in Shaper's sandbox. |
+| `flect app propose <sandbox-dir> [--name <text>]` | Submit packaged authored web app source as the running canvas. |
 | `flect proposal accept\|reject` | Resolve the current preview. |
 | `flect revision list\|rollback` | Inspect or roll back revision state. |
 | `flect repository status` | Inspect canonical Git refs, candidate isolation, dirtiness, and conflicts. |

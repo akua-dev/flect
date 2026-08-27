@@ -430,11 +430,14 @@ describe("useAgentSession", () => {
     const { result, unmount } = renderHook(() => useAgentSession(runtime));
     await waitFor(() => expect(result.current.status).toBe("ready"));
 
-    const document = await act(() =>
+    const outcome = await act(() =>
       result.current.shape("Make it focused", defaultInterfaceDocument),
     );
 
-    expect(document).toEqual(defaultInterfaceDocument);
+    expect(outcome).toEqual({
+      kind: "document",
+      document: defaultInterfaceDocument,
+    });
     expect(client.createSession).toHaveBeenCalledOnce();
     expect(client.shape).toHaveBeenCalledWith(
       "session-hook-test",

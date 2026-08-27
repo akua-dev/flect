@@ -310,6 +310,37 @@ textarea:focus-visible,
   overflow: auto;
 }
 
+/* A compiled app owns its viewport like a browser window: no canvas inset,
+   no shell ground behind it, and its frame fills the available area. */
+.workspace-canvas--app {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Over a full-bleed app the window drag surface shrinks to its visible
+   handle so the app's own top content stays clickable. */
+.role-shell--app .window-drag-region {
+  right: auto;
+  left: 50%;
+  width: 168px;
+  height: 28px;
+  translate: -50% 0;
+}
+
+/* Over a full-bleed app the protected recovery control keeps its own quiet
+   ground so it stays legible against arbitrary product content. */
+.role-shell--app .safe-mode-link {
+  background: color-mix(in oklch, var(--void) 76%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--line) 55%, transparent);
+}
+
+.workspace-canvas--app .capsule-surface {
+  min-height: 100dvh;
+}
+
 .role-shell--split:not(.role-shell--collapsed) .workspace-canvas--starter {
   padding-right: calc(var(--flect-rail-width) + 64px);
 }

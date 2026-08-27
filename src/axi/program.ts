@@ -750,6 +750,34 @@ const execute = Effect.fn("Flect.Axi.execute")(function* (
         version: document.version,
       };
     }
+    case "app-validate":
+    case "app-propose": {
+      if (gateway.audience !== "shaper") {
+        return yield* gatewayFailure(
+          "unauthorized",
+          "Only Shaper can author app source.",
+        );
+      }
+      const maybeInterface = yield* Effect.serviceOption(
+        FlectInterfaceCommandGateway,
+      );
+      if (Option.isNone(maybeInterface)) {
+        return yield* unsupported(
+          "App source requires the role-scoped sandbox adapter.",
+        );
+      }
+      if (command.kind === "app-propose") {
+        return yield* maybeInterface.value.proposeApp(
+          command.path,
+          command.name,
+        );
+      }
+      const summary = yield* maybeInterface.value.validateApp(
+        command.path,
+        command.name,
+      );
+      return { status: "valid", ...summary };
+    }
     case "context": {
       const status = yield* Effect.result(gateway.status);
       const base = {

@@ -165,10 +165,12 @@ const makeLayer = () => {
     setExternalExtensions: () => Effect.void,
     proposeShaperInterface: (_source, document) =>
       Effect.succeed({ status: "proposed", document }),
+    proposeShaperApp: (_source, _archive, name) =>
+      Effect.succeed({ status: "proposed", name }),
     submitAppPrompt: () => Effect.succeed(AgentPromptOutcome.make({})),
     submitPreviewPrompt: () => Effect.succeed(AgentPromptOutcome.make({})),
     submitShaperInstruction: (_operation, _instruction, document) =>
-      Effect.succeed(document),
+      Effect.succeed({ kind: "document", document }),
     cancel: () => Effect.void,
     cancelPreview: Effect.void,
     releasePreview: Effect.void,

@@ -143,8 +143,8 @@ describe("ConversationTimeline", () => {
             role: "app",
             toolName: "bash",
             phase: "succeeded",
-            startedAt: 22,
-            updatedAt: 23,
+            startedAt: 1_220,
+            updatedAt: 1_238,
             durationMs: 18,
           }),
         ]}
@@ -165,7 +165,7 @@ describe("ConversationTimeline", () => {
             turnId: "operation-timeline-turn-1",
             role: "assistant",
             content: "I softened the interface.",
-            createdAt: 30,
+            createdAt: 1_300,
             source: UserCommandSource.make({ kind: "user" }),
           }),
         ]}
@@ -177,7 +177,7 @@ describe("ConversationTimeline", () => {
     expect(
       await screen.findByRole("region", { name: "2 tool calls" }),
     ).toBeVisible();
-    expect(screen.getByText("Worked for 30 ms")).toBeVisible();
+    expect(screen.getByText("Worked for 1.2 s")).toBeVisible();
     expect(screen.getByText("2 steps")).toBeVisible();
 
     const userMessage = screen.getByText("Make it calmer");
