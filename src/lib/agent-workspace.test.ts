@@ -198,6 +198,49 @@ const makeProposalBridge = (document: InterfaceDocument) => {
   };
 };
 
+const makeAppProposalBridge = (archive: Uint8Array, name: string) => {
+  let propose: AgentWorkspaceShape["proposeShaperApp"] | undefined;
+  return {
+    connect: (workspace: AgentWorkspaceShape) => {
+      propose = workspace.proposeShaperApp;
+    },
+    execute: ((role, _line, options) =>
+      Effect.gen(function* () {
+        const submit = propose;
+        if (submit === undefined || options?.agentContext === undefined) {
+          return yield* Effect.fail(
+            BunCommandFailed.make({
+              reason: "execution",
+              message: "The test Shaper app bridge is unavailable.",
+            }),
+          );
+        }
+        yield* submit(
+          AgentCommandSource.make({
+            kind: "agent",
+            role: role === "previewApp" ? "app" : role,
+            ...options.agentContext,
+          }),
+          archive,
+          name,
+        ).pipe(
+          Effect.mapError(() =>
+            BunCommandFailed.make({
+              reason: "execution",
+              message: "The test app proposal was rejected.",
+            }),
+          ),
+        );
+        return BunCommandResult.make({
+          version: 1,
+          exitCode: 0,
+          stdout: "status: proposed\n",
+          stderr: "",
+        });
+      })) satisfies SandboxedShellShape["execute"],
+  };
+};
+
 describe("AgentWorkspace", () => {
   it.effect(
     "returns a typed edit request without treating questions as Shape",
@@ -834,6 +877,116 @@ describe("AgentWorkspace", () => {
         });
         assert.strictEqual(vi.mocked(client.shape).mock.calls.length, 1);
         assert.strictEqual(afterTurn._tag, "Failure");
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.effect(
+    "confirms an authored app only when the controller concludes the turn",
+    () => {
+      const archive = new Uint8Array([1, 2, 3]);
+      const bridge = makeAppProposalBridge(archive, "Driftwood Coffee");
+      const { layer } = makeLayer({
+        shape: () =>
+          Stream.make(
+            AgentShellRequest.make({
+              type: "shell_request",
+              requestId: "shell-app-proposal",
+              command: "flect app propose /workspace/project",
+            }),
+            ShapeCompleted.make({ type: "shape_completed" }),
+          ),
+        execute: bridge.execute,
+      });
+      return Effect.gen(function* () {
+        const workspace = yield* AgentWorkspace;
+        bridge.connect(workspace);
+        yield* workspace.refresh;
+        const outcome = yield* workspace.submitShaperInstruction(
+          userOperation(30),
+          "Make a landing page website",
+          defaultInterfaceDocument,
+        );
+        const afterTurn = yield* workspace.snapshot;
+
+        assert.deepStrictEqual(outcome, {
+          kind: "app",
+          archive,
+          name: "Driftwood Coffee",
+        });
+        assert.deepStrictEqual(
+          afterTurn.shaper.messages.map((message) => message.content),
+          ["Make a landing page website"],
+        );
+        assert.strictEqual(afterTurn.shaper.status, "ready");
+
+        yield* workspace.concludeShaperTurn(userOperation(30), {
+          kind: "completed",
+          name: "Driftwood Coffee",
+        });
+        const confirmed = yield* workspace.snapshot;
+
+        assert.deepStrictEqual(
+          confirmed.shaper.messages.map((message) => message.content),
+          ["Make a landing page website", "Change complete: Driftwood Coffee"],
+        );
+        assert.deepStrictEqual(
+          confirmed.shaper.messages.map((message) => message.turnId),
+          ["operation-agent-workspace-30", "operation-agent-workspace-30"],
+        );
+        assert.strictEqual(confirmed.shaper.status, "ready");
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.effect(
+    "reports a bounded activation failure without any completion claim",
+    () => {
+      const archive = new Uint8Array([4, 5, 6]);
+      const bridge = makeAppProposalBridge(archive, "Driftwood Coffee");
+      const { layer } = makeLayer({
+        shape: () =>
+          Stream.make(
+            AgentShellRequest.make({
+              type: "shell_request",
+              requestId: "shell-app-proposal-failure",
+              command: "flect app propose /workspace/project",
+            }),
+            ShapeCompleted.make({ type: "shape_completed" }),
+          ),
+        execute: bridge.execute,
+      });
+      return Effect.gen(function* () {
+        const workspace = yield* AgentWorkspace;
+        bridge.connect(workspace);
+        yield* workspace.refresh;
+        yield* workspace.submitShaperInstruction(
+          userOperation(31),
+          "Make a landing page website",
+          defaultInterfaceDocument,
+        );
+        yield* workspace.concludeShaperTurn(userOperation(31), {
+          kind: "failed",
+          reason: "The authored project could not be checkpointed safely.",
+        });
+        const snapshot = yield* workspace.snapshot;
+
+        assert.deepStrictEqual(
+          snapshot.shaper.messages.map((message) => message.content),
+          [
+            "Make a landing page website",
+            "The app could not be activated: The authored project could not be checkpointed safely. Your previous canvas is unchanged.",
+          ],
+        );
+        assert.notInclude(
+          snapshot.shaper.messages.map((message) => message.content).join("\n"),
+          "Change complete",
+        );
+        assert.strictEqual(snapshot.shaper.status, "error");
+        assert.strictEqual(
+          snapshot.shaper.error,
+          "The authored project could not be checkpointed safely.",
+        );
       }).pipe(Effect.provide(layer));
     },
   );
