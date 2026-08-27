@@ -69,10 +69,17 @@ This runs:
 5. Rust formatting and host tests; and
 6. a release-mode macOS application bundle build.
 
-The pinned, least-privilege GitHub workflow runs this canonical command for
-every pull request and every change to `main`. Live Pi, Apple signing,
-notarization, and other credentialed release proof remain separate authorized
-gates; the public workflow must never silently represent them as completed.
+The pinned, least-privilege GitHub workflow runs these same commands for
+every pull request and every change to `main`, split into independent
+parallel jobs for faster feedback: `bun run check` on Linux, the Playwright
+suite on macOS, and the Rust checks plus the release-mode bundle build with
+its own clean production web build on macOS. A required `Flect quality gate`
+summary check always reports and fails unless every job succeeded;
+documentation-only pull requests (Markdown, `docs/`, `.agents/`) may skip the
+browser and desktop jobs while `bun run check` still runs. Live Pi, Apple
+signing, notarization, and other credentialed release proof remain separate
+authorized gates; the public workflow must never silently represent them as
+completed.
 
 Playwright uses `FLECT_TEST_MODE=1`, a deterministic in-memory runtime, and no
 provider credentials. It covers streamed turns, schema-driven Shaper tool
