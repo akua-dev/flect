@@ -141,6 +141,13 @@ const ownedData = [
 ];
 let mainPid: number | undefined;
 
+const requireMainPid = (): number => {
+	if (mainPid === undefined) {
+		throw new Error('The packaged app is not running.');
+	}
+	return mainPid;
+};
+
 const cleanup = async () => {
 	await terminate(mainPid, 'SIGTERM').catch(() => undefined);
 	for (const path of ownedData) {
@@ -189,7 +196,7 @@ try {
 
 	mainPid = await launch();
 	const firstContents = await waitFor('the protected setup surface', async () => {
-		const tree = await contents(mainPid as number);
+		const tree = await contents(requireMainPid());
 		return tree.includes('Connect an agent') ? tree : undefined;
 	});
 	if (
@@ -222,7 +229,7 @@ try {
 	await appleScript(`${appProcess(mainPid)} to set size of front window to {480, 320}`);
 	const clampedWindowSize = await waitFor('the native minimum window size', async () => {
 		const size = numberPair(
-			await appleScript(`${appProcess(mainPid as number)} to get size of front window`)
+			await appleScript(`${appProcess(requireMainPid())} to get size of front window`)
 		);
 		return size[0] >= 760 && size[1] >= 560 ? size : undefined;
 	});
@@ -232,7 +239,7 @@ try {
 
 	await setTextareaValue(mainPid, canary);
 	await waitFor('the private draft canary', async () =>
-		(await textarea(mainPid as number, 'get value')) === canary ? true : undefined
+		(await textarea(requireMainPid(), 'get value')) === canary ? true : undefined
 	);
 	await Bun.sleep(750);
 
@@ -255,10 +262,10 @@ try {
 	await terminate(priorPid, 'SIGTERM');
 	mainPid = await launch(priorPid);
 	await waitFor('the restored protected surface', async () =>
-		(await contents(mainPid as number)).includes('Connect an agent') ? true : undefined
+		(await contents(requireMainPid())).includes('Connect an agent') ? true : undefined
 	);
 	const restoredDraft = await waitFor('the restored private draft', async () => {
-		const value = await textarea(mainPid as number, 'get value');
+		const value = await textarea(requireMainPid(), 'get value');
 		return value === canary ? value : undefined;
 	});
 	const relaunchedSidecar = await waitFor('the relaunched private runtime', async () =>

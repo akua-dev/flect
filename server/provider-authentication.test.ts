@@ -331,7 +331,7 @@ describe('ProviderAuthentication', () => {
 
 	it.effect('expires a login after the bounded lifetime', () =>
 		Effect.gen(function* () {
-			const started = yield* Deferred.make<void>();
+			const started = yield* Deferred.make<undefined>();
 			const layer = makeLayer({
 				credentials: Effect.succeed([]),
 				check: () => Effect.succeed(undefined),
@@ -383,7 +383,9 @@ describe('ProviderAuthentication', () => {
 			});
 			yield* Effect.gen(function* () {
 				const auth = yield* ProviderAuthentication;
-				const started = yield* Effect.forEach(providers.slice(0, 4), () => Deferred.make<void>());
+				const started = yield* Effect.forEach(providers.slice(0, 4), () =>
+					Deferred.make<undefined>()
+				);
 				const fibers = yield* Effect.forEach(providers.slice(0, 4), (candidate, index) =>
 					auth
 						.login(
@@ -393,11 +395,12 @@ describe('ProviderAuthentication', () => {
 							})
 						)
 						.pipe(
-							Stream.tap((event) =>
-								event.type === 'auth_started'
-									? Deferred.succeed(started[index] as Deferred.Deferred<void>, undefined)
-									: Effect.void
-							),
+							Stream.tap((event) => {
+								const deferred = started[index];
+								return event.type === 'auth_started' && deferred !== undefined
+									? Deferred.succeed(deferred, undefined)
+									: Effect.void;
+							}),
 							Stream.runDrain,
 							Effect.forkChild
 						)

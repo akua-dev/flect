@@ -1,6 +1,53 @@
+import { Schema } from 'effect';
+
 const mebibytes = (value: number) => value * 1024 * 1024;
 
-export const FlectPerformanceBudgets = {
+const PositiveNumber = Schema.Number.check(Schema.isGreaterThan(0));
+
+const BrowserPerformanceBudgets = Schema.Struct({
+	coldInteractiveMs: PositiveNumber,
+	warmInteractiveMs: PositiveNumber,
+	initialShellGzipBytes: PositiveNumber,
+	initialShellDecodedBytes: PositiveNumber,
+	initialCssGzipBytes: PositiveNumber,
+	composerP95Ms: PositiveNumber,
+	interactionLatencyMs: PositiveNumber,
+	sendVisualAcknowledgeMs: PositiveNumber,
+	firstVisibleActivityMs: PositiveNumber,
+	deterministicCanvasChangeMs: PositiveNumber,
+	textCssPatchMs: PositiveNumber,
+	componentPatchMs: PositiveNumber,
+	candidateRebuildMs: PositiveNumber,
+	cancellationAcknowledgeMs: PositiveNumber,
+	markdownRenderMs: PositiveNumber,
+	lcpFast4gMs: PositiveNumber,
+	lcpSlow4gMs: PositiveNumber,
+	frameBudgetMs: PositiveNumber,
+	longTaskMs: PositiveNumber,
+	heapCeilingBytes: PositiveNumber,
+	repeatedCycleCount: PositiveNumber,
+	repeatedCycleGrowthBytes: PositiveNumber
+});
+
+const MacosPerformanceBudgets = Schema.Struct({
+	coldWindowMs: PositiveNumber,
+	reopenWindowMs: PositiveNumber,
+	cancellationAcknowledgeMs: PositiveNumber,
+	steadyRssBytes: PositiveNumber,
+	repeatedCycleGrowthBytes: PositiveNumber
+});
+
+const FlectPerformanceBudgetsSchema = Schema.Struct({
+	version: Schema.Literal(2),
+	browser: BrowserPerformanceBudgets,
+	macos: MacosPerformanceBudgets
+});
+
+export type FlectPerformanceBudgets = typeof FlectPerformanceBudgetsSchema.Type;
+
+export const FlectPerformanceBudgets: FlectPerformanceBudgets = Schema.decodeUnknownSync(
+	FlectPerformanceBudgetsSchema
+)({
 	version: 2,
 	browser: {
 		coldInteractiveMs: 1_000,
@@ -33,4 +80,4 @@ export const FlectPerformanceBudgets = {
 		steadyRssBytes: mebibytes(250),
 		repeatedCycleGrowthBytes: mebibytes(32)
 	}
-} as const;
+});

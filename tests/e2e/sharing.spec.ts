@@ -201,7 +201,7 @@ const verifyPortableFork = async (archive: Uint8Array, commit: string) => {
 	}
 };
 
-const inspectPortableFork = async (archive: Uint8Array) => {
+const parsePortableForkExport = async (archive: Uint8Array) => {
 	const decoded = await Effect.runPromise(decodeShareArchive(archive));
 	const directory = await mkdtemp(join(tmpdir(), 'flect-share-inspect-'));
 	try {
@@ -247,7 +247,7 @@ const inspectPortableFork = async (archive: Uint8Array) => {
 	}
 };
 
-const inspectResolvedWeather = async (archive: Uint8Array) => {
+const parseResolvedWeatherExport = async (archive: Uint8Array) => {
 	const decoded = await Effect.runPromise(decodeShareArchive(archive));
 	const directory = await mkdtemp(join(tmpdir(), 'flect-share-resolved-'));
 	try {
@@ -508,7 +508,7 @@ test('routes fork personalization through one composer and activates a real two-
 	await library.getByRole('button', { name: 'Export fork' }).click();
 	const path = await (await download).path();
 	expect(path).not.toBeNull();
-	const exported = await inspectPortableFork(new Uint8Array(await readFile(path ?? '')));
+	const exported = await parsePortableForkExport(new Uint8Array(await readFile(path ?? '')));
 	expect(exported.parents).toHaveLength(2);
 	expect(exported.parents[0]).not.toBe(fixtures.initial.commit);
 	expect(exported.parents[1]).toBe(fixtures.compatibleUpdate.commit);
@@ -580,7 +580,7 @@ test('resolves a real Git conflict with Flect and activates only the explicit re
 	await library.getByRole('button', { name: 'Export fork' }).click();
 	const path = await (await download).path();
 	expect(path).not.toBeNull();
-	const exported = await inspectResolvedWeather(new Uint8Array(await readFile(path ?? '')));
+	const exported = await parseResolvedWeatherExport(new Uint8Array(await readFile(path ?? '')));
 	expect(exported.parents).toHaveLength(2);
 	expect(exported.parents[0]).not.toBe(fixtures.initial.commit);
 	expect(exported.parents[1]).toBe(fixtures.conflictingUpdate.commit);

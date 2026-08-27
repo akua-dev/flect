@@ -251,8 +251,8 @@ const serveFixture = (version: string, archive: Uint8Array, signature: string) =
 			return Effect.sync(() => server.close());
 		}),
 		(server) =>
-			Effect.callback<void>((resume) => {
-				server.close(() => resume(Effect.void));
+			Effect.callback<undefined>((resume) => {
+				server.close(() => resume(Effect.succeed(undefined)));
 			})
 	);
 

@@ -270,7 +270,7 @@ describe('Flect RPC handlers', () => {
 					.Shape({
 						sessionId: 'session-1',
 						instruction: 'Make this more focused',
-						document: deeplyNestedDocument(2_000) as never
+						document: deeplyNestedDocument(2_000)
 					})
 					.pipe(Stream.runDrain)
 			);

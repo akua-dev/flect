@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { describe, expect, it, vi } from '@effect/vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime } from 'effect';
-import { describe, expect, it, vi } from 'vitest';
 import { ShellPreferencesValue } from '../../shared/shell-preferences';
 import { InterfaceStorageError } from '../lib/interface-store';
 import { ShellPreferences, type ShellPreferencesShape } from '../lib/shell-preferences';

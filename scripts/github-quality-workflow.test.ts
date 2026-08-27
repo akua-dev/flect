@@ -4,9 +4,16 @@ import { parse } from 'yaml';
 
 type JsonRecord = Record<string, unknown>;
 
+function assertMapping(value: unknown, label: string): asserts value is JsonRecord {
+	if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+		assert.fail(`${label} must be a mapping`);
+		throw new Error(`${label} must be a mapping`);
+	}
+}
+
 const record = (value: unknown, label: string): JsonRecord => {
-	assert.isObject(value, `${label} must be a mapping`);
-	return value as JsonRecord;
+	assertMapping(value, label);
+	return value;
 };
 
 const loadWorkflow = async () => {
@@ -18,9 +25,16 @@ const loadWorkflow = async () => {
 const jobRecord = (workflow: JsonRecord, id: string): JsonRecord =>
 	record(record(workflow.jobs, 'workflow jobs')[id], `${id} job`);
 
+function assertStepList(value: unknown, label: string): asserts value is ReadonlyArray<JsonRecord> {
+	if (!Array.isArray(value)) {
+		assert.fail(`${label} steps must be a list`);
+		throw new Error(`${label} steps must be a list`);
+	}
+}
+
 const jobSteps = (job: JsonRecord, label: string) => {
-	const steps = job.steps as ReadonlyArray<JsonRecord>;
-	assert.isArray(steps, `${label} steps must be a list`);
+	const steps = job.steps;
+	assertStepList(steps, label);
 	return steps;
 };
 
@@ -31,8 +45,11 @@ const actionSteps = (steps: ReadonlyArray<JsonRecord>) =>
 
 const findAction = (steps: ReadonlyArray<JsonRecord>, prefix: string, label: string) => {
 	const step = actionSteps(steps).find((candidate) => candidate.uses.startsWith(prefix));
-	assert.isDefined(step, `${label} requires a ${prefix} step`);
-	return step as JsonRecord & { readonly uses: string };
+	if (step === undefined) {
+		assert.fail(`${label} requires a ${prefix} step`);
+		throw new Error(`${label} requires a ${prefix} step`);
+	}
+	return step;
 };
 
 const runCommands = (steps: ReadonlyArray<JsonRecord>) =>

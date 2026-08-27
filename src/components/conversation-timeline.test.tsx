@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it, vi } from '@effect/vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConversationMessage, ToolActivity, UserCommandSource } from '../../shared/control';
 import { ConversationTimeline } from './conversation-timeline';
 

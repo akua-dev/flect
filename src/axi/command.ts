@@ -390,10 +390,12 @@ const parseLogs = Effect.fn('Flect.Axi.parseLogs')(function* (args: ReadonlyArra
 				operationId = value;
 				index += 1;
 				break;
+			case undefined:
+				return yield* failed('unexpected-argument', 'Unexpected argument: ');
 			default:
-				return yield* flag?.startsWith('-')
+				return yield* flag.startsWith('-')
 					? unknownFlag(flag)
-					: failed('unexpected-argument', `Unexpected argument: ${flag ?? ''}`);
+					: failed('unexpected-argument', `Unexpected argument: ${flag}`);
 		}
 	}
 	return {

@@ -1,12 +1,34 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
 import { assert, describe, it, vi } from '@effect/vitest';
-import { Effect, Stream } from 'effect';
+import { Effect, Layer, Schema, Stream } from 'effect';
 import { makeControlToken, writeControlDescriptor } from '../server/control-descriptor';
 import { FlectWorkspaceEvent, SetMode, UserCommandSource } from '../shared/control';
 import { ControlDescriptor } from '../shared/control-channel';
 import { FlectControlClient, makeFlectControlClientLayer } from './flect-client';
+
+const platform = Layer.merge(BunFileSystem.layer, BunPath.layer);
+
+const SentCommandBody = Schema.Struct({
+	source: Schema.Struct({
+		kind: Schema.String,
+		clientName: Schema.String
+	}),
+	command: Schema.Struct({
+		type: Schema.String
+	})
+});
+const decodeSentCommandBody = Schema.decodeUnknownSync(SentCommandBody);
+
+const SentDisableBody = Schema.Struct({
+	command: Schema.Struct({
+		type: Schema.String
+	})
+});
+const decodeSentDisableBody = Schema.decodeUnknownSync(SentDisableBody);
 
 describe('FlectControlClient', () => {
 	it.effect('discovers the private descriptor without exposing its bearer', () =>
@@ -24,7 +46,7 @@ describe('FlectControlClient', () => {
 					createdAt: 1
 				}),
 				directory
-			);
+			).pipe(Effect.provide(platform));
 			const fetcher = vi.fn<typeof fetch>().mockImplementation(() =>
 				Promise.resolve(
 					new Response(
@@ -50,13 +72,7 @@ describe('FlectControlClient', () => {
 				const client = yield* FlectControlClient;
 				const receipt = yield* client.command(SetMode.make({ type: 'set-mode', mode: 'run' }));
 				const [input, init] = fetcher.mock.calls[0] ?? [];
-				const body = JSON.parse(String(init?.body)) as {
-					readonly source: {
-						readonly kind: string;
-						readonly clientName: string;
-					};
-					readonly command: { readonly type: string };
-				};
+				const body = decodeSentCommandBody(JSON.parse(String(init?.body)));
 
 				assert.strictEqual(
 					String(input),
@@ -71,18 +87,19 @@ describe('FlectControlClient', () => {
 
 				yield* client.disable;
 				const [, disableInit] = fetcher.mock.calls[1] ?? [];
-				const disableBody = JSON.parse(String(disableInit?.body)) as {
-					readonly command: { readonly type: string };
-				};
+				const disableBody = decodeSentDisableBody(JSON.parse(String(disableInit?.body)));
 				assert.strictEqual(disableBody.command.type, 'disable-control');
 			}).pipe(
 				Effect.provide(
-					makeFlectControlClientLayer({
-						stateDirectory: directory,
-						clientName: 'Outside test',
-						clientId: 'client-client-test',
-						fetch: fetcher
-					})
+					Layer.merge(
+						makeFlectControlClientLayer({
+							stateDirectory: directory,
+							clientName: 'Outside test',
+							clientId: 'client-client-test',
+							fetch: fetcher
+						}),
+						platform
+					)
 				)
 			);
 		})
@@ -104,7 +121,7 @@ describe('FlectControlClient', () => {
 					createdAt: 1
 				}),
 				directory
-			);
+			).pipe(Effect.provide(platform));
 			const event = FlectWorkspaceEvent.make({
 				version: 1,
 				id: 'event-client-test',
@@ -133,10 +150,13 @@ describe('FlectControlClient', () => {
 				);
 			}).pipe(
 				Effect.provide(
-					makeFlectControlClientLayer({
-						stateDirectory: directory,
-						fetch: fetcher
-					})
+					Layer.merge(
+						makeFlectControlClientLayer({
+							stateDirectory: directory,
+							fetch: fetcher
+						}),
+						platform
+					)
 				)
 			);
 		})

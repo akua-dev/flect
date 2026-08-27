@@ -1,5 +1,5 @@
+import { describe, expect, it, vi } from '@effect/vitest';
 import { Effect, Layer } from 'effect';
-import { describe, expect, it, vi } from 'vitest';
 import { BrowserBuildArtifact, type ProposalBuildRequest } from '../../shared/browser-build';
 import { GitWorkspace, type GitWorkspaceShape } from '../git/git-workspace';
 import { makeLazyProposalBuildLayer } from './lazy-proposal-build';

@@ -1,6 +1,8 @@
+import { Schema } from 'effect';
 import type { ShapingSnapshot } from '../../shared/revisions';
 
-export type WorkspacePhase = 'blank' | 'preview' | 'accepted' | 'safe';
+export const WorkspacePhase = Schema.Literals(['blank', 'preview', 'accepted', 'safe']);
+export type WorkspacePhase = typeof WorkspacePhase.Type;
 
 export const workspacePhase = (
 	snapshot: ShapingSnapshot,

@@ -1,6 +1,13 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
+import { Schema } from 'effect';
 import { resetBrowserWorkspace } from './reset-browser-workspace';
+
+const DocumentGeometry = Schema.Struct({
+	documentWidth: Schema.Number,
+	viewportWidth: Schema.Number
+});
+const decodeDocumentGeometry = Schema.decodeUnknownSync(DocumentGeometry);
 
 const browserFailures = new WeakMap<Page, Array<string>>();
 
@@ -51,10 +58,12 @@ test('keeps update ownership readable in the compact protected shell', async ({ 
 	});
 	await openUpdate(page);
 
-	const geometry = await page.evaluate(() => ({
-		documentWidth: document.documentElement.scrollWidth,
-		viewportWidth: window.innerWidth
-	}));
+	const geometry = decodeDocumentGeometry(
+		await page.evaluate(() => ({
+			documentWidth: document.documentElement.scrollWidth,
+			viewportWidth: window.innerWidth
+		}))
+	);
 	expect(geometry.documentWidth).toBe(geometry.viewportWidth);
 	await expect(page.getByText('Updates are available in a signed desktop release.')).toBeVisible();
 });

@@ -206,7 +206,7 @@ type AuthNotificationRequest =
 	  }
 	| {
 			readonly type: 'barrier';
-			readonly ready: Deferred.Deferred<void>;
+			readonly ready: Deferred.Deferred<undefined>;
 	  };
 
 const promptUnavailable = () =>
@@ -582,7 +582,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 
 					const notifications = yield* Queue.unbounded<AuthNotificationRequest>();
 					const awaitNotifications = Effect.gen(function* () {
-						const ready = yield* Deferred.make<void>();
+						const ready = yield* Deferred.make<undefined>();
 						yield* Queue.offer(notifications, { type: 'barrier', ready });
 						yield* Deferred.await(ready);
 					});

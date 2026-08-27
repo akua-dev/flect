@@ -1,11 +1,18 @@
 import { expect, test } from '@playwright/test';
+import { Schema } from 'effect';
 
-const capabilityIds = {
+const CapabilityIds = Schema.Struct({
+	status: Schema.String,
+	read: Schema.String,
+	write: Schema.String,
+	events: Schema.String
+});
+const capabilityIds = Schema.decodeUnknownSync(CapabilityIds)({
 	status: 'product.reference.status',
 	read: 'product.reference.projects.read',
 	write: 'product.reference.projects.write',
 	events: 'product.reference.projects.events'
-};
+});
 
 test('drives the reference adapter through grants, GraphQL, events, cancellation, and recovery', async ({
 	page

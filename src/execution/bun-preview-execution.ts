@@ -107,6 +107,15 @@ const packageNameOf = (specifier: string) =>
 const packageSubpathOf = (specifier: string, packageName: string) =>
 	specifier.slice(packageName.length).replace(/^\/+/, '');
 
+interface PackageManifest {
+	readonly browser?: unknown;
+	readonly module?: unknown;
+	readonly main?: unknown;
+}
+
+const isPackageManifest = (value: unknown): value is PackageManifest =>
+	typeof value === 'object' && value !== null && !Array.isArray(value);
+
 const text = (value: string | Uint8Array | undefined) => {
 	if (value === undefined) {
 		return undefined;
@@ -132,11 +141,8 @@ const resolvePackage = (
 		}
 		const manifestText = text(files[`${root}/package.json`]);
 		if (manifestText !== undefined) {
-			const manifest = JSON.parse(manifestText) as {
-				readonly browser?: unknown;
-				readonly module?: unknown;
-				readonly main?: unknown;
-			};
+			const parsedManifest: unknown = JSON.parse(manifestText);
+			const manifest = isPackageManifest(parsedManifest) ? parsedManifest : {};
 			const entry = [manifest.browser, manifest.module, manifest.main].find(
 				(value): value is string => typeof value === 'string'
 			);
@@ -508,32 +514,34 @@ const createRealm = Effect.fn('Flect.BunPreviewExecution.createRealm')(
 		})
 );
 
-const waitForPreviewServiceWorkerControl = Effect.callback<void, BunCommandFailed>((resume) => {
-	let settled = false;
-	const cleanup = () => {
-		window.clearTimeout(timer);
-		navigator.serviceWorker.removeEventListener('controllerchange', controlled);
-	};
-	const complete = (result: Effect.Effect<void, BunCommandFailed>) => {
-		if (settled) {
-			return;
+const waitForPreviewServiceWorkerControl = Effect.callback<undefined, BunCommandFailed>(
+	(resume) => {
+		let settled = false;
+		const cleanup = () => {
+			window.clearTimeout(timer);
+			navigator.serviceWorker.removeEventListener('controllerchange', controlled);
+		};
+		const complete = (result: Effect.Effect<undefined, BunCommandFailed>) => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			cleanup();
+			resume(result);
+		};
+		function controlled() {
+			complete(Effect.succeed(undefined));
 		}
-		settled = true;
-		cleanup();
-		resume(result);
-	};
-	function controlled() {
-		complete(Effect.void);
+		const timer = window.setTimeout(() => complete(Effect.fail(previewFailure())), 3_000);
+		navigator.serviceWorker.addEventListener('controllerchange', controlled, {
+			once: true
+		});
+		if (navigator.serviceWorker.controller !== null) {
+			controlled();
+		}
+		return Effect.sync(cleanup);
 	}
-	const timer = window.setTimeout(() => complete(Effect.fail(previewFailure())), 3_000);
-	navigator.serviceWorker.addEventListener('controllerchange', controlled, {
-		once: true
-	});
-	if (navigator.serviceWorker.controller !== null) {
-		controlled();
-	}
-	return Effect.sync(cleanup);
-});
+);
 
 const ensurePreviewServiceWorker = Effect.fn('Flect.BunPreviewExecution.ensureServiceWorker')(
 	function* () {
@@ -565,13 +573,13 @@ const registerPreviewRoute = Effect.fn('Flect.BunPreviewExecution.registerRoute'
 		return yield* Effect.fail(previewFailure());
 	}
 	const channel = new MessageChannel();
-	yield* Effect.callback<void, BunCommandFailed>((resume) => {
+	yield* Effect.callback<undefined, BunCommandFailed>((resume) => {
 		let settled = false;
 		const cleanup = () => {
 			window.clearTimeout(timer);
 			channel.port1.close();
 		};
-		const complete = (result: Effect.Effect<void, BunCommandFailed>) => {
+		const complete = (result: Effect.Effect<undefined, BunCommandFailed>) => {
 			if (settled) {
 				return;
 			}
@@ -586,7 +594,7 @@ const registerPreviewRoute = Effect.fn('Flect.BunPreviewExecution.registerRoute'
 			if (event.data?.type !== 'flect-preview-registered') {
 				return;
 			}
-			complete(Effect.void);
+			complete(Effect.succeed(undefined));
 		};
 		try {
 			target.postMessage(

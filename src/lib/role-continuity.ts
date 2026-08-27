@@ -1,3 +1,4 @@
+import { Schema } from 'effect';
 import {
 	AgentWorkspaceSnapshot,
 	ConversationMessage,
@@ -12,8 +13,9 @@ const MESSAGE_CONTENT_LENGTH = 16_000;
 const encoder = new TextEncoder();
 const restoredSource = UserCommandSource.make({ kind: 'user' });
 
+const ActiveConversationStatus = Schema.Literals(['submitting', 'streaming', 'cancelling']);
 const isActive = (status: RoleConversationSnapshot['status']) =>
-	status === 'submitting' || status === 'streaming' || status === 'cancelling';
+	Schema.is(ActiveConversationStatus)(status);
 
 const projectMessages = (
 	conversation: RoleConversationSnapshot

@@ -12,7 +12,7 @@ const decodeResult = Schema.decodeUnknownEffect(BunCommandResult, strict);
 
 const expectRejected = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 	effect.pipe(
-		Effect.match({
+		Effect.matchEffect({
 			onFailure: () => Effect.void,
 			onSuccess: () => Effect.die('invalid value was accepted')
 		})

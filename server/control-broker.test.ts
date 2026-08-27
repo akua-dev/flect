@@ -1,8 +1,10 @@
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
 import { assert, describe, it } from '@effect/vitest';
-import { Effect, Fiber, Schema } from 'effect';
+import { Effect, Fiber, Layer, Schema } from 'effect';
 import {
 	ControlCommandSource,
 	ControlStateSnapshot,
@@ -122,7 +124,14 @@ describe('FlectControlBroker', () => {
 				yield* broker.enable(snapshot);
 				const rotated = yield* readControlDescriptor(directory);
 				assert.notStrictEqual(rotated.token, descriptor.token);
-			}).pipe(Effect.provide(makeControlBrokerLayer({ stateDirectory: directory })));
+			}).pipe(
+				Effect.provide(
+					Layer.merge(
+						makeControlBrokerLayer({ stateDirectory: directory }),
+						Layer.merge(BunFileSystem.layer, BunPath.layer)
+					)
+				)
+			);
 		})
 	);
 
@@ -185,7 +194,14 @@ describe('FlectControlBroker', () => {
 					})
 				);
 				assert.strictEqual(stale.status, 401);
-			}).pipe(Effect.provide(makeControlBrokerLayer({ stateDirectory: directory })));
+			}).pipe(
+				Effect.provide(
+					Layer.merge(
+						makeControlBrokerLayer({ stateDirectory: directory }),
+						Layer.merge(BunFileSystem.layer, BunPath.layer)
+					)
+				)
+			);
 		})
 	);
 
@@ -257,7 +273,14 @@ describe('FlectControlBroker', () => {
 					),
 					new Set(commands.map((candidate) => candidate.commandId))
 				);
-			}).pipe(Effect.provide(makeControlBrokerLayer({ stateDirectory: directory })));
+			}).pipe(
+				Effect.provide(
+					Layer.merge(
+						makeControlBrokerLayer({ stateDirectory: directory }),
+						Layer.merge(BunFileSystem.layer, BunPath.layer)
+					)
+				)
+			);
 		})
 	);
 });

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '@effect/vitest';
 import { transformFrameworkSource } from './framework-source-transform';
 
 const encode = (source: string) => new TextEncoder().encode(source);

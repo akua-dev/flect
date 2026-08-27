@@ -375,7 +375,7 @@ describe('AgentWorkspace', () => {
 
 	it.effect('isolates candidate overlap and cancellation from accepted App', () =>
 		Effect.gen(function* () {
-			const gate = yield* Deferred.make<void>();
+			const gate = yield* Deferred.make<undefined>();
 			const { cancelSession, createSession, layer } = makeLayer({
 				prompt: () =>
 					Stream.make({ type: 'turn_started' } as const).pipe(
@@ -427,7 +427,7 @@ describe('AgentWorkspace', () => {
 	);
 
 	it.effect('stays busy until the completed turn stream has closed', () => {
-		const streamClosed = Deferred.makeUnsafe<void>();
+		const streamClosed = Deferred.makeUnsafe<undefined>();
 		const { layer } = makeLayer({
 			prompt: () =>
 				Stream.make({ type: 'turn_started' } as const, { type: 'turn_completed' } as const).pipe(
@@ -908,7 +908,7 @@ describe('AgentWorkspace', () => {
 	});
 
 	it.effect('finishes a running shell activity when its role is cancelled', () => {
-		const shellStarted = Deferred.makeUnsafe<void>();
+		const shellStarted = Deferred.makeUnsafe<undefined>();
 		const callId = 'tool-agent-workspace-cancelled';
 		const { layer } = makeLayer({
 			prompt: () =>
@@ -955,8 +955,8 @@ describe('AgentWorkspace', () => {
 	});
 
 	it.effect('acknowledges cancellation while stream cleanup drains', () => {
-		const cleanupStarted = Deferred.makeUnsafe<void>();
-		const cleanupGate = Deferred.makeUnsafe<void>();
+		const cleanupStarted = Deferred.makeUnsafe<undefined>();
+		const cleanupGate = Deferred.makeUnsafe<undefined>();
 		const { layer } = makeLayer({
 			prompt: () =>
 				Stream.never.pipe(

@@ -2,9 +2,13 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '@effect/vitest';
+import { Schema } from 'effect';
 
 const root = resolve(import.meta.dirname, '../..');
+const Sha256Hex = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
+const MediaDigestMap = Schema.Record(Schema.String, Sha256Hex);
+const decodeMediaDigestMap = Schema.decodeUnknownSync(MediaDigestMap);
 const verifyReproducibility = process.env.FLECT_VERIFY_MEDIA_REPRODUCIBILITY === '1';
 const generatedMedia = [
 	'assets/screenshots/flect-edit-mode.png',
@@ -17,13 +21,15 @@ const generatedMedia = [
 ] as const;
 
 const digestGeneratedMedia = () =>
-	Object.fromEntries(
-		generatedMedia.map((relativePath) => [
-			relativePath,
-			createHash('sha256')
-				.update(readFileSync(resolve(root, relativePath)))
-				.digest('hex')
-		])
+	decodeMediaDigestMap(
+		Object.fromEntries(
+			generatedMedia.map((relativePath) => [
+				relativePath,
+				createHash('sha256')
+					.update(readFileSync(resolve(root, relativePath)))
+					.digest('hex')
+			])
+		)
 	);
 
 const generateReleaseMedia = () => {

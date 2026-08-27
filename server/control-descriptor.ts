@@ -1,7 +1,6 @@
-import { chmod, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
-import { Effect, Schema, type SchemaAST } from 'effect';
+import { Effect, FileSystem, Path, Schema, type SchemaAST } from 'effect';
 import { ControlDescriptor } from '../shared/control-channel';
+import { flectServerConfig } from './env.server';
 
 const strictOptions: SchemaAST.ParseOptions = {
 	errors: 'all',
@@ -20,26 +19,36 @@ const descriptorError = () =>
 		message: 'The Flect control descriptor is unavailable.'
 	});
 
-export const defaultControlStateDirectory = () => {
-	const explicit = process.env.FLECT_CONTROL_STATE_DIR;
+export const defaultControlStateDirectory = Effect.fn(
+	'Flect.ControlDescriptor.defaultControlStateDirectory'
+)(function* () {
+	const path = yield* Path.Path;
+	const explicit = flectServerConfig.controlStateDir;
 	if (explicit !== undefined && explicit.length > 0) {
 		return explicit;
 	}
-	const xdg = process.env.XDG_STATE_HOME;
+	const xdg = flectServerConfig.xdgStateHome;
 	if (xdg !== undefined && xdg.length > 0) {
-		return join(xdg, 'flect');
+		return path.join(xdg, 'flect');
 	}
-	const userDirectory = process.env.HOME;
+	const userDirectory = flectServerConfig.home;
 	if (userDirectory === undefined || userDirectory.length === 0) {
-		return join(process.cwd(), '.flect-state');
+		return path.join(process.cwd(), '.flect-state');
 	}
 	return process.platform === 'darwin'
-		? join(userDirectory, 'Library', 'Application Support', 'Flect')
-		: join(userDirectory, '.local', 'state', 'flect');
-};
+		? path.join(userDirectory, 'Library', 'Application Support', 'Flect')
+		: path.join(userDirectory, '.local', 'state', 'flect');
+});
 
-export const controlDescriptorPath = (stateDirectory = defaultControlStateDirectory()) =>
-	join(stateDirectory, 'control.json');
+const resolveStateDirectory = (stateDirectory: string | undefined) =>
+	stateDirectory !== undefined ? Effect.succeed(stateDirectory) : defaultControlStateDirectory();
+
+export const controlDescriptorPath = Effect.fn('Flect.ControlDescriptor.path')(function* (
+	stateDirectory?: string
+) {
+	const path = yield* Path.Path;
+	return path.join(yield* resolveStateDirectory(stateDirectory), 'control.json');
+});
 
 export const makeControlToken = () => {
 	const bytes = new Uint8Array(32);
@@ -49,37 +58,38 @@ export const makeControlToken = () => {
 
 export const writeControlDescriptor = Effect.fn('Flect.ControlDescriptor.write')(function* (
 	descriptor: ControlDescriptor,
-	stateDirectory = defaultControlStateDirectory()
+	stateDirectory?: string
 ) {
-	const target = controlDescriptorPath(stateDirectory);
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
+	const target = yield* controlDescriptorPath(resolvedStateDirectory);
 	const temporary = `${target}.tmp-${crypto.randomUUID()}`;
 	const encoded = yield* Schema.encodeEffect(Schema.fromJsonString(ControlDescriptor))(
 		descriptor
 	).pipe(Effect.mapError(descriptorError));
-	yield* Effect.tryPromise({
-		try: async () => {
-			await mkdir(dirname(target), { recursive: true, mode: 0o700 });
-			await chmod(dirname(target), 0o700);
-			await writeFile(temporary, `${encoded}\n`, {
-				encoding: 'utf8',
-				mode: 0o600,
-				flag: 'wx'
-			});
-			await chmod(temporary, 0o600);
-			await rename(temporary, target);
-			await chmod(target, 0o600);
-		},
-		catch: descriptorError
-	});
+	yield* Effect.gen(function* () {
+		const directory = path.dirname(target);
+		yield* fs.makeDirectory(directory, { recursive: true, mode: 0o700 });
+		yield* fs.chmod(directory, 0o700);
+		yield* fs.writeFileString(temporary, `${encoded}\n`, { mode: 0o600, flag: 'wx' });
+		yield* fs.chmod(temporary, 0o600);
+		yield* fs.rename(temporary, target);
+		yield* fs.chmod(target, 0o600);
+	}).pipe(Effect.mapError(descriptorError));
 });
 
-export const removeControlDescriptor = Effect.fn('Flect.ControlDescriptor.remove')(
-	(stateDirectory = defaultControlStateDirectory()) =>
-		Effect.tryPromise({
-			try: () => unlink(controlDescriptorPath(stateDirectory)),
-			catch: descriptorError
-		}).pipe(Effect.catch(() => Effect.void))
-);
+export const removeControlDescriptor = Effect.fn('Flect.ControlDescriptor.remove')(function* (
+	stateDirectory?: string
+) {
+	const fs = yield* FileSystem.FileSystem;
+	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
+	const target = yield* controlDescriptorPath(resolvedStateDirectory);
+	yield* fs.remove(target).pipe(
+		Effect.mapError(descriptorError),
+		Effect.catch(() => Effect.void)
+	);
+});
 
 const processExists = (pid: number) => {
 	try {
@@ -91,19 +101,19 @@ const processExists = (pid: number) => {
 };
 
 export const readControlDescriptor = Effect.fn('Flect.ControlDescriptor.read')(function* (
-	stateDirectory = defaultControlStateDirectory(),
+	stateDirectory?: string,
 	verifyProcess = true
 ) {
-	const source = yield* Effect.tryPromise({
-		try: () => readFile(controlDescriptorPath(stateDirectory), 'utf8'),
-		catch: descriptorError
-	});
+	const fs = yield* FileSystem.FileSystem;
+	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
+	const target = yield* controlDescriptorPath(resolvedStateDirectory);
+	const source = yield* fs.readFileString(target).pipe(Effect.mapError(descriptorError));
 	const descriptor = yield* Schema.decodeUnknownEffect(
 		Schema.fromJsonString(ControlDescriptor),
 		strictOptions
 	)(source).pipe(Effect.mapError(descriptorError));
 	if (verifyProcess && !processExists(descriptor.pid)) {
-		yield* removeControlDescriptor(stateDirectory);
+		yield* removeControlDescriptor(resolvedStateDirectory);
 		return yield* Effect.fail(descriptorError());
 	}
 	return descriptor;

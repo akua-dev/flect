@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '@effect/vitest';
 import { serializeTableToCsv, serializeTableToMarkdown } from './markdown-table-serialization';
 
 const makeTable = (markup: string) => {

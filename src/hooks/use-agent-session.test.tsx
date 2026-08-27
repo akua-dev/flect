@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { describe, expect, it, vi } from '@effect/vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime, Stream } from 'effect';
-import { describe, expect, it, vi } from 'vitest';
 import { BunCommandFailed, BunCommandResult } from '../../shared/bun-command';
 import {
 	AgentShellRequest,

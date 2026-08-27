@@ -163,8 +163,8 @@ const makeHarness = () => {
 		FlectWorkspaceController,
 		Effect.gen(function* () {
 			const state = yield* SubscriptionRef.make(initial);
-			const promptStarted = yield* Deferred.make<void>();
-			const promptGate = yield* Deferred.make<void>();
+			const promptStarted = yield* Deferred.make<undefined>();
+			const promptGate = yield* Deferred.make<undefined>();
 			awaitPromptStarted = Deferred.await(promptStarted);
 			releasePrompt = Deferred.succeed(promptGate, undefined).pipe(Effect.asVoid);
 			setControl = (enabled) =>

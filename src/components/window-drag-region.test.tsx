@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it } from '@effect/vitest';
 import { fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { vi } from 'vitest';
 
 const runPromise = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 

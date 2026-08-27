@@ -1,11 +1,14 @@
+import { Schema } from 'effect';
+
 const encoder = new TextEncoder();
 
-export const digestBuildEntries = async (
-	entries: ReadonlyArray<{
-		readonly path: string;
-		readonly contents: Uint8Array;
-	}>
-) => {
+export const BuildEntry = Schema.Struct({
+	path: Schema.String,
+	contents: Schema.Uint8Array
+});
+export type BuildEntry = typeof BuildEntry.Type;
+
+export const digestBuildEntries = async (entries: ReadonlyArray<BuildEntry>) => {
 	const parts: Array<Uint8Array> = [];
 	let length = 0;
 	for (const entry of entries.toSorted((left, right) => left.path.localeCompare(right.path))) {

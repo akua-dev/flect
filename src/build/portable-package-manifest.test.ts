@@ -1,5 +1,5 @@
+import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
-import { describe, expect, it } from 'vitest';
 import { portablePackageManifest } from './portable-package-manifest';
 
 const encoder = new TextEncoder();

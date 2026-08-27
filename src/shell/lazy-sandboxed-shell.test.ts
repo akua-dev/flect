@@ -1,8 +1,8 @@
+import { describe, expect, it, vi } from '@effect/vitest';
 import { Effect, Layer } from 'effect';
-import { describe, expect, it, vi } from 'vitest';
 import { BunCommandResult } from '../../shared/bun-command';
-import { AgentCommandBus, type AgentCommandBusShape } from '../axi/agent-command-bus';
-import { GitWorkspace, type GitWorkspaceShape } from '../git/git-workspace';
+import { AgentCommandBus } from '../axi/agent-command-bus';
+import { GitWorkspace } from '../git/git-workspace';
 import { makeLazyRoleSandboxedShellLayer } from './lazy-sandboxed-shell';
 import { SandboxedShell, type SandboxedShellShape } from './sandboxed-shell-service';
 
@@ -29,9 +29,14 @@ describe('LazyRoleSandboxedShellLive', () => {
 				dispose
 			})
 		);
+		// Neither dependency's methods are exercised by this test (it only asserts
+		// that `load` stays uncalled until a command runs, then runs against the
+		// lazily-loaded shell above). AgentCommandBusShape/GitWorkspaceShape are
+		// each 3-17 methods wide, so Object.create(null) stands in for an unused
+		// service without an `as` assertion or a large, unmaintained mock.
 		const dependencies = Layer.merge(
-			Layer.succeed(AgentCommandBus)({} as AgentCommandBusShape),
-			Layer.succeed(GitWorkspace)({} as GitWorkspaceShape)
+			Layer.succeed(AgentCommandBus)(Object.create(null)),
+			Layer.succeed(GitWorkspace)(Object.create(null))
 		);
 		const layer = makeLazyRoleSandboxedShellLayer({ load }).pipe(Layer.provide(dependencies));
 

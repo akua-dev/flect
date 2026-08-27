@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it, vi } from '@effect/vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModelSummary } from '../../shared/contracts';
 import type { AgentSessionStatus } from '../hooks/use-agent-session';
 import { Composer, type ComposerProps } from './composer';

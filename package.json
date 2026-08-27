@@ -8,7 +8,7 @@
 		"packages/*"
 	],
 	"scripts": {
-		"prepare": "./scripts/prepare-effect.sh",
+		"prepare": "bun scripts/prepare-effect.ts",
 		"dev": "concurrently --kill-others --names runtime,shell \"bun run dev:server\" \"bun run dev:web\"",
 		"dev:server": "bun --watch server/index.ts",
 		"dev:web": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 127.0.0.1",
@@ -40,7 +40,7 @@
 		"typecheck": "tsc -b",
 		"lint": "biome check . && oxfmt --check --ignore-path .oxfmtignore .",
 		"format": "oxfmt --write --ignore-path .oxfmtignore .",
-		"check:effect": "./scripts/prepare-effect.sh --check",
+		"check:effect": "bun scripts/prepare-effect.ts --check",
 		"check:effect-concurrency": "bun scripts/verify-effect-concurrency.ts",
 		"check:rifty": "bun scripts/verify-rifty-dependencies.ts",
 		"check": "bun run check:effect && bun run check:effect-concurrency && bun run check:rifty && bun run check:flect-skill && bun run check:quality && bun run lint && bun run typecheck && bun run test",
@@ -96,7 +96,7 @@
 		"@astrojs/preact": "6.0.2",
 		"@axe-core/playwright": "4.12.1",
 		"@biomejs/biome": "2.5.6",
-		"@effect/vitest": "4.0.0-beta.102",
+		"@effect/vitest": "4.0.0-rc.109",
 		"@modelcontextprotocol/client": "2.0.0",
 		"@playwright/test": "1.62.1",
 		"@tailwindcss/vite": "4.1.18",

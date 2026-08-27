@@ -193,8 +193,8 @@ describe('ProductEvents', () => {
 
 	it.effect('backpressures at policy capacity and aborts owned work on cancellation', () =>
 		Effect.gen(function* () {
-			const firstObserved = yield* Deferred.make<void>();
-			const releaseConsumer = yield* Deferred.make<void>();
+			const firstObserved = yield* Deferred.make<undefined>();
+			const releaseConsumer = yield* Deferred.make<undefined>();
 			const stages: Array<number> = [];
 			let aborted = false;
 			const connector: ProductEventConnector = {
@@ -209,10 +209,10 @@ describe('ProductEvents', () => {
 							});
 							stages.push(Number(sequence));
 						}
-						yield* Effect.callback<void>((resume) => {
+						yield* Effect.callback<undefined>((resume) => {
 							const onAbort = () => {
 								aborted = true;
-								resume(Effect.void);
+								resume(Effect.succeed(undefined));
 							};
 							signal.addEventListener('abort', onAbort, { once: true });
 							return Effect.sync(() => signal.removeEventListener('abort', onAbort));

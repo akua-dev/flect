@@ -1,5 +1,12 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
+import { Schema } from 'effect';
+
+const DocumentGeometry = Schema.Struct({
+	documentWidth: Schema.Number,
+	viewportWidth: Schema.Number
+});
+const decodeDocumentGeometry = Schema.decodeUnknownSync(DocumentGeometry);
 
 test('proves deterministic product adoption, recovery, and private-state boundaries', async ({
 	page
@@ -61,10 +68,12 @@ test('proves deterministic product adoption, recovery, and private-state boundar
 		.withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
 		.analyze();
 	expect(accessibility.violations).toEqual([]);
-	const geometry = await page.evaluate(() => ({
-		documentWidth: document.documentElement.scrollWidth,
-		viewportWidth: window.innerWidth
-	}));
+	const geometry = decodeDocumentGeometry(
+		await page.evaluate(() => ({
+			documentWidth: document.documentElement.scrollWidth,
+			viewportWidth: window.innerWidth
+		}))
+	);
 	expect(geometry.documentWidth).toBe(geometry.viewportWidth);
 
 	await expect(page.locator('body')).not.toContainText('product-sdk-private-secret');

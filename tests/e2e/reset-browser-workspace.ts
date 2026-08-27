@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { expect, type Page } from '@playwright/test';
+import { Schema } from 'effect';
 
-type ResetBrowserWorkspaceOptions = {
-	readonly viewOnly?: boolean;
-};
+const ResetBrowserWorkspaceOptions = Schema.Struct({
+	viewOnly: Schema.optionalKey(Schema.Boolean)
+});
+type ResetBrowserWorkspaceOptions = typeof ResetBrowserWorkspaceOptions.Type;
 
 export const resetBrowserWorkspace = async (
 	page: Page,

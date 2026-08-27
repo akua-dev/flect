@@ -69,8 +69,8 @@ describe('RoleContinuityRepository', () => {
 	it.effect('serializes the Effect fallback when Web Locks are unavailable', () =>
 		Effect.gen(function* () {
 			const lock = yield* ContinuityLock;
-			const firstStarted = yield* Deferred.make<void>();
-			const releaseFirst = yield* Deferred.make<void>();
+			const firstStarted = yield* Deferred.make<undefined>();
+			const releaseFirst = yield* Deferred.make<undefined>();
 			const events: Array<string> = [];
 			const first = yield* lock
 				.exclusive(

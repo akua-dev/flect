@@ -141,7 +141,9 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 				})
 			);
 
-		const runEnvelope = Effect.fn('Flect.ControlBridge.runEnvelope')(function* (envelope) {
+		const runEnvelope = Effect.fn('Flect.ControlBridge.runEnvelope')(function* (
+			envelope: FlectCommandEnvelope
+		) {
 			if (envelope.source.kind !== 'control') {
 				yield* completeFailure(envelope.commandId, unavailable());
 				return;
@@ -183,31 +185,31 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 			);
 		});
 
-		const startTrackedEnvelope = Effect.fn('Flect.ControlBridge.startTrackedEnvelope')(
-			function* (envelope) {
-				const start = yield* Deferred.make<void>();
-				let trackedFiber: Fiber.Fiber<unknown, unknown> | undefined;
-				yield* commandLaunchPermit.withPermits(1)(
-					Effect.gen(function* () {
-						const fiber = yield* Effect.forkScoped(
-							Deferred.await(start).pipe(
-								Effect.andThen(runEnvelope(envelope)),
-								Effect.ensuring(
-									Ref.update(activeCommandFibers, (current) => {
-										const next = new Set(current);
-										if (trackedFiber !== undefined) next.delete(trackedFiber);
-										return next;
-									})
-								)
+		const startTrackedEnvelope = Effect.fn('Flect.ControlBridge.startTrackedEnvelope')(function* (
+			envelope: FlectCommandEnvelope
+		) {
+			const start = yield* Deferred.make<undefined>();
+			let trackedFiber: Fiber.Fiber<unknown, unknown> | undefined;
+			yield* commandLaunchPermit.withPermits(1)(
+				Effect.gen(function* () {
+					const fiber = yield* Effect.forkScoped(
+						Deferred.await(start).pipe(
+							Effect.andThen(runEnvelope(envelope)),
+							Effect.ensuring(
+								Ref.update(activeCommandFibers, (current) => {
+									const next = new Set(current);
+									if (trackedFiber !== undefined) next.delete(trackedFiber);
+									return next;
+								})
 							)
-						);
-						trackedFiber = fiber;
-						yield* Ref.update(activeCommandFibers, (current) => new Set(current).add(fiber));
-						yield* Deferred.succeed(start, undefined);
-					})
-				);
-			}
-		);
+						)
+					);
+					trackedFiber = fiber;
+					yield* Ref.update(activeCommandFibers, (current) => new Set(current).add(fiber));
+					yield* Deferred.succeed(start, undefined);
+				})
+			);
+		});
 
 		const runNext = Effect.fn('Flect.ControlBridge.runNext')(function* () {
 			if (!(yield* Ref.get(enabled))) {

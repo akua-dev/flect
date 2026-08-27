@@ -1,3 +1,5 @@
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
 import { Context, Effect, Layer, Schema, type SchemaAST, Stream } from 'effect';
 import { type ControlDescriptorError, readControlDescriptor } from '../server/control-descriptor';
 import {
@@ -113,6 +115,7 @@ export const makeFlectControlClientLayer = (options: FlectControlClientOptions =
 	Layer.effect(
 		FlectControlClient,
 		Effect.sync(() => {
+			const platform = Layer.merge(BunFileSystem.layer, BunPath.layer);
 			const clientName = options.clientName ?? 'flect';
 			const clientId = options.clientId ?? `client-${crypto.randomUUID()}`;
 			const fetcher = options.fetch ?? globalThis.fetch;
@@ -121,7 +124,9 @@ export const makeFlectControlClientLayer = (options: FlectControlClientOptions =
 				path: string,
 				init: RequestInit = {}
 			) {
-				const descriptor = yield* readControlDescriptor(options.stateDirectory);
+				const descriptor = yield* readControlDescriptor(options.stateDirectory).pipe(
+					Effect.provide(platform)
+				);
 				const response = yield* Effect.tryPromise({
 					try: (signal) =>
 						fetcher(`${descriptor.url}${path}`, {
@@ -165,6 +170,7 @@ export const makeFlectControlClientLayer = (options: FlectControlClientOptions =
 			);
 
 			const workspacePath = readControlDescriptor(options.stateDirectory).pipe(
+				Effect.provide(platform),
 				Effect.map((descriptor) => `/v1/workspaces/${encodeURIComponent(descriptor.workspaceId)}`)
 			);
 
@@ -214,7 +220,9 @@ export const makeFlectControlClientLayer = (options: FlectControlClientOptions =
 						clientError('unauthorized', 'Outside clients cannot enable Flect control.')
 					);
 				}
-				const descriptor = yield* readControlDescriptor(options.stateDirectory);
+				const descriptor = yield* readControlDescriptor(options.stateDirectory).pipe(
+					Effect.provide(platform)
+				);
 				const commandPath = `/v1/workspaces/${encodeURIComponent(descriptor.workspaceId)}/commands`;
 				const envelope = FlectCommandEnvelope.make({
 					version: 1,
@@ -241,4 +249,4 @@ export const makeFlectControlClientLayer = (options: FlectControlClientOptions =
 
 			return { status, inspect, logs, events, command, disable };
 		})
-	);
+	).pipe(Layer.provide(Layer.merge(BunFileSystem.layer, BunPath.layer)));

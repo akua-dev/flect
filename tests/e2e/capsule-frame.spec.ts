@@ -1,4 +1,15 @@
 import { expect, test } from '@playwright/test';
+import { Schema } from 'effect';
+
+const CapsuleIsolationProbe = Schema.Struct({
+	origin: Schema.String,
+	parent: Schema.Boolean,
+	storage: Schema.Boolean,
+	tauri: Schema.Boolean,
+	pi: Schema.Boolean,
+	network: Schema.Boolean
+});
+const decodeCapsuleIsolationProbe = Schema.decodeUnknownSync(CapsuleIsolationProbe);
 
 test.beforeEach(async ({ page }) => {
 	await page.goto('/?capsule-diagnostic=1');
@@ -29,7 +40,7 @@ test('denies parent, storage, Tauri, and network authority', async ({ page }) =>
 	const frame = await (await element.elementHandle())?.contentFrame();
 	expect(frame).toBeDefined();
 	if (frame === undefined || frame === null) return;
-	const result = await frame.evaluate(async () => {
+	const rawResult = await frame.evaluate(async () => {
 		const denied = async (run: () => unknown | Promise<unknown>) => {
 			try {
 				await run();
@@ -47,6 +58,7 @@ test('denies parent, storage, Tauri, and network authority', async ({ page }) =>
 			network: await denied(() => fetch('/api/runtime'))
 		};
 	});
+	const result = decodeCapsuleIsolationProbe(rawResult);
 	expect(result).toEqual({
 		origin: 'null',
 		parent: true,

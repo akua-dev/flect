@@ -265,7 +265,7 @@ const runDiagnostic = (workspaceId: string) => {
 				)
 			)
 		)
-		.finally(() => runtime.dispose());
+		.finally(() => void runtime.dispose());
 };
 
 export function GitShareLifecycleDiagnostic() {

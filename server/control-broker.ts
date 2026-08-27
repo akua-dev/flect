@@ -4,6 +4,8 @@ import {
 	type Server as NodeServer,
 	type ServerResponse
 } from 'node:http';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
 import { Context, Deferred, Effect, Layer, Queue, Ref, Schema, Semaphore } from 'effect';
 import {
 	decodeFlectCommandEnvelope,
@@ -124,6 +126,23 @@ interface LoopbackServer {
 	readonly close: Effect.Effect<void>;
 }
 
+const incomingHeadersToFetchHeaders = (incoming: IncomingMessage['headers']): Headers => {
+	const headers = new Headers();
+	for (const [name, value] of Object.entries(incoming)) {
+		if (value === undefined) {
+			continue;
+		}
+		if (Array.isArray(value)) {
+			for (const entry of value) {
+				headers.append(name, entry);
+			}
+			continue;
+		}
+		headers.set(name, value);
+	}
+	return headers;
+};
+
 const requestBody = (request: IncomingMessage) =>
 	Effect.callback<Uint8Array, ControlBrokerError>((resume) => {
 		const chunks: Array<Uint8Array> = [];
@@ -197,13 +216,13 @@ const sendWebResponse = Effect.fn('Flect.ControlBroker.sendWebResponse')(
 );
 
 const closeLoopbackServer = (server: NodeServer) =>
-	Effect.callback<void>((resume) => {
+	Effect.callback<undefined>((resume) => {
 		if (!server.listening) {
-			resume(Effect.void);
+			resume(Effect.succeed(undefined));
 			return;
 		}
 		server.closeAllConnections();
-		server.close(() => resume(Effect.void));
+		server.close(() => resume(Effect.succeed(undefined)));
 		return Effect.sync(() => server.closeAllConnections());
 	});
 
@@ -221,7 +240,7 @@ const startLoopbackServer = (
 					try: () =>
 						new Request(`http://127.0.0.1${incoming.url ?? '/'}`, {
 							method,
-							headers: incoming.headers as HeadersInit,
+							headers: incomingHeadersToFetchHeaders(incoming.headers),
 							...(body === undefined || body.byteLength === 0
 								? {}
 								: { body: new TextDecoder().decode(body) })
@@ -304,6 +323,14 @@ const startLoopbackServer = (
 		);
 	});
 
+// oxlint-disable effecttsgo/missing-effect-context -- false positive: `tsc -b`
+// confirms this whole layer's R resolves to never (control-descriptor's
+// FileSystem/Path requirement is threaded through `platform` below and
+// provided at every call site). effecttsgo cannot fully resolve the
+// requirement type once a Layer.provide(Layer.merge(...)) composition this
+// large is involved — same class of false positive documented for
+// tauri-transport.ts and workspace-controller.ts. See the escalations list
+// in the conformance burn-down report.
 export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 	Layer.effect(
 		FlectControlBroker,
@@ -345,13 +372,14 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 				)
 			);
 
+			const platform = Layer.merge(BunFileSystem.layer, BunPath.layer);
 			const disableUnlocked = Effect.gen(function* () {
 				const active = yield* Ref.getAndSet(state, undefined);
 				if (active !== undefined) {
 					yield* Queue.shutdown(active.queue);
 					yield* failPending(active);
 				}
-				yield* removeControlDescriptor(options.stateDirectory);
+				yield* removeControlDescriptor(options.stateDirectory).pipe(Effect.provide(platform));
 			});
 			const mutateState = statePermit.withPermits(1);
 			const disable = mutateState(disableUnlocked);
@@ -387,7 +415,10 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 								createdAt
 							}),
 							options.stateDirectory
-						).pipe(Effect.mapError(() => brokerError('The control grant could not be persisted.')));
+						).pipe(
+							Effect.provide(platform),
+							Effect.mapError(() => brokerError('The control grant could not be persisted.'))
+						);
 						yield* Ref.set(state, active);
 						return yield* status;
 					})
@@ -569,7 +600,7 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 											);
 										}
 										if (!closed) {
-											timer = setTimeout(publish, 250);
+											timer = setTimeout(() => void publish(), 250);
 										}
 									} catch {
 										closed = true;
@@ -654,7 +685,8 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 				eventsSince
 			};
 		})
-	);
+	).pipe(Layer.provide(Layer.merge(BunFileSystem.layer, BunPath.layer)));
+// oxlint-enable effecttsgo/missing-effect-context
 
 export const ControlBrokerLive = makeControlBrokerLayer();
 

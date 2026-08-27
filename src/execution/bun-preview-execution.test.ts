@@ -21,7 +21,7 @@ describe('BunPreviewExecution', () => {
 				const route = yield* Ref.make<
 					{ readonly runId: string; readonly port: number } | undefined
 				>(undefined);
-				const startupReachedRoute = yield* Deferred.make<void>();
+				const startupReachedRoute = yield* Deferred.make<undefined>();
 				const runId = 'run-interrupted';
 				const port = 3005;
 				const release = () =>
@@ -46,7 +46,7 @@ describe('BunPreviewExecution', () => {
 						Effect.gen(function* () {
 							yield* Ref.set(route, { runId, port });
 							yield* Deferred.succeed(startupReachedRoute, undefined);
-							yield* Effect.never;
+							return yield* Effect.never;
 						}),
 					release
 				).pipe(Effect.forkChild);

@@ -132,7 +132,7 @@ describe('BunModuleExecution', () => {
 	it.effect('enforces the outer deadline and releases the runtime', () =>
 		Effect.gen(function* () {
 			const releases = yield* Ref.make(0);
-			const started = yield* Deferred.make<void>();
+			const started = yield* Deferred.make<undefined>();
 			const layer = makeBunModuleExecutionTestLayer(() =>
 				Effect.scoped(
 					Effect.acquireRelease(Deferred.succeed(started, undefined), () =>
@@ -158,7 +158,7 @@ describe('BunModuleExecution', () => {
 	it.effect('stops the active run and waits for runtime release', () =>
 		Effect.gen(function* () {
 			const releases = yield* Ref.make(0);
-			const started = yield* Deferred.make<void>();
+			const started = yield* Deferred.make<undefined>();
 			const layer = makeBunModuleExecutionTestLayer(() =>
 				Effect.scoped(
 					Effect.acquireRelease(Deferred.succeed(started, undefined), () =>

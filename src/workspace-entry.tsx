@@ -14,10 +14,16 @@ import { browserRuntime } from './lib/runtime';
 import { WorkspaceControlBridge } from './lib/workspace-control-bridge';
 import workspaceStylesUrl from './styles.css?url';
 
+const isComponentType = (value: unknown): value is ComponentType => typeof value === 'function';
+
 const diagnostic = (load: () => Promise<Record<string, unknown>>, name: string) =>
 	lazy(async () => {
 		const module = await load();
-		return { default: Reflect.get(module, name) as ComponentType };
+		const exported = Reflect.get(module, name);
+		if (!isComponentType(exported)) {
+			throw new Error(`Diagnostic export "${name}" is not a component.`);
+		}
+		return { default: exported };
 	});
 
 const ProductAdoptionDiagnosticRoute = diagnostic(

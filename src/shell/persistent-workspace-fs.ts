@@ -1,9 +1,31 @@
 import type { Vfs } from '@riftydev/vfs';
+import { Data } from 'effect';
 import { type IFileSystem, InMemoryFs } from 'just-bash/browser';
 
 const WORKSPACE_ROOT = '/workspace';
 const FILE_LIMIT = 4_096;
 const BYTE_LIMIT = 67_108_864;
+
+/**
+ * `IFileSystem`'s methods must stay Promise-returning to satisfy the
+ * external `just-bash` shell contract, so failures still surface as thrown
+ * errors rather than an Effect failure channel — but every throw site below
+ * uses this one typed, discriminated error instead of ad hoc `new Error(...)`
+ * calls, so callers that do want to branch on failure reason can.
+ */
+export class PersistentWorkspaceFsError extends Data.TaggedError('PersistentWorkspaceFsError')<{
+	readonly reason:
+		| 'invalid-namespace'
+		| 'path-outside-workspace'
+		| 'path-protected'
+		| 'entry-limit-exceeded'
+		| 'byte-limit-exceeded'
+		| 'read-only'
+		| 'restore-failed'
+		| 'links-disabled';
+	readonly message: string;
+	readonly cause?: unknown;
+}> {}
 
 type ReadOptions = Parameters<IFileSystem['readFile']>[1];
 type WriteContent = Parameters<IFileSystem['writeFile']>[1];
@@ -34,7 +56,10 @@ export interface WorkspaceSourceFile {
 
 const checkedNamespace = (namespace: string) => {
 	if (!/^\/[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*$/.test(namespace)) {
-		throw new Error('The persistent workspace namespace is invalid.');
+		throw new PersistentWorkspaceFsError({
+			reason: 'invalid-namespace',
+			message: 'The persistent workspace namespace is invalid.'
+		});
 	}
 	return namespace;
 };
@@ -53,10 +78,16 @@ const workspaceRelative = (path: string) => {
 		path.includes('\0') ||
 		parts.some((part) => part.length === 0 || part === '.' || part === '..')
 	) {
-		throw new Error('The requested path is outside the role workspace.');
+		throw new PersistentWorkspaceFsError({
+			reason: 'path-outside-workspace',
+			message: 'The requested path is outside the role workspace.'
+		});
 	}
 	if (parts[0] === '.git' || parts[0] === '.flect-root') {
-		throw new Error('The requested path is protected by Flect.');
+		throw new PersistentWorkspaceFsError({
+			reason: 'path-protected',
+			message: 'The requested path is protected by Flect.'
+		});
 	}
 	return relative;
 };
@@ -95,7 +126,10 @@ const walkVfs = async (
 			});
 		}
 		if (output.length > FILE_LIMIT) {
-			throw new Error('The persistent role workspace contains too many entries.');
+			throw new PersistentWorkspaceFsError({
+				reason: 'entry-limit-exceeded',
+				message: 'The persistent role workspace contains too many entries.'
+			});
 		}
 	}
 	return output;
@@ -143,7 +177,10 @@ const snapshotWorkspaceTree = async (
 			entries.push({ type: 'file', path: relative, contents });
 		}
 		if (entries.length > FILE_LIMIT || bytes > BYTE_LIMIT) {
-			throw new Error('The role workspace exceeds its portable source limit.');
+			throw new PersistentWorkspaceFsError({
+				reason: 'byte-limit-exceeded',
+				message: 'The role workspace exceeds its portable source limit.'
+			});
 		}
 	}
 	return entries;
@@ -171,7 +208,10 @@ export class PersistentWorkspaceFs implements IFileSystem {
 
 	#assertWritable(relative: string | undefined) {
 		if (relative !== undefined && this.#readOnly) {
-			throw new Error('This role workspace is read-only.');
+			throw new PersistentWorkspaceFsError({
+				reason: 'read-only',
+				message: 'This role workspace is read-only.'
+			});
 		}
 	}
 
@@ -206,10 +246,12 @@ export class PersistentWorkspaceFs implements IFileSystem {
 				}
 				await this.#restoreMemoryTree(previousMemoryTree);
 			} catch (rollbackError) {
-				throw new Error(
-					'The persistent role workspace could not be restored after a failed replacement.',
-					{ cause: rollbackError }
-				);
+				throw new PersistentWorkspaceFsError({
+					reason: 'restore-failed',
+					message:
+						'The persistent role workspace could not be restored after a failed replacement.',
+					cause: rollbackError
+				});
 			}
 			throw error;
 		}
@@ -291,7 +333,10 @@ export class PersistentWorkspaceFs implements IFileSystem {
 		const relative = workspaceRelative(path);
 		this.#assertWritable(relative);
 		if (relative === '') {
-			throw new Error('The role workspace root is protected by Flect.');
+			throw new PersistentWorkspaceFsError({
+				reason: 'path-protected',
+				message: 'The role workspace root is protected by Flect.'
+			});
 		}
 		if (relative === undefined) {
 			await this.#memory.rm(path, options);
@@ -340,12 +385,22 @@ export class PersistentWorkspaceFs implements IFileSystem {
 
 	symlink(_target: string, linkPath: string): Promise<void> {
 		workspaceRelative(linkPath);
-		return Promise.reject(new Error('Filesystem links are disabled by Flect.'));
+		return Promise.reject(
+			new PersistentWorkspaceFsError({
+				reason: 'links-disabled',
+				message: 'Filesystem links are disabled by Flect.'
+			})
+		);
 	}
 
 	link(_existingPath: string, newPath: string): Promise<void> {
 		workspaceRelative(newPath);
-		return Promise.reject(new Error('Filesystem links are disabled by Flect.'));
+		return Promise.reject(
+			new PersistentWorkspaceFsError({
+				reason: 'links-disabled',
+				message: 'Filesystem links are disabled by Flect.'
+			})
+		);
 	}
 
 	readlink(path: string) {

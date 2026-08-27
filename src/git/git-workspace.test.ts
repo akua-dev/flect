@@ -34,11 +34,15 @@ class RespondingWorker implements GitWorkspaceWorker {
 	}
 
 	postMessage(message: unknown) {
-		const request = message as { readonly id: string };
+		const requestId: unknown =
+			typeof message === 'object' && message !== null ? Reflect.get(message, 'id') : undefined;
+		if (typeof requestId !== 'string') {
+			throw new Error('Expected a git-workspace worker request with a string id.');
+		}
 		const event = new MessageEvent('message', {
 			data: {
 				type: 'success',
-				id: request.id,
+				id: requestId,
 				result: { type: 'opened', variant: 'asyncify', existed: true }
 			}
 		});

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it, vi } from '@effect/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CanvasSelection } from '../../shared/canvas-selection';
 import { CapsuleIntentSucceeded } from '../../shared/capsule-protocol';
 import { CapsuleFrame, projectCapsuleDocument } from './capsule-frame';
@@ -14,6 +14,14 @@ afterEach(() => {
 	vi.restoreAllMocks();
 	vi.unstubAllGlobals();
 });
+
+const getFlectAppFrame = (): HTMLIFrameElement => {
+	const frame = screen.getByTitle('Flect app');
+	if (!(frame instanceof HTMLIFrameElement)) {
+		throw new Error('Expected the "Flect app" element to be an <iframe>.');
+	}
+	return frame;
+};
 
 class FakePort {
 	onmessage: ((event: MessageEvent) => void) | null = null;
@@ -50,7 +58,7 @@ const frameDocument = (frame: HTMLIFrameElement) =>
 describe('CapsuleFrame', () => {
 	it('mounts compiled UI in an opaque network-denied frame', () => {
 		render(<CapsuleFrame html='<main>Capsule UI</main>' />);
-		const frame = screen.getByTitle('Flect app') as HTMLIFrameElement;
+		const frame = getFlectAppFrame();
 		expect(frame.getAttribute('sandbox')).toBe('allow-scripts');
 		expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
 		const source = frame.getAttribute('src');
@@ -323,10 +331,6 @@ describe('CapsuleFrame', () => {
 		await expect(screen.findByText('This Flect app was stopped safely.')).resolves.toBeVisible();
 
 		rendered.rerender(<CapsuleFrame html='<main>Replacement</main>' />);
-		await waitFor(() =>
-			expect(frameDocument(screen.getByTitle('Flect app') as HTMLIFrameElement)).toContain(
-				'Replacement'
-			)
-		);
+		await waitFor(() => expect(frameDocument(getFlectAppFrame())).toContain('Replacement'));
 	});
 });

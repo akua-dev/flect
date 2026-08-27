@@ -440,12 +440,17 @@ const systemSource = UserCommandSource.make({ kind: 'user' });
 const evolveWorkspaceSnapshot = (
 	current: FlectWorkspaceSnapshot,
 	patch: Partial<FlectWorkspaceSnapshot>
-): FlectWorkspaceSnapshot =>
-	Object.assign(
-		Object.create(FlectWorkspaceSnapshot.prototype) as FlectWorkspaceSnapshot,
-		current,
-		patch
-	);
+): FlectWorkspaceSnapshot => {
+	// Deliberately checking the prototype chain, not decoding: `blank` has no
+	// fields yet (Object.assign below populates them), so `Schema.is` would
+	// reject it. `instanceof` only confirms `Object.create` wired the right
+	// prototype before the shallow field copy runs.
+	const blank: unknown = Object.create(FlectWorkspaceSnapshot.prototype);
+	if (!(blank instanceof FlectWorkspaceSnapshot)) {
+		throw new Error('Expected a FlectWorkspaceSnapshot prototype instance.');
+	}
+	return Object.assign(blank, current, patch);
+};
 
 const phaseFrom = (shaping: ShapingSnapshot) =>
 	shaping.safeMode ? 'safe-mode' : shaping.proposal?.status === 'previewed' ? 'preview' : 'ready';
@@ -2628,6 +2633,11 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 			}).pipe(Effect.catch(() => Effect.void));
 		}
 
+		// oxlint-disable effecttsgo/missing-effect-context -- false positive: `tsc -b`
+		// confirms R = never here; effecttsgo cannot resolve the requirement type through
+		// the lazy `import('./capsule-staging')` module boundary this function
+		// intentionally uses to stay under the browser bundle budget (see
+		// scripts/check-browser-bundle.ts and src/lib/capsule-staging.ts).
 		const stageCapsuleProposal = Effect.fn('Flect.Workspace.stageCapsuleProposal')(function* (
 			envelope: FlectCommandEnvelope,
 			operationId: string,
@@ -2677,6 +2687,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 			envelope: FlectCommandEnvelope,
 			operationId: string
 		) {
+			// oxlint-enable effecttsgo/missing-effect-context
 			const command = envelope.command;
 			const portableKey = (value: {
 				readonly capsuleId: string;

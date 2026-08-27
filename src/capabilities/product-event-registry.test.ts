@@ -213,10 +213,10 @@ describe('ProductEventRegistry', () => {
 			let aborted = false;
 			const connector: ProductEventConnector = {
 				open: ({ signal }) =>
-					Effect.callback<void, ProductEventFailure>((resume) => {
+					Effect.callback<undefined, ProductEventFailure>((resume) => {
 						const onAbort = () => {
 							aborted = true;
-							resume(Effect.void);
+							resume(Effect.succeed(undefined));
 						};
 						signal.addEventListener('abort', onAbort, { once: true });
 						return Effect.sync(() => signal.removeEventListener('abort', onAbort));
@@ -245,10 +245,10 @@ describe('ProductEventRegistry', () => {
 			let aborted = false;
 			const connector: ProductEventConnector = {
 				open: ({ signal }) =>
-					Effect.callback<void, ProductEventFailure>((resume) => {
+					Effect.callback<undefined, ProductEventFailure>((resume) => {
 						const onAbort = () => {
 							aborted = true;
-							resume(Effect.void);
+							resume(Effect.succeed(undefined));
 						};
 						signal.addEventListener('abort', onAbort, { once: true });
 						return Effect.sync(() => signal.removeEventListener('abort', onAbort));

@@ -595,7 +595,7 @@ type OperationKind = 'prompt' | 'shape' | 'diagnose';
 type ActiveOperation = {
 	readonly kind: OperationKind;
 	readonly interrupt: Effect.Effect<void, PiOperationFailed>;
-	readonly done: Deferred.Deferred<void>;
+	readonly done: Deferred.Deferred<undefined>;
 	fiber: Fiber.Fiber<unknown, unknown> | undefined;
 };
 
@@ -1057,7 +1057,7 @@ export const FlectRuntimeLive = Layer.effect(
 			const operation: ActiveOperation = {
 				kind: 'diagnose',
 				interrupt: Effect.suspend(() => record.guardian.abort()),
-				done: yield* Deferred.make<void>(),
+				done: yield* Deferred.make<undefined>(),
 				fiber: undefined
 			};
 			return yield* executeOperation(
@@ -1104,7 +1104,7 @@ export const FlectRuntimeLive = Layer.effect(
 									yield* Ref.set(cancelled, true);
 									yield* record.app.abort();
 								}),
-								done: yield* Deferred.make<void>(),
+								done: yield* Deferred.make<undefined>(),
 								fiber: undefined
 							};
 
@@ -1233,7 +1233,7 @@ export const FlectRuntimeLive = Layer.effect(
 					const operation: ActiveOperation = {
 						kind: 'shape',
 						interrupt: Effect.suspend(() => record.shaper.abort()),
-						done: yield* Deferred.make<void>(),
+						done: yield* Deferred.make<undefined>(),
 						fiber: undefined
 					};
 					yield* executeOperation(
@@ -1269,6 +1269,11 @@ export const FlectRuntimeLive = Layer.effect(
 											break;
 										case 'external_extension_failed':
 											Queue.offerUnsafe(queue, publicExtensionFailure('shaper', event));
+											break;
+										case 'interface_edit_requested':
+											// The shaper role never proposes interface edits through this
+											// channel; only the app role's subscribe switch above forwards
+											// InterfaceEditRequested.
 											break;
 									}
 								});

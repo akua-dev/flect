@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it } from '@effect/vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Effect } from 'effect';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { vi } from 'vitest';
 import { MessageContent } from './message-content';
 
 const highlightMarkdownCode = vi.hoisted(() =>
@@ -127,7 +128,10 @@ const answer = 42`}
 		expect(screen.getByRole('link', { name: 'Jump' })).toHaveAttribute('href', '#summary');
 		const code = container.querySelector('pre code');
 		expect(code).toHaveTextContent('const answer = 42');
-		expect(within(code as HTMLElement).queryByRole('button')).toBeNull();
+		if (!(code instanceof HTMLElement)) {
+			throw new Error('Expected the highlighted code block to be an HTMLElement.');
+		}
+		expect(within(code).queryByRole('button')).toBeNull();
 	});
 
 	it('resolves repeated fragments inside their own message first', async () => {

@@ -121,13 +121,14 @@ const shape = async (page: Page, instruction: string, enforceBudget = true) => {
 		await expect(shell).toHaveAttribute('data-phase', 'accepted');
 		await expect(page.getByRole('region', { name: 'Import decision' })).toHaveCount(0);
 	});
-	const candidateRebuildMs = await page.evaluate(
-		() =>
-			performance
-				.getEntriesByType('resource')
-				.map((entry) => entry as PerformanceResourceTiming)
-				.findLast((entry) => /\/api\/sessions\/[^/]+\/shape$/.test(entry.name))?.duration
-	);
+	const candidateRebuildMs = await page.evaluate(() => {
+		const isResourceTiming = (entry: PerformanceEntry): entry is PerformanceResourceTiming =>
+			entry.entryType === 'resource';
+		return performance
+			.getEntriesByType('resource')
+			.filter(isResourceTiming)
+			.findLast((entry) => /\/api\/sessions\/[^/]+\/shape$/.test(entry.name))?.duration;
+	});
 	expect(candidateRebuildMs, 'candidate rebuild resource timing').toBeDefined();
 	if (enforceBudget) {
 		expect(
@@ -263,16 +264,18 @@ test('enforces the static Astro shell and cold/warm interaction budgets', async 
 		budget.coldInteractiveMs
 	);
 
-	const initialResources = await page.evaluate(() =>
-		performance.getEntriesByType('resource').map((entry) => {
-			const resource = entry as PerformanceResourceTiming;
-			return {
+	const initialResources = await page.evaluate(() => {
+		const isResourceTiming = (entry: PerformanceEntry): entry is PerformanceResourceTiming =>
+			entry.entryType === 'resource';
+		return performance
+			.getEntriesByType('resource')
+			.filter(isResourceTiming)
+			.map((resource) => ({
 				decoded: resource.decodedBodySize,
 				name: resource.name,
 				transfer: resource.transferSize
-			};
-		})
-	);
+			}));
+	});
 	const initialDecodedBytes = initialResources.reduce(
 		(total, resource) => total + resource.decoded,
 		0
@@ -399,13 +402,14 @@ test('gates the static Astro shell on Fast and Slow 4G with 4x CPU', async ({ pa
 				metrics.lcpMs = Math.max(metrics.lcpMs, entry.startTime);
 			}
 		}).observe({ buffered: true, type: 'largest-contentful-paint' });
+		const isLayoutShift = (
+			entry: PerformanceEntry
+		): entry is PerformanceEntry & { readonly hadRecentInput: boolean; readonly value: number } =>
+			entry.entryType === 'layout-shift' && 'hadRecentInput' in entry && 'value' in entry;
 		new PerformanceObserver((list) => {
 			for (const entry of list.getEntries()) {
-				const shift = entry as PerformanceEntry & {
-					readonly hadRecentInput: boolean;
-					readonly value: number;
-				};
-				if (!shift.hadRecentInput) metrics.cls += shift.value;
+				if (!isLayoutShift(entry)) continue;
+				if (!entry.hadRecentInput) metrics.cls += entry.value;
 			}
 		}).observe({ buffered: true, type: 'layout-shift' });
 		new PerformanceObserver((list) => {

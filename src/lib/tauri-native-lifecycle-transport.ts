@@ -107,21 +107,15 @@ export const makeTauriAgentIntegrationLayer = () =>
 		AgentIntegration,
 		Effect.gen(function* () {
 			const rpc = yield* RpcClient.make(FlectRpcs);
-			const mapError = <A, R>(
-				effect: Effect.Effect<A, AgentIntegrationError | RpcClientError, R>
-			) =>
-				effect.pipe(
-					Effect.mapError((error) =>
-						error._tag === 'AgentIntegrationError'
-							? error
-							: AgentIntegrationError.make({
-									host: 'codex',
-									reason: 'io',
-									message: 'The private agent integration runtime is unavailable.'
-								})
-					)
-				);
-			const statusAll = mapError(rpc.SetupAgentStatus());
+			const toAgentIntegrationError = (error: AgentIntegrationError | RpcClientError) =>
+				error._tag === 'AgentIntegrationError'
+					? error
+					: AgentIntegrationError.make({
+							host: 'codex',
+							reason: 'io',
+							message: 'The private agent integration runtime is unavailable.'
+						});
+			const statusAll = rpc.SetupAgentStatus().pipe(Effect.mapError(toAgentIntegrationError));
 			return {
 				status: (host) =>
 					statusAll.pipe(
@@ -139,8 +133,10 @@ export const makeTauriAgentIntegrationLayer = () =>
 						})
 					),
 				statusAll,
-				install: (host) => mapError(rpc.SetupAgentInstall({ host })),
-				remove: (host) => mapError(rpc.SetupAgentRemove({ host }))
+				install: (host) =>
+					rpc.SetupAgentInstall({ host }).pipe(Effect.mapError(toAgentIntegrationError)),
+				remove: (host) =>
+					rpc.SetupAgentRemove({ host }).pipe(Effect.mapError(toAgentIntegrationError))
 			} satisfies AgentIntegrationShape;
 		})
 	).pipe(Layer.provide(TauriProtocolLive));

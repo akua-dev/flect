@@ -49,12 +49,14 @@ const hash = async (archive: Uint8Array) => {
 
 const bindingKeys = ['accepted', 'candidate', 'lastKnownGood'] as const;
 
+const isRecord = (input: unknown): input is Record<string, unknown> =>
+	typeof input === 'object' && input !== null && !Array.isArray(input);
+
 const readBindingDigests = async (vfs: Vfs) => {
 	if (!(await vfs.exists(BINDINGS))) return undefined;
 	const parsed: unknown = JSON.parse(await vfs.readFileText(BINDINGS));
-	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed))
-		throw new Error('invalid bindings');
-	const record = parsed as Record<string, unknown>;
+	if (!isRecord(parsed)) throw new Error('invalid bindings');
+	const record = parsed;
 	if (
 		record.version !== 1 ||
 		Object.keys(record).some(

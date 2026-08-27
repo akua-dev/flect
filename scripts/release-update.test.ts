@@ -2,8 +2,8 @@ import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { afterEach, describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
-import { afterEach, describe, expect, it } from 'vitest';
 import {
 	validateUpdaterArchiveEntries,
 	validateUpdaterEvidence,

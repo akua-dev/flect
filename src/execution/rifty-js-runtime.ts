@@ -79,11 +79,11 @@ const mapEvaluation = (result: EvalResult): Evaluation =>
 const waitUntilReady = (runtime: RuntimeController) =>
 	runtime.isReady()
 		? Effect.void
-		: Effect.callback<void, BrowserExecutionFailed>((resume) => {
+		: Effect.callback<undefined, BrowserExecutionFailed>((resume) => {
 				const unsubscribe = runtime.on((event) => {
 					if (event.type === 'ready') {
 						unsubscribe();
-						resume(Effect.void);
+						resume(Effect.succeed(undefined));
 					} else if (event.type === 'exit') {
 						unsubscribe();
 						resume(

@@ -89,7 +89,7 @@ const invalidRevision = () =>
 	});
 
 const readProperty = (input: unknown, key: string) =>
-	typeof input === 'object' && input !== null ? (input as Record<string, unknown>)[key] : undefined;
+	typeof input === 'object' && input !== null ? Reflect.get(input, key) : undefined;
 
 const validateRawRevisionDocument = Effect.fn('Flect.InterfaceRevision.preflightDocument')(
 	(input: unknown) =>

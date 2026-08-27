@@ -11,7 +11,16 @@ import {
 } from '../../shared/browser-execution';
 import { makeBoundedWasiOutput } from './rifty-wasi-output';
 
-const worker = globalThis as unknown as DedicatedWorkerGlobalScope;
+const isDedicatedWorkerGlobalScope = (value: unknown): value is DedicatedWorkerGlobalScope =>
+	typeof value === 'object' &&
+	value !== null &&
+	'importScripts' in value &&
+	typeof value.importScripts === 'function';
+
+if (!isDedicatedWorkerGlobalScope(globalThis)) {
+	throw new Error('This module must run inside a dedicated worker.');
+}
+const worker = globalThis;
 const strictOptions: SchemaAST.ParseOptions = {
 	errors: 'all',
 	onExcessProperty: 'error'

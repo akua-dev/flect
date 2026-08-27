@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from '@effect/vitest';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlStateSnapshot } from '../../shared/control';
 import { defaultInterfaceDocument, InterfaceDocument } from '../../shared/interface-document';
 import { ShellPreferencesValue } from '../../shared/shell-preferences';
@@ -321,7 +321,7 @@ describe('RoleAwareShell', () => {
 					shapingController={shaping({
 						status,
 						request: async (instruction) => {
-							request(instruction);
+							void request(instruction);
 							setStatus('shaping');
 						}
 					})}

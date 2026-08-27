@@ -4,8 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, type Page, test } from '@playwright/test';
+import { Schema } from 'effect';
 import { resetBrowserWorkspace } from './reset-browser-workspace';
 import { revealActivity } from './reveal-activity';
+
+const GitCommitRef = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
+const AcceptedAuthoringRefs = Schema.Tuple([GitCommitRef, GitCommitRef]);
+const decodeAcceptedAuthoringRefs = Schema.decodeUnknownSync(AcceptedAuthoringRefs);
 
 const browserFailures = new WeakMap<Page, Array<string>>();
 const completedPromptPages = new WeakSet<Page>();
@@ -157,7 +162,7 @@ test('Flect checkpoints staged source through embedded Wasm Git', async ({ page 
 		'flect/accepted',
 		'flect/authoring'
 	]);
-	const [accepted, authoring] = refs.stdout.trim().split('\n');
+	const [accepted, authoring] = decodeAcceptedAuthoringRefs(refs.stdout.trim().split('\n'));
 	expect(authoring).toBe(accepted);
 });
 

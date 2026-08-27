@@ -222,7 +222,7 @@ describe('share quarantine', () => {
 	it.effect('removes quarantine storage and terminates work on interruption', () => {
 		const removals = Ref.makeUnsafe(0);
 		return Effect.gen(function* () {
-			const started = yield* Deferred.make<void>();
+			const started = yield* Deferred.make<undefined>();
 			yield* Effect.gen(function* () {
 				const archive = yield* encodeShareArchive({
 					manifest: gitManifest(),

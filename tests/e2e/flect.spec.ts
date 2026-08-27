@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, type Page, test } from '@playwright/test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { zipSync } from 'fflate';
 import { decodeCapsule, encodeCapsule } from '../../shared/capsule';
 import { defaultInterfaceDocument } from '../../shared/interface-document';
@@ -15,6 +15,50 @@ const completedShapePages = new WeakSet<Page>();
 const completedPromptPages = new WeakSet<Page>();
 const runFile = promisify(execFile);
 const controlStateDirectory = resolve('test-results/control-state');
+
+const isExecFileError = (value: unknown): value is { stdout?: string; stderr?: string } => {
+	if (typeof value !== 'object' || value === null) return false;
+	const stdout = 'stdout' in value ? value.stdout : undefined;
+	const stderr = 'stderr' in value ? value.stderr : undefined;
+	return (
+		(stdout === undefined || typeof stdout === 'string') &&
+		(stderr === undefined || typeof stderr === 'string')
+	);
+};
+
+const RepositoryStatus = Schema.Struct({
+	acceptedCommit: Schema.optionalKey(Schema.String),
+	proposalCommit: Schema.optionalKey(Schema.String),
+	dirty: Schema.optionalKey(Schema.Boolean)
+});
+
+const InspectSnapshot = Schema.Struct({
+	workspaceId: Schema.optionalKey(Schema.String)
+});
+
+const LogsSnapshot = Schema.Struct({
+	operations: Schema.optionalKey(
+		Schema.Array(
+			Schema.Struct({
+				clientId: Schema.optionalKey(Schema.String),
+				category: Schema.optionalKey(Schema.String),
+				phase: Schema.optionalKey(Schema.String)
+			})
+		)
+	)
+});
+
+const PackageLock = Schema.Struct({
+	packages: Schema.optionalKey(
+		Schema.Record(
+			Schema.String,
+			Schema.Struct({
+				version: Schema.optionalKey(Schema.String),
+				integrity: Schema.optionalKey(Schema.String)
+			})
+		)
+	)
+});
 
 const runFlect = async (...args: ReadonlyArray<string>) => {
 	try {
@@ -28,10 +72,7 @@ const runFlect = async (...args: ReadonlyArray<string>) => {
 		);
 		return JSON.parse(result.stdout.trim()) as unknown;
 	} catch (cause) {
-		const output = cause as {
-			readonly stderr?: string;
-			readonly stdout?: string;
-		};
+		const output = isExecFileError(cause) ? cause : {};
 		throw new Error(
 			`flect ${args.join(' ')} failed\nstdout: ${output.stdout?.trim() ?? ''}\nstderr: ${output.stderr?.trim() ?? ''}`,
 			{ cause }
@@ -784,11 +825,7 @@ test('imports a Vite React project and rebuilds it with the registry offline', a
 		'show',
 		'flect/accepted:project/package-lock.json'
 	]);
-	const packageLock = JSON.parse(packageLockSource) as {
-		readonly packages?: Readonly<
-			Record<string, { readonly version?: string; readonly integrity?: string }>
-		>;
-	};
+	const packageLock = Schema.decodeUnknownSync(PackageLock)(JSON.parse(packageLockSource));
 	expect(packageLock.packages?.['node_modules/react']?.version).toBe('19.2.8');
 	expect(packageLock.packages?.['node_modules/react']?.integrity).toMatch(/^sha512-/);
 
@@ -1217,9 +1254,18 @@ test('restores the one visible draft through refresh and clears it after send', 
 	await expect
 		.poll(() =>
 			page.evaluate(() => {
+				const isDraftsRecord = (value: unknown): value is Record<string, string> =>
+					typeof value === 'object' &&
+					value !== null &&
+					Object.values(value).every((entry) => typeof entry === 'string');
 				const encoded = localStorage.getItem('flect.role-continuity.v1');
 				if (encoded === null) return undefined;
-				return (JSON.parse(encoded) as { drafts?: Record<string, string> }).drafts;
+				const parsed: unknown = JSON.parse(encoded);
+				if (typeof parsed !== 'object' || parsed === null || !('drafts' in parsed)) {
+					return undefined;
+				}
+				const { drafts } = parsed;
+				return isDraftsRecord(drafts) ? drafts : undefined;
 			})
 		)
 		.toEqual({ acceptedUse: '', candidateUse: '', shape: '' });
@@ -1690,9 +1736,7 @@ test('lets an outside agent drive the same reactive workspace through flect', as
 	await expect
 		.poll(async () => {
 			try {
-				const snapshot = (await runFlect('inspect')) as {
-					readonly workspaceId?: string;
-				};
+				const snapshot = Schema.decodeUnknownSync(InspectSnapshot)(await runFlect('inspect'));
 				return snapshot.workspaceId;
 			} catch {
 				return undefined;
@@ -1704,11 +1748,9 @@ test('lets an outside agent drive the same reactive workspace through flect', as
 	await runFlect('shape', 'Create a focused project overview');
 	await expect(page.getByRole('heading', { name: 'Focused project overview' })).toBeVisible();
 
-	const repository = (await runFlect('repository', 'status')) as {
-		readonly acceptedCommit?: string;
-		readonly proposalCommit?: string;
-		readonly dirty?: boolean;
-	};
+	const repository = Schema.decodeUnknownSync(RepositoryStatus)(
+		await runFlect('repository', 'status')
+	);
 	expect(repository.acceptedCommit).toMatch(/^[0-9a-f]{40}$/);
 	expect(repository.proposalCommit).toBeUndefined();
 	expect(repository.dirty).toBe(false);
@@ -1717,13 +1759,7 @@ test('lets an outside agent drive the same reactive workspace through flect', as
 	completedPromptPages.add(page);
 	await expect(page.getByText('The product action completed.')).toBeVisible();
 
-	const logs = (await runFlect('logs')) as {
-		readonly operations?: ReadonlyArray<{
-			readonly clientId?: string;
-			readonly category?: string;
-			readonly phase?: string;
-		}>;
-	};
+	const logs = Schema.decodeUnknownSync(LogsSnapshot)(await runFlect('logs'));
 	expect(
 		logs.operations?.some(
 			(operation) =>
@@ -1733,23 +1769,23 @@ test('lets an outside agent drive the same reactive workspace through flect', as
 		)
 	).toBe(true);
 
-	const beforeSafeMode = (await runFlect('repository', 'status')) as {
-		readonly acceptedCommit?: string;
-	};
+	const beforeSafeMode = Schema.decodeUnknownSync(RepositoryStatus)(
+		await runFlect('repository', 'status')
+	);
 	await runFlect('safe', 'enter');
 	await expect(page.locator('.topbar .safe-mode')).toBeVisible();
-	const enteredSafeMode = (await runFlect('repository', 'status')) as {
-		readonly acceptedCommit?: string;
-	};
+	const enteredSafeMode = Schema.decodeUnknownSync(RepositoryStatus)(
+		await runFlect('repository', 'status')
+	);
 	expect(enteredSafeMode.acceptedCommit).toBe(beforeSafeMode.acceptedCommit);
 	await runFlect('safe', 'restore');
 	await expect(page.locator('.topbar .safe-mode')).toHaveCount(0);
 	await expect(page.getByRole('button', { name: 'Open recovery mode' })).toBeVisible();
 	await expect
 		.poll(async () => {
-			const restored = (await runFlect('repository', 'status')) as {
-				readonly acceptedCommit?: string;
-			};
+			const restored = Schema.decodeUnknownSync(RepositoryStatus)(
+				await runFlect('repository', 'status')
+			);
 			return restored.acceptedCommit;
 		})
 		.not.toBe(enteredSafeMode.acceptedCommit);

@@ -1,8 +1,10 @@
 import { mkdtemp, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
 import { assert, describe, it } from '@effect/vitest';
-import { Effect } from 'effect';
+import { Effect, Layer } from 'effect';
 import { ControlDescriptor } from '../shared/control-channel';
 import {
 	controlDescriptorPath,
@@ -11,6 +13,8 @@ import {
 	removeControlDescriptor,
 	writeControlDescriptor
 } from './control-descriptor';
+
+const platform = Layer.merge(BunFileSystem.layer, BunPath.layer);
 
 describe('control descriptor', () => {
 	it.effect('writes a private schema-valid descriptor atomically', () =>
@@ -31,8 +35,9 @@ describe('control descriptor', () => {
 
 			yield* writeControlDescriptor(descriptor, directory);
 			const decoded = yield* readControlDescriptor(directory);
+			const descriptorPath = yield* controlDescriptorPath(directory);
 			const directoryMode = (yield* Effect.promise(() => stat(directory))).mode;
-			const fileMode = (yield* Effect.promise(() => stat(controlDescriptorPath(directory)))).mode;
+			const fileMode = (yield* Effect.promise(() => stat(descriptorPath))).mode;
 
 			assert.strictEqual(Buffer.from(token, 'base64url').byteLength, 32);
 			assert.deepStrictEqual(decoded, descriptor);
@@ -42,7 +47,7 @@ describe('control descriptor', () => {
 			yield* removeControlDescriptor(directory);
 			const missing = yield* readControlDescriptor(directory).pipe(Effect.exit);
 			assert.strictEqual(missing._tag, 'Failure');
-		})
+		}).pipe(Effect.provide(platform))
 	);
 
 	it.effect('removes stale process descriptors', () =>
@@ -67,6 +72,6 @@ describe('control descriptor', () => {
 			assert.strictEqual(result._tag, 'Failure');
 			const missing = yield* readControlDescriptor(directory, false).pipe(Effect.exit);
 			assert.strictEqual(missing._tag, 'Failure');
-		})
+		}).pipe(Effect.provide(platform))
 	);
 });

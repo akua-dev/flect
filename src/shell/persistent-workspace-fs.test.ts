@@ -1,5 +1,5 @@
+import { describe, expect, it } from '@effect/vitest';
 import { MemoryVfs } from '@riftydev/vfs';
-import { describe, expect, it } from 'vitest';
 import { makePersistentWorkspaceFs, snapshotWorkspaceFiles } from './persistent-workspace-fs';
 
 class FailOnceVfs extends MemoryVfs {
