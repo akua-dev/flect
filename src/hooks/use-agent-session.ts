@@ -29,6 +29,7 @@ import {
   type AgentWorkspaceShape,
   OperationContext,
   type ProviderAuthUiState,
+  type ShaperTurnOutcome,
 } from "../lib/agent-workspace";
 import { FlectUnavailableError } from "../lib/api";
 import { browserRuntime } from "../lib/runtime";
@@ -45,6 +46,7 @@ export const isAgentSessionActive = (status: AgentSessionStatus) =>
 
 export interface ConversationMessage {
   readonly id: string;
+  readonly turnId?: string;
   readonly role: "user" | "assistant" | "activity";
   readonly content: string;
   readonly createdAt?: number;
@@ -80,7 +82,7 @@ export interface ShaperConversationController extends RoleConversationState {
   readonly shape: (
     instruction: string,
     document: InterfaceDocument,
-  ) => Promise<InterfaceDocument>;
+  ) => Promise<ShaperTurnOutcome>;
 }
 
 export interface AgentWorkspaceController {
@@ -120,6 +122,7 @@ export interface AgentWorkspaceController {
   readonly toggleExternalExtensions: (
     role: InteractiveAgentRole,
   ) => Promise<void>;
+  readonly submitConversation?: (text: string) => Promise<void>;
   readonly app: AppConversationController;
   readonly previewApp: PreviewAppConversationController;
   readonly shaper: ShaperConversationController;
@@ -146,6 +149,7 @@ const activityMessage = (
   activity: RoleConversationSnapshot["activities"][number],
 ): ConversationMessage => ({
   id: activity.id,
+  ...(activity.turnId === undefined ? {} : { turnId: activity.turnId }),
   role: "activity",
   createdAt: activity.updatedAt,
   content:
@@ -162,6 +166,7 @@ const conversationMessages = (
   [
     ...conversation.messages.map((message) => ({
       id: message.id,
+      ...(message.turnId === undefined ? {} : { turnId: message.turnId }),
       role: message.role,
       content: message.content,
       createdAt: message.createdAt,
@@ -194,7 +199,7 @@ export function useAgentSession(
   readonly shape: (
     instruction: string,
     document: InterfaceDocument,
-  ) => Promise<InterfaceDocument>;
+  ) => Promise<ShaperTurnOutcome>;
   readonly cancel: () => Promise<void>;
 } {
   const [snapshot, setSnapshot] = useState<AgentWorkspaceSnapshot>();

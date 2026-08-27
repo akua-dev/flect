@@ -16,6 +16,10 @@ import {
   decodeCapsuleHostMessage,
   decodeCapsuleMessage,
 } from "../../shared/capsule-protocol";
+import {
+  type CanvasEditAction,
+  CanvasEditPalette,
+} from "./canvas-edit-palette";
 
 const CSP = [
   "default-src 'none'",
@@ -250,6 +254,9 @@ export interface CapsuleFrameProps {
   readonly title?: string;
   readonly selectionMode?: boolean;
   readonly selection?: CanvasSelection;
+  readonly selectionBusy?: boolean;
+  readonly onSelectionAction?: (action: CanvasEditAction) => void;
+  readonly onClearSelection?: () => void;
   readonly onSelectionChange?: (selection: CanvasSelection | undefined) => void;
   readonly onDirectManipulation?: (
     kind: "move" | "resize",
@@ -267,6 +274,9 @@ export function CapsuleFrame({
   title = "Flect app",
   selectionMode = false,
   selection,
+  selectionBusy = false,
+  onSelectionAction,
+  onClearSelection,
   onSelectionChange,
   onDirectManipulation,
   onIntent,
@@ -688,6 +698,22 @@ export function CapsuleFrame({
           />
         </fieldset>
       )}
+      {selection !== undefined &&
+        onSelectionAction !== undefined &&
+        onClearSelection !== undefined && (
+          <CanvasEditPalette
+            busy={selectionBusy}
+            coordinateSpace="absolute"
+            label={selection.label}
+            onAction={onSelectionAction}
+            onClear={onClearSelection}
+            rect={selection.rect}
+            viewport={{
+              width: frameRef.current?.clientWidth ?? globalThis.innerWidth,
+              height: frameRef.current?.clientHeight ?? globalThis.innerHeight,
+            }}
+          />
+        )}
     </div>
   );
 }

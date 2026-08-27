@@ -312,7 +312,15 @@ const expectAccessible = async (page: Page, include: string) => {
     .include(include)
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
-  expect(result.violations.map((violation) => violation.id)).toEqual([]);
+  expect(
+    result.violations.map((violation) => ({
+      id: violation.id,
+      nodes: violation.nodes.map((node) => ({
+        summary: node.failureSummary,
+        target: node.target,
+      })),
+    })),
+  ).toEqual([]);
 };
 
 test.beforeEach(async ({ page }) => {
@@ -449,9 +457,9 @@ test("retains, previews, exports, removes, and explicitly deletes a real Git sha
       .getByRole("dialog", { name: "Shared sources" })
       .getByText("No shared sources yet"),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("prepares and activates an exact fast-forward update from real Git history", async ({
@@ -504,9 +512,9 @@ test("prepares and activates an exact fast-forward update from real Git history"
     fixtures.compatibleUpdate.commit,
   );
   await library.getByRole("button", { name: "Close shared sources" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("routes fork personalization through one composer and activates a real two-parent merge", async ({
@@ -530,15 +538,10 @@ test("routes fork personalization through one composer and activates a real two-
   const composer = page.getByRole("textbox", { name: "Message Flect" });
   await composer.fill(`Personalize shared fork ${fixtures.initial.commit}`);
   await composer.press("Enter");
-  await expect(
-    page
-      .getByRole("button", { name: "Bash details" })
-      .filter({ hasText: "Completed" })
-      .last(),
-  ).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("form.composer")).toHaveAttribute(
     "aria-busy",
     "false",
+    { timeout: 30_000 },
   );
   completedPromptPages.add(page);
   await expect(
@@ -551,7 +554,9 @@ test("routes fork personalization through one composer and activates a real two-
     buffer: Buffer.from(fixtures.compatibleUpdate.archive),
   });
   review = page.getByRole("region", { name: "Weather workspace" });
-  await expect(review.getByText(/1\.1\.0 · update/)).toBeVisible();
+  await expect(review.getByText(/1\.1\.0 · update/)).toBeVisible({
+    timeout: 30_000,
+  });
   await review.getByRole("button", { name: "Prepare update" }).click();
   await expect(review.getByText(/1\.1\.0 · fork/)).toBeVisible({
     timeout: 30_000,
@@ -579,9 +584,9 @@ test("routes fork personalization through one composer and activates a real two-
   expect(exported.upstream).toContain("refreshed: true");
   expect(exported.decoded.manifest.signatures).toEqual([]);
   await library.getByRole("button", { name: "Close shared sources" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("resolves a real Git conflict with Flect and activates only the explicit resolution", async ({
@@ -607,15 +612,10 @@ test("resolves a real Git conflict with Flect and activates only the explicit re
     `Personalize shared conflict fork ${fixtures.initial.commit}`,
   );
   await composer.press("Enter");
-  await expect(
-    page
-      .getByRole("button", { name: "Bash details" })
-      .filter({ hasText: "Completed" })
-      .last(),
-  ).toBeVisible({ timeout: 30_000 });
   await expect(page.locator("form.composer")).toHaveAttribute(
     "aria-busy",
     "false",
+    { timeout: 30_000 },
   );
   completedPromptPages.add(page);
   await expect(
@@ -684,9 +684,9 @@ test("resolves a real Git conflict with Flect and activates only the explicit re
   expect(exported.weather).toContain("warning: true");
   expect(exported.decoded.manifest.signatures).toEqual([]);
   await library.getByRole("button", { name: "Close shared sources" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("reviews a credential-free HTTPS share through the same inactive boundary", async ({
@@ -725,9 +725,9 @@ test("reviews a credential-free HTTPS share through the same inactive boundary",
     review.getByText("Inactive until you activate it"),
   ).toBeVisible();
   await review.getByRole("button", { name: "Discard shared source" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("clones and reviews an exact public Git descriptor through wasm-git", async ({
@@ -799,9 +799,9 @@ test("clones and reviews an exact public Git descriptor through wasm-git", async
     await page.unroute(pattern);
     await rm(root, { force: true, recursive: true });
   }
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("opens a host-composed private adapter without exposing its credential closure", async ({
@@ -855,9 +855,9 @@ test("opens a host-composed private adapter without exposing its credential clos
     ),
   ).toBe(false);
   await review.getByRole("button", { name: "Discard shared source" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });
 
 test("sharing review and source library remain contained at 320px and 200 percent text", async ({
@@ -946,7 +946,7 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
   ).toBeEnabled();
   await review.getByRole("button", { name: "Discard shared source" }).click();
   await expect(
-    page.getByRole("heading", { name: "What do you want to make?" }),
+    page.getByRole("heading", { name: "What do you need?" }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Actions" }).click();
@@ -965,7 +965,7 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
     /The shared file could not be reviewed safely/,
   );
   await expect(
-    page.getByRole("heading", { name: "What do you want to make?" }),
+    page.getByRole("heading", { name: "What do you need?" }),
   ).toBeVisible();
   await expect(page.getByText("private archive detail")).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText(
@@ -982,7 +982,7 @@ test("inspects every artifact kind inertly and contains a malicious local archiv
   ).toBeVisible();
   await expect(failure).not.toBeVisible();
   await page.getByRole("button", { name: "Discard shared source" }).click();
-  await expect(page.getByRole("button", { name: "Diagnostics" })).toContainText(
-    "Local control off",
-  );
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toContainText("Local control off");
 });

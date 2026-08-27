@@ -2,11 +2,11 @@ import { assert, describe, it } from "@effect/vitest";
 import { Effect, Layer, Result } from "effect";
 import { FlectUnavailableError } from "./api";
 import {
-  makeTauriNativePlatformLayer,
   NativePlatform,
   NativePlatformUnavailableLive,
 } from "./native-platform";
 import { TauriNativeHost } from "./tauri-native-host";
+import { makeTauriNativePlatformLayer } from "./tauri-native-platform";
 
 const readAccent = Effect.flatMap(
   NativePlatform,

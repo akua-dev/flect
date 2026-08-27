@@ -158,7 +158,8 @@ const makeRuntime = (safeMode = false) => {
           const sequence = current.sequence + 1;
           const command = envelope.command;
           const next =
-            command.type === "submit-shaper-instruction"
+            command.type === "submit-shaper-instruction" ||
+            command.type === "submit-conversation-prompt"
               ? (() => {
                   const proposal = InterfaceRevision.make({
                     version: 1,
@@ -273,7 +274,8 @@ describe("App", () => {
     await waitFor(() =>
       expect(
         dispatch.mock.calls.some(
-          ([envelope]) => envelope.command.type === "submit-shaper-instruction",
+          ([envelope]) =>
+            envelope.command.type === "submit-conversation-prompt",
         ),
       ).toBe(true),
     );
@@ -291,7 +293,7 @@ describe("App", () => {
       ),
     ).toBe(false);
 
-    await user.click(screen.getByRole("button", { name: "Diagnostics" }));
+    await user.click(screen.getByRole("button", { name: "Open settings" }));
     await user.click(
       await screen.findByRole("button", { name: "Enable local control" }),
     );
@@ -324,7 +326,7 @@ describe("App", () => {
     render(<App runtime={runtime} />);
 
     expect(
-      await screen.findByText("Custom interface state is bypassed."),
+      await screen.findByText("Your interface is protected."),
     ).toBeVisible();
     expect(
       screen.getByRole("textbox", { name: "Message Flect" }),

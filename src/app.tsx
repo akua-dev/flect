@@ -44,6 +44,7 @@ import {
   SetRailCollapsed,
   SetRailWidth,
   SubmitAppPrompt,
+  SubmitConversationPrompt,
   SubmitShaperInstruction,
   TestPortableExtension,
   WorkbenchHandoff,
@@ -53,6 +54,7 @@ import { isRollbackAvailable } from "../shared/revisions";
 import { ShellPreferencesValue } from "../shared/shell-preferences";
 import type { ShapingController } from "./components/agent-rail";
 import { RoleAwareShell } from "./components/role-aware-shell";
+import { WindowDragRegion } from "./components/window-drag-region";
 import type {
   AgentWorkspaceController,
   ConversationMessage,
@@ -70,6 +72,7 @@ export interface AppProps {
 const toMessages = (
   messages: ReadonlyArray<{
     readonly id: string;
+    readonly turnId?: string;
     readonly role: "user" | "assistant";
     readonly content: string;
     readonly createdAt: number;
@@ -77,6 +80,7 @@ const toMessages = (
 ): ReadonlyArray<ConversationMessage> =>
   messages.map((message) => ({
     id: message.id,
+    ...(message.turnId === undefined ? {} : { turnId: message.turnId }),
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,
@@ -150,15 +154,10 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
     }
     initialPromptSent.current = true;
     void command(
-      workspacePhase(snapshot.shaping, false) === "blank"
-        ? SubmitShaperInstruction.make({
-            type: "submit-shaper-instruction",
-            instruction: initialPrompt,
-          })
-        : SubmitAppPrompt.make({
-            type: "submit-app-prompt",
-            text: initialPrompt,
-          }),
+      SubmitConversationPrompt.make({
+        type: "submit-conversation-prompt",
+        text: initialPrompt,
+      }),
     );
   }, [command, initialPrompt, snapshot]);
 
@@ -240,6 +239,13 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
             enabled: !snapshot.agent.externalExtensions[interactiveRole],
           }),
         ),
+      submitConversation: (text) =>
+        command(
+          SubmitConversationPrompt.make({
+            type: "submit-conversation-prompt",
+            text,
+          }),
+        ),
       app: {
         ...app,
         role: "app",
@@ -272,7 +278,7 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
               instruction,
             }),
           );
-          return snapshot.document;
+          return { kind: "document" as const, document: snapshot.document };
         },
       },
       diagnoseRecovery: async () => ({
@@ -359,11 +365,7 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
   ) {
     return (
       <div className="role-shell role-shell--loading">
-        <header className="topbar">
-          <a aria-label="Flect home" className="wordmark" href="/">
-            Flect
-          </a>
-        </header>
+        <WindowDragRegion />
         <main aria-busy="true" className="workspace-canvas">
           <p className="shell-loading-status" role="status">
             Opening workspace

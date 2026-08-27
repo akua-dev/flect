@@ -157,6 +157,28 @@ const respondToReads = Effect.gen(function* () {
         );
         return;
       }
+      if (request.operation.type === "propose-app") {
+        if (request.source.role !== "shaper") {
+          yield* Deferred.fail(
+            request.response,
+            CommandRejected.make({
+              message: "Only Shaper can propose an authored app.",
+            }),
+          );
+          return;
+        }
+        yield* Deferred.succeed(
+          request.response,
+          AgentGatewayResult.make({
+            type: "propose-app",
+            value: {
+              status: "proposed",
+              name: request.operation.name,
+            },
+          }),
+        );
+        return;
+      }
       if (request.operation.type === "command") {
         yield* Deferred.succeed(
           request.response,
@@ -252,6 +274,57 @@ describe("reserved browser flect command", () => {
     }).pipe(
       Effect.provide(
         makeLayer("shaper", { "/workspace/app.flect": "fixture" }),
+      ),
+    ),
+  );
+
+  it.effect("packages and proposes authored app source from the sandbox", () =>
+    Effect.gen(function* () {
+      yield* respondToReads;
+      const shell = yield* SandboxedShell;
+      const validated = yield* shell.execute(
+        "shaper",
+        "flect app validate /workspace/project --name 'Driftwood Coffee'",
+        { agentContext: context },
+      );
+      assert.strictEqual(validated.exitCode, 0);
+      assert.include(validated.stdout, "valid");
+      assert.include(validated.stdout, "static-html");
+      const proposed = yield* shell.execute(
+        "shaper",
+        "flect app propose /workspace/project --name 'Driftwood Coffee'",
+        { agentContext: { ...context, requestId: "tool-shell-flect-2" } },
+      );
+      assert.strictEqual(proposed.exitCode, 0);
+      assert.include(proposed.stdout, "proposed");
+      assert.include(proposed.stdout, "Driftwood Coffee");
+    }).pipe(
+      Effect.provide(
+        makeLayer("shaper", {
+          "/workspace/project/index.html":
+            '<!doctype html><html><head><link rel="stylesheet" href="styles.css"></head><body><h1>Driftwood</h1></body></html>',
+          "/workspace/project/styles.css": "body{background:#faf6f0}",
+        }),
+      ),
+    ),
+  );
+
+  it.effect("refuses authored app proposals outside the Shaper role", () =>
+    Effect.gen(function* () {
+      yield* respondToReads;
+      const shell = yield* SandboxedShell;
+      const result = yield* shell.execute(
+        "app",
+        "flect app propose /workspace/project",
+        { agentContext: context },
+      );
+      assert.notStrictEqual(result.exitCode, 0);
+      assert.include(result.stderr + result.stdout, "Shaper");
+    }).pipe(
+      Effect.provide(
+        makeLayer("app", {
+          "/workspace/project/index.html": "<!doctype html><h1>App</h1>",
+        }),
       ),
     ),
   );
@@ -527,37 +600,74 @@ describe("reserved browser flect command", () => {
       }),
   );
 
-  it.effect("validates and proposes a workspace interface only as Shaper", () =>
-    Effect.gen(function* () {
-      yield* respondToReads;
-      const shell = yield* SandboxedShell;
-      const validated = yield* shell.execute(
-        "shaper",
-        "flect interface validate ./interface.json",
-        { agentContext: context },
-      );
-      const proposed = yield* shell.execute(
-        "shaper",
-        "flect interface propose /workspace/interface.json",
-        { agentContext: { ...context, requestId: "tool-propose" } },
-      );
-      const escaped = yield* shell.execute(
-        "shaper",
-        "flect interface validate ../outside.json",
-        { agentContext: { ...context, requestId: "tool-escape" } },
-      );
-      assert.strictEqual(validated.exitCode, 0);
-      assert.include(validated.stdout, "status: valid");
-      assert.strictEqual(proposed.exitCode, 0);
-      assert.include(proposed.stdout, "status: proposed");
-      assert.strictEqual(escaped.exitCode, 1);
-      assert.include(escaped.stdout, "code: unauthorized");
-    }).pipe(
-      Effect.provide(
-        makeLayer("shaper", {
-          "/workspace/interface.json": JSON.stringify(defaultInterfaceDocument),
-        }),
+  it.effect(
+    "describes, validates, and proposes an interface only as Shaper",
+    () =>
+      Effect.gen(function* () {
+        yield* respondToReads;
+        const shell = yield* SandboxedShell;
+        const schema = yield* shell.execute(
+          "shaper",
+          "flect interface schema",
+          { agentContext: { ...context, requestId: "tool-schema" } },
+        );
+        const candidate = JSON.stringify({
+          version: 2,
+          name: "Visible canvas",
+          root: {
+            id: "root",
+            type: "stack",
+            direction: "column",
+            gap: "md",
+            children: [
+              {
+                id: "headline",
+                type: "text",
+                text: "Visible canvas",
+                style: "headline",
+              },
+            ],
+          },
+        });
+        const written = yield* shell.execute(
+          "shaper",
+          `printf '%s' '${candidate}' > /workspace/interface.json`,
+          { agentContext: { ...context, requestId: "tool-write" } },
+        );
+        const validated = yield* shell.execute(
+          "shaper",
+          "flect interface validate ./interface.json",
+          { agentContext: context },
+        );
+        const proposed = yield* shell.execute(
+          "shaper",
+          "flect interface propose /workspace/interface.json",
+          { agentContext: { ...context, requestId: "tool-propose" } },
+        );
+        const escaped = yield* shell.execute(
+          "shaper",
+          "flect interface validate ../outside.json",
+          { agentContext: { ...context, requestId: "tool-escape" } },
+        );
+        assert.strictEqual(schema.exitCode, 0);
+        assert.include(schema.stdout, "direction");
+        assert.include(schema.stdout, "children");
+        assert.include(schema.stdout, "headline");
+        assert.strictEqual(written.exitCode, 0);
+        assert.strictEqual(validated.exitCode, 0);
+        assert.include(validated.stdout, "status: valid");
+        assert.strictEqual(proposed.exitCode, 0);
+        assert.include(proposed.stdout, "status: proposed");
+        assert.strictEqual(escaped.exitCode, 1);
+        assert.include(escaped.stdout, "code: unauthorized");
+      }).pipe(
+        Effect.provide(
+          makeLayer("shaper", {
+            "/workspace/interface.json": JSON.stringify(
+              defaultInterfaceDocument,
+            ),
+          }),
+        ),
       ),
-    ),
   );
 });

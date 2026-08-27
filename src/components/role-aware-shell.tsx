@@ -31,9 +31,11 @@ import {
   type AgentRailProps,
   type ShapingController,
 } from "./agent-rail";
+import type { CanvasEditAction } from "./canvas-edit-palette";
 import { PanelOpenIcon } from "./icons";
-import { type InterfaceAction, InterfaceRenderer } from "./interface-renderer";
+import type { InterfaceAction } from "./interface-renderer";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
+import { WindowDragRegion } from "./window-drag-region";
 
 const ShareLibrary = lazy(() =>
   import("./share-library").then((module) => ({
@@ -53,6 +55,13 @@ const ShareSourceDialog = lazy(() =>
 const CapsuleFrame = lazy(() =>
   import("./capsule-frame").then((module) => ({
     default: module.CapsuleFrame,
+  })),
+);
+const CanvasEditPalette = lazy(() => import("./canvas-edit-palette"));
+const InterfaceRenderer = lazy(() => import("./interface-renderer"));
+const DiagnosticsPanel = lazy(() =>
+  import("./diagnostics-panel").then((module) => ({
+    default: module.DiagnosticsPanel,
   })),
 );
 
@@ -141,6 +150,25 @@ const focusableSelector = [
 const initialMode = (phase: WorkspacePhase): ShellMode =>
   phase === "accepted" ? "run" : phase === "safe" ? "safe" : "edit";
 
+const isStarterInterface = (document: InterfaceDocument) => {
+  const root = document.root;
+  const actions =
+    root.type === "stack"
+      ? root.children.flatMap((node) =>
+          node.type === "stack" ? node.children : [node],
+        )
+      : [];
+  return (
+    document.name === "Flect" &&
+    actions.some(
+      (node) =>
+        node.type === "button" &&
+        node.id === "shape-interface" &&
+        node.label === "Start building",
+    )
+  );
+};
+
 export function RoleAwareShell({
   build,
   phase,
@@ -195,6 +223,7 @@ export function RoleAwareShell({
   );
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareLibraryOpen, setShareLibraryOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [shareFileError, setShareFileError] = useState<string>();
   const [selectionMode, setSelectionMode] = useState(false);
   const [canvasSelection, setCanvasSelection] = useState<CanvasSelection>();
@@ -225,10 +254,10 @@ export function RoleAwareShell({
     "--flect-rail-width": `${preferences.value.railWidth}px`,
   };
 
+  const starterWorkspace = phase === "blank" || isStarterInterface(document);
   const hasShaperActivity =
     workspace.shaper.messages.length > 0 || shaping.status !== "idle";
-  const docked =
-    phase === "accepted" || phase === "preview" || hasShaperActivity;
+  const docked = !starterWorkspace || hasShaperActivity || phase === "preview";
   const compiledCapsule =
     phase === "safe"
       ? undefined
@@ -248,7 +277,7 @@ export function RoleAwareShell({
     !(shareReview.lineage === "conflict" && target === "shape");
   const workbenchStatus =
     phase === "safe"
-      ? "Safe mode. Customized interface state is bypassed. Restore, export, discard, or retry continuity from the protected shell."
+      ? "Recovery mode. Custom interface changes are hidden. Restore the last working interface or manage the recovery backup from the protected shell."
       : shaping.status === "preview"
         ? `Imported candidate ${document.name} validated. Review its authority changes, then activate or discard it.`
         : operationActive
@@ -289,7 +318,7 @@ export function RoleAwareShell({
       shouldFocusRailRef.current = false;
       queueMicrotask(() => {
         railContainerRef.current
-          ?.querySelector<HTMLElement>(".agent-rail button:not(:disabled)")
+          ?.querySelector<HTMLElement>('[aria-label="Collapse agent"]')
           ?.focus();
       });
     }
@@ -385,6 +414,19 @@ export function RoleAwareShell({
     void preferences.setRailCollapsed(false);
   }, [preferences]);
 
+  const openSettings = useCallback(() => {
+    setSettingsOpen(true);
+  }, []);
+
+  const closeSettings = useCallback(() => {
+    setSettingsOpen(false);
+    queueMicrotask(() => {
+      railContainerRef.current
+        ?.querySelector<HTMLButtonElement>("[data-settings-trigger]")
+        ?.focus();
+    });
+  }, []);
+
   const focusComposer = useCallback(() => {
     if (preferences.value.railCollapsed) {
       shouldFocusRailRef.current = true;
@@ -393,7 +435,7 @@ export function RoleAwareShell({
     queueMicrotask(() => {
       railContainerRef.current
         ?.querySelector<HTMLTextAreaElement>(
-          '.composer textarea[name="prompt"]',
+          '.composer textarea[name="message"]',
         )
         ?.focus({ preventScroll: true });
     });
@@ -431,6 +473,23 @@ export function RoleAwareShell({
       );
     },
     [canvasSelection, operationActive, selectedNodeId, shaping],
+  );
+
+  const applyCanvasEditAction = useCallback(
+    (action: CanvasEditAction) => {
+      const instructions: Record<CanvasEditAction, string> = {
+        "move-earlier":
+          "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
+        "move-later":
+          "Move the selected element one position later in its current layout while preserving responsive behavior.",
+        smaller:
+          "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
+        larger:
+          "Make the selected element slightly larger using its existing responsive layout and design tokens.",
+      };
+      applyDirectManipulation(instructions[action]);
+    },
+    [applyDirectManipulation],
   );
 
   useEffect(() => {
@@ -557,7 +616,7 @@ export function RoleAwareShell({
 
   return (
     <div
-      className={`role-shell${docked ? " role-shell--split" : " role-shell--centered"}${collapsed ? " role-shell--collapsed" : ""}${preview ? " role-shell--preview" : ""}`}
+      className={`role-shell${docked ? " role-shell--split" : " role-shell--centered"}${collapsed ? " role-shell--collapsed" : ""}${preview ? " role-shell--preview" : ""}${settingsOpen ? " role-shell--settings" : ""}${!starterWorkspace && compiledCapsule !== undefined ? " role-shell--app" : ""}`}
       data-mode={mode}
       data-phase={phase}
       data-active-revision={activeRevisionId}
@@ -579,20 +638,20 @@ export function RoleAwareShell({
       >
         {workbenchStatus}
       </div>
+      <WindowDragRegion />
       <header className="topbar">
-        <a aria-label="Flect home" className="wordmark" href="/">
-          Flect
-        </a>
         <div className="topbar__status">
           {phase === "safe" ? (
-            <span className="safe-mode">Safe mode</span>
+            <span className="safe-mode">Recovery mode</span>
           ) : (
             <button
+              aria-label="Open recovery mode"
               className="safe-mode-link"
               onClick={onOpenSafeMode}
+              title="Open protected recovery"
               type="button"
             >
-              Safe mode
+              Recovery
             </button>
           )}
         </div>
@@ -669,83 +728,36 @@ export function RoleAwareShell({
           </Suspense>
         )}
 
-      <main className="workspace-canvas">
-        {docked && phase === "accepted" && !preview && (
-          <div
-            aria-label="Canvas editing"
-            className="canvas-edit-toolbar"
-            role="toolbar"
+      <main
+        className={`workspace-canvas${starterWorkspace ? " workspace-canvas--starter" : ""}${settingsOpen ? " workspace-canvas--settings" : ""}${!starterWorkspace && compiledCapsule !== undefined ? " workspace-canvas--app" : ""}`}
+      >
+        {settingsOpen && diagnostics !== undefined && (
+          <Suspense fallback={<ShareSurfaceFallback />}>
+            <DiagnosticsPanel
+              control={diagnostics.control}
+              onClose={closeSettings}
+              onToggleControl={diagnostics.onToggleControl}
+              operations={diagnostics.operations}
+              persistence={diagnostics.persistence}
+              presentation="workspace"
+              setup={diagnostics.setup}
+              update={diagnostics.update}
+            />
+          </Suspense>
+        )}
+        {docked && !starterWorkspace && phase === "accepted" && !preview && (
+          <button
+            aria-label={
+              selectionMode ? "Cancel element selection" : "Select element"
+            }
+            aria-pressed={selectionMode}
+            className="canvas-edit-trigger"
+            disabled={operationActive}
+            onClick={() => setSelectionMode((current) => !current)}
+            type="button"
           >
-            <button
-              aria-pressed={selectionMode}
-              className="canvas-edit-toolbar__select"
-              disabled={operationActive}
-              onClick={() => setSelectionMode((current) => !current)}
-              type="button"
-            >
-              {selectionMode ? "Choose an element" : "Select element"}
-            </button>
-            {canvasSelection !== undefined && (
-              <>
-                <span className="canvas-edit-toolbar__selection" role="status">
-                  {canvasSelection.label}
-                </span>
-                <div className="canvas-edit-toolbar__actions">
-                  <button
-                    disabled={operationActive}
-                    onClick={() =>
-                      applyDirectManipulation(
-                        "Move the selected element one position earlier in its current layout while preserving responsive behavior.",
-                      )
-                    }
-                    type="button"
-                  >
-                    Move earlier
-                  </button>
-                  <button
-                    disabled={operationActive}
-                    onClick={() =>
-                      applyDirectManipulation(
-                        "Move the selected element one position later in its current layout while preserving responsive behavior.",
-                      )
-                    }
-                    type="button"
-                  >
-                    Move later
-                  </button>
-                  <button
-                    disabled={operationActive}
-                    onClick={() =>
-                      applyDirectManipulation(
-                        "Make the selected element slightly smaller using its existing responsive layout and design tokens.",
-                      )
-                    }
-                    type="button"
-                  >
-                    Smaller
-                  </button>
-                  <button
-                    disabled={operationActive}
-                    onClick={() =>
-                      applyDirectManipulation(
-                        "Make the selected element slightly larger using its existing responsive layout and design tokens.",
-                      )
-                    }
-                    type="button"
-                  >
-                    Larger
-                  </button>
-                  <button
-                    aria-label="Clear canvas selection"
-                    onClick={() => chooseCanvasSelection(undefined)}
-                    type="button"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+            <span className="canvas-edit-trigger__glyph" />
+          </button>
         )}
         {!preview &&
           shareReview !== undefined &&
@@ -778,9 +790,13 @@ export function RoleAwareShell({
               />
             </Suspense>
           )}
-        {!docked ? (
+        {starterWorkspace ? (
           <section className="blank-invitation">
-            <h1>What do you want to make?</h1>
+            <h1>What do you need?</h1>
+            <p>
+              Flect makes a live interface from your outcome. You can keep using
+              and changing it here.
+            </p>
           </section>
         ) : compiledCapsule !== undefined ? (
           <Suspense fallback={<ShareSurfaceFallback />}>
@@ -796,42 +812,60 @@ export function RoleAwareShell({
                 )
               }
               onIntent={onCapsuleIntent}
+              onClearSelection={() => chooseCanvasSelection(undefined)}
+              onSelectionAction={applyCanvasEditAction}
               onSelectionChange={(selection) =>
                 chooseCanvasSelection(selection)
               }
               selection={canvasSelection}
+              selectionBusy={operationActive}
               selectionMode={selectionMode}
               title={compiledCapsule.name}
             />
           </Suspense>
         ) : (
-          <InterfaceRenderer
-            actions={actions}
-            document={document}
-            onAction={handleInterfaceAction}
-            onSelectionChange={(selection, nodeId) =>
-              chooseCanvasSelection(selection, nodeId)
-            }
-            renderPrompt={() => (
-              <button
-                className="canvas-agent-entry"
-                onClick={expand}
-                type="button"
-              >
-                Open Flect
-              </button>
+          <>
+            <Suspense fallback={<ShareSurfaceFallback />}>
+              <InterfaceRenderer
+                actions={actions}
+                document={document}
+                onAction={handleInterfaceAction}
+                onSelectionChange={(selection, nodeId) =>
+                  chooseCanvasSelection(selection, nodeId)
+                }
+                renderPrompt={() => (
+                  <button
+                    className="canvas-agent-entry"
+                    onClick={focusComposer}
+                    type="button"
+                  >
+                    Ask Flect about this interface
+                  </button>
+                )}
+                selectedNodeId={selectedNodeId}
+                selectionMode={selectionMode}
+              />
+            </Suspense>
+            {canvasSelection !== undefined && (
+              <Suspense fallback={null}>
+                <CanvasEditPalette
+                  busy={operationActive}
+                  label={canvasSelection.label}
+                  onAction={applyCanvasEditAction}
+                  onClear={() => chooseCanvasSelection(undefined)}
+                  rect={canvasSelection.rect}
+                />
+              </Suspense>
             )}
-            selectedNodeId={selectedNodeId}
-            selectionMode={selectionMode}
-          />
+          </>
         )}
       </main>
 
       <div
-        aria-hidden={collapsed || shareReviewObscuresRail}
+        aria-hidden={collapsed || shareReviewObscuresRail || settingsOpen}
         className="agent-rail-container"
         data-layout={docked ? "rail" : "center"}
-        inert={collapsed || shareReviewObscuresRail}
+        inert={collapsed || shareReviewObscuresRail || settingsOpen}
         onKeyDown={handleRailKeyDown}
         ref={railContainerRef}
       >
@@ -863,9 +897,12 @@ export function RoleAwareShell({
           preview={preview}
           candidateRevisionId={candidateRevisionId}
           selectedNodeId={selectedNodeId}
+          starter={starterWorkspace}
           useDisabled={useDisabled || phase === "blank"}
           onCollapse={collapse}
           onOpenSafeMode={onOpenSafeMode}
+          onOpenSettings={openSettings}
+          settingsInDock={!docked}
           {...(onOpenShareUrl === undefined || onOpenShareGit === undefined
             ? {}
             : { onOpenShareSource: () => setShareDialogOpen(true) })}

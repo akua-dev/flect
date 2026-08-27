@@ -53,7 +53,7 @@ const Sequence = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const CommandId = Identifier("cmd");
 const WorkspaceId = Identifier("workspace");
 const ClientId = Identifier("client");
-const OperationId = Identifier("operation");
+export const OperationId = Identifier("operation");
 const EventId = Identifier("event");
 const ActivityId = Identifier("activity");
 const ToolCallId = Schema.String.check(
@@ -317,6 +317,13 @@ export class SubmitAppPrompt extends Schema.Class<SubmitAppPrompt>(
   text: BoundedText(1, 100_000),
 }) {}
 
+export class SubmitConversationPrompt extends Schema.Class<SubmitConversationPrompt>(
+  "SubmitConversationPrompt",
+)({
+  type: Schema.Literal("submit-conversation-prompt"),
+  text: BoundedText(1, 100_000),
+}) {}
+
 export class SubmitShaperInstruction extends Schema.Class<SubmitShaperInstruction>(
   "SubmitShaperInstruction",
 )({
@@ -528,6 +535,7 @@ export const FlectCommand = Schema.Union([
   RemovePortableExtension,
   InvokePortableExtension,
   SubmitAppPrompt,
+  SubmitConversationPrompt,
   SubmitShaperInstruction,
   RequestShapeHandoff,
   CancelRole,
@@ -590,6 +598,7 @@ export class ToolActivity extends Schema.Class<ToolActivity>("ToolActivity")({
   id: ActivityId,
   callId: ToolCallId,
   operationId: OperationId,
+  turnId: Schema.optionalKey(OperationId),
   role: InteractiveAgentRole,
   toolName: BoundedText(1, 80),
   phase: Schema.Literals(["queued", "running", "succeeded", "failed"]),
@@ -618,6 +627,7 @@ export class ConversationMessage extends Schema.Class<ConversationMessage>(
 )({
   version: Schema.Literal(1),
   id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+  turnId: Schema.optionalKey(OperationId),
   role: Schema.Literals(["user", "assistant"]),
   content: Schema.String.check(Schema.isMaxLength(100_000)),
   createdAt: Timestamp,

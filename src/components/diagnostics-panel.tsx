@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   ControlStateSnapshot,
   OperationRecord,
@@ -88,6 +88,8 @@ export interface DiagnosticsPanelProps {
   readonly setup?: NativeSetupView;
   readonly update?: NativeUpdateView;
   readonly defaultOpen?: boolean;
+  readonly presentation?: "inline" | "workspace";
+  readonly onClose?: () => void;
 }
 
 export function DiagnosticsPanel({
@@ -98,12 +100,15 @@ export function DiagnosticsPanel({
   setup: providedSetup,
   update: providedUpdate,
   defaultOpen = false,
+  presentation = "inline",
+  onClose,
 }: DiagnosticsPanelProps) {
   const nativeSetup = useNativeSetup();
   const nativeUpdate = useNativeUpdate();
   const setup = providedSetup ?? nativeSetup;
   const update = providedUpdate ?? nativeUpdate;
   const [open, setOpen] = useState(defaultOpen);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const nativeAvailable = setup?.available === true;
   const shell = setup?.shell;
   const storageDegraded =
@@ -178,6 +183,302 @@ export function DiagnosticsPanel({
     }
   };
 
+  useEffect(() => {
+    if (presentation === "workspace") {
+      closeButtonRef.current?.focus();
+    }
+  }, [presentation]);
+
+  const panelBody = (
+    <div className="diagnostics-panel__body">
+      {persistence !== undefined && (
+        <section
+          className={`diagnostics-panel__storage${storageDegraded ? " diagnostics-panel__storage--degraded" : ""}`}
+          {...(storageDegraded ? { role: "alert" as const } : {})}
+        >
+          <strong>Workspace storage</strong>
+          <p>
+            {persistence.source !== "durable"
+              ? "Source history is unavailable. Flect cannot promise recovery; export what you can and reopen in a supported browser."
+              : persistence.capsule === "session"
+                ? "Source history stays durable. Compiled interfaces will be lost when this Flect session closes; export before leaving."
+                : persistence.capsule === "unavailable"
+                  ? "Compiled interface storage is unavailable. Source history remains durable, but previews cannot be recovered after reload."
+                  : "Source history and compiled interfaces are durable in this browser."}
+          </p>
+        </section>
+      )}
+      {update !== undefined && (
+        <section
+          aria-busy={update.loading}
+          aria-label="Flect update"
+          className="diagnostics-panel__update"
+        >
+          <div className="diagnostics-panel__setup-heading">
+            <div>
+              <strong>Flect updates</strong>
+              {updateSnapshot === undefined ? (
+                <p>Checking the installed version.</p>
+              ) : updateSnapshot.state === "unavailable" ? (
+                <p>
+                  {updateSnapshot.reason === "browser"
+                    ? "Updates are available in a signed desktop release."
+                    : "This development build has no trusted update key."}
+                </p>
+              ) : updateSnapshot.state === "current" ? (
+                <p>Flect {updateSnapshot.installedVersion} is current.</p>
+              ) : updateSnapshot.state === "available" ? (
+                <>
+                  <p>Flect {updateSnapshot.candidate.version} is available</p>
+                  <p>{updateSnapshot.candidate.notes}</p>
+                  <p>
+                    Apple silicon macOS ·{" "}
+                    {updateSize(updateSnapshot.candidate.contentLength)}
+                  </p>
+                </>
+              ) : updateSnapshot.state === "ready-to-relaunch" ? (
+                <p>Flect {updateSnapshot.candidate.version} is ready.</p>
+              ) : (
+                <p>
+                  {updateSnapshot.state === "downloading"
+                    ? "Downloading the verified update."
+                    : "Installing the verified update."}
+                </p>
+              )}
+            </div>
+            {updateSnapshot?.state === "current" ? (
+              <button
+                disabled={update.loading}
+                onClick={() => void update.check()}
+                type="button"
+              >
+                Check for updates
+              </button>
+            ) : updateSnapshot?.state === "available" ? (
+              <button
+                disabled={update.loading}
+                onClick={confirmUpdate}
+                type="button"
+              >
+                Install update
+              </button>
+            ) : updateSnapshot?.state === "ready-to-relaunch" ? (
+              <button
+                disabled={update.loading}
+                onClick={() => void update.relaunch()}
+                type="button"
+              >
+                Restart Flect
+              </button>
+            ) : undefined}
+          </div>
+          {(updateSnapshot?.state === "downloading" ||
+            updateSnapshot?.state === "installing") && (
+            <progress
+              aria-label="Update progress"
+              {...(updateSnapshot.progress.totalBytes === undefined
+                ? {}
+                : { max: updateSnapshot.progress.totalBytes })}
+              value={updateSnapshot.progress.downloadedBytes}
+            />
+          )}
+          {update.error !== undefined && (
+            <p className="diagnostics-panel__setup-error" role="alert">
+              {update.error}
+            </p>
+          )}
+        </section>
+      )}
+      <div className="diagnostics-panel__control">
+        <div>
+          <strong>Local agent control</strong>
+          <p>Loopback only. Access is explicit and revocable.</p>
+        </div>
+        <button onClick={() => void onToggleControl()} type="button">
+          {control.enabled ? "Disable local control" : "Enable local control"}
+        </button>
+      </div>
+      <section
+        aria-busy={setup?.loading === true}
+        aria-label="Native setup"
+        className="diagnostics-panel__setup"
+      >
+        <div className="diagnostics-panel__setup-heading">
+          <div>
+            <strong>Command line</strong>
+            <p>One public Flect command, linked into your local PATH.</p>
+          </div>
+          {!nativeAvailable ? (
+            <button disabled type="button">
+              Desktop app required
+            </button>
+          ) : shell === undefined ? (
+            <button disabled type="button">
+              Checking
+            </button>
+          ) : shell.state === "installed" ? (
+            <button
+              disabled={setup.loading}
+              onClick={() => confirmShell("remove")}
+              type="button"
+            >
+              Remove command-line link
+            </button>
+          ) : shell.state === "conflict" ? (
+            <button disabled type="button">
+              Existing path preserved
+            </button>
+          ) : (
+            <button
+              disabled={setup.loading}
+              onClick={() =>
+                confirmShell(shell.state === "stale" ? "repair" : "install")
+              }
+              type="button"
+            >
+              {shell.state === "stale"
+                ? "Repair command-line link"
+                : "Install command-line link"}
+            </button>
+          )}
+        </div>
+        <span className="diagnostics-panel__setup-state">
+          {nativeAvailable
+            ? shell === undefined
+              ? "Checking native state"
+              : stateLabel(shell.state)
+            : "Available only in the installed desktop app"}
+        </span>
+
+        <div className="diagnostics-panel__setup-heading">
+          <div>
+            <strong>Agent context</strong>
+            <p>Opt in per host. Flect never runs an agent installer.</p>
+          </div>
+        </div>
+        {nativeAvailable ? (
+          <ul
+            aria-label="Agent context integrations"
+            className="diagnostics-panel__integrations"
+          >
+            {setup.agents.map((agent) => (
+              <li key={agent.host}>
+                <div>
+                  <strong>{hostLabel(agent.host)}</strong>
+                  <span>{stateLabel(agent.state)}</span>
+                </div>
+                {agent.state === "installed" ? (
+                  <button
+                    disabled={setup.loading}
+                    onClick={() => confirmAgent(agent.host, "remove")}
+                    type="button"
+                  >
+                    Remove {hostLabel(agent.host)} context
+                  </button>
+                ) : agent.state === "conflict" ? (
+                  <button disabled type="button">
+                    Existing config preserved
+                  </button>
+                ) : (
+                  <button
+                    disabled={setup.loading}
+                    onClick={() => confirmAgent(agent.host, "install")}
+                    type="button"
+                  >
+                    {agent.state === "stale" ? "Repair" : "Enable"}{" "}
+                    {hostLabel(agent.host)} context
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="diagnostics-panel__unavailable">
+            Install the desktop app to manage agent context.
+          </p>
+        )}
+        {setup?.error !== undefined && (
+          <p className="diagnostics-panel__setup-error" role="alert">
+            {setup.error}
+          </p>
+        )}
+        {nativeAvailable && uninstall !== undefined && (
+          <div className="diagnostics-panel__uninstall">
+            <div className="diagnostics-panel__setup-heading">
+              <div>
+                <strong>Uninstall Flect</strong>
+                <p>
+                  First remove only integrations Flect still owns. Then move
+                  <code>{uninstall.application.path}</code> to Trash.
+                </p>
+              </div>
+              <button
+                disabled={setup.loading || !uninstallPending}
+                onClick={confirmUninstallPreparation}
+                type="button"
+              >
+                {uninstallPending
+                  ? "Prepare to uninstall"
+                  : "Integrations prepared"}
+              </button>
+            </div>
+            <ul aria-label="Data retained after uninstall">
+              {uninstall.retained.map((item) => (
+                <li key={item.kind}>
+                  <strong>{retainedLabel(item.kind)}</strong>
+                  <span>{item.reason}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </section>
+      {operations.length > 0 && (
+        <ol
+          aria-label="Recent operations"
+          className="diagnostics-panel__operations"
+        >
+          {operations
+            .slice(-20)
+            .reverse()
+            .map((operation) => (
+              <li key={operation.sequence}>
+                <span data-phase={operation.phase}>{operation.phase}</span>
+                <strong>{operation.summary}</strong>
+                <code>{operation.operationId}</code>
+              </li>
+            ))}
+        </ol>
+      )}
+    </div>
+  );
+
+  if (presentation === "workspace") {
+    return (
+      <section
+        aria-labelledby="settings-title"
+        className="diagnostics-panel diagnostics-panel--workspace"
+      >
+        <header className="diagnostics-panel__workspace-header">
+          <div>
+            <h1 id="settings-title">Settings</h1>
+            <p>Manage Flect, local control, and diagnostic information.</p>
+          </div>
+          <button
+            aria-label="Close settings"
+            className="diagnostics-panel__close"
+            onClick={onClose}
+            ref={closeButtonRef}
+            type="button"
+          >
+            Done
+          </button>
+        </header>
+        {panelBody}
+      </section>
+    );
+  }
+
   return (
     <details
       className="diagnostics-panel"
@@ -187,7 +488,7 @@ export function DiagnosticsPanel({
       {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
       <summary aria-label="Diagnostics" role="button">
         <span>Diagnostics</span>
-        <small>
+        <small aria-hidden="true">
           {storageSummary !== undefined
             ? storageSummary
             : control.enabled
@@ -195,267 +496,7 @@ export function DiagnosticsPanel({
               : "Local control off"}
         </small>
       </summary>
-      <div className="diagnostics-panel__body">
-        {persistence !== undefined && (
-          <section
-            className={`diagnostics-panel__storage${storageDegraded ? " diagnostics-panel__storage--degraded" : ""}`}
-            {...(storageDegraded ? { role: "alert" as const } : {})}
-          >
-            <strong>Workspace storage</strong>
-            <p>
-              {persistence.source !== "durable"
-                ? "Source history is unavailable. Flect cannot promise recovery; export what you can and reopen in a supported browser."
-                : persistence.capsule === "session"
-                  ? "Source history stays durable. Compiled interfaces will be lost when this Flect session closes; export before leaving."
-                  : persistence.capsule === "unavailable"
-                    ? "Compiled interface storage is unavailable. Source history remains durable, but previews cannot be recovered after reload."
-                    : "Source history and compiled interfaces are durable in this browser."}
-            </p>
-          </section>
-        )}
-        {update !== undefined && (
-          <section
-            aria-busy={update.loading}
-            aria-label="Flect update"
-            className="diagnostics-panel__update"
-          >
-            <div className="diagnostics-panel__setup-heading">
-              <div>
-                <strong>Flect updates</strong>
-                {updateSnapshot === undefined ? (
-                  <p>Checking the installed version.</p>
-                ) : updateSnapshot.state === "unavailable" ? (
-                  <p>
-                    {updateSnapshot.reason === "browser"
-                      ? "Updates are available in a signed desktop release."
-                      : "This development build has no trusted update key."}
-                  </p>
-                ) : updateSnapshot.state === "current" ? (
-                  <p>Flect {updateSnapshot.installedVersion} is current.</p>
-                ) : updateSnapshot.state === "available" ? (
-                  <>
-                    <p>Flect {updateSnapshot.candidate.version} is available</p>
-                    <p>{updateSnapshot.candidate.notes}</p>
-                    <p>
-                      Apple silicon macOS ·{" "}
-                      {updateSize(updateSnapshot.candidate.contentLength)}
-                    </p>
-                  </>
-                ) : updateSnapshot.state === "ready-to-relaunch" ? (
-                  <p>Flect {updateSnapshot.candidate.version} is ready.</p>
-                ) : (
-                  <p>
-                    {updateSnapshot.state === "downloading"
-                      ? "Downloading the verified update."
-                      : "Installing the verified update."}
-                  </p>
-                )}
-              </div>
-              {updateSnapshot?.state === "current" ? (
-                <button
-                  disabled={update.loading}
-                  onClick={() => void update.check()}
-                  type="button"
-                >
-                  Check for updates
-                </button>
-              ) : updateSnapshot?.state === "available" ? (
-                <button
-                  disabled={update.loading}
-                  onClick={confirmUpdate}
-                  type="button"
-                >
-                  Install update
-                </button>
-              ) : updateSnapshot?.state === "ready-to-relaunch" ? (
-                <button
-                  disabled={update.loading}
-                  onClick={() => void update.relaunch()}
-                  type="button"
-                >
-                  Restart Flect
-                </button>
-              ) : undefined}
-            </div>
-            {(updateSnapshot?.state === "downloading" ||
-              updateSnapshot?.state === "installing") && (
-              <progress
-                aria-label="Update progress"
-                {...(updateSnapshot.progress.totalBytes === undefined
-                  ? {}
-                  : { max: updateSnapshot.progress.totalBytes })}
-                value={updateSnapshot.progress.downloadedBytes}
-              />
-            )}
-            {update.error !== undefined && (
-              <p className="diagnostics-panel__setup-error" role="alert">
-                {update.error}
-              </p>
-            )}
-          </section>
-        )}
-        <div className="diagnostics-panel__control">
-          <div>
-            <strong>Local agent control</strong>
-            <p>Loopback only. Access is explicit and revocable.</p>
-          </div>
-          <button onClick={() => void onToggleControl()} type="button">
-            {control.enabled ? "Disable local control" : "Enable local control"}
-          </button>
-        </div>
-        <section
-          aria-busy={setup?.loading === true}
-          aria-label="Native setup"
-          className="diagnostics-panel__setup"
-        >
-          <div className="diagnostics-panel__setup-heading">
-            <div>
-              <strong>Command line</strong>
-              <p>One public Flect command, linked into your local PATH.</p>
-            </div>
-            {!nativeAvailable ? (
-              <button disabled type="button">
-                Desktop app required
-              </button>
-            ) : shell === undefined ? (
-              <button disabled type="button">
-                Checking
-              </button>
-            ) : shell.state === "installed" ? (
-              <button
-                disabled={setup.loading}
-                onClick={() => confirmShell("remove")}
-                type="button"
-              >
-                Remove command-line link
-              </button>
-            ) : shell.state === "conflict" ? (
-              <button disabled type="button">
-                Existing path preserved
-              </button>
-            ) : (
-              <button
-                disabled={setup.loading}
-                onClick={() =>
-                  confirmShell(shell.state === "stale" ? "repair" : "install")
-                }
-                type="button"
-              >
-                {shell.state === "stale"
-                  ? "Repair command-line link"
-                  : "Install command-line link"}
-              </button>
-            )}
-          </div>
-          <span className="diagnostics-panel__setup-state">
-            {nativeAvailable
-              ? shell === undefined
-                ? "Checking native state"
-                : stateLabel(shell.state)
-              : "Available only in the installed desktop app"}
-          </span>
-
-          <div className="diagnostics-panel__setup-heading">
-            <div>
-              <strong>Agent context</strong>
-              <p>Opt in per host. Flect never runs an agent installer.</p>
-            </div>
-          </div>
-          {nativeAvailable ? (
-            <ul
-              aria-label="Agent context integrations"
-              className="diagnostics-panel__integrations"
-            >
-              {setup.agents.map((agent) => (
-                <li key={agent.host}>
-                  <div>
-                    <strong>{hostLabel(agent.host)}</strong>
-                    <span>{stateLabel(agent.state)}</span>
-                  </div>
-                  {agent.state === "installed" ? (
-                    <button
-                      disabled={setup.loading}
-                      onClick={() => confirmAgent(agent.host, "remove")}
-                      type="button"
-                    >
-                      Remove {hostLabel(agent.host)} context
-                    </button>
-                  ) : agent.state === "conflict" ? (
-                    <button disabled type="button">
-                      Existing config preserved
-                    </button>
-                  ) : (
-                    <button
-                      disabled={setup.loading}
-                      onClick={() => confirmAgent(agent.host, "install")}
-                      type="button"
-                    >
-                      {agent.state === "stale" ? "Repair" : "Enable"}{" "}
-                      {hostLabel(agent.host)} context
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="diagnostics-panel__unavailable">
-              Install the desktop app to manage agent context.
-            </p>
-          )}
-          {setup?.error !== undefined && (
-            <p className="diagnostics-panel__setup-error" role="alert">
-              {setup.error}
-            </p>
-          )}
-          {nativeAvailable && uninstall !== undefined && (
-            <div className="diagnostics-panel__uninstall">
-              <div className="diagnostics-panel__setup-heading">
-                <div>
-                  <strong>Uninstall Flect</strong>
-                  <p>
-                    First remove only integrations Flect still owns. Then move
-                    <code>{uninstall.application.path}</code> to Trash.
-                  </p>
-                </div>
-                <button
-                  disabled={setup.loading || !uninstallPending}
-                  onClick={confirmUninstallPreparation}
-                  type="button"
-                >
-                  {uninstallPending
-                    ? "Prepare to uninstall"
-                    : "Integrations prepared"}
-                </button>
-              </div>
-              <ul aria-label="Data retained after uninstall">
-                {uninstall.retained.map((item) => (
-                  <li key={item.kind}>
-                    <strong>{retainedLabel(item.kind)}</strong>
-                    <span>{item.reason}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
-        {operations.length > 0 && (
-          <ol
-            aria-label="Recent operations"
-            className="diagnostics-panel__operations"
-          >
-            {operations
-              .slice(-20)
-              .reverse()
-              .map((operation) => (
-                <li key={operation.sequence}>
-                  <span data-phase={operation.phase}>{operation.phase}</span>
-                  <strong>{operation.summary}</strong>
-                  <code>{operation.operationId}</code>
-                </li>
-              ))}
-          </ol>
-        )}
-      </div>
+      {panelBody}
     </details>
   );
 }

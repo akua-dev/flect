@@ -1,3 +1,5 @@
+import { isNativeHost } from "../lib/native-host";
+
 export interface FlectClientModule {
   readonly mountFlect: (root: HTMLElement) => Promise<void>;
 }
@@ -27,12 +29,15 @@ const diagnosticParameters = [
   "product-adoption-diagnostic",
 ] as const;
 
-export const isFlectDesktop = (
-  location: Pick<Location, "hostname" | "protocol"> = globalThis.location,
-) =>
-  "__TAURI_INTERNALS__" in globalThis ||
-  location.protocol === "tauri:" ||
-  location.hostname === "tauri.localhost";
+export const isFlectDesktop = isNativeHost;
+
+if (import.meta.hot && isFlectDesktop()) {
+  const reloadNativeWorkspace = () => globalThis.location.reload();
+  import.meta.hot.on("vite:beforeUpdate", reloadNativeWorkspace);
+  import.meta.hot.dispose(() =>
+    import.meta.hot?.off("vite:beforeUpdate", reloadNativeWorkspace),
+  );
+}
 
 export const shouldActivateFlectImmediately = ({
   href,
@@ -147,6 +152,22 @@ export const installFlectActivation = (
   document.addEventListener("pointerdown", (event) =>
     activateFromTarget(event.target),
   );
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const example = target.closest<HTMLElement>("[data-flect-example]");
+    const prompt = example?.dataset.flectExample;
+    if (prompt === undefined || prompt.length === 0) return;
+    const input = shell.querySelector<HTMLTextAreaElement>(
+      'textarea[name="prompt"]',
+    );
+    if (input === null) return;
+    input.value = prompt;
+    input.focus();
+    if (status !== null) {
+      status.textContent = "Edit this idea or describe the outcome you need.";
+    }
+  });
   document.addEventListener("submit", (event) => {
     const form = event.target;
     if (

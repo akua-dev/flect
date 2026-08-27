@@ -5,12 +5,14 @@ import { fireEvent } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   installFlectActivation,
+  isFlectDesktop,
   shouldActivateFlectImmediately,
 } from "./activate-flect";
 
 afterEach(() => {
   document.body.innerHTML = "";
   document.documentElement.removeAttribute("data-flect-state");
+  Reflect.deleteProperty(globalThis, "isTauri");
 });
 
 const shell = () => {
@@ -27,6 +29,14 @@ const shell = () => {
 };
 
 describe("Flect activation boundary", () => {
+  it("recognizes the native host marker exposed by Tauri isolation", () => {
+    Reflect.set(globalThis, "isTauri", true);
+
+    expect(isFlectDesktop({ hostname: "127.0.0.1", protocol: "http:" })).toBe(
+      true,
+    );
+  });
+
   it("keeps an ordinary browser view static until the user activates it", async () => {
     shell();
     const mountFlect = vi.fn(() => Promise.resolve());
@@ -92,6 +102,37 @@ describe("Flect activation boundary", () => {
     });
     fireEvent.submit(form);
     expect(await submitted).toBe("Make a calm notes app");
+  });
+
+  it("fills a starter idea before the user decides to submit it", () => {
+    shell();
+    const load = vi.fn(() =>
+      Promise.resolve({ mountFlect: vi.fn(() => Promise.resolve()) }),
+    );
+    installFlectActivation({
+      document,
+      location: {
+        href: "https://flect.local/?view=1",
+        hostname: "flect.local",
+        protocol: "https:",
+      },
+      testMode: false,
+      desktop: false,
+      load,
+    });
+    const form = document.querySelector("form");
+    const prompt = document.querySelector("textarea");
+    expect(form).not.toBeNull();
+    expect(prompt).not.toBeNull();
+    if (form === null || prompt === null) return;
+
+    const example = document.createElement("button");
+    example.dataset.flectExample = "A calm project planner for this week";
+    form.append(example);
+    fireEvent.click(example);
+
+    expect(prompt).toHaveValue("A calm project planner for this week");
+    expect(load).not.toHaveBeenCalled();
   });
 
   it.each([

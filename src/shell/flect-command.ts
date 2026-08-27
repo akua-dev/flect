@@ -24,6 +24,11 @@ export interface FlectCommandOptions {
   readonly bus: AgentCommandBusShape | undefined;
   readonly context: () => SandboxedAgentContext | undefined;
   readonly readFile: (path: string) => Promise<Uint8Array>;
+  readonly readTree?: (
+    directory: string,
+  ) => Promise<
+    ReadonlyArray<{ readonly path: string; readonly contents: Uint8Array }>
+  >;
 }
 
 const workspacePath = (path: string) => {
@@ -396,9 +401,32 @@ export const makeFlectCommand = (options: FlectCommandOptions) =>
           }),
       });
     };
+    const readAppSource = (directory: string) => {
+      const resolved = workspacePath(directory);
+      if (resolved === undefined || options.readTree === undefined) {
+        return Effect.fail(
+          FlectGatewayError.make({
+            reason: "unauthorized",
+            message: "The app source directory must stay inside /workspace.",
+          }),
+        );
+      }
+      return Effect.tryPromise({
+        try: async () => {
+          const files = await options.readTree?.(resolved);
+          return files ?? [];
+        },
+        catch: () =>
+          FlectGatewayError.make({
+            reason: "invalid-response",
+            message: "The app source directory could not be read.",
+          }),
+      });
+    };
     const gateway = makeAgentFlectCommandGatewayLayer(
       source,
       readInterface,
+      readAppSource,
     ).pipe(Layer.provide(bus));
     try {
       const result = await Effect.runPromise(

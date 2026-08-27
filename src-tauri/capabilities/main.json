@@ -3,5 +3,5 @@
   "identifier": "main",
   "description": "The Flect main window receives only core WebView authority.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }

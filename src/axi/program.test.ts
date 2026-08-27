@@ -169,6 +169,23 @@ const permission = (state: "granted" | "revoked") =>
   });
 
 describe("Flect AXI program", () => {
+  it.effect("returns a complete bounded interface authoring contract", () => {
+    const { layer } = makeGateway();
+    return Effect.gen(function* () {
+      const result = yield* runFlect(["--json", "interface", "schema"]);
+
+      assert.strictEqual(result.exitCode, 0);
+      assert.include(result.stdout, '"required":["version","name","root"]');
+      assert.include(result.stdout, '"required":["id","type","text","style"]');
+      assert.include(
+        result.stdout,
+        '"required":["id","type","direction","gap","children"]',
+      );
+      assert.include(result.stdout, '"name":"Example"');
+      assert.include(result.stdout, '"text":"Example"');
+    }).pipe(Effect.provide(layer));
+  });
+
   it.effect(
     "lists and inspects only bounded protected share projections",
     () => {

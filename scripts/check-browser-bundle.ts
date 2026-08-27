@@ -1,9 +1,16 @@
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { parse } from "acorn";
+import { FlectPerformanceBudgets } from "../shared/performance-budgets";
 
 const DIST = join(import.meta.dir, "..", "dist");
 const ASSETS = join(DIST, "assets");
 const KIB = 1_024;
+const WORKSPACE_CSS_GZIP_BUDGET = 20 * KIB;
+const WORKSPACE_CSS_DECODED_BUDGET = 112 * KIB;
+const WORKSPACE_GZIP_BUDGET =
+  FlectPerformanceBudgets.browser.initialShellGzipBytes;
+const WORKSPACE_DECODED_BUDGET =
+  FlectPerformanceBudgets.browser.initialShellDecodedBytes;
 
 const fail = (message: string): never => {
   throw new Error(`Browser bundle gate failed: ${message}`);
@@ -63,6 +70,23 @@ const graphSize = async (paths: ReadonlySet<string>) => {
     gzip += current.gzip;
   }
   return { decoded, gzip };
+};
+
+const graphDependencies = async (paths: ReadonlySet<string>) => {
+  const dependencies: Array<{
+    readonly asset: string;
+    readonly decoded: number;
+    readonly gzip: number;
+  }> = [];
+  for (const path of [...paths].sort((left, right) =>
+    left.localeCompare(right),
+  )) {
+    dependencies.push({
+      asset: relative(DIST, path),
+      ...(await size(path)),
+    });
+  }
+  return dependencies;
 };
 
 const htmlPath = join(DIST, "index.html");
@@ -169,15 +193,21 @@ if (initialNames.includes(workspaceCssReference)) {
   fail("view-only HTML eagerly references workspace CSS");
 }
 const workspaceCss = await size(assetPath(`/assets/${workspaceCssReference}`));
-if (workspaceCss.gzip > 16 * KIB || workspaceCss.decoded > 80 * KIB) {
+if (
+  workspaceCss.gzip > WORKSPACE_CSS_GZIP_BUDGET ||
+  workspaceCss.decoded > WORKSPACE_CSS_DECODED_BUDGET
+) {
   fail(
-    `deferred workspace CSS is ${workspaceCss.gzip} bytes gzip / ${workspaceCss.decoded} decoded (limits 16384 / 81920)`,
+    `deferred workspace CSS is ${workspaceCss.gzip} bytes gzip / ${workspaceCss.decoded} decoded (limits ${WORKSPACE_CSS_GZIP_BUDGET} / ${WORKSPACE_CSS_DECODED_BUDGET})`,
   );
 }
 const workspace = await graphSize(workspaceGraph);
-if (workspace.gzip > 200 * KIB || workspace.decoded > 600 * KIB) {
+if (
+  workspace.gzip > WORKSPACE_GZIP_BUDGET ||
+  workspace.decoded > WORKSPACE_DECODED_BUDGET
+) {
   fail(
-    `protected workspace is ${workspace.gzip} bytes gzip / ${workspace.decoded} decoded (limits 204800 / 614400)`,
+    `protected workspace is ${workspace.gzip} bytes gzip / ${workspace.decoded} decoded (limits ${WORKSPACE_GZIP_BUDGET} / ${WORKSPACE_DECODED_BUDGET})`,
   );
 }
 
@@ -216,6 +246,20 @@ console.log(
         ...workspace,
         modules: workspaceGraph.size,
       },
+      islands: [
+        {
+          name: "flect-workspace",
+          entryAssets: [
+            relative(DIST, assetPath(componentReference)),
+            relative(DIST, assetPath(rendererReference)),
+            relative(
+              DIST,
+              assetPath(`/assets/${workspaceActivationReference}`),
+            ),
+          ].sort((left, right) => left.localeCompare(right)),
+          dependencies: await graphDependencies(workspaceGraph),
+        },
+      ],
       onDemandBoundaries: ["shell", "compiler", "package", "worker", "wasm"],
     },
     undefined,

@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type {
   AuthLoginEvent,
   AuthLoginReference,
@@ -14,13 +14,17 @@ import {
   type AgentSessionStatus,
   isAgentSessionActive,
 } from "../hooks/use-agent-session";
+import {
+  PromptInput,
+  PromptInputBody,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "./ai-elements/prompt-input";
 import { ComposerActionsMenu } from "./composer-actions-menu";
-import { ArrowUpIcon, StopIcon } from "./icons";
 import { ModelMenu } from "./model-menu";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
-
-const MAX_COMPOSER_HEIGHT = 168;
-const MIN_COMPOSER_HEIGHT = 48;
 
 export interface ComposerProps {
   readonly mode: ShellMode;
@@ -33,6 +37,8 @@ export interface ComposerProps {
   /** @deprecated Routing is automatic. */
   readonly useDisabled?: boolean;
   readonly placeholder: string;
+  /** Outcome-oriented examples for a blank Flect workspace. */
+  readonly starterPrompts?: ReadonlyArray<string>;
   readonly disabled?: boolean;
   readonly disabledReason?: string;
   readonly drafts?: ContinuityDrafts;
@@ -89,6 +95,7 @@ export interface ComposerProps {
 export function Composer({
   mode,
   placeholder,
+  starterPrompts = [],
   disabled = false,
   disabledReason,
   drafts: persistedDrafts,
@@ -128,15 +135,15 @@ export function Composer({
   externalExtensionsEnabled,
   onToggleExternalExtensions,
 }: ComposerProps) {
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const composingRef = useRef(false);
-  const submittingRef = useRef(false);
-  const initialFocusAttemptedRef = useRef(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const helpId = useId();
   const draftKey = "accepted-use";
   const continuityKey: keyof ContinuityDrafts = "acceptedUse";
+  const [drafts, setDrafts] = useState<Record<string, string>>(() => ({
+    [draftKey]: persistedDrafts?.acceptedUse ?? "",
+  }));
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const hasLocalDraftRef = useRef(false);
+  const helpId = useId();
   const prompt = mode === "safe" ? "" : (drafts[draftKey] ?? "");
   const isActive = isAgentSessionActive(status);
   const protectedActionsLocked = submitting || isActive;
@@ -178,47 +185,12 @@ export function Composer({
                     : "Press Enter to send. Press Shift Enter for a new line.");
 
   useEffect(() => {
-    if (persistedDrafts === undefined) {
-      return;
-    }
+    if (persistedDrafts === undefined || hasLocalDraftRef.current) return;
     setDrafts((current) => ({
       ...current,
-      "accepted-use": persistedDrafts.acceptedUse,
+      [draftKey]: persistedDrafts.acceptedUse,
     }));
   }, [persistedDrafts]);
-
-  useEffect(() => {
-    const textarea = textareaRef.current;
-    if (
-      initialFocusAttemptedRef.current ||
-      textarea === null ||
-      inputUnavailable ||
-      globalThis.matchMedia?.("(pointer: coarse)").matches === true
-    ) {
-      return;
-    }
-    initialFocusAttemptedRef.current = true;
-    const active = textarea.ownerDocument.activeElement;
-    if (active === null || active === textarea.ownerDocument.body) {
-      textarea.focus({ preventScroll: true });
-    }
-  }, [inputUnavailable]);
-
-  useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (textarea === null) {
-      return;
-    }
-
-    textarea.style.height = "0px";
-    const measuredHeight = Math.max(textarea.scrollHeight, MIN_COMPOSER_HEIGHT);
-    textarea.style.height = `${Math.min(
-      measuredHeight,
-      MAX_COMPOSER_HEIGHT,
-    )}px`;
-    textarea.style.overflowY =
-      textarea.scrollHeight > MAX_COMPOSER_HEIGHT ? "auto" : "hidden";
-  });
 
   const submit = async () => {
     const nextPrompt = prompt.trim();
@@ -243,53 +215,60 @@ export function Composer({
     }
   };
 
+  const chooseStarterPrompt = (starterPrompt: string) => {
+    hasLocalDraftRef.current = true;
+    setDrafts((current) => ({ ...current, [draftKey]: starterPrompt }));
+    void onDraftChange?.(continuityKey, starterPrompt);
+  };
+
   return (
-    <form
+    <PromptInput
       aria-busy={isActive}
-      className={`composer${isActive ? " composer--active" : ""}`}
+      className="composer-form composer"
       data-composer-role="flect"
-      onSubmit={(event) => {
-        event.preventDefault();
+      onSubmit={() => {
         void submit();
       }}
     >
-      <textarea
-        aria-describedby={helpId}
-        aria-label={`Message ${roleName}`}
-        disabled={inputUnavailable}
-        name="prompt"
-        onChange={(event) => {
-          const value = event.target.value;
-          setDrafts((current) => ({
-            ...current,
-            [draftKey]: value,
-          }));
-          void onDraftChange?.(continuityKey, value);
-        }}
-        onCompositionEnd={() => {
-          composingRef.current = false;
-        }}
-        onCompositionStart={() => {
-          composingRef.current = true;
-        }}
-        onKeyDown={(event) => {
-          if (
-            event.key === "Enter" &&
-            !event.shiftKey &&
-            !composingRef.current
-          ) {
-            event.preventDefault();
-            void submit();
-          }
-        }}
-        placeholder={placeholder}
-        ref={textareaRef}
-        rows={1}
-        value={prompt}
-      />
+      <PromptInputBody>
+        <PromptInputTextarea
+          aria-describedby={helpId}
+          aria-label={`Message ${roleName}`}
+          autoFocus={!inputUnavailable}
+          disabled={inputUnavailable}
+          onChange={(event) => {
+            const value = event.target.value;
+            hasLocalDraftRef.current = true;
+            setDrafts((current) => ({
+              ...current,
+              [draftKey]: value,
+            }));
+            void onDraftChange?.(continuityKey, value);
+          }}
+          placeholder={placeholder}
+          rows={1}
+          value={prompt}
+        />
+        {starterPrompts.length > 0 && (
+          <fieldset className="composer__starter-prompts">
+            <legend className="sr-only">Starter ideas</legend>
+            {starterPrompts.map((starterPrompt) => (
+              <button
+                aria-label={`Try ${starterPrompt}`}
+                className="composer__starter-prompt"
+                key={starterPrompt}
+                onClick={() => chooseStarterPrompt(starterPrompt)}
+                type="button"
+              >
+                {starterPrompt}
+              </button>
+            ))}
+          </fieldset>
+        )}
+      </PromptInputBody>
 
-      <div className="composer__rail">
-        <div className="composer__tools">
+      <PromptInputFooter className="composer__rail">
+        <PromptInputTools className="composer__tools">
           <ComposerActionsMenu
             disabled={protectedActionsLocked}
             externalExtensionsEnabled={externalExtensionsEnabled}
@@ -311,7 +290,7 @@ export function Composer({
             rollbackDisabled={protectedActionsLocked}
           />
           {mode === "safe" && (
-            <span className="composer__safe-label">Safe mode</span>
+            <span className="composer__safe-label">Recovery mode</span>
           )}
           <ModelMenu
             authEvent={authEvent}
@@ -331,36 +310,30 @@ export function Composer({
             reasoningLevel={reasoningLevel}
             selectedModel={selectedModel}
           />
-        </div>
+        </PromptInputTools>
 
         <div className="composer__actions">
-          {isActive ? (
-            <button
-              aria-describedby={helpId}
-              aria-label={`Stop ${roleName}`}
-              className="submit-button submit-button--stop"
-              disabled={status === "cancelling"}
-              onClick={() => void onCancel()}
-              type="button"
-            >
-              <StopIcon />
-            </button>
-          ) : (
-            <button
-              aria-describedby={helpId}
-              aria-label={`Send to ${roleName}`}
-              className="submit-button"
-              disabled={!canSubmit}
-              type="submit"
-            >
-              <ArrowUpIcon />
-            </button>
-          )}
+          <PromptInputSubmit
+            aria-describedby={helpId}
+            aria-label={isActive ? `Stop ${roleName}` : `Send to ${roleName}`}
+            className="submit-button"
+            disabled={isActive ? status === "cancelling" : !canSubmit}
+            onStop={() => void onCancel()}
+            status={
+              status === "streaming"
+                ? "streaming"
+                : status === "submitting" || status === "cancelling"
+                  ? "submitted"
+                  : status === "error"
+                    ? "error"
+                    : "ready"
+            }
+          />
         </div>
-      </div>
+      </PromptInputFooter>
       <span className="sr-only" id={helpId}>
         {help}
       </span>
-    </form>
+    </PromptInput>
   );
 }
