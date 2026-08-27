@@ -23,10 +23,36 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  quality:
-    name: Flect quality gate
-    runs-on: macos-15
-    timeout-minutes: 45
+  changes:
+    name: Classify changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      # Pull requests are classified through the GitHub API, so no checkout is
+      # needed. Non-pull-request events skip the filter and always run the full
+      # gate. A changed file counts as code unless it matches every
+      # documentation pattern below; when in doubt a path counts as code.
+      - name: Detect non-documentation changes
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+        with:
+          predicate-quantifier: every
+          filters: |
+            code:
+              - "!**/*.md"
+              - "!docs/**"
+              - "!.agents/**"
+
+  checks:
+    name: Static checks and unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       CI: true
     steps:
@@ -39,13 +65,31 @@ jobs:
         uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979
         with:
           bun-version: "1.3.14"
-          no-cache: true
 
-      - name: Install the pinned Rust toolchain
-        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run the static and unit quality gate
+        run: bun run check
+
+  e2e:
+    name: Browser end-to-end tests
+    runs-on: macos-15
+    timeout-minutes: 45
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
+    env:
+      CI: true
+    steps:
+      - name: Check out the exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
-          toolchain: "1.93.0"
-          components: rustfmt
+          persist-credentials: false
+
+      - name: Install the pinned Bun runtime
+        uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979
+        with:
+          bun-version: "1.3.14"
 
       - name: Install locked dependencies
         run: bun install --frozen-lockfile
@@ -53,12 +97,8 @@ jobs:
       - name: Install the pinned Chromium runtime
         run: bunx playwright install chromium
 
-      - name: Run the canonical quality gate
-        run: bun run check:all
-
-      - name: Deliberate failure probe
-        if: github.event_name == 'workflow_dispatch' && inputs.failure_probe
-        run: bun -e 'throw new Error("Deliberate Flect CI failure probe.")'
+      - name: Run production Chromium workflows
+        run: bun run test:e2e
 
       - name: Upload bounded browser failure evidence
         if: failure() && !cancelled()
@@ -72,3 +112,99 @@ jobs:
           retention-days: 7
           compression-level: 9
           include-hidden-files: false
+
+  desktop:
+    name: Rust checks and desktop bundle
+    runs-on: macos-15
+    timeout-minutes: 45
+    needs: changes
+    if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
+    env:
+      CI: true
+    steps:
+      - name: Check out the exact revision
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+
+      - name: Install the pinned Bun runtime
+        uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install the pinned Rust toolchain
+        uses: dtolnay/rust-toolchain@2c7215f132e9ebf062739d9130488b56d53c060c
+        with:
+          toolchain: "1.93.0"
+          components: rustfmt
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: src-tauri
+
+      - name: Install locked dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build the Rust sidecar
+        run: bun run build:sidecar
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+
+      - name: Run Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      # The stock beforeBuildCommand builds the flag-free production
+      # frontend, so the bundle proves a clean web build end to end.
+      - name: Build the release-mode application bundle
+        run: >-
+          bunx tauri build --bundles app
+          --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
+
+  gate:
+    name: Flect quality gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs:
+      - changes
+      - checks
+      - e2e
+      - desktop
+    if: always()
+    steps:
+      - name: Deliberate failure probe
+        if: github.event_name == 'workflow_dispatch' && inputs.failure_probe
+        run: |
+          echo "Deliberate Flect CI failure probe."
+          exit 1
+
+      - name: Require every quality job to succeed
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          E2E_RESULT: ${{ needs.e2e.result }}
+          DESKTOP_RESULT: ${{ needs.desktop.result }}
+          DOCS_ONLY: ${{ github.event_name == 'pull_request' && needs.changes.outputs.code != 'true' }}
+        run: |
+          status=0
+          require() {
+            job="$1"
+            result="$2"
+            docs_skippable="$3"
+            if [ "$result" = "success" ]; then
+              echo "$job succeeded."
+              return
+            fi
+            if [ "$docs_skippable" = "true" ] && [ "$result" = "skipped" ] && [ "$DOCS_ONLY" = "true" ]; then
+              echo "$job was intentionally skipped for a documentation-only change."
+              return
+            fi
+            echo "$job did not succeed: $result"
+            status=1
+          }
+          require changes "$CHANGES_RESULT" false
+          require checks "$CHECKS_RESULT" false
+          require e2e "$E2E_RESULT" true
+          require desktop "$DESKTOP_RESULT" true
+          exit "$status"

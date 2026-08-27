@@ -315,10 +315,11 @@ Rust formatting and tests, and the native application build. The architecture
 gate rejects native promise fan-out everywhere and ad hoc Promise constructors
 or native Promise serialization tails outside tests. Concurrency, callback
 lifetimes, cancellation, and failure composition therefore stay explicit in
-Effect. The credential-free GitHub quality workflow runs this same command on
-every pull request and every change to `main`; branch protection requires its
-exact `Flect quality gate` context on a current revision, including for
-administrators. The workflow uploads only bounded Playwright failure evidence.
+Effect. The credential-free GitHub quality workflow runs these same checks in
+parallel jobs on every pull request and every change to `main`; branch
+protection requires its exact `Flect quality gate` summary context on a
+current revision, including for administrators. The workflow uploads only
+bounded Playwright failure evidence.
 `bun run
 test:pi-smoke` is separate
 because it makes one real private turn with the developer's existing Pi

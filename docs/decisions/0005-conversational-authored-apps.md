@@ -81,7 +81,13 @@ last-known-good.
   through the guarded proposal build before automatic acceptance, so their
   build progress remains visible; the transient preview state they publish is
   a known cosmetic limitation.
-- The Shaper conversation currently reports "Change complete" when the turn's
-  proposal latches, slightly before the controller finishes acceptance; a
-  staging failure after that message surfaces only as a failed operation.
-  Tightening that sequencing is follow-up work.
+- The Shaper conversation confirms an authored app only after acceptance.
+  The turn latches the archive without claiming completion; the controller
+  then concludes the turn through the agent workspace: "Change complete" is
+  appended once staging and local acceptance succeed, a staging failure
+  appends a bounded "The app could not be activated" message and sets the
+  shaper status to error while the canvas stays last-known-good, and a
+  blocked review announces nothing because the explicit Activate/Discard
+  candidate takes over. Declarative document outcomes keep their latch-time
+  completion message; their acceptance is the immediate local revision that
+  follows in the same operation.

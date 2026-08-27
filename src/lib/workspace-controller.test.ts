@@ -67,6 +67,7 @@ import {
   WorkbenchHandoff,
 } from "../../shared/control";
 import { PortableExtensionPackage } from "../../shared/extensions";
+import { GitWorkspaceFailure } from "../../shared/git-workspace";
 import {
   defaultInterfaceDocument,
   InterfaceDocument,
@@ -221,6 +222,9 @@ const makeLayer = (options?: {
       }),
     }),
   );
+  const concludeShaperTurn = vi.fn<AgentWorkspaceShape["concludeShaperTurn"]>(
+    () => Effect.void,
+  );
   const agentLayer = Layer.effect(
     AgentWorkspace,
     Effect.gen(function* () {
@@ -248,6 +252,7 @@ const makeLayer = (options?: {
         submitAppPrompt,
         submitPreviewPrompt,
         submitShaperInstruction,
+        concludeShaperTurn,
         cancel: () => Effect.void,
         cancelPreview: Effect.void,
         releasePreview: Effect.void,
@@ -316,6 +321,7 @@ const makeLayer = (options?: {
     submitPreviewPrompt,
     submitAppPrompt,
     submitShaperInstruction,
+    concludeShaperTurn,
   };
 };
 
@@ -2712,7 +2718,8 @@ describe("FlectWorkspaceController", () => {
   it.effect(
     "accepts a conversationally authored web app as a local revision without ceremony",
     () => {
-      const { layer, submitShaperInstruction } = makeLayer();
+      const { layer, submitShaperInstruction, concludeShaperTurn } =
+        makeLayer();
       return Effect.gen(function* () {
         const authored = yield* importWebProject(
           [
@@ -2768,6 +2775,116 @@ describe("FlectWorkspaceController", () => {
           presentation.acceptedReview?.id,
           "local.flect.driftwood-coffee",
         );
+        assert.deepStrictEqual(
+          concludeShaperTurn.mock.calls.map(([, conclusion]) => conclusion),
+          [{ kind: "completed", name: "Driftwood Coffee" }],
+        );
+      }).pipe(Effect.provide(layer));
+    },
+  );
+
+  it.effect(
+    "reports a bounded failure instead of completion when authored-app staging fails",
+    () => {
+      const unexpected = Effect.die(new Error("Unexpected Git call"));
+      const git: GitWorkspaceShape = {
+        open: () =>
+          Effect.succeed({
+            type: "opened",
+            variant: "asyncify" as const,
+            existed: true,
+          }),
+        write: () => unexpected,
+        read: () => unexpected,
+        run: () => unexpected,
+        exportRepository: unexpected,
+        remove: unexpected,
+        checkpoint: () =>
+          Effect.fail(
+            GitWorkspaceFailure.make({
+              operation: "checkpoint",
+              reason: "conflict",
+              message: "The authoring branch moved unexpectedly.",
+            }),
+          ),
+        readAtRef: () => unexpected,
+        moveRef: () => unexpected,
+        snapshotRef: () => unexpected,
+        status: () =>
+          Effect.succeed({
+            type: "status",
+            acceptedCommit: "a".repeat(40),
+            lastKnownGoodCommit: "b".repeat(40),
+            conflictPaths: [],
+            dirty: false,
+          }),
+        importRepository: () => unexpected,
+        importObjects: () => unexpected,
+        deleteRef: () => unexpected,
+        inspectCommit: () => unexpected,
+        mergeRef: () => unexpected,
+        inspectShare: () => unexpected,
+      };
+      const { layer, submitShaperInstruction, concludeShaperTurn } = makeLayer({
+        git,
+      });
+      return Effect.gen(function* () {
+        const authored = yield* importWebProject(
+          [
+            {
+              path: "index.html",
+              contents: new TextEncoder().encode(
+                "<!doctype html><html><body><h1>Driftwood Coffee</h1></body></html>",
+              ),
+            },
+          ],
+          {
+            source: "conversation",
+            revision: "conversation",
+            name: "Driftwood Coffee",
+          },
+        );
+        submitShaperInstruction.mockImplementationOnce(() =>
+          Effect.succeed({
+            kind: "app",
+            archive: authored.archive,
+            name: authored.report.name,
+          }),
+        );
+        const controller = yield* FlectWorkspaceController;
+        const before = yield* controller.snapshot;
+        const result = yield* Effect.result(
+          controller.dispatch(
+            envelope(
+              802,
+              SubmitShaperInstruction.make({
+                type: "submit-shaper-instruction",
+                instruction: "Make a landing page website",
+              }),
+            ),
+          ),
+        );
+        const snapshot = yield* controller.snapshot;
+        const presentation = yield* controller.capsulePresentation ??
+          Effect.succeed<CapsulePresentationState>({});
+
+        assert.strictEqual(result._tag, "Failure");
+        assert.deepStrictEqual(
+          concludeShaperTurn.mock.calls.map(([, conclusion]) => conclusion),
+          [
+            {
+              kind: "failed",
+              reason: "The authored project could not be checkpointed safely.",
+            },
+          ],
+        );
+        assert.strictEqual(snapshot.shaping.proposal, undefined);
+        assert.deepStrictEqual(
+          snapshot.shaping.active.document,
+          before.shaping.active.document,
+        );
+        assert.strictEqual(presentation.accepted, undefined);
+        assert.strictEqual(presentation.candidateReview, undefined);
       }).pipe(Effect.provide(layer));
     },
   );
