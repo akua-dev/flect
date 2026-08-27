@@ -1,7 +1,4 @@
-interface RestrictedCssFile {
-	readonly path: string;
-	readonly contents: Uint8Array;
-}
+import type { BuildEntry } from './browser-build-digest';
 
 const normalizeAbsolutePath = (path: string) => {
 	const parts: Array<string> = [];
@@ -39,7 +36,7 @@ export const resolveRestrictedCssImport = (
 	return resolved?.startsWith(`${root}/`) && files.has(resolved) ? resolved : undefined;
 };
 
-export const collectRestrictedCss = (files: ReadonlyArray<RestrictedCssFile>) => {
+export const collectRestrictedCss = (files: ReadonlyArray<BuildEntry>) => {
 	const decoder = new TextDecoder('utf-8', { fatal: true });
 	const encoder = new TextEncoder();
 	const css = files

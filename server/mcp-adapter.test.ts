@@ -1,6 +1,6 @@
+import { afterEach, describe, expect, it, vi } from '@effect/vitest';
 import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
 import { Effect, Layer, Stream } from 'effect';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ControlUnauthorized, FlectCommandReceipt } from '../shared/control';
 import { ControlBrokerStatus, ControlLogsResponse } from '../shared/control-channel';
 import { FlectCommandGateway, type FlectCommandGatewayShape } from '../src/axi/gateway';

@@ -185,7 +185,7 @@ export const encodeCapsule = Effect.fn('Flect.Capsule.encode')(function* (source
 	);
 	const files = [];
 	for (const file of sorted) {
-		if (paths.has(file.path) || file.path === 'flect.json') yield* Effect.fail(invalid());
+		if (paths.has(file.path) || file.path === 'flect.json') return yield* Effect.fail(invalid());
 		paths.add(file.path);
 		total += file.contents.byteLength;
 		files.push({

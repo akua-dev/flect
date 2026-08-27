@@ -1,6 +1,6 @@
+import { afterEach, describe, expect, it } from '@effect/vitest';
 import { parse } from 'acorn';
 import { createServer, type ViteDevServer } from 'vite';
-import { afterEach, describe, expect, it } from 'vitest';
 
 describe('Vite development browser entry', () => {
 	let server: ViteDevServer | undefined;

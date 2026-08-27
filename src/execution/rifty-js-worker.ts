@@ -1,5 +1,11 @@
 import { installMemoryFs } from '@riftydev/vfs/internal';
+import { Schema } from 'effect';
 import { installRiftyCapabilityBoundary } from './rifty-capability-boundary';
+
+const RiftyWorkerReadyMessage = Schema.Struct({
+	type: Schema.Literal('ready')
+});
+const isRiftyWorkerReadyMessage = Schema.is(RiftyWorkerReadyMessage);
 
 const forceMemoryVfs = (): void => {
 	Object.defineProperty(globalThis, 'crossOriginIsolated', {
@@ -26,12 +32,7 @@ function forwardPostMessage(
 	optionsOrTarget?: string | Transferable[] | WindowPostMessageOptions,
 	transfer?: Transferable[]
 ): void {
-	if (
-		typeof message === 'object' &&
-		message !== null &&
-		'type' in message &&
-		message.type === 'ready'
-	) {
+	if (isRiftyWorkerReadyMessage(message)) {
 		installRiftyCapabilityBoundary();
 	}
 	if (typeof optionsOrTarget === 'string') {

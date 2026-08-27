@@ -174,7 +174,7 @@ export const runFlectCliMain = (
 };
 
 if (import.meta.main) {
-	Effect.runPromise(
+	void Effect.runPromise(
 		runFlectCliMain(process.argv.slice(2), defaultIo, {
 			bin: process.argv[1] ?? 'flect'
 		})

@@ -109,21 +109,57 @@ export const ProtectedPromptHostLive = Layer.succeed(ProtectedPromptHost)({
 			const context = yield* Effect.context<never>();
 			const runPromise = Effect.runPromiseWith(context);
 			let origin = '';
-			const server = createServer(async (request, response) => {
-				try {
-					const requestUrl = new URL(request.url ?? '/', origin);
-					const headers = responseHeaders(nonce);
-					const remoteAddress = request.socket.remoteAddress;
-					if (remoteAddress !== '127.0.0.1' && remoteAddress !== '::ffff:127.0.0.1') {
-						send(response, 'Request rejected', { status: 400, headers });
-						await runPromise(close);
-						return;
-					}
-					if (requestUrl.pathname !== path) {
-						send(response, 'Not found', { status: 404, headers });
-						return;
-					}
-					if (request.method === 'GET') {
+			const server = createServer((request, response) => {
+				void (async () => {
+					try {
+						const requestUrl = new URL(request.url ?? '/', origin);
+						const headers = responseHeaders(nonce);
+						const remoteAddress = request.socket.remoteAddress;
+						if (remoteAddress !== '127.0.0.1' && remoteAddress !== '::ffff:127.0.0.1') {
+							send(response, 'Request rejected', { status: 400, headers });
+							await runPromise(close);
+							return;
+						}
+						if (requestUrl.pathname !== path) {
+							send(response, 'Not found', { status: 404, headers });
+							return;
+						}
+						if (request.method === 'GET') {
+							if (valueRef.consumed || valueRef.closed) {
+								send(response, fixedPage('Entry expired', 'Return to Flect and try again.'), {
+									status: 410,
+									headers: {
+										...headers,
+										'content-type': 'text/html; charset=utf-8'
+									}
+								});
+								return;
+							}
+							send(response, entryHtml(nonce), {
+								headers: {
+									...headers,
+									'content-type': 'text/html; charset=utf-8'
+								}
+							});
+							return;
+						}
+						if (request.method !== 'POST') {
+							send(response, 'Method not allowed', {
+								status: 405,
+								headers: { ...headers, allow: 'GET, POST' }
+							});
+							await runPromise(close);
+							return;
+						}
+						const contentType = request.headers['content-type'] ?? '';
+						if (
+							request.headers.origin !== origin ||
+							!contentType.toLowerCase().startsWith('application/x-www-form-urlencoded')
+						) {
+							send(response, 'Request rejected', { status: 400, headers });
+							await runPromise(close);
+							return;
+						}
 						if (valueRef.consumed || valueRef.closed) {
 							send(response, fixedPage('Entry expired', 'Return to Flect and try again.'), {
 								status: 410,
@@ -134,94 +170,60 @@ export const ProtectedPromptHostLive = Layer.succeed(ProtectedPromptHost)({
 							});
 							return;
 						}
-						send(response, entryHtml(nonce), {
-							headers: {
-								...headers,
-								'content-type': 'text/html; charset=utf-8'
-							}
-						});
-						return;
-					}
-					if (request.method !== 'POST') {
-						send(response, 'Method not allowed', {
-							status: 405,
-							headers: { ...headers, allow: 'GET, POST' }
-						});
-						await runPromise(close);
-						return;
-					}
-					const contentType = request.headers['content-type'] ?? '';
-					if (
-						request.headers.origin !== origin ||
-						!contentType.toLowerCase().startsWith('application/x-www-form-urlencoded')
-					) {
-						send(response, 'Request rejected', { status: 400, headers });
-						await runPromise(close);
-						return;
-					}
-					if (valueRef.consumed || valueRef.closed) {
-						send(response, fixedPage('Entry expired', 'Return to Flect and try again.'), {
-							status: 410,
-							headers: {
-								...headers,
-								'content-type': 'text/html; charset=utf-8'
-							}
-						});
-						return;
-					}
-					const declaredLength = request.headers['content-length'];
-					if (
-						declaredLength !== undefined &&
-						(!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAX_FORM_BYTES)
-					) {
-						send(response, 'Request rejected', { status: 400, headers });
-						await runPromise(close);
-						return;
-					}
-					const body = await readBoundedBody(request);
-					const value = body === undefined ? undefined : new URLSearchParams(body).get('value');
-					if (
-						value === undefined ||
-						value === null ||
-						value.length === 0 ||
-						new TextEncoder().encode(value).byteLength > MAX_VALUE_BYTES
-					) {
-						if (!response.destroyed) {
+						const declaredLength = request.headers['content-length'];
+						if (
+							declaredLength !== undefined &&
+							(!/^\d+$/.test(declaredLength) || Number(declaredLength) > MAX_FORM_BYTES)
+						) {
 							send(response, 'Request rejected', { status: 400, headers });
+							await runPromise(close);
+							return;
+						}
+						const body = await readBoundedBody(request);
+						const value = body === undefined ? undefined : new URLSearchParams(body).get('value');
+						if (
+							value === undefined ||
+							value === null ||
+							value.length === 0 ||
+							new TextEncoder().encode(value).byteLength > MAX_VALUE_BYTES
+						) {
+							if (!response.destroyed) {
+								send(response, 'Request rejected', { status: 400, headers });
+							}
+							await runPromise(close);
+							return;
+						}
+						valueRef.consumed = true;
+						send(
+							response,
+							fixedPage(
+								'Continue in Flect',
+								'Provider information was delivered to Pi’s local runtime. You can close this page.'
+							),
+							{
+								status: 200,
+								headers: {
+									...headers,
+									'content-type': 'text/html; charset=utf-8'
+								}
+							}
+						);
+						await runPromise(
+							Deferred.succeed(submission, Redacted.make(value, { label: 'provider credential' }))
+						);
+					} catch {
+						if (!response.headersSent && !response.destroyed) {
+							send(response, 'Request rejected', {
+								status: 400,
+								headers: responseHeaders(nonce)
+							});
 						}
 						await runPromise(close);
-						return;
 					}
-					valueRef.consumed = true;
-					send(
-						response,
-						fixedPage(
-							'Continue in Flect',
-							'Provider information was delivered to Pi’s local runtime. You can close this page.'
-						),
-						{
-							status: 200,
-							headers: {
-								...headers,
-								'content-type': 'text/html; charset=utf-8'
-							}
-						}
-					);
-					await runPromise(
-						Deferred.succeed(submission, Redacted.make(value, { label: 'provider credential' }))
-					);
-				} catch {
-					if (!response.headersSent && !response.destroyed) {
-						send(response, 'Request rejected', {
-							status: 400,
-							headers: responseHeaders(nonce)
-						});
-					}
-					await runPromise(close);
-				}
+				})();
 			});
 
-			yield* Effect.callback<void, ProviderAuthOperationFailed>((resume) => {
+			yield* Effect.callback<undefined, ProviderAuthOperationFailed>((resume) => {
 				const onError = () => resume(Effect.fail(entryFailure()));
 				server.once('error', onError);
 				server.listen(0, '127.0.0.1', () => {
@@ -232,7 +234,7 @@ export const ProtectedPromptHostLive = Layer.succeed(ProtectedPromptHost)({
 						return;
 					}
 					origin = `http://127.0.0.1:${address.port}`;
-					resume(Effect.void);
+					resume(Effect.succeed(undefined));
 				});
 				return Effect.sync(() => server.close());
 			});

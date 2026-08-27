@@ -36,7 +36,16 @@ import {
 	type RepositoryArchiveEntry
 } from './repository-tar';
 
-const worker = globalThis as unknown as DedicatedWorkerGlobalScope;
+const isDedicatedWorkerGlobalScope = (value: unknown): value is DedicatedWorkerGlobalScope =>
+	typeof value === 'object' &&
+	value !== null &&
+	'importScripts' in value &&
+	typeof value.importScripts === 'function';
+
+if (!isDedicatedWorkerGlobalScope(globalThis)) {
+	throw new Error('This module must run inside a dedicated worker.');
+}
+const worker = globalThis;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 const MAX_EXPORT_BYTES = 32 * 1024 * 1024;
 const MAX_EXPORT_FILES = 20_000;

@@ -1,6 +1,11 @@
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { parse } from 'acorn';
+import { Data } from 'effect';
 import { FlectPerformanceBudgets } from '../shared/performance-budgets';
+
+export class BrowserBundleGateError extends Data.TaggedError('BrowserBundleGateError')<{
+	readonly message: string;
+}> {}
 
 const DIST = join(import.meta.dir, '..', 'dist');
 const ASSETS = join(DIST, 'assets');
@@ -11,7 +16,7 @@ const WORKSPACE_GZIP_BUDGET = FlectPerformanceBudgets.browser.initialShellGzipBy
 const WORKSPACE_DECODED_BUDGET = FlectPerformanceBudgets.browser.initialShellDecodedBytes;
 
 const fail = (message: string): never => {
-	throw new Error(`Browser bundle gate failed: ${message}`);
+	throw new BrowserBundleGateError({ message: `Browser bundle gate failed: ${message}` });
 };
 
 const required = (value: string | undefined, message: string): string => value ?? fail(message);
@@ -83,11 +88,11 @@ const graphDependencies = async (paths: ReadonlySet<string>) => {
 
 const htmlPath = join(DIST, 'index.html');
 const html = await Bun.file(htmlPath).text();
-const initialReferences = [...html.matchAll(/(?:src|href)="([^"]+)"/g)].map(
-	(match) => match[1] as string
-);
+const initialReferences = [...html.matchAll(/(?:src|href)="([^"]+)"/g)]
+	.map((match) => match[1])
+	.filter((reference): reference is string => reference !== undefined);
 const initialNames = initialReferences.map((reference) =>
-	basename(reference.split('?')[0] as string)
+	basename(reference.split('?')[0] ?? reference)
 );
 const initialScriptPaths = initialReferences
 	.filter((reference) => reference.startsWith('/assets/') && reference.endsWith('.js'))

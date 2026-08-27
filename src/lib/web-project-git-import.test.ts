@@ -1,5 +1,5 @@
+import { describe, expect, it } from '@effect/vitest';
 import { Effect, Ref } from 'effect';
-import { describe, expect, it } from 'vitest';
 import { GitOpened, GitRemoved, GitShareInspected } from '../../shared/git-workspace';
 import type { GitWorkspaceShape } from '../git/git-workspace';
 import { importWebProjectFromGit } from './web-project-git-import';

@@ -104,7 +104,7 @@ const runDiagnostic = (workspaceId: string) => {
 				return result;
 			}).pipe(Effect.catch((error: GitWorkspaceFailure) => Effect.fail(new Error(error.message))))
 		)
-		.finally(() => runtime.dispose());
+		.finally(() => void runtime.dispose());
 };
 
 export function GitShareImportDiagnostic() {

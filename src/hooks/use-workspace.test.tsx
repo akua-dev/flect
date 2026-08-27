@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { describe, expect, it, vi } from '@effect/vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { Effect, Layer, ManagedRuntime, Stream, SubscriptionRef } from 'effect';
-import { describe, expect, it, vi } from 'vitest';
 import { ProviderAuthSummary } from '../../shared/contracts';
 import { FlectCommandReceipt, FlectWorkspaceSnapshot, SetMode } from '../../shared/control';
 import { defaultInterfaceDocument } from '../../shared/interface-document';

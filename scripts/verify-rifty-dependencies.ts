@@ -1,5 +1,6 @@
-import { readFile } from 'node:fs/promises';
-import { Effect, Schema } from 'effect';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
+import { Effect, FileSystem, Layer, Schema } from 'effect';
 
 export const RIFTY_DEPENDENCIES: ReadonlyArray<string> = [
 	'@riftydev/npm-client',
@@ -41,22 +42,32 @@ const decodeManifest = Schema.decodeUnknownEffect(PackageManifest, {
 	onExcessProperty: 'ignore'
 });
 
-type ManifestReader = (path: string) => Effect.Effect<unknown, RiftyDependencyVerificationFailed>;
+type ManifestReader = (
+	path: string
+) => Effect.Effect<unknown, RiftyDependencyVerificationFailed, FileSystem.FileSystem>;
 
 const readManifest: ManifestReader = (path) =>
-	Effect.tryPromise({
-		try: async () => JSON.parse(await readFile(path, 'utf8')) as unknown,
-		catch: () =>
+	Effect.gen(function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const source = yield* fs.readFileString(path);
+		return JSON.parse(source) as unknown;
+	}).pipe(
+		Effect.mapError(() =>
 			RiftyDependencyVerificationFailed.make({
 				packageName: path,
 				message: 'The installed Rifty package manifest could not be read.'
 			})
-	});
+		)
+	);
 
 const verifyOne = (
 	read: ManifestReader,
 	name: string
-): Effect.Effect<VerifiedRiftyDependency, RiftyDependencyVerificationFailed> =>
+): Effect.Effect<
+	VerifiedRiftyDependency,
+	RiftyDependencyVerificationFailed,
+	FileSystem.FileSystem
+> =>
 	Effect.gen(function* () {
 		const path = `node_modules/${name}/package.json`;
 		const input = yield* read(path);
@@ -98,7 +109,9 @@ export const makeVerifyRiftyDependencies = (read: ManifestReader) =>
 export const verifyRiftyDependencies = makeVerifyRiftyDependencies(readManifest);
 
 if (import.meta.main) {
-	Effect.runPromise(verifyRiftyDependencies).then((entries) => {
+	void Effect.runPromise(
+		verifyRiftyDependencies.pipe(Effect.provide(Layer.merge(BunFileSystem.layer, BunPath.layer)))
+	).then((entries) => {
 		for (const entry of entries) {
 			console.log(`${entry.name}@${entry.version} ${entry.license}`);
 		}

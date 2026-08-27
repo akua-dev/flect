@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it } from '@effect/vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Effect } from 'effect';
-import { afterEach, describe, expect, it } from 'vitest';
 import {
 	loadProductAdoptionDiagnosticModels,
 	ProductAdoptionDiagnostic

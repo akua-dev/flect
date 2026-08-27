@@ -495,8 +495,8 @@ const makeBunModuleExecutionLayer = Layer.effect(
 		const runtime = yield* BunModuleRuntime;
 		const active = yield* Ref.make<
 			| {
-					readonly cancel: Deferred.Deferred<void>;
-					readonly done: Deferred.Deferred<void>;
+					readonly cancel: Deferred.Deferred<undefined>;
+					readonly done: Deferred.Deferred<undefined>;
 			  }
 			| undefined
 		>(undefined);
@@ -506,8 +506,8 @@ const makeBunModuleExecutionLayer = Layer.effect(
 			runPermit.withPermit(
 				Effect.gen(function* () {
 					const graph = yield* prepare(operation);
-					const cancel = yield* Deferred.make<void>();
-					const done = yield* Deferred.make<void>();
+					const cancel = yield* Deferred.make<undefined>();
+					const done = yield* Deferred.make<undefined>();
 					const runEffect = runtime
 						.execute({
 							cwd: operation.cwd,

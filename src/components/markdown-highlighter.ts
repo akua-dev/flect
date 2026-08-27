@@ -39,7 +39,7 @@ const writeCache = (key: string, code: string, html: string): void => {
 	cache.set(key, { html, bytes });
 	cacheBytes += bytes;
 	while (cache.size > MAX_CACHE_ENTRIES || cacheBytes > MAX_CACHE_BYTES) {
-		const oldest = cache.entries().next().value as [string, CacheEntry] | undefined;
+		const oldest = cache.entries().next().value;
 		if (oldest === undefined) {
 			break;
 		}

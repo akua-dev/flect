@@ -1,10 +1,14 @@
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
 import { assert, describe, it } from '@effect/vitest';
-import { Effect } from 'effect';
+import { Effect, Layer } from 'effect';
 import {
 	makeVerifyRiftyDependencies,
 	RIFTY_DEPENDENCIES,
 	verifyRiftyDependencies
 } from './verify-rifty-dependencies';
+
+const platform = Layer.merge(BunFileSystem.layer, BunPath.layer);
 
 describe('Rifty dependency pins', () => {
 	it.effect('accepts the four exact published artifacts', () =>
@@ -17,7 +21,7 @@ describe('Rifty dependency pins', () => {
 			);
 			assert.isTrue(verified.every((entry) => entry.version === '0.2.0'));
 			assert.isTrue(verified.every((entry) => entry.license === 'MIT'));
-		})
+		}).pipe(Effect.provide(platform))
 	);
 
 	it.effect('rejects an artifact outside the exact approved pin', () =>
@@ -36,6 +40,6 @@ describe('Rifty dependency pins', () => {
 
 			assert.strictEqual(error._tag, 'RiftyDependencyVerificationFailed');
 			assert.notInclude(error.message, '0.2.1');
-		})
+		}).pipe(Effect.provide(platform))
 	);
 });

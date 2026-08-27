@@ -409,7 +409,7 @@ describe('Tauri RPC transport', () => {
 	it.effect('fails pending calls when the private runtime stops', () =>
 		Effect.gen(function* () {
 			const listener = yield* Ref.make<((payload: unknown) => void) | undefined>(undefined);
-			const requestSent = yield* Deferred.make<void>();
+			const requestSent = yield* Deferred.make<undefined>();
 
 			const bridge: TauriBridgeShape = {
 				listen: (handler) => Ref.set(listener, handler).pipe(Effect.as(Effect.void)),
@@ -430,7 +430,7 @@ describe('Tauri RPC transport', () => {
 								}
 							});
 						}
-						yield* Effect.never;
+						return yield* Effect.never;
 					})
 			};
 

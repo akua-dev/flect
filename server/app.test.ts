@@ -559,8 +559,8 @@ describe('Flect HTTP application', () => {
 	});
 
 	it.effect('keeps a Shaper shell request alive until HTTP completion', () => {
-		const shellSeen = Deferred.makeUnsafe<void>();
-		const shellReleased = Deferred.makeUnsafe<void>();
+		const shellSeen = Deferred.makeUnsafe<undefined>();
+		const shellReleased = Deferred.makeUnsafe<undefined>();
 		const requestId = 'shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2';
 		const runtime = {
 			...createFakeRuntime(),

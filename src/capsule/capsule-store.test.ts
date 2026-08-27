@@ -1,6 +1,6 @@
+import { describe, expect, it } from '@effect/vitest';
 import { MemoryVfs } from '@riftydev/vfs';
 import { Effect } from 'effect';
-import { describe, expect, it } from 'vitest';
 import { CapsuleStore, makeCapsuleStoreLayer } from './capsule-store';
 
 describe('CapsuleStore', () => {

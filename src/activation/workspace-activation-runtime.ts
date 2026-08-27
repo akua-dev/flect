@@ -20,8 +20,8 @@ interface ActivateWorkspaceOptions {
 }
 
 export const waitForAstroIsland = (document: Document, timeout: Duration.Input = '20 seconds') =>
-	Effect.callback<void, WorkspaceActivationError>((resume) => {
-		const ready = () => resume(Effect.void);
+	Effect.callback<undefined, WorkspaceActivationError>((resume) => {
+		const ready = () => resume(Effect.succeed(undefined));
 		const failed = () =>
 			resume(Effect.fail(WorkspaceActivationError.make({ reason: 'hydration-failed' })));
 		document.addEventListener('flect:workspace-ready', ready, { once: true });

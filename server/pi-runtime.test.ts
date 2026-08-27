@@ -32,21 +32,21 @@ type FakeOptions = {
 	readonly promptFailure?: boolean;
 	readonly promptResponse?: string;
 	readonly guardianResponse?: string;
-	readonly promptGate?: Deferred.Deferred<void>;
-	readonly promptStarted?: Deferred.Deferred<void>;
-	readonly appPromptGate?: Deferred.Deferred<void>;
-	readonly appPromptStarted?: Deferred.Deferred<void>;
-	readonly shaperPromptGate?: Deferred.Deferred<void>;
-	readonly shaperPromptStarted?: Deferred.Deferred<void>;
-	readonly pendingPromptStarted?: Deferred.Deferred<void>;
-	readonly abortStarted?: Deferred.Deferred<void>;
-	readonly abortGate?: Deferred.Deferred<void>;
-	readonly pairObserved?: Deferred.Deferred<void>;
+	readonly promptGate?: Deferred.Deferred<undefined>;
+	readonly promptStarted?: Deferred.Deferred<undefined>;
+	readonly appPromptGate?: Deferred.Deferred<undefined>;
+	readonly appPromptStarted?: Deferred.Deferred<undefined>;
+	readonly shaperPromptGate?: Deferred.Deferred<undefined>;
+	readonly shaperPromptStarted?: Deferred.Deferred<undefined>;
+	readonly pendingPromptStarted?: Deferred.Deferred<undefined>;
+	readonly abortStarted?: Deferred.Deferred<undefined>;
+	readonly abortGate?: Deferred.Deferred<undefined>;
+	readonly pairObserved?: Deferred.Deferred<undefined>;
 	readonly appEvent?: PiEvent;
 	readonly shellRequest?: {
 		readonly requestId: string;
 		readonly command: string;
-		readonly started: Deferred.Deferred<void>;
+		readonly started: Deferred.Deferred<undefined>;
 		readonly completed: Deferred.Deferred<BunCommandResult>;
 	};
 };
@@ -539,10 +539,10 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('cancels only the selected interactive role', () => {
-		const appStarted = Deferred.makeUnsafe<void>();
-		const appGate = Deferred.makeUnsafe<void>();
-		const shaperStarted = Deferred.makeUnsafe<void>();
-		const shaperGate = Deferred.makeUnsafe<void>();
+		const appStarted = Deferred.makeUnsafe<undefined>();
+		const appGate = Deferred.makeUnsafe<undefined>();
+		const shaperStarted = Deferred.makeUnsafe<undefined>();
+		const shaperGate = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			appPromptStarted: appStarted,
 			appPromptGate: appGate,
@@ -667,7 +667,7 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('disposes every protected Pi role when registration is interrupted', () => {
-		const pairObserved = Deferred.makeUnsafe<void>();
+		const pairObserved = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({ pairObserved });
 
 		return Effect.gen(function* () {
@@ -775,7 +775,7 @@ describe('FlectRuntimeLive', () => {
 		const shellRequest = {
 			requestId: 'shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2',
 			command: 'bun run src/index.ts',
-			started: Deferred.makeUnsafe<void>(),
+			started: Deferred.makeUnsafe<undefined>(),
 			completed: Deferred.makeUnsafe<BunCommandResult>()
 		};
 		const shaped = InterfaceDocument.make({
@@ -861,8 +861,8 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('keeps App and Shaper operation slots independent', () => {
-		const promptStarted = Deferred.makeUnsafe<void>();
-		const promptGate = Deferred.makeUnsafe<void>();
+		const promptStarted = Deferred.makeUnsafe<undefined>();
+		const promptGate = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			appPromptGate: promptGate,
 			appPromptStarted: promptStarted,
@@ -897,7 +897,7 @@ describe('FlectRuntimeLive', () => {
 		const shellRequest = {
 			requestId: 'shell-018f8f4f-76d1-7f4d-8f35-71eebc5931d2',
 			command: 'bun run src/index.ts',
-			started: Deferred.makeUnsafe<void>(),
+			started: Deferred.makeUnsafe<undefined>(),
 			completed: Deferred.makeUnsafe<BunCommandResult>()
 		};
 		const fake = createFakePi({
@@ -934,9 +934,9 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('acknowledges cancellation while the interrupted prompt drains', () => {
-		const promptStarted = Deferred.makeUnsafe<void>();
-		const promptGate = Deferred.makeUnsafe<void>();
-		const abortStarted = Deferred.makeUnsafe<void>();
+		const promptStarted = Deferred.makeUnsafe<undefined>();
+		const promptGate = Deferred.makeUnsafe<undefined>();
+		const abortStarted = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			promptGate,
 			promptStarted,
@@ -964,9 +964,9 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('aborts Pi work when the request consumer is interrupted', () => {
-		const promptStarted = Deferred.makeUnsafe<void>();
-		const promptGate = Deferred.makeUnsafe<void>();
-		const abortStarted = Deferred.makeUnsafe<void>();
+		const promptStarted = Deferred.makeUnsafe<undefined>();
+		const promptGate = Deferred.makeUnsafe<undefined>();
+		const abortStarted = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			promptGate,
 			promptStarted,
@@ -994,10 +994,10 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('holds the session slot while cancellation is claimed', () => {
-		const promptStarted = Deferred.makeUnsafe<void>();
-		const promptGate = Deferred.makeUnsafe<void>();
-		const abortStarted = Deferred.makeUnsafe<void>();
-		const abortGate = Deferred.makeUnsafe<void>();
+		const promptStarted = Deferred.makeUnsafe<undefined>();
+		const promptGate = Deferred.makeUnsafe<undefined>();
+		const abortStarted = Deferred.makeUnsafe<undefined>();
+		const abortGate = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			promptGate,
 			promptStarted,
@@ -1036,7 +1036,7 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('keeps an interrupted Pi promise occupying its session slot', () => {
-		const pendingPromptStarted = Deferred.makeUnsafe<void>();
+		const pendingPromptStarted = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			abortFailure: true,
 			pendingPromptStarted,
@@ -1077,8 +1077,8 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('rejects conflicts and waits before disposing an active session', () => {
-		const promptStarted = Deferred.makeUnsafe<void>();
-		const promptGate = Deferred.makeUnsafe<void>();
+		const promptStarted = Deferred.makeUnsafe<undefined>();
+		const promptGate = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			promptGate,
 			promptStarted,
@@ -1120,9 +1120,9 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('completes disposal when the close fiber is interrupted', () => {
-		const promptStarted = Deferred.makeUnsafe<void>();
-		const promptGate = Deferred.makeUnsafe<void>();
-		const abortStarted = Deferred.makeUnsafe<void>();
+		const promptStarted = Deferred.makeUnsafe<undefined>();
+		const promptGate = Deferred.makeUnsafe<undefined>();
+		const abortStarted = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			promptGate,
 			promptStarted,
@@ -1159,9 +1159,9 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('forces disposal after an unresponsive active operation', () => {
-		const promptStarted = Deferred.makeUnsafe<void>();
-		const promptGate = Deferred.makeUnsafe<void>();
-		const abortStarted = Deferred.makeUnsafe<void>();
+		const promptStarted = Deferred.makeUnsafe<undefined>();
+		const promptGate = Deferred.makeUnsafe<undefined>();
+		const abortStarted = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			promptGate,
 			promptStarted,
@@ -1216,8 +1216,8 @@ describe('FlectRuntimeLive', () => {
 	});
 
 	it.effect('aborts a Shaper that stalls while generating a tool call', () => {
-		const promptStarted = Deferred.makeUnsafe<void>();
-		const promptGate = Deferred.makeUnsafe<void>();
+		const promptStarted = Deferred.makeUnsafe<undefined>();
+		const promptGate = Deferred.makeUnsafe<undefined>();
 		const fake = createFakePi({
 			shaperPromptStarted: promptStarted,
 			shaperPromptGate: promptGate

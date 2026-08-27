@@ -54,8 +54,10 @@ test('runs the browser Bun command and isolated preview in production Chromium',
 	await expect(page.getByTestId('bun-stop')).toHaveText('disposed');
 
 	await page.locator('iframe[title="Flect preview"]').evaluate((element) => {
-		const frame = element as HTMLIFrameElement;
-		frame.src = `${frame.src}?after-stop=1`;
+		if (!(element instanceof HTMLIFrameElement)) {
+			throw new Error('Expected the Flect preview element to be an iframe.');
+		}
+		element.src = `${element.src}?after-stop=1`;
 	});
 	await expect(preview.locator('body')).toContainText('Preview stopped.');
 	expect(errors).toEqual([]);

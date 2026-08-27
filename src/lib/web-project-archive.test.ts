@@ -1,6 +1,6 @@
+import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
 import { zipSync } from 'fflate';
-import { describe, expect, it } from 'vitest';
 import { decodeCapsule } from '../../shared/capsule';
 import { makeRepositoryTar } from '../git/repository-tar';
 import { importWebProjectArchive } from './web-project-archive';

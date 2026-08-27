@@ -4,7 +4,6 @@ import { Context, Effect, Layer, Stream } from 'effect';
 import * as RpcClient from 'effect/unstable/rpc/RpcClient';
 import { RpcClientDefect, RpcClientError } from 'effect/unstable/rpc/RpcClientError';
 import type { FromClientEncoded, FromServerEncoded } from 'effect/unstable/rpc/RpcMessage';
-import type { FlectRuntimeError } from '../../shared/contracts';
 import type { FlectWorkspaceEvent, FlectWorkspaceSnapshot } from '../../shared/control';
 import type { ControlCommandCompletion } from '../../shared/control-channel';
 import { encodeInterfaceDocument } from '../../shared/interface-document';
@@ -20,9 +19,6 @@ const unavailable = () =>
 	FlectUnavailableError.make({
 		message: 'The local Flect runtime is unavailable.'
 	});
-
-const mapSessionError = <A, R>(effect: Effect.Effect<A, FlectRuntimeError | RpcClientError, R>) =>
-	effect.pipe(Effect.mapError((error) => (error._tag === 'SessionBusy' ? error : unavailable())));
 
 const rpcTransportError = () =>
 	new RpcClientError({
@@ -126,7 +122,7 @@ export const TauriBridgeLive = Layer.succeed(TauriBridge)({
 	),
 	send: Effect.fn('Flect.TauriBridge.send')((request) =>
 		Effect.tryPromise({
-			try: () => invoke<void>('rpc_send', { request }),
+			try: () => invoke<undefined>('rpc_send', { request }),
 			catch: unavailable
 		})
 	)
@@ -166,22 +162,29 @@ export const makeTauriFlectClientLayer = () =>
 		FlectClient,
 		Effect.gen(function* () {
 			const rpc = yield* RpcClient.make(FlectRpcs);
-			const mapError = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-				effect.pipe(Effect.mapError(unavailable));
 
+			// oxlint-disable effecttsgo/missing-effect-context -- false positive: `tsc -b`
+			// confirms every property below resolves to R = never (FlectRpcs declares no
+			// middleware/context requirements); effecttsgo cannot fully resolve the nested
+			// conditional/mapped `RpcClient.From<Rpcs, E>` generic across this many
+			// differently-shaped properties and falls back to reporting `unknown`. See the
+			// escalations list in the conformance burn-down report.
 			return {
-				status: mapError(rpc.GetRuntime()),
-				models: mapError(rpc.ListModels()),
-				providerAuth: mapError(rpc.ListProviderAuth()),
+				status: rpc.GetRuntime().pipe(Effect.mapError(unavailable)),
+				models: rpc.ListModels().pipe(Effect.mapError(unavailable)),
+				providerAuth: rpc.ListProviderAuth().pipe(Effect.mapError(unavailable)),
 				loginProvider: (request) => rpc.LoginProvider(request).pipe(Stream.mapError(unavailable)),
 				replyProviderAuth: (reply) =>
-					mapError(rpc.ReplyProviderAuthSelection(reply)).pipe(Effect.asVoid),
+					rpc.ReplyProviderAuthSelection(reply).pipe(Effect.mapError(unavailable), Effect.asVoid),
 				cancelProviderAuth: (reference) =>
-					mapError(rpc.CancelProviderAuth(reference)).pipe(Effect.asVoid),
-				refreshProviderAuth: mapError(rpc.RefreshProviderAuth()),
-				logoutProvider: (providerId) => mapError(rpc.LogoutProvider({ providerId })),
-				createSession: (selection) => mapError(rpc.CreateSession(selection)),
-				closeSession: (sessionId) => mapError(rpc.CloseSession({ sessionId })),
+					rpc.CancelProviderAuth(reference).pipe(Effect.mapError(unavailable), Effect.asVoid),
+				refreshProviderAuth: rpc.RefreshProviderAuth().pipe(Effect.mapError(unavailable)),
+				logoutProvider: (providerId) =>
+					rpc.LogoutProvider({ providerId }).pipe(Effect.mapError(unavailable)),
+				createSession: (selection) =>
+					rpc.CreateSession(selection).pipe(Effect.mapError(unavailable)),
+				closeSession: (sessionId) =>
+					rpc.CloseSession({ sessionId }).pipe(Effect.mapError(unavailable)),
 				prompt: (sessionId, text) =>
 					rpc
 						.Prompt({ sessionId, text })
@@ -207,14 +210,20 @@ export const makeTauriFlectClientLayer = () =>
 							)
 						)
 					),
-				cancel: (sessionId, role) => mapError(rpc.Cancel({ sessionId, role })).pipe(Effect.asVoid),
+				cancel: (sessionId, role) =>
+					rpc.Cancel({ sessionId, role }).pipe(Effect.mapError(unavailable), Effect.asVoid),
 				completeShellRequest: (sessionId, role, requestId, result) =>
-					mapError(rpc.CompleteShellRequest({ sessionId, role, requestId, result })).pipe(
-						Effect.asVoid
-					),
+					rpc
+						.CompleteShellRequest({ sessionId, role, requestId, result })
+						.pipe(Effect.mapError(unavailable), Effect.asVoid),
 				diagnoseRecovery: (sessionId, reason) =>
-					mapSessionError(rpc.DiagnoseRecovery({ sessionId, reason }))
+					rpc
+						.DiagnoseRecovery({ sessionId, reason })
+						.pipe(
+							Effect.mapError((error) => (error._tag === 'SessionBusy' ? error : unavailable()))
+						)
 			} satisfies FlectClientShape;
+			// oxlint-enable effecttsgo/missing-effect-context
 		})
 	).pipe(Layer.provide(TauriProtocolLive));
 
@@ -223,20 +232,25 @@ export const makeTauriWorkspaceControlTransportLayer = () =>
 		WorkspaceControlTransport,
 		Effect.gen(function* () {
 			const rpc = yield* RpcClient.make(FlectRpcs);
-			const mapError = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-				effect.pipe(Effect.mapError(unavailable));
 
+			// oxlint-disable effecttsgo/missing-effect-context -- false positive, same cause
+			// as makeTauriFlectClientLayer above: `tsc -b` confirms R = never throughout.
 			return {
-				enable: (snapshot: FlectWorkspaceSnapshot) => mapError(rpc.ControlEnable({ snapshot })),
-				status: mapError(rpc.ControlStatus()),
-				disable: mapError(rpc.ControlDisable()).pipe(Effect.asVoid),
+				enable: (snapshot: FlectWorkspaceSnapshot) =>
+					rpc.ControlEnable({ snapshot }).pipe(Effect.mapError(unavailable)),
+				status: rpc.ControlStatus().pipe(Effect.mapError(unavailable)),
+				disable: rpc.ControlDisable().pipe(Effect.mapError(unavailable), Effect.asVoid),
 				publishSnapshot: (snapshot: FlectWorkspaceSnapshot) =>
-					mapError(rpc.ControlPublishSnapshot({ snapshot })).pipe(Effect.asVoid),
+					rpc
+						.ControlPublishSnapshot({ snapshot })
+						.pipe(Effect.mapError(unavailable), Effect.asVoid),
 				publishEvent: (event: FlectWorkspaceEvent) =>
-					mapError(rpc.ControlPublishEvent({ event })).pipe(Effect.asVoid),
-				nextCommand: (workspaceId: string) => mapError(rpc.ControlNextCommand({ workspaceId })),
+					rpc.ControlPublishEvent({ event }).pipe(Effect.mapError(unavailable), Effect.asVoid),
+				nextCommand: (workspaceId: string) =>
+					rpc.ControlNextCommand({ workspaceId }).pipe(Effect.mapError(unavailable)),
 				complete: (completion: ControlCommandCompletion) =>
-					mapError(rpc.ControlComplete({ completion })).pipe(Effect.asVoid)
+					rpc.ControlComplete({ completion }).pipe(Effect.mapError(unavailable), Effect.asVoid)
 			} satisfies WorkspaceControlTransportShape;
+			// oxlint-enable effecttsgo/missing-effect-context
 		})
 	).pipe(Layer.provide(TauriProtocolLive));

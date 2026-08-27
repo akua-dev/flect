@@ -1,5 +1,5 @@
+import { afterEach, describe, expect, it, vi } from '@effect/vitest';
 import { Effect } from 'effect';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { capsuleHostFixture } from '../../shared/capsule-fixture';
 import { loadBrowserCapsule, loadBrowserCapsuleArchiveFromUrl } from './browser-capsule-loader';
 

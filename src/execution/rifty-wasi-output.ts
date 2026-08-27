@@ -1,14 +1,14 @@
+import { Data } from 'effect';
+
 export const WASI_OUTPUT_LIMIT = 1_048_576;
 
-export class WasiOutputLimitExceeded extends Error {
+export class WasiOutputLimitExceeded extends Data.TaggedError('WasiOutputLimitExceeded')<{
 	readonly stream: 'stdout' | 'stderr';
+	readonly message: string;
+}> {}
 
-	constructor(stream: 'stdout' | 'stderr') {
-		super(`WASI ${stream} output exceeded its limit.`);
-		this.name = 'WasiOutputLimitExceeded';
-		this.stream = stream;
-	}
-}
+const wasiOutputLimitExceeded = (stream: 'stdout' | 'stderr') =>
+	new WasiOutputLimitExceeded({ stream, message: `WASI ${stream} output exceeded its limit.` });
 
 interface BoundedOutputStream {
 	readonly write: (chunk: string) => void;
@@ -30,7 +30,7 @@ const makeStream = (stream: 'stdout' | 'stderr', encoder: TextEncoder): BoundedO
 		write: (chunk) => {
 			const nextByteLength = byteLength + encoder.encode(chunk).byteLength;
 			if (nextByteLength > WASI_OUTPUT_LIMIT) {
-				throw new WasiOutputLimitExceeded(stream);
+				throw wasiOutputLimitExceeded(stream);
 			}
 			byteLength = nextByteLength;
 			chunks.push(chunk);

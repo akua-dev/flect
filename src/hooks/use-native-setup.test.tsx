@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
+import { afterEach, describe, expect, it, vi } from '@effect/vitest';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AgentIntegrationStatus, ShellLinkStatus } from '../../shared/setup';
 import {
 	UninstallApplication,

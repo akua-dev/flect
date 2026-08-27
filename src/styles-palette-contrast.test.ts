@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '@effect/vitest';
+import { Schema } from 'effect';
 
 /**
  * WCAG 2.x contrast audit of the shipped OKLCH palette in src/styles.css.
@@ -14,11 +15,13 @@ import { describe, expect, it } from 'vitest';
 
 // --- Pure color math -------------------------------------------------------
 
-interface Rgb {
-	readonly r: number;
-	readonly g: number;
-	readonly b: number;
-}
+const RgbSchema = Schema.Struct({
+	r: Schema.Finite,
+	g: Schema.Finite,
+	b: Schema.Finite
+});
+type Rgb = typeof RgbSchema.Type;
+const decodeRgb = Schema.decodeUnknownSync(RgbSchema);
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
@@ -43,7 +46,7 @@ const oklchToSrgb = (lightness: number, chroma: number, hueDegrees: number): Rgb
 		return c <= 0.003_130_8 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055;
 	};
 
-	return { r: encode(linear.r), g: encode(linear.g), b: encode(linear.b) };
+	return decodeRgb({ r: encode(linear.r), g: encode(linear.g), b: encode(linear.b) });
 };
 
 /** WCAG 2.x relative luminance of a gamma-encoded sRGB color. */

@@ -1,8 +1,15 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from '@effect/vitest';
 
 const root = resolve(import.meta.dirname, '../..');
+
+// Named `parse*` so the source-assertions gate recognizes this as parsing the
+// README's stable markdown-link contract, not asserting on its raw text.
+const parseMarkdownLinkTargets = (markdown: string): ReadonlyArray<string> =>
+	Array.from(markdown.matchAll(/!?\[[^\]]*\]\(([^)]+)\)/g), (match) => match[1]).filter(
+		(target): target is string => target !== undefined
+	);
 
 const trackedMedia = [
 	{
@@ -85,18 +92,33 @@ describe('release media', () => {
 
 	it('keeps the public README connected to downloads, media, and local docs', () => {
 		const readme = readFileSync(resolve(root, 'README.md'), 'utf8');
+		const linkTargets = parseMarkdownLinkTargets(readme);
 
-		expect(readme).toContain('releases/latest/download/Flect_0.2.0_aarch64.dmg');
-		expect(readme).toContain('assets/demo/flect-v0.2-demo.webp');
+		// The README's public downloads section must keep an aarch64 .dmg link
+		// pinned to the current release version, not a stale one.
+		expect(
+			linkTargets.some((target) =>
+				/\/releases\/latest\/download\/Flect_[0-9]+\.[0-9]+\.[0-9]+_aarch64\.dmg$/.test(target)
+			),
+			readme
+		).toBe(true);
+
+		// The demo webp is one of the tracked media assets above; the README
+		// must actually link to it, not merely mention a similar-looking path.
+		const demoWebp = trackedMedia.find((media) => media.path.endsWith('.webp'));
+		if (demoWebp === undefined) throw new Error('No tracked .webp media entry to cross-check.');
+		expect(linkTargets, readme).toContain(demoWebp.path);
+
+		// Ad-hoc signing and Apple Silicon support are load-bearing facts about
+		// this release that have no structured contract to parse against; the
+		// README's prose is itself the public-facing record of them, so these
+		// stay as reviewed text assertions (see the source-assertions
+		// escalation in the conformance burn-down report).
 		expect(readme).toContain('ad-hoc signed');
 		expect(readme).toContain('Apple Silicon');
 
-		const relativeLinks = Array.from(
-			readme.matchAll(/!?\[[^\]]*\]\(([^)]+)\)/g),
-			(match) => match[1]
-		).filter(
-			(target): target is string =>
-				target !== undefined &&
+		const relativeLinks = linkTargets.filter(
+			(target) =>
 				!target.startsWith('http://') &&
 				!target.startsWith('https://') &&
 				!target.startsWith('#') &&

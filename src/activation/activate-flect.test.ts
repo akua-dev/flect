@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { afterEach, describe, expect, it, vi } from '@effect/vitest';
 import { fireEvent } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	installFlectActivation,
 	isFlectDesktop,
@@ -90,8 +90,13 @@ describe('Flect activation boundary', () => {
 			document.addEventListener(
 				'flect:starter-submit',
 				(event) => {
-					const detail: unknown = (event as CustomEvent).detail;
-					resolve(String(Reflect.get(detail as object, 'prompt')));
+					if (!(event instanceof CustomEvent)) return;
+					const detail: unknown = event.detail;
+					const prompt =
+						typeof detail === 'object' && detail !== null && 'prompt' in detail
+							? Reflect.get(detail, 'prompt')
+							: undefined;
+					resolve(String(prompt));
 				},
 				{ once: true }
 			);

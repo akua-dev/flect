@@ -1,6 +1,18 @@
+import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
-import { describe, expect, it } from 'vitest';
 import { type CapsuleSource, decodeCapsule, encodeCapsule } from './capsule';
+
+// oxlint-disable typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion -- this file's whole job is
+// proving encodeCapsule's runtime Schema validation rejects a manifest that is
+// deliberately incompatible with CapsuleSource['manifest'] (excess `credential`
+// field, wrong `formatVersion` literal, duplicate/oversized/ungranted
+// extensions, ...). Those values are, by construction, not expressible as a
+// CapsuleSource['manifest'] at compile time (e.g. `formatVersion: 2` can never
+// be assignable to the schema's `Schema.Literal(1)` field), so every fixture in
+// this file goes through the documented `as unknown as CapsuleSource['manifest']`
+// bridge on purpose. See the escalations list in the conformance burn-down
+// report for the reasoning; this is not a substitute for real Schema decoding
+// elsewhere in the codebase.
 
 const bytes = (value: string) => new TextEncoder().encode(value);
 const extensionSource = '() => []';
@@ -104,7 +116,10 @@ describe('portable .flect capsules', () => {
 			Effect.runPromise(
 				encodeCapsule({
 					...value,
-					manifest: { ...value.manifest, credential: 'secret' } as never
+					manifest: {
+						...value.manifest,
+						credential: 'secret'
+					} as unknown as CapsuleSource['manifest']
 				})
 			)
 		).rejects.toMatchObject({ _tag: 'InvalidCapsule' });
@@ -130,7 +145,7 @@ describe('portable .flect capsules', () => {
 			Effect.runPromise(
 				encodeCapsule({
 					...value,
-					manifest: { ...value.manifest, formatVersion: 2 } as never
+					manifest: { ...value.manifest, formatVersion: 2 } as unknown as CapsuleSource['manifest']
 				})
 			)
 		).rejects.toMatchObject({ _tag: 'InvalidCapsule' });
@@ -152,7 +167,7 @@ describe('portable .flect capsules', () => {
 				manifest: {
 					...value.manifest,
 					extensions: [portableExtension]
-				} as never,
+				} as unknown as CapsuleSource['manifest'],
 				files: [
 					...value.files,
 					{ path: portableExtension.bundle, contents: bytes(extensionSource) }
@@ -172,7 +187,7 @@ describe('portable .flect capsules', () => {
 		const manifest = {
 			...value.manifest,
 			extensions: [portableExtension]
-		} as never;
+		} as unknown as CapsuleSource['manifest'];
 
 		await expect(Effect.runPromise(encodeCapsule({ ...value, manifest }))).rejects.toMatchObject({
 			_tag: 'InvalidCapsule'
@@ -209,7 +224,7 @@ describe('portable .flect capsules', () => {
 								}
 							}
 						]
-					} as never,
+					} as unknown as CapsuleSource['manifest'],
 					files: [...value.files, { path: portableExtension.bundle, contents: oversized }]
 				})
 			)
@@ -230,7 +245,7 @@ describe('portable .flect capsules', () => {
 					manifest: {
 						...value.manifest,
 						extensions: [portableExtension, portableExtension]
-					} as never,
+					} as unknown as CapsuleSource['manifest'],
 					files
 				})
 			)
@@ -242,10 +257,11 @@ describe('portable .flect capsules', () => {
 					manifest: {
 						...value.manifest,
 						extensions: [{ ...portableExtension, grants: ['interface:read'] }]
-					} as never,
+					} as unknown as CapsuleSource['manifest'],
 					files
 				})
 			)
 		).rejects.toMatchObject({ _tag: 'InvalidCapsule' });
 	});
 });
+// oxlint-enable typescript/no-unsafe-type-assertion, typescript/no-unnecessary-type-assertion

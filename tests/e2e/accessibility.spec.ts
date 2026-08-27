@@ -1,8 +1,17 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '@playwright/test';
+import { Schema } from 'effect';
 import { resetBrowserWorkspace } from './reset-browser-workspace';
 
 const wcagTags = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] as const;
+
+const DecisionButtonContrast = Schema.Array(
+	Schema.Struct({
+		label: Schema.String,
+		ratio: Schema.Number
+	})
+);
+const decodeDecisionButtonContrast = Schema.decodeUnknownSync(DecisionButtonContrast);
 
 const expectAccessible = async (page: Page, state: string) => {
 	const result = await new AxeBuilder({ page }).withTags([...wcagTags]).analyze();
@@ -20,41 +29,44 @@ const expectAccessible = async (page: Page, state: string) => {
 };
 
 const decisionButtonContrast = async (page: Page) =>
-	page.locator('.decision-button:not(:disabled)').evaluateAll((buttons) => {
-		const canvas = document.createElement('canvas');
-		canvas.width = 1;
-		canvas.height = 1;
-		const context = canvas.getContext('2d', { willReadFrequently: true });
-		if (context === null) {
-			throw new Error('Canvas context is unavailable');
-		}
-		const toRgb = (color: string) => {
-			context.clearRect(0, 0, 1, 1);
-			context.fillStyle = color;
-			context.fillRect(0, 0, 1, 1);
-			return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
-		};
-		const luminance = (color: ReadonlyArray<number>) => {
-			const channel = (value: number) => {
-				const normalized = value / 255;
-				return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+	decodeDecisionButtonContrast(
+		await page.locator('.decision-button:not(:disabled)').evaluateAll((buttons) => {
+			const canvas = document.createElement('canvas');
+			canvas.width = 1;
+			canvas.height = 1;
+			const context = canvas.getContext('2d', { willReadFrequently: true });
+			if (context === null) {
+				throw new Error('Canvas context is unavailable');
+			}
+			const toRgb = (color: string) => {
+				context.clearRect(0, 0, 1, 1);
+				context.fillStyle = color;
+				context.fillRect(0, 0, 1, 1);
+				return [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
 			};
-			return (
-				0.2126 * channel(color[0] ?? 0) +
-				0.7152 * channel(color[1] ?? 0) +
-				0.0722 * channel(color[2] ?? 0)
-			);
-		};
-		return buttons.map((button) => {
-			const style = getComputedStyle(button);
-			const foreground = luminance(toRgb(style.color));
-			const background = luminance(toRgb(style.backgroundColor));
-			return {
-				label: button.textContent?.trim() ?? 'Unnamed decision',
-				ratio: (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
+			const luminance = (color: ReadonlyArray<number>) => {
+				const channel = (value: number) => {
+					const normalized = value / 255;
+					return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4;
+				};
+				return (
+					0.2126 * channel(color[0] ?? 0) +
+					0.7152 * channel(color[1] ?? 0) +
+					0.0722 * channel(color[2] ?? 0)
+				);
 			};
-		});
-	});
+			return buttons.map((button) => {
+				const style = getComputedStyle(button);
+				const foreground = luminance(toRgb(style.color));
+				const background = luminance(toRgb(style.backgroundColor));
+				return {
+					label: button.textContent?.trim() ?? 'Unnamed decision',
+					ratio:
+						(Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
+				};
+			});
+		})
+	);
 
 const shapeCandidate = async (page: Page) => {
 	await expect(page.locator('html')).toHaveAttribute('data-flect-state', 'active');

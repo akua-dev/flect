@@ -3,6 +3,11 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium, expect, type Page } from '@playwright/test';
+import { Data } from 'effect';
+
+export class ReleaseMediaCaptureError extends Data.TaggedError('ReleaseMediaCaptureError')<{
+	readonly message: string;
+}> {}
 
 const root = resolve(import.meta.dirname, '..');
 const runtimeUrl = 'http://127.0.0.1:3210/api/runtime';
@@ -44,7 +49,9 @@ const run = async (command: ReadonlyArray<string>) => {
 	});
 	const exitCode = await child.exited;
 	if (exitCode !== 0) {
-		throw new Error(`${commandText(command)} exited with status ${exitCode}.`);
+		throw new ReleaseMediaCaptureError({
+			message: `${commandText(command)} exited with status ${exitCode}.`
+		});
 	}
 };
 
@@ -63,7 +70,9 @@ const isReachable = async (url: string) => {
 
 const requireUnusedPort = async (url: string) => {
 	if (await isReachable(url)) {
-		throw new Error(`Release media needs an unused local endpoint, but ${url} is already serving.`);
+		throw new ReleaseMediaCaptureError({
+			message: `Release media needs an unused local endpoint, but ${url} is already serving.`
+		});
 	}
 };
 
@@ -71,14 +80,16 @@ const waitForServer = async (url: string, child: ChildProcess, label: string) =>
 	const deadline = Date.now() + 20_000;
 	while (Date.now() < deadline) {
 		if (child.exitCode !== null) {
-			throw new Error(`${label} exited before ${url} became ready.`);
+			throw new ReleaseMediaCaptureError({
+				message: `${label} exited before ${url} became ready.`
+			});
 		}
 		if (await isReachable(url)) {
 			return;
 		}
 		await Bun.sleep(100);
 	}
-	throw new Error(`${label} did not become ready at ${url}.`);
+	throw new ReleaseMediaCaptureError({ message: `${label} did not become ready at ${url}.` });
 };
 
 const stopChild = async (child: ChildProcess) => {
@@ -262,7 +273,9 @@ const recordDemo = async (videoDirectory: string) => {
 	}
 
 	if (sequenceFrames.length === 0) {
-		throw new Error('Playwright did not capture release demo frames.');
+		throw new ReleaseMediaCaptureError({
+			message: 'Playwright did not capture release demo frames.'
+		});
 	}
 	await run([
 		'ffmpeg',
@@ -315,7 +328,9 @@ const captureHero = async () => {
 
 const convertDemo = async (frames: ReadonlyArray<string>) => {
 	if (frames.length === 0) {
-		throw new Error('Playwright did not produce any release demo frames.');
+		throw new ReleaseMediaCaptureError({
+			message: 'Playwright did not produce any release demo frames.'
+		});
 	}
 	await run([
 		'img2webp',

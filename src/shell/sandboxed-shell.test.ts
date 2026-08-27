@@ -224,8 +224,8 @@ describe('SandboxedShell', () => {
 
 	it.effect('propagates shell cancellation into the active Effect command', () =>
 		Effect.gen(function* () {
-			const started = yield* Deferred.make<void>();
-			const interrupted = yield* Deferred.make<void>();
+			const started = yield* Deferred.make<undefined>();
+			const interrupted = yield* Deferred.make<undefined>();
 			const commandLayer = makeBunCommandTestLayer(() =>
 				Deferred.succeed(started, undefined).pipe(
 					Effect.andThen(Effect.never),

@@ -242,6 +242,9 @@ interface HastElementNode {
 	readonly children?: ReadonlyArray<HastTextNode>;
 }
 
+const isHastElementNode = (value: unknown): value is HastElementNode =>
+	typeof value === 'object' && value !== null;
+
 const extractPreCode = (
 	node: unknown
 ):
@@ -251,10 +254,12 @@ const extractPreCode = (
 			readonly title?: string;
 	  }
 	| undefined => {
-	const codeNode = (node as HastElementNode | undefined)?.children?.find(
-		(child) =>
-			(child as HastElementNode).type === 'element' && (child as HastElementNode).tagName === 'code'
-	) as HastElementNode | undefined;
+	if (!isHastElementNode(node)) {
+		return undefined;
+	}
+	const codeNode = node.children
+		?.map((child): HastElementNode | undefined => (isHastElementNode(child) ? child : undefined))
+		.find((child) => child?.type === 'element' && child.tagName === 'code');
 	if (codeNode === undefined) {
 		return undefined;
 	}

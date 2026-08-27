@@ -1,3 +1,4 @@
+import { Schema } from 'effect';
 import {
 	type RefObject,
 	type UIEventHandler,
@@ -9,12 +10,13 @@ import {
 
 const FOLLOW_THRESHOLD_PX = 48;
 
-interface FollowState {
-	readonly following: boolean;
-	readonly unreadCount: number;
-	readonly scrollTop: number;
-	readonly contentKey: string | undefined;
-}
+const FollowState = Schema.Struct({
+	following: Schema.Boolean,
+	unreadCount: Schema.Number,
+	scrollTop: Schema.Number,
+	contentKey: Schema.UndefinedOr(Schema.String)
+});
+type FollowState = typeof FollowState.Type;
 
 export interface StickyFollowController {
 	readonly containerRef: RefObject<HTMLDivElement | null>;

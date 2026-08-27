@@ -17,7 +17,13 @@ describe('Pi workbench bridge', () => {
 					{ instruction: 'Make the failed action clearer' },
 					undefined,
 					undefined,
-					{} as never
+					// makePiWorkbenchBridge's execute() never reads its ExtensionContext
+					// argument (see pi-workbench-bridge.ts). That third-party type has ~16
+					// required members, including a class field gated by a private
+					// property, so no object literal can satisfy it structurally without
+					// constructing a real ModelRuntime this test doesn't need. Object.create
+					// returns `any`, so this assigns without an `as` type assertion.
+					Object.create(null)
 				)
 			);
 
