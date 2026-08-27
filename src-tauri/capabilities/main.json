@@ -1,7 +1,7 @@
 {
-  "$schema": "../gen/schemas/desktop-schema.json",
-  "identifier": "main",
-  "description": "The Flect main window receives only core WebView authority.",
-  "windows": ["main"],
-  "permissions": ["core:default", "core:window:allow-start-dragging"]
+	"$schema": "../gen/schemas/desktop-schema.json",
+	"identifier": "main",
+	"description": "The Flect main window receives only core WebView authority.",
+	"windows": ["main"],
+	"permissions": ["core:default", "core:window:allow-start-dragging"]
 }

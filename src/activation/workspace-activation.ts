@@ -1,1 +1,1 @@
-export { activateWorkspace } from "./workspace-activation-runtime";
+export { activateWorkspace } from './workspace-activation-runtime';

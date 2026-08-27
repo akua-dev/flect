@@ -16,7 +16,7 @@ the browser/native trust boundaries.
 ```bash
 bun install --frozen-lockfile
 bun run prepare
-bunx playwright install chromium
+./node_modules/.bin/playwright install chromium
 ```
 
 `prepare` creates or updates an ignored checkout of the exact Effect source
@@ -42,7 +42,7 @@ bun run dev:desktop
 Pi owns provider login and credentials:
 
 ```bash
-bunx pi
+./node_modules/.bin/pi
 # Run /login inside Pi, complete login, then quit Pi.
 ```
 

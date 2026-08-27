@@ -46,79 +46,76 @@ never receives a grant method:
 
 ```ts
 import {
-  AuthorizedProductOperation,
-  defineProductIntegration,
-  ProductCapabilityManifest,
-} from "@flect/product";
-import { Effect } from "effect";
+	AuthorizedProductOperation,
+	defineProductIntegration,
+	ProductCapabilityManifest
+} from '@flect/product';
+import { Effect } from 'effect';
 
 const capability = ProductCapabilityManifest.make({
-  version: 1,
-  id: "product.example.status",
-  name: "Read status",
-  description: "Read one offline status.",
-  operationIds: ["example.status"],
-  resourceIds: ["example.workspace"],
-  dataClassIds: ["example.status"],
-  confirmationPolicies: ["session"],
+	version: 1,
+	id: 'product.example.status',
+	name: 'Read status',
+	description: 'Read one offline status.',
+	operationIds: ['example.status'],
+	resourceIds: ['example.workspace'],
+	dataClassIds: ['example.status'],
+	confirmationPolicies: ['session']
 });
 
-export const makeExampleProduct = (
-  capsule: Uint8Array,
-  archiveSha256: string,
-) =>
-  defineProductIntegration({
-    metadata: {
-      version: 1,
-      descriptor: {
-        version: 1,
-        id: "dev.example.product",
-        name: "Example product",
-        description: "The smallest offline Flect product.",
-        integrationVersion: "1.0.0",
-        revision: "v1",
-        productApiVersion: 1,
-        connection: "offline",
-        authenticationOwner: "none",
-        compatibility: {
-          flect: ">=0.2.0 <1.0.0",
-          platforms: ["browser"],
-        },
-        inference: { allowedOwners: ["user"], defaultOwner: "user" },
-      },
-      experience: {
-        version: 1,
-        capsuleId: "dev.example.product",
-        capsuleVersion: "1.0.0",
-        archiveSha256,
-        provenanceRevision: "v1",
-        appExtensionIds: [],
-        shaperExtensionIds: [],
-      },
-      capabilities: [capability],
-      migrations: [],
-    },
-    operations: [
-      {
-        id: "example.status",
-        capabilityId: capability.id,
-        authorize: () =>
-          Effect.succeed(
-            AuthorizedProductOperation.make({
-              version: 1,
-              capabilityId: capability.id,
-              operationId: "example.status",
-              resourceIds: ["example.workspace"],
-              dataClassIds: ["example.status"],
-            }),
-          ),
-        execute: () => Effect.succeed({ status: "ready" }),
-      },
-    ],
-    events: [],
-    selectedInferenceOwner: "user",
-    loadRecommendedExperience: Effect.succeed(capsule),
-  });
+export const makeExampleProduct = (capsule: Uint8Array, archiveSha256: string) =>
+	defineProductIntegration({
+		metadata: {
+			version: 1,
+			descriptor: {
+				version: 1,
+				id: 'dev.example.product',
+				name: 'Example product',
+				description: 'The smallest offline Flect product.',
+				integrationVersion: '1.0.0',
+				revision: 'v1',
+				productApiVersion: 1,
+				connection: 'offline',
+				authenticationOwner: 'none',
+				compatibility: {
+					flect: '>=0.2.0 <1.0.0',
+					platforms: ['browser']
+				},
+				inference: { allowedOwners: ['user'], defaultOwner: 'user' }
+			},
+			experience: {
+				version: 1,
+				capsuleId: 'dev.example.product',
+				capsuleVersion: '1.0.0',
+				archiveSha256,
+				provenanceRevision: 'v1',
+				appExtensionIds: [],
+				shaperExtensionIds: []
+			},
+			capabilities: [capability],
+			migrations: []
+		},
+		operations: [
+			{
+				id: 'example.status',
+				capabilityId: capability.id,
+				authorize: () =>
+					Effect.succeed(
+						AuthorizedProductOperation.make({
+							version: 1,
+							capabilityId: capability.id,
+							operationId: 'example.status',
+							resourceIds: ['example.workspace'],
+							dataClassIds: ['example.status']
+						})
+					),
+				execute: () => Effect.succeed({ status: 'ready' })
+			}
+		],
+		events: [],
+		selectedInferenceOwner: 'user',
+		loadRecommendedExperience: Effect.succeed(capsule)
+	});
 ```
 
 Create deterministic capsule bytes with `encodeCapsule`, and calculate the
@@ -128,11 +125,11 @@ and the archive digest before returning a branded integration.
 
 ## Choose a connection model
 
-| Model | Authentication | Intended use |
-| --- | --- | --- |
-| `offline` | `none` | Local data and deterministic product logic; no transport |
-| `browser-direct` | `product` | Same-origin session or explicitly CORS-compatible fixed API |
-| `brokered` | `host` | Named callback whose closure privately owns credentials |
+| Model            | Authentication | Intended use                                                |
+| ---------------- | -------------- | ----------------------------------------------------------- |
+| `offline`        | `none`         | Local data and deterministic product logic; no transport    |
+| `browser-direct` | `product`      | Same-origin session or explicitly CORS-compatible fixed API |
+| `brokered`       | `host`         | Named callback whose closure privately owns credentials     |
 
 Browser-direct adapters omit ambient credentials, reject redirects, and allow
 only registered HTTPS origins, paths, methods, headers, documents, and bounds.

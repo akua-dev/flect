@@ -1,9 +1,9 @@
 if (globalThis.ResizeObserver === undefined) {
-  globalThis.ResizeObserver = class ResizeObserverStub {
-    disconnect() {}
+	globalThis.ResizeObserver = class ResizeObserverStub {
+		disconnect() {}
 
-    observe() {}
+		observe() {}
 
-    unobserve() {}
-  };
+		unobserve() {}
+	};
 }

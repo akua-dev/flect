@@ -1,246 +1,228 @@
-import { Context, Effect, Layer, Ref, Schema } from "effect";
-import { BunCommandFailed } from "../../shared/bun-command";
-import {
-  BunPreview,
-  BunPreviewResponse,
-  makeBunPreviewLayer,
-} from "./bun-preview";
-import { loadBrowserEsbuild } from "./esbuild-browser";
-import { riftyCapabilityBoundarySource } from "./rifty-capability-boundary";
+import { Context, Effect, Layer, Ref, Schema } from 'effect';
+import { BunCommandFailed } from '../../shared/bun-command';
+import { BunPreview, BunPreviewResponse, makeBunPreviewLayer } from './bun-preview';
+import { loadBrowserEsbuild } from './esbuild-browser';
+import { riftyCapabilityBoundarySource } from './rifty-capability-boundary';
 
-const WORKSPACE_ROOT = "/workspace";
+const WORKSPACE_ROOT = '/workspace';
 const START_DEADLINE_MS = 10_000;
 const BODY_LIMIT = 1_048_576;
-const decoder = new TextDecoder("utf-8", { fatal: true });
+const decoder = new TextDecoder('utf-8', { fatal: true });
 
 export interface BunPreviewExecutionRequest {
-  readonly entry: string;
-  readonly files: Readonly<Record<string, string | Uint8Array>>;
+	readonly entry: string;
+	readonly files: Readonly<Record<string, string | Uint8Array>>;
 }
 
 export interface BunPreviewExecutionResult {
-  readonly previewUrl: string;
-  readonly port: number;
+	readonly previewUrl: string;
+	readonly port: number;
 }
 
 export interface BunPreviewExecutionShape {
-  readonly start: (
-    request: BunPreviewExecutionRequest,
-  ) => Effect.Effect<BunPreviewExecutionResult, BunCommandFailed>;
-  readonly stop: Effect.Effect<void, BunCommandFailed>;
+	readonly start: (
+		request: BunPreviewExecutionRequest
+	) => Effect.Effect<BunPreviewExecutionResult, BunCommandFailed>;
+	readonly stop: Effect.Effect<void, BunCommandFailed>;
 }
 
 export class BunPreviewExecution extends Context.Service<
-  BunPreviewExecution,
-  BunPreviewExecutionShape
->()("flect/BunPreviewExecution") {}
+	BunPreviewExecution,
+	BunPreviewExecutionShape
+>()('flect/BunPreviewExecution') {}
 
 const previewFailure = () =>
-  BunCommandFailed.make({
-    reason: "preview",
-    message: "The isolated Bun-compatible preview failed safely.",
-  });
+	BunCommandFailed.make({
+		reason: 'preview',
+		message: 'The isolated Bun-compatible preview failed safely.'
+	});
 
 export interface BunPreviewExecutionRelease {
-  readonly runId: string;
-  readonly port: number;
-  readonly stopRealm: () => void;
-  readonly stopPreview: (
-    runId: string,
-  ) => Effect.Effect<void, BunCommandFailed>;
-  readonly stopRoute: (runId: string, port: number) => Effect.Effect<void>;
-  readonly clearActive: (runId: string) => Effect.Effect<void>;
+	readonly runId: string;
+	readonly port: number;
+	readonly stopRealm: () => void;
+	readonly stopPreview: (runId: string) => Effect.Effect<void, BunCommandFailed>;
+	readonly stopRoute: (runId: string, port: number) => Effect.Effect<void>;
+	readonly clearActive: (runId: string) => Effect.Effect<void>;
 }
 
-export const releaseBunPreviewExecution = Effect.fn(
-  "Flect.BunPreviewExecution.release",
-)((release: BunPreviewExecutionRelease) =>
-  Effect.gen(function* () {
-    yield* Effect.sync(release.stopRealm).pipe(
-      Effect.catchDefect(() => Effect.void),
-    );
-    yield* release.stopPreview(release.runId).pipe(Effect.ignore);
-    yield* release.stopRoute(release.runId, release.port).pipe(Effect.ignore);
-    yield* release.clearActive(release.runId);
-  }).pipe(
-    Effect.catch(() => Effect.void),
-    Effect.catchDefect(() => Effect.void),
-  ),
+export const releaseBunPreviewExecution = Effect.fn('Flect.BunPreviewExecution.release')(
+	(release: BunPreviewExecutionRelease) =>
+		Effect.gen(function* () {
+			yield* Effect.sync(release.stopRealm).pipe(Effect.catchDefect(() => Effect.void));
+			yield* release.stopPreview(release.runId).pipe(Effect.ignore);
+			yield* release.stopRoute(release.runId, release.port).pipe(Effect.ignore);
+			yield* release.clearActive(release.runId);
+		}).pipe(
+			Effect.catch(() => Effect.void),
+			Effect.catchDefect(() => Effect.void)
+		)
 );
 
 const dirname = (path: string) => {
-  const slash = path.lastIndexOf("/");
-  return slash <= 0 ? "/" : path.slice(0, slash);
+	const slash = path.lastIndexOf('/');
+	return slash <= 0 ? '/' : path.slice(0, slash);
 };
 
 const normalize = (path: string) => {
-  const output: Array<string> = [];
-  for (const segment of path.split("/")) {
-    if (segment === "" || segment === ".") {
-      continue;
-    }
-    if (segment === "..") {
-      output.pop();
-    } else {
-      output.push(segment);
-    }
-  }
-  return `/${output.join("/")}`;
+	const output: Array<string> = [];
+	for (const segment of path.split('/')) {
+		if (segment === '' || segment === '.') {
+			continue;
+		}
+		if (segment === '..') {
+			output.pop();
+		} else {
+			output.push(segment);
+		}
+	}
+	return `/${output.join('/')}`;
 };
 
 const extension = (path: string) => {
-  const name = path.slice(path.lastIndexOf("/") + 1);
-  const dot = name.lastIndexOf(".");
-  return dot < 0 ? "" : name.slice(dot);
+	const name = path.slice(path.lastIndexOf('/') + 1);
+	const dot = name.lastIndexOf('.');
+	return dot < 0 ? '' : name.slice(dot);
 };
 
-const sourceExtensions = ["", ".js", ".mjs", ".ts", ".tsx", ".jsx", ".json"];
+const sourceExtensions = ['', '.js', '.mjs', '.ts', '.tsx', '.jsx', '.json'];
 
-const resolveFile = (
-  files: Readonly<Record<string, string | Uint8Array>>,
-  candidate: string,
-) => {
-  const path = normalize(candidate);
-  if (extension(path) === ".cjs") {
-    return undefined;
-  }
-  const candidates = [
-    ...sourceExtensions.map((suffix) => `${path}${suffix}`),
-    ...sourceExtensions.slice(1).map((suffix) => `${path}/index${suffix}`),
-  ];
-  return candidates.find((entry) => files[entry] !== undefined);
+const resolveFile = (files: Readonly<Record<string, string | Uint8Array>>, candidate: string) => {
+	const path = normalize(candidate);
+	if (extension(path) === '.cjs') {
+		return undefined;
+	}
+	const candidates = [
+		...sourceExtensions.map((suffix) => `${path}${suffix}`),
+		...sourceExtensions.slice(1).map((suffix) => `${path}/index${suffix}`)
+	];
+	return candidates.find((entry) => files[entry] !== undefined);
 };
 
 const packageNameOf = (specifier: string) =>
-  specifier.startsWith("@")
-    ? specifier.split("/").slice(0, 2).join("/")
-    : (specifier.split("/")[0] ?? specifier);
+	specifier.startsWith('@')
+		? specifier.split('/').slice(0, 2).join('/')
+		: (specifier.split('/')[0] ?? specifier);
 
 const packageSubpathOf = (specifier: string, packageName: string) =>
-  specifier.slice(packageName.length).replace(/^\/+/, "");
+	specifier.slice(packageName.length).replace(/^\/+/, '');
 
 const text = (value: string | Uint8Array | undefined) => {
-  if (value === undefined) {
-    return undefined;
-  }
-  return typeof value === "string" ? value : decoder.decode(value);
+	if (value === undefined) {
+		return undefined;
+	}
+	return typeof value === 'string' ? value : decoder.decode(value);
 };
 
 const resolvePackage = (
-  files: Readonly<Record<string, string | Uint8Array>>,
-  specifier: string,
-  resolveDir: string,
+	files: Readonly<Record<string, string | Uint8Array>>,
+	specifier: string,
+	resolveDir: string
 ) => {
-  const packageName = packageNameOf(specifier);
-  const subpath = packageSubpathOf(specifier, packageName);
-  let current = resolveDir;
-  while (
-    current === WORKSPACE_ROOT ||
-    current.startsWith(`${WORKSPACE_ROOT}/`)
-  ) {
-    const root = `${current}/node_modules/${packageName}`;
-    if (subpath.length > 0) {
-      const resolved = resolveFile(files, `${root}/${subpath}`);
-      if (resolved !== undefined) {
-        return resolved;
-      }
-    }
-    const manifestText = text(files[`${root}/package.json`]);
-    if (manifestText !== undefined) {
-      const manifest = JSON.parse(manifestText) as {
-        readonly browser?: unknown;
-        readonly module?: unknown;
-        readonly main?: unknown;
-      };
-      const entry = [manifest.browser, manifest.module, manifest.main].find(
-        (value): value is string => typeof value === "string",
-      );
-      const resolved = resolveFile(files, `${root}/${entry ?? "index.js"}`);
-      if (resolved !== undefined) {
-        return resolved;
-      }
-    }
-    if (current === WORKSPACE_ROOT) {
-      break;
-    }
-    current = dirname(current);
-  }
-  return undefined;
+	const packageName = packageNameOf(specifier);
+	const subpath = packageSubpathOf(specifier, packageName);
+	let current = resolveDir;
+	while (current === WORKSPACE_ROOT || current.startsWith(`${WORKSPACE_ROOT}/`)) {
+		const root = `${current}/node_modules/${packageName}`;
+		if (subpath.length > 0) {
+			const resolved = resolveFile(files, `${root}/${subpath}`);
+			if (resolved !== undefined) {
+				return resolved;
+			}
+		}
+		const manifestText = text(files[`${root}/package.json`]);
+		if (manifestText !== undefined) {
+			const manifest = JSON.parse(manifestText) as {
+				readonly browser?: unknown;
+				readonly module?: unknown;
+				readonly main?: unknown;
+			};
+			const entry = [manifest.browser, manifest.module, manifest.main].find(
+				(value): value is string => typeof value === 'string'
+			);
+			const resolved = resolveFile(files, `${root}/${entry ?? 'index.js'}`);
+			if (resolved !== undefined) {
+				return resolved;
+			}
+		}
+		if (current === WORKSPACE_ROOT) {
+			break;
+		}
+		current = dirname(current);
+	}
+	return undefined;
 };
 
-const loaderFor = (path: string): "js" | "jsx" | "ts" | "tsx" | "json" => {
-  switch (extension(path)) {
-    case ".ts":
-      return "ts";
-    case ".tsx":
-      return "tsx";
-    case ".jsx":
-      return "jsx";
-    case ".json":
-      return "json";
-    default:
-      return "js";
-  }
+const loaderFor = (path: string): 'js' | 'jsx' | 'ts' | 'tsx' | 'json' => {
+	switch (extension(path)) {
+		case '.ts':
+			return 'ts';
+		case '.tsx':
+			return 'tsx';
+		case '.jsx':
+			return 'jsx';
+		case '.json':
+			return 'json';
+		default:
+			return 'js';
+	}
 };
 
 const bundleWorkspace = async (request: BunPreviewExecutionRequest) => {
-  const esbuild = await loadBrowserEsbuild();
-  const result = await esbuild.build({
-    entryPoints: [request.entry],
-    bundle: true,
-    write: false,
-    format: "iife",
-    platform: "browser",
-    target: "es2022",
-    plugins: [
-      {
-        name: "flect-vfs",
-        setup(build) {
-          build.onResolve({ filter: /.*/ }, (args) => {
-            const resolved =
-              args.kind === "entry-point"
-                ? resolveFile(request.files, args.path)
-                : args.path.startsWith(".") || args.path.startsWith("/")
-                  ? resolveFile(
-                      request.files,
-                      args.path.startsWith("/")
-                        ? args.path
-                        : `${args.resolveDir}/${args.path}`,
-                    )
-                  : resolvePackage(request.files, args.path, args.resolveDir);
-            if (
-              resolved === undefined ||
-              (!resolved.startsWith(`${WORKSPACE_ROOT}/`) &&
-                resolved !== WORKSPACE_ROOT)
-            ) {
-              return {
-                errors: [{ text: "Module is outside the preview workspace." }],
-              };
-            }
-            return {
-              path: resolved,
-              namespace: "flect-vfs",
-            };
-          });
-          build.onLoad({ filter: /.*/, namespace: "flect-vfs" }, (args) => {
-            const contents = text(request.files[args.path]);
-            return contents === undefined
-              ? { errors: [{ text: "Module is unavailable." }] }
-              : {
-                  contents,
-                  loader: loaderFor(args.path),
-                  resolveDir: dirname(args.path),
-                };
-          });
-        },
-      },
-    ],
-  });
-  const output = result.outputFiles?.[0]?.text;
-  if (output === undefined || output.length > 8_388_608) {
-    throw previewFailure();
-  }
-  return output;
+	const esbuild = await loadBrowserEsbuild();
+	const result = await esbuild.build({
+		entryPoints: [request.entry],
+		bundle: true,
+		write: false,
+		format: 'iife',
+		platform: 'browser',
+		target: 'es2022',
+		plugins: [
+			{
+				name: 'flect-vfs',
+				setup(build) {
+					build.onResolve({ filter: /.*/ }, (args) => {
+						const resolved =
+							args.kind === 'entry-point'
+								? resolveFile(request.files, args.path)
+								: args.path.startsWith('.') || args.path.startsWith('/')
+									? resolveFile(
+											request.files,
+											args.path.startsWith('/') ? args.path : `${args.resolveDir}/${args.path}`
+										)
+									: resolvePackage(request.files, args.path, args.resolveDir);
+						if (
+							resolved === undefined ||
+							(!resolved.startsWith(`${WORKSPACE_ROOT}/`) && resolved !== WORKSPACE_ROOT)
+						) {
+							return {
+								errors: [{ text: 'Module is outside the preview workspace.' }]
+							};
+						}
+						return {
+							path: resolved,
+							namespace: 'flect-vfs'
+						};
+					});
+					build.onLoad({ filter: /.*/, namespace: 'flect-vfs' }, (args) => {
+						const contents = text(request.files[args.path]);
+						return contents === undefined
+							? { errors: [{ text: 'Module is unavailable.' }] }
+							: {
+									contents,
+									loader: loaderFor(args.path),
+									resolveDir: dirname(args.path)
+								};
+					});
+				}
+			}
+		]
+	});
+	const output = result.outputFiles?.[0]?.text;
+	if (output === undefined || output.length > 8_388_608) {
+		throw previewFailure();
+	}
+	return output;
 };
 
 const makeWorkerSource = (bundle: string) => `
@@ -365,17 +347,17 @@ const makeWorkerSource = (bundle: string) => `
 `;
 
 interface RealmRequest {
-  readonly complete: (
-    result: Effect.Effect<typeof BunPreviewResponse.Encoded, BunCommandFailed>,
-  ) => void;
+	readonly complete: (
+		result: Effect.Effect<typeof BunPreviewResponse.Encoded, BunCommandFailed>
+	) => void;
 }
 
 interface RealmHandle {
-  readonly port: number;
-  readonly request: (
-    request: unknown,
-  ) => Effect.Effect<typeof BunPreviewResponse.Encoded, BunCommandFailed>;
-  readonly stop: () => void;
+	readonly port: number;
+	readonly request: (
+		request: unknown
+	) => Effect.Effect<typeof BunPreviewResponse.Encoded, BunCommandFailed>;
+	readonly stop: () => void;
 }
 
 const bootstrapDocument = (token: string) => `<!doctype html>
@@ -397,409 +379,374 @@ const bootstrapDocument = (token: string) => `<!doctype html>
 })();
 </script>`;
 
-const createRealm = Effect.fn("Flect.BunPreviewExecution.createRealm")(
-  (source: string): Effect.Effect<RealmHandle, BunCommandFailed> =>
-    Effect.callback<RealmHandle, BunCommandFailed>((resume) => {
-      const token = crypto.randomUUID();
-      const iframe = document.createElement("iframe");
-      iframe.hidden = true;
-      iframe.setAttribute("sandbox", "allow-scripts");
-      iframe.srcdoc = bootstrapDocument(token);
-      const channel = new MessageChannel();
-      const pending = new Map<string, RealmRequest>();
-      let settled = false;
-      let stopped = false;
-      let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
-      const cleanup = () => {
-        if (stopped) {
-          return;
-        }
-        stopped = true;
-        globalThis.removeEventListener("message", onFrameReady);
-        if (timer !== undefined) {
-          globalThis.clearTimeout(timer);
-        }
-        channel.port1.close();
-        for (const request of pending.values()) {
-          request.complete(Effect.fail(previewFailure()));
-        }
-        pending.clear();
-        iframe.remove();
-      };
-      const failStartup = () => {
-        if (!settled) {
-          settled = true;
-          cleanup();
-          resume(Effect.fail(previewFailure()));
-        }
-      };
-      const onFrameReady = (event: MessageEvent) => {
-        if (
-          event.source !== iframe.contentWindow ||
-          event.data?.type !== "flect-preview-frame-ready" ||
-          event.data?.token !== token
-        ) {
-          return;
-        }
-        try {
-          iframe.contentWindow?.postMessage(
-            {
-              type: "flect-preview-init",
-              token,
-              source,
-            },
-            "*",
-            [channel.port2],
-          );
-        } catch {
-          failStartup();
-        }
-      };
-      timer = globalThis.setTimeout(failStartup, START_DEADLINE_MS);
-      globalThis.addEventListener("message", onFrameReady);
-      channel.port1.onmessage = (event) => {
-        const frame = event.data;
-        if (frame?.type === "startup-failure" && !settled) {
-          failStartup();
-        } else if (
-          frame?.type === "ready" &&
-          Number.isInteger(frame.port) &&
-          !settled
-        ) {
-          settled = true;
-          if (timer !== undefined) {
-            globalThis.clearTimeout(timer);
-          }
-          globalThis.removeEventListener("message", onFrameReady);
-          resume(
-            Effect.succeed({
-              port: frame.port,
-              request: (request) =>
-                Effect.callback<
-                  typeof BunPreviewResponse.Encoded,
-                  BunCommandFailed
-                >((requestResume) => {
-                  const id = `request-${crypto.randomUUID().replaceAll("-", "")}`;
-                  let completed = false;
-                  const complete: RealmRequest["complete"] = (result) => {
-                    if (completed) {
-                      return;
-                    }
-                    completed = true;
-                    pending.delete(id);
-                    requestResume(result);
-                  };
-                  pending.set(id, { complete });
-                  try {
-                    channel.port1.postMessage({ type: "request", id, request });
-                  } catch {
-                    complete(Effect.fail(previewFailure()));
-                  }
-                  return Effect.sync(() => {
-                    if (completed) {
-                      return;
-                    }
-                    completed = true;
-                    pending.delete(id);
-                    try {
-                      channel.port1.postMessage({ type: "cancel", id });
-                    } catch {
-                      // The realm is already unavailable; interruption still owns cleanup.
-                    }
-                  });
-                }),
-              stop: () => {
-                try {
-                  channel.port1.postMessage({ type: "stop" });
-                } catch {
-                  // Cleanup below remains deterministic if the channel already closed.
-                }
-                cleanup();
-              },
-            }),
-          );
-        } else if (frame?.type === "response" && typeof frame.id === "string") {
-          const request = pending.get(frame.id);
-          if (request !== undefined) {
-            request.complete(Effect.succeed(frame.response));
-          }
-        }
-      };
-      channel.port1.start();
-      document.body.append(iframe);
-      return Effect.sync(() => {
-        if (!settled) {
-          settled = true;
-          cleanup();
-        }
-      });
-    }),
+const createRealm = Effect.fn('Flect.BunPreviewExecution.createRealm')(
+	(source: string): Effect.Effect<RealmHandle, BunCommandFailed> =>
+		Effect.callback<RealmHandle, BunCommandFailed>((resume) => {
+			const token = crypto.randomUUID();
+			const iframe = document.createElement('iframe');
+			iframe.hidden = true;
+			iframe.setAttribute('sandbox', 'allow-scripts');
+			iframe.srcdoc = bootstrapDocument(token);
+			const channel = new MessageChannel();
+			const pending = new Map<string, RealmRequest>();
+			let settled = false;
+			let stopped = false;
+			const cleanup = () => {
+				if (stopped) {
+					return;
+				}
+				stopped = true;
+				globalThis.removeEventListener('message', onFrameReady);
+				globalThis.clearTimeout(timer);
+				channel.port1.close();
+				for (const request of pending.values()) {
+					request.complete(Effect.fail(previewFailure()));
+				}
+				pending.clear();
+				iframe.remove();
+			};
+			const failStartup = () => {
+				if (!settled) {
+					settled = true;
+					cleanup();
+					resume(Effect.fail(previewFailure()));
+				}
+			};
+			const onFrameReady = (event: MessageEvent) => {
+				if (
+					event.source !== iframe.contentWindow ||
+					event.data?.type !== 'flect-preview-frame-ready' ||
+					event.data?.token !== token
+				) {
+					return;
+				}
+				try {
+					iframe.contentWindow?.postMessage(
+						{
+							type: 'flect-preview-init',
+							token,
+							source
+						},
+						'*',
+						[channel.port2]
+					);
+				} catch {
+					failStartup();
+				}
+			};
+			const timer = globalThis.setTimeout(failStartup, START_DEADLINE_MS);
+			globalThis.addEventListener('message', onFrameReady);
+			channel.port1.onmessage = (event) => {
+				const frame = event.data;
+				if (frame?.type === 'startup-failure' && !settled) {
+					failStartup();
+				} else if (frame?.type === 'ready' && Number.isInteger(frame.port) && !settled) {
+					settled = true;
+					globalThis.clearTimeout(timer);
+					globalThis.removeEventListener('message', onFrameReady);
+					resume(
+						Effect.succeed({
+							port: frame.port,
+							request: (request) =>
+								Effect.callback<typeof BunPreviewResponse.Encoded, BunCommandFailed>(
+									(requestResume) => {
+										const id = `request-${crypto.randomUUID().replaceAll('-', '')}`;
+										let completed = false;
+										const complete: RealmRequest['complete'] = (result) => {
+											if (completed) {
+												return;
+											}
+											completed = true;
+											pending.delete(id);
+											requestResume(result);
+										};
+										pending.set(id, { complete });
+										try {
+											channel.port1.postMessage({ type: 'request', id, request });
+										} catch {
+											complete(Effect.fail(previewFailure()));
+										}
+										return Effect.sync(() => {
+											if (completed) {
+												return;
+											}
+											completed = true;
+											pending.delete(id);
+											try {
+												channel.port1.postMessage({ type: 'cancel', id });
+											} catch {
+												// The realm is already unavailable; interruption still owns cleanup.
+											}
+										});
+									}
+								),
+							stop: () => {
+								try {
+									channel.port1.postMessage({ type: 'stop' });
+								} catch {
+									// Cleanup below remains deterministic if the channel already closed.
+								}
+								cleanup();
+							}
+						})
+					);
+				} else if (frame?.type === 'response' && typeof frame.id === 'string') {
+					const request = pending.get(frame.id);
+					if (request !== undefined) {
+						request.complete(Effect.succeed(frame.response));
+					}
+				}
+			};
+			channel.port1.start();
+			document.body.append(iframe);
+			return Effect.sync(() => {
+				if (!settled) {
+					settled = true;
+					cleanup();
+				}
+			});
+		})
 );
 
-const waitForPreviewServiceWorkerControl = Effect.callback<
-  void,
-  BunCommandFailed
->((resume) => {
-  let settled = false;
-  const cleanup = () => {
-    window.clearTimeout(timer);
-    navigator.serviceWorker.removeEventListener("controllerchange", controlled);
-  };
-  const complete = (result: Effect.Effect<void, BunCommandFailed>) => {
-    if (settled) {
-      return;
-    }
-    settled = true;
-    cleanup();
-    resume(result);
-  };
-  function controlled() {
-    complete(Effect.void);
-  }
-  const timer = window.setTimeout(
-    () => complete(Effect.fail(previewFailure())),
-    3_000,
-  );
-  navigator.serviceWorker.addEventListener("controllerchange", controlled, {
-    once: true,
-  });
-  if (navigator.serviceWorker.controller !== null) {
-    controlled();
-  }
-  return Effect.sync(cleanup);
+const waitForPreviewServiceWorkerControl = Effect.callback<void, BunCommandFailed>((resume) => {
+	let settled = false;
+	const cleanup = () => {
+		window.clearTimeout(timer);
+		navigator.serviceWorker.removeEventListener('controllerchange', controlled);
+	};
+	const complete = (result: Effect.Effect<void, BunCommandFailed>) => {
+		if (settled) {
+			return;
+		}
+		settled = true;
+		cleanup();
+		resume(result);
+	};
+	function controlled() {
+		complete(Effect.void);
+	}
+	const timer = window.setTimeout(() => complete(Effect.fail(previewFailure())), 3_000);
+	navigator.serviceWorker.addEventListener('controllerchange', controlled, {
+		once: true
+	});
+	if (navigator.serviceWorker.controller !== null) {
+		controlled();
+	}
+	return Effect.sync(cleanup);
 });
 
-const ensurePreviewServiceWorker = Effect.fn(
-  "Flect.BunPreviewExecution.ensureServiceWorker",
-)(function* () {
-  if (!("serviceWorker" in navigator)) {
-    return yield* Effect.fail(previewFailure());
-  }
-  yield* Effect.tryPromise({
-    try: () => navigator.serviceWorker.register("/sw.js", { scope: "/" }),
-    catch: previewFailure,
-  });
-  const registration = yield* Effect.tryPromise({
-    try: () => navigator.serviceWorker.ready,
-    catch: previewFailure,
-  });
-  if (navigator.serviceWorker.controller === null) {
-    yield* waitForPreviewServiceWorkerControl;
-  }
-  return registration;
-});
-
-const registerPreviewRoute = Effect.fn(
-  "Flect.BunPreviewExecution.registerRoute",
-)(function* (runId: string, port: number) {
-  const registration = yield* ensurePreviewServiceWorker();
-  const target = navigator.serviceWorker.controller ?? registration.active;
-  if (target === null) {
-    return yield* Effect.fail(previewFailure());
-  }
-  const channel = new MessageChannel();
-  yield* Effect.callback<void, BunCommandFailed>((resume) => {
-    let settled = false;
-    const cleanup = () => {
-      window.clearTimeout(timer);
-      channel.port1.close();
-    };
-    const complete = (result: Effect.Effect<void, BunCommandFailed>) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      cleanup();
-      resume(result);
-    };
-    const timer = window.setTimeout(() => {
-      complete(Effect.fail(previewFailure()));
-    }, 3_000);
-    channel.port1.onmessage = (event) => {
-      if (event.data?.type !== "flect-preview-registered") {
-        return;
-      }
-      complete(Effect.void);
-    };
-    try {
-      target.postMessage(
-        {
-          type: "flect-preview-register",
-          runId,
-          port,
-        },
-        [channel.port2],
-      );
-    } catch {
-      complete(Effect.fail(previewFailure()));
-    }
-    return Effect.sync(cleanup);
-  });
-});
-
-const stopPreviewRoute = Effect.fn("Flect.BunPreviewExecution.stopRoute")(
-  function* (runId: string, port: number) {
-    if (!("serviceWorker" in navigator)) {
-      return;
-    }
-    const registration = yield* ensurePreviewServiceWorker();
-    const target = navigator.serviceWorker.controller ?? registration.active;
-    yield* Effect.try({
-      try: () =>
-        target?.postMessage({
-          type: "flect-preview-stop",
-          runId,
-          port,
-        }),
-      catch: previewFailure,
-    });
-  },
+const ensurePreviewServiceWorker = Effect.fn('Flect.BunPreviewExecution.ensureServiceWorker')(
+	function* () {
+		if (!('serviceWorker' in navigator)) {
+			return yield* Effect.fail(previewFailure());
+		}
+		yield* Effect.tryPromise({
+			try: () => navigator.serviceWorker.register('/sw.js', { scope: '/' }),
+			catch: previewFailure
+		});
+		const registration = yield* Effect.tryPromise({
+			try: () => navigator.serviceWorker.ready,
+			catch: previewFailure
+		});
+		if (navigator.serviceWorker.controller === null) {
+			yield* waitForPreviewServiceWorkerControl;
+		}
+		return registration;
+	}
 );
+
+const registerPreviewRoute = Effect.fn('Flect.BunPreviewExecution.registerRoute')(function* (
+	runId: string,
+	port: number
+) {
+	const registration = yield* ensurePreviewServiceWorker();
+	const target = navigator.serviceWorker.controller ?? registration.active;
+	if (target === null) {
+		return yield* Effect.fail(previewFailure());
+	}
+	const channel = new MessageChannel();
+	yield* Effect.callback<void, BunCommandFailed>((resume) => {
+		let settled = false;
+		const cleanup = () => {
+			window.clearTimeout(timer);
+			channel.port1.close();
+		};
+		const complete = (result: Effect.Effect<void, BunCommandFailed>) => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			cleanup();
+			resume(result);
+		};
+		const timer = window.setTimeout(() => {
+			complete(Effect.fail(previewFailure()));
+		}, 3_000);
+		channel.port1.onmessage = (event) => {
+			if (event.data?.type !== 'flect-preview-registered') {
+				return;
+			}
+			complete(Effect.void);
+		};
+		try {
+			target.postMessage(
+				{
+					type: 'flect-preview-register',
+					runId,
+					port
+				},
+				[channel.port2]
+			);
+		} catch {
+			complete(Effect.fail(previewFailure()));
+		}
+		return Effect.sync(cleanup);
+	});
+});
+
+const stopPreviewRoute = Effect.fn('Flect.BunPreviewExecution.stopRoute')(function* (
+	runId: string,
+	port: number
+) {
+	if (!('serviceWorker' in navigator)) {
+		return;
+	}
+	const registration = yield* ensurePreviewServiceWorker();
+	const target = navigator.serviceWorker.controller ?? registration.active;
+	yield* Effect.try({
+		try: () =>
+			target?.postMessage({
+				type: 'flect-preview-stop',
+				runId,
+				port
+			}),
+		catch: previewFailure
+	});
+});
 
 export const BunPreviewExecutionLive = Layer.effect(
-  BunPreviewExecution,
-  Effect.gen(function* () {
-    const preview = yield* BunPreview;
-    const active = yield* Ref.make<
-      | {
-          readonly runId: string;
-          readonly realm: RealmHandle;
-        }
-      | undefined
-    >(undefined);
+	BunPreviewExecution,
+	Effect.gen(function* () {
+		const preview = yield* BunPreview;
+		const active = yield* Ref.make<
+			| {
+					readonly runId: string;
+					readonly realm: RealmHandle;
+			  }
+			| undefined
+		>(undefined);
 
-    const stop = Effect.fn("Flect.BunPreviewExecution.stop")(() =>
-      Effect.gen(function* () {
-        const current = yield* Ref.get(active);
-        if (current === undefined) {
-          return;
-        }
-        yield* Effect.sync(() => current.realm.stop()).pipe(
-          Effect.catchDefect(() => Effect.void),
-        );
-        yield* preview.stop(current.runId).pipe(Effect.ignore);
-        yield* stopPreviewRoute(current.runId, current.realm.port).pipe(
-          Effect.ignore,
-        );
-        yield* Ref.set(active, undefined);
-      }).pipe(
-        Effect.ensuring(Ref.set(active, undefined)),
-        Effect.catchDefect(() => Effect.void),
-      ),
-    );
+		const stop = Effect.fn('Flect.BunPreviewExecution.stop')(() =>
+			Effect.gen(function* () {
+				const current = yield* Ref.get(active);
+				if (current === undefined) {
+					return;
+				}
+				yield* Effect.sync(() => current.realm.stop()).pipe(Effect.catchDefect(() => Effect.void));
+				yield* preview.stop(current.runId).pipe(Effect.ignore);
+				yield* stopPreviewRoute(current.runId, current.realm.port).pipe(Effect.ignore);
+				yield* Ref.set(active, undefined);
+			}).pipe(
+				Effect.ensuring(Ref.set(active, undefined)),
+				Effect.catchDefect(() => Effect.void)
+			)
+		);
 
-    const clearActive = (runId: string) =>
-      Ref.update(active, (current) =>
-        current?.runId === runId ? undefined : current,
-      );
+		const clearActive = (runId: string) =>
+			Ref.update(active, (current) => (current?.runId === runId ? undefined : current));
 
-    const serviceWorkerMessage = (event: MessageEvent) => {
-      if (
-        event.data?.type !== "flect-preview-request" ||
-        event.ports.length !== 1
-      ) {
-        return;
-      }
-      const port = event.ports[0];
-      Effect.runCallback(
-        preview.request(event.data.request).pipe(
-          Effect.match({
-            onFailure: () => ({
-              status: 502,
-              headers: {},
-              body: "Preview broker failed.",
-            }),
-            onSuccess: (output) => ({
-              status: output.status,
-              headers: output.headers,
-              body: output.body,
-            }),
-          }),
-          Effect.tap((output) =>
-            Effect.sync(() => {
-              port.postMessage(output);
-            }),
-          ),
-          Effect.ensuring(
-            Effect.sync(() => port.close()).pipe(
-              Effect.catchDefect(() => Effect.void),
-            ),
-          ),
-        ),
-      );
-    };
-    yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        navigator.serviceWorker?.addEventListener(
-          "message",
-          serviceWorkerMessage,
-        );
-      }),
-      () =>
-        Effect.gen(function* () {
-          yield* Effect.sync(() => {
-            navigator.serviceWorker?.removeEventListener(
-              "message",
-              serviceWorkerMessage,
-            );
-          });
-          yield* stop();
-        }),
-    );
+		const serviceWorkerMessage = (event: MessageEvent) => {
+			if (event.data?.type !== 'flect-preview-request' || event.ports.length !== 1) {
+				return;
+			}
+			const port = event.ports[0];
+			Effect.runCallback(
+				preview.request(event.data.request).pipe(
+					Effect.match({
+						onFailure: () => ({
+							status: 502,
+							headers: {},
+							body: 'Preview broker failed.'
+						}),
+						onSuccess: (output) => ({
+							status: output.status,
+							headers: output.headers,
+							body: output.body
+						})
+					}),
+					Effect.tap((output) =>
+						Effect.sync(() => {
+							port.postMessage(output);
+						})
+					),
+					Effect.ensuring(
+						Effect.sync(() => port.close()).pipe(Effect.catchDefect(() => Effect.void))
+					)
+				)
+			);
+		};
+		yield* Effect.acquireRelease(
+			Effect.sync(() => {
+				navigator.serviceWorker?.addEventListener('message', serviceWorkerMessage);
+			}),
+			() =>
+				Effect.gen(function* () {
+					yield* Effect.sync(() => {
+						navigator.serviceWorker?.removeEventListener('message', serviceWorkerMessage);
+					});
+					yield* stop();
+				})
+		);
 
-    return {
-      start: Effect.fn("Flect.BunPreviewExecution.start")((request) =>
-        Effect.gen(function* () {
-          yield* stop();
-          const bundle = yield* Effect.tryPromise({
-            try: () => bundleWorkspace(request),
-            catch: previewFailure,
-          });
-          const runId = `run-${crypto.randomUUID().replaceAll("-", "")}`;
-          const realm = yield* createRealm(makeWorkerSource(bundle));
-          let committed = false;
-          const release = releaseBunPreviewExecution({
-            runId,
-            port: realm.port,
-            stopRealm: () => realm.stop(),
-            stopPreview: preview.stop,
-            stopRoute: (ownerRunId, ownerPort) =>
-              stopPreviewRoute(ownerRunId, ownerPort).pipe(Effect.ignore),
-            clearActive,
-          });
+		return {
+			start: Effect.fn('Flect.BunPreviewExecution.start')((request) =>
+				Effect.gen(function* () {
+					yield* stop();
+					const bundle = yield* Effect.tryPromise({
+						try: () => bundleWorkspace(request),
+						catch: previewFailure
+					});
+					const runId = `run-${crypto.randomUUID().replaceAll('-', '')}`;
+					const realm = yield* createRealm(makeWorkerSource(bundle));
+					let committed = false;
+					const release = releaseBunPreviewExecution({
+						runId,
+						port: realm.port,
+						stopRealm: () => realm.stop(),
+						stopPreview: preview.stop,
+						stopRoute: (ownerRunId, ownerPort) =>
+							stopPreviewRoute(ownerRunId, ownerPort).pipe(Effect.ignore),
+						clearActive
+					});
 
-          return yield* Effect.gen(function* () {
-            const registration = yield* preview.register({
-              runId,
-              port: realm.port,
-              handler: (input) =>
-                realm
-                  .request(input)
-                  .pipe(
-                    Effect.flatMap((output) =>
-                      Schema.decodeUnknownEffect(BunPreviewResponse)(
-                        output,
-                      ).pipe(Effect.mapError(previewFailure)),
-                    ),
-                  ),
-              onTimeout: release,
-            });
-            yield* registerPreviewRoute(runId, realm.port);
+					return yield* Effect.gen(function* () {
+						const registration = yield* preview.register({
+							runId,
+							port: realm.port,
+							handler: (input) =>
+								realm
+									.request(input)
+									.pipe(
+										Effect.flatMap((output) =>
+											Schema.decodeUnknownEffect(BunPreviewResponse)(output).pipe(
+												Effect.mapError(previewFailure)
+											)
+										)
+									),
+							onTimeout: release
+						});
+						yield* registerPreviewRoute(runId, realm.port);
 
-            yield* Ref.set(active, { runId, realm });
-            committed = true;
-            return {
-              previewUrl: registration.previewUrl,
-              port: realm.port,
-            };
-          }).pipe(
-            Effect.ensuring(
-              Effect.suspend(() => (committed ? Effect.void : release)),
-            ),
-          );
-        }).pipe(Effect.catchDefect(() => Effect.fail(previewFailure()))),
-      ),
-      stop: stop(),
-    };
-  }),
+						yield* Ref.set(active, { runId, realm });
+						committed = true;
+						return {
+							previewUrl: registration.previewUrl,
+							port: realm.port
+						};
+					}).pipe(Effect.ensuring(Effect.suspend(() => (committed ? Effect.void : release))));
+				}).pipe(Effect.catchDefect(() => Effect.fail(previewFailure())))
+			),
+			stop: stop()
+		};
+	})
 ).pipe(Layer.provide(makeBunPreviewLayer()));

@@ -1,6 +1,6 @@
 {
-  "files": ["index.html"],
-  "insertBefore": "</body>",
-  "commentSyntax": "html",
-  "cspChecked": true
+	"files": ["index.html"],
+	"insertBefore": "</body>",
+	"commentSyntax": "html",
+	"cspChecked": true
 }

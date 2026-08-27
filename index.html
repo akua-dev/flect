@@ -1,55 +1,51 @@
 <!doctype html>
 <html lang="en" data-flect-state="inactive">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#080808" />
-    <meta
-      name="description"
-      content="Flect turns an ongoing conversation into a live, editable product."
-    />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>Flect</title>
-  </head>
-  <body>
-    <div class="activation-shell" id="flect-static-shell">
-      <header class="activation-shell__bar" data-tauri-drag-region>
-        <a class="activation-shell__wordmark" href="/">Flect</a>
-      </header>
-      <main class="activation-shell__main">
-        <h1>What do you want to make?</h1>
-        <p>
-          Build, use, and refine a real product in one conversation. The full
-          local workspace opens only when you need it.
-        </p>
-        <form class="activation-shell__composer" data-flect-starter>
-          <label class="sr-only" for="flect-starter-prompt">Message Flect</label>
-          <textarea
-            data-flect-activate
-            id="flect-starter-prompt"
-            name="prompt"
-            placeholder="Describe what you want to make or change…"
-            required
-            rows="3"
-          ></textarea>
-          <button data-flect-activate type="submit">Send to Flect</button>
-          <p
-            aria-live="polite"
-            class="activation-shell__status"
-            id="flect-activation-status"
-          >
-            Ready when you are. Press ⌘K or Ctrl+K from anywhere.
-          </p>
-        </form>
-      </main>
-    </div>
-    <div id="root" hidden></div>
-    <noscript>Flect needs JavaScript only after you open the workspace.</noscript>
-    <script type="module">
-      import "/src/activation-shell.css";
-      import { installFlectActivation } from "/src/activation/activate-flect";
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="theme-color" content="#080808" />
+		<meta
+			name="description"
+			content="Flect turns an ongoing conversation into a live, editable product."
+		/>
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<title>Flect</title>
+	</head>
+	<body>
+		<div class="activation-shell" id="flect-static-shell">
+			<header class="activation-shell__bar" data-tauri-drag-region>
+				<a class="activation-shell__wordmark" href="/">Flect</a>
+			</header>
+			<main class="activation-shell__main">
+				<h1>What do you want to make?</h1>
+				<p>
+					Build, use, and refine a real product in one conversation. The full local workspace opens
+					only when you need it.
+				</p>
+				<form class="activation-shell__composer" data-flect-starter>
+					<label class="sr-only" for="flect-starter-prompt">Message Flect</label>
+					<textarea
+						data-flect-activate
+						id="flect-starter-prompt"
+						name="prompt"
+						placeholder="Describe what you want to make or change…"
+						required
+						rows="3"
+					></textarea>
+					<button data-flect-activate type="submit">Send to Flect</button>
+					<p aria-live="polite" class="activation-shell__status" id="flect-activation-status">
+						Ready when you are. Press ⌘K or Ctrl+K from anywhere.
+					</p>
+				</form>
+			</main>
+		</div>
+		<div id="root" hidden></div>
+		<noscript>Flect needs JavaScript only after you open the workspace.</noscript>
+		<script type="module">
+			import '/src/activation-shell.css';
+			import { installFlectActivation } from '/src/activation/activate-flect';
 
-      installFlectActivation();
-    </script>
-  </body>
+			installFlectActivation();
+		</script>
+	</body>
 </html>

@@ -1,9 +1,9 @@
 /// <reference types="astro/client" />
 
-import "astro";
+import 'astro';
 
-declare module "astro" {
-  interface AstroClientDirectives {
-    "client:flect"?: boolean;
-  }
+declare module 'astro' {
+	interface AstroClientDirectives {
+		'client:flect'?: boolean;
+	}
 }

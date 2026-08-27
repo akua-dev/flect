@@ -1,9 +1,6 @@
-import { useState } from "react";
-import {
-  type CapsuleIntent,
-  CapsuleIntentSucceeded,
-} from "../../shared/capsule-protocol";
-import { CapsuleFrame } from "../components/capsule-frame";
+import { useState } from 'react';
+import { type CapsuleIntent, CapsuleIntentSucceeded } from '../../shared/capsule-protocol';
+import { CapsuleFrame } from '../components/capsule-frame';
 
 const html = `
 <style>body{font:16px system-ui;padding:24px}button{padding:10px 16px}</style>
@@ -27,34 +24,32 @@ document.querySelector('#flood').addEventListener('click',()=>{for(let index=0;i
 </script>`;
 
 export function CapsuleFrameDiagnostic() {
-  const [intent, setIntent] = useState<CapsuleIntent>();
-  const [mounted, setMounted] = useState(true);
-  return (
-    <main>
-      <h1>Capsule isolation diagnostic</h1>
-      <button type="button" onClick={() => setMounted((value) => !value)}>
-        Replace capsule
-      </button>
-      {mounted && (
-        <CapsuleFrame
-          html={html}
-          onIntent={async (next) => {
-            setIntent(next);
-            return CapsuleIntentSucceeded.make({
-              version: 1,
-              type: "intent-result",
-              id: next.id,
-              ok: true,
-              output: { observed: next.input },
-            });
-          }}
-        />
-      )}
-      <output aria-label="Capsule intent">
-        {intent === undefined
-          ? "none"
-          : `${intent.action}:${JSON.stringify(intent.input)}`}
-      </output>
-    </main>
-  );
+	const [intent, setIntent] = useState<CapsuleIntent>();
+	const [mounted, setMounted] = useState(true);
+	return (
+		<main>
+			<h1>Capsule isolation diagnostic</h1>
+			<button type='button' onClick={() => setMounted((value) => !value)}>
+				Replace capsule
+			</button>
+			{mounted && (
+				<CapsuleFrame
+					html={html}
+					onIntent={async (next) => {
+						setIntent(next);
+						return CapsuleIntentSucceeded.make({
+							version: 1,
+							type: 'intent-result',
+							id: next.id,
+							ok: true,
+							output: { observed: next.input }
+						});
+					}}
+				/>
+			)}
+			<output aria-label='Capsule intent'>
+				{intent === undefined ? 'none' : `${intent.action}:${JSON.stringify(intent.input)}`}
+			</output>
+		</main>
+	);
 }

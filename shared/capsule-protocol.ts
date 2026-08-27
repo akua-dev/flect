@@ -1,165 +1,148 @@
-import { Effect, Schema, type SchemaAST } from "effect";
-import { CanvasSelection } from "./canvas-selection";
+import { Effect, Schema, type SchemaAST } from 'effect';
+import { CanvasSelection } from './canvas-selection';
 
 const strict: SchemaAST.ParseOptions = {
-  errors: "all",
-  onExcessProperty: "error",
+	errors: 'all',
+	onExcessProperty: 'error'
 };
 const Id = Schema.String.check(
-  Schema.isMinLength(9),
-  Schema.isMaxLength(100),
-  Schema.isPattern(/^[a-z][a-z0-9-]*$/),
+	Schema.isMinLength(9),
+	Schema.isMaxLength(100),
+	Schema.isPattern(/^[a-z][a-z0-9-]*$/)
 );
 const Action = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(120),
-  Schema.isPattern(/^[a-z][a-z0-9.-]*$/),
+	Schema.isMinLength(1),
+	Schema.isMaxLength(120),
+	Schema.isPattern(/^[a-z][a-z0-9.-]*$/)
 );
 
-export class CapsuleReady extends Schema.Class<CapsuleReady>("CapsuleReady")({
-  version: Schema.Literal(1),
-  type: Schema.Literal("ready"),
+export class CapsuleReady extends Schema.Class<CapsuleReady>('CapsuleReady')({
+	version: Schema.Literal(1),
+	type: Schema.Literal('ready')
 }) {}
 
-export class CapsuleResize extends Schema.Class<CapsuleResize>("CapsuleResize")(
-  {
-    version: Schema.Literal(1),
-    type: Schema.Literal("resize"),
-    height: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 })),
-  },
-) {}
+export class CapsuleResize extends Schema.Class<CapsuleResize>('CapsuleResize')({
+	version: Schema.Literal(1),
+	type: Schema.Literal('resize'),
+	height: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 10_000 }))
+}) {}
 
-export class CapsuleIntent extends Schema.Class<CapsuleIntent>("CapsuleIntent")(
-  {
-    version: Schema.Literal(1),
-    type: Schema.Literal("intent"),
-    id: Id,
-    action: Action,
-    input: Schema.Json,
-  },
-) {}
+export class CapsuleIntent extends Schema.Class<CapsuleIntent>('CapsuleIntent')({
+	version: Schema.Literal(1),
+	type: Schema.Literal('intent'),
+	id: Id,
+	action: Action,
+	input: Schema.Json
+}) {}
 
 export class CapsuleSelectionChanged extends Schema.Class<CapsuleSelectionChanged>(
-  "CapsuleSelectionChanged",
+	'CapsuleSelectionChanged'
 )({
-  version: Schema.Literal(1),
-  type: Schema.Literal("selection-changed"),
-  selection: Schema.optionalKey(CanvasSelection),
+	version: Schema.Literal(1),
+	type: Schema.Literal('selection-changed'),
+	selection: Schema.optionalKey(CanvasSelection)
 }) {}
 
 export const CapsuleMessage = Schema.Union([
-  CapsuleReady,
-  CapsuleResize,
-  CapsuleIntent,
-  CapsuleSelectionChanged,
+	CapsuleReady,
+	CapsuleResize,
+	CapsuleIntent,
+	CapsuleSelectionChanged
 ]);
 export type CapsuleMessage = typeof CapsuleMessage.Type;
 
 export class InvalidCapsuleMessage extends Schema.TaggedErrorClass<InvalidCapsuleMessage>()(
-  "InvalidCapsuleMessage",
-  { message: Schema.Literal("The capsule message is invalid.") },
+	'InvalidCapsuleMessage',
+	{ message: Schema.Literal('The capsule message is invalid.') }
 ) {}
 
-const invalid = () =>
-  InvalidCapsuleMessage.make({ message: "The capsule message is invalid." });
+const invalid = () => InvalidCapsuleMessage.make({ message: 'The capsule message is invalid.' });
 
 const encodedSize = (input: unknown) =>
-  Effect.try({
-    try: () => new TextEncoder().encode(JSON.stringify(input)).byteLength,
-    catch: invalid,
-  });
+	Effect.try({
+		try: () => new TextEncoder().encode(JSON.stringify(input)).byteLength,
+		catch: invalid
+	});
 
 const decode = Schema.decodeUnknownEffect(CapsuleMessage, strict);
 
-export const decodeCapsuleMessage = Effect.fn("Flect.Capsule.decodeMessage")(
-  (input: unknown) => {
-    return encodedSize(input).pipe(
-      Effect.filterOrFail((bytes) => bytes <= 64 * 1024, invalid),
-      Effect.flatMap(() => decode(input)),
-      Effect.mapError(invalid),
-    );
-  },
-);
+export const decodeCapsuleMessage = Effect.fn('Flect.Capsule.decodeMessage')((input: unknown) => {
+	return encodedSize(input).pipe(
+		Effect.filterOrFail((bytes) => bytes <= 64 * 1024, invalid),
+		Effect.flatMap(() => decode(input)),
+		Effect.mapError(invalid)
+	);
+});
 
-export class CapsuleVisibility extends Schema.Class<CapsuleVisibility>(
-  "CapsuleVisibility",
-)({
-  version: Schema.Literal(1),
-  type: Schema.Literal("visibility"),
-  visible: Schema.Boolean,
+export class CapsuleVisibility extends Schema.Class<CapsuleVisibility>('CapsuleVisibility')({
+	version: Schema.Literal(1),
+	type: Schema.Literal('visibility'),
+	visible: Schema.Boolean
 }) {}
 
-export class CapsuleFocus extends Schema.Class<CapsuleFocus>("CapsuleFocus")({
-  version: Schema.Literal(1),
-  type: Schema.Literal("focus"),
+export class CapsuleFocus extends Schema.Class<CapsuleFocus>('CapsuleFocus')({
+	version: Schema.Literal(1),
+	type: Schema.Literal('focus')
 }) {}
 
-export class CapsuleDispose extends Schema.Class<CapsuleDispose>(
-  "CapsuleDispose",
-)({
-  version: Schema.Literal(1),
-  type: Schema.Literal("dispose"),
+export class CapsuleDispose extends Schema.Class<CapsuleDispose>('CapsuleDispose')({
+	version: Schema.Literal(1),
+	type: Schema.Literal('dispose')
 }) {}
 
 export class CapsuleSelectionMode extends Schema.Class<CapsuleSelectionMode>(
-  "CapsuleSelectionMode",
+	'CapsuleSelectionMode'
 )({
-  version: Schema.Literal(1),
-  type: Schema.Literal("selection-mode"),
-  enabled: Schema.Boolean,
+	version: Schema.Literal(1),
+	type: Schema.Literal('selection-mode'),
+	enabled: Schema.Boolean
 }) {}
 
 export class CapsuleIntentFailure extends Schema.Class<CapsuleIntentFailure>(
-  "CapsuleIntentFailure",
+	'CapsuleIntentFailure'
 )({
-  code: Schema.Literals(["unavailable", "denied", "failed", "invalid-result"]),
-  message: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(240)),
+	code: Schema.Literals(['unavailable', 'denied', 'failed', 'invalid-result']),
+	message: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(240))
 }) {}
 
 export class CapsuleIntentSucceeded extends Schema.Class<CapsuleIntentSucceeded>(
-  "CapsuleIntentSucceeded",
+	'CapsuleIntentSucceeded'
 )({
-  version: Schema.Literal(1),
-  type: Schema.Literal("intent-result"),
-  id: Id,
-  ok: Schema.Literal(true),
-  output: Schema.Json,
+	version: Schema.Literal(1),
+	type: Schema.Literal('intent-result'),
+	id: Id,
+	ok: Schema.Literal(true),
+	output: Schema.Json
 }) {}
 
-export class CapsuleIntentFailed extends Schema.Class<CapsuleIntentFailed>(
-  "CapsuleIntentFailed",
-)({
-  version: Schema.Literal(1),
-  type: Schema.Literal("intent-result"),
-  id: Id,
-  ok: Schema.Literal(false),
-  error: CapsuleIntentFailure,
+export class CapsuleIntentFailed extends Schema.Class<CapsuleIntentFailed>('CapsuleIntentFailed')({
+	version: Schema.Literal(1),
+	type: Schema.Literal('intent-result'),
+	id: Id,
+	ok: Schema.Literal(false),
+	error: CapsuleIntentFailure
 }) {}
 
-export const CapsuleIntentOutcome = Schema.Union([
-  CapsuleIntentSucceeded,
-  CapsuleIntentFailed,
-]);
+export const CapsuleIntentOutcome = Schema.Union([CapsuleIntentSucceeded, CapsuleIntentFailed]);
 export type CapsuleIntentOutcome = typeof CapsuleIntentOutcome.Type;
 
 export const CapsuleHostMessage = Schema.Union([
-  CapsuleVisibility,
-  CapsuleFocus,
-  CapsuleDispose,
-  CapsuleSelectionMode,
-  CapsuleIntentSucceeded,
-  CapsuleIntentFailed,
+	CapsuleVisibility,
+	CapsuleFocus,
+	CapsuleDispose,
+	CapsuleSelectionMode,
+	CapsuleIntentSucceeded,
+	CapsuleIntentFailed
 ]);
 export type CapsuleHostMessage = typeof CapsuleHostMessage.Type;
 
 const decodeHost = Schema.decodeUnknownEffect(CapsuleHostMessage, strict);
 
-export const decodeCapsuleHostMessage = Effect.fn(
-  "Flect.Capsule.decodeHostMessage",
-)((input: unknown) =>
-  encodedSize(input).pipe(
-    Effect.filterOrFail((bytes) => bytes <= 64 * 1024, invalid),
-    Effect.flatMap(() => decodeHost(input)),
-    Effect.mapError(invalid),
-  ),
+export const decodeCapsuleHostMessage = Effect.fn('Flect.Capsule.decodeHostMessage')(
+	(input: unknown) =>
+		encodedSize(input).pipe(
+			Effect.filterOrFail((bytes) => bytes <= 64 * 1024, invalid),
+			Effect.flatMap(() => decodeHost(input)),
+			Effect.mapError(invalid)
+		)
 );

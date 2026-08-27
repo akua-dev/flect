@@ -95,7 +95,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install the pinned Chromium runtime
-        run: bunx playwright install chromium
+        run: ./node_modules/.bin/playwright install chromium
 
       - name: Run production Chromium workflows
         run: bun run test:e2e
@@ -159,7 +159,7 @@ jobs:
       # frontend, so the bundle proves a clean web build end to end.
       - name: Build the release-mode application bundle
         run: >-
-          bunx tauri build --bundles app
+          ./node_modules/.bin/tauri build --bundles app
           --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
 
   gate:

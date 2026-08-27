@@ -1,39 +1,34 @@
-import * as BunFileSystem from "@effect/platform-bun/BunFileSystem";
-import * as BunPath from "@effect/platform-bun/BunPath";
-import * as BunRuntime from "@effect/platform-bun/BunRuntime";
-import { Effect, FileSystem, Layer, Path, Schema } from "effect";
-import {
-  FLECT_COMMAND_METADATA,
-  type FlectCommandMetadata,
-} from "../src/axi/command";
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunPath from '@effect/platform-bun/BunPath';
+import * as BunRuntime from '@effect/platform-bun/BunRuntime';
+import { Effect, FileSystem, Layer, Path, Schema } from 'effect';
+import { FLECT_COMMAND_METADATA, type FlectCommandMetadata } from '../src/axi/command';
 
 export class FlectSkillGenerationError extends Schema.TaggedErrorClass<FlectSkillGenerationError>()(
-  "FlectSkillGenerationError",
-  {
-    reason: Schema.Literals(["io", "stale"]),
-    message: Schema.String,
-  },
+	'FlectSkillGenerationError',
+	{
+		reason: Schema.Literals(['io', 'stale']),
+		message: Schema.String
+	}
 ) {}
 
 const audience = (values: ReadonlyArray<string>) =>
-  values
-    .map((value) => {
-      switch (value) {
-        case "app":
-          return "App Agent";
-        case "shaper":
-          return "Shaper";
-        default:
-          return "outside agent";
-      }
-    })
-    .join(", ");
+	values
+		.map((value) => {
+			switch (value) {
+				case 'app':
+					return 'App Agent';
+				case 'shaper':
+					return 'Shaper';
+				default:
+					return 'outside agent';
+			}
+		})
+		.join(', ');
 
-const tableValue = (value: string) => value.replaceAll("|", "\\|");
+const tableValue = (value: string) => value.replaceAll('|', '\\|');
 
-export const renderFlectSkill = (
-  commands: ReadonlyArray<FlectCommandMetadata>,
-) => `---
+export const renderFlectSkill = (commands: ReadonlyArray<FlectCommandMetadata>) => `---
 name: flect
 description: Operate and inspect a running Flect interface through its bounded agent-first command surface. Use when an agent needs to inspect Flect state, read operation evidence, invoke visible actions, shape an interface, manage revisions or models, debug a Flect workspace, or configure explicit native Flect integrations.
 ---
@@ -61,11 +56,11 @@ Use the public \`flect\` command. Treat it as the authoritative command surface 
 | Command | Purpose | Intended caller |
 | --- | --- | --- |
 ${commands
-  .map(
-    (command) =>
-      `| \`${tableValue(command.usage)}\` | ${tableValue(command.summary)} | ${audience(command.audiences)} |`,
-  )
-  .join("\n")}
+	.map(
+		(command) =>
+			`| \`${tableValue(command.usage)}\` | ${tableValue(command.summary)} | ${audience(command.audiences)} |`
+	)
+	.join('\n')}
 
 ## Keep the boundary safe
 
@@ -76,55 +71,53 @@ ${commands
 `;
 
 export interface GenerateFlectSkillOptions {
-  readonly check: boolean;
-  readonly outputPath?: string;
-  readonly commands?: ReadonlyArray<FlectCommandMetadata>;
+	readonly check: boolean;
+	readonly outputPath?: string;
+	readonly commands?: ReadonlyArray<FlectCommandMetadata>;
 }
 
-export const generateFlectSkill = Effect.fn("Flect.Skill.generate")(function* (
-  options: GenerateFlectSkillOptions,
+export const generateFlectSkill = Effect.fn('Flect.Skill.generate')(function* (
+	options: GenerateFlectSkillOptions
 ) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const outputPath =
-    options.outputPath ??
-    (yield* path.fromFileUrl(
-      new URL("../.agents/skills/flect/SKILL.md", import.meta.url),
-    ));
-  const expected = renderFlectSkill(options.commands ?? FLECT_COMMAND_METADATA);
-  if (options.check) {
-    const current = yield* fs.readFileString(outputPath).pipe(
-      Effect.mapError(() =>
-        FlectSkillGenerationError.make({
-          reason: "stale",
-          message: "The checked-in Flect skill is missing or stale.",
-        }),
-      ),
-    );
-    if (current !== expected) {
-      return yield* Effect.fail(
-        FlectSkillGenerationError.make({
-          reason: "stale",
-          message: "The checked-in Flect skill is missing or stale.",
-        }),
-      );
-    }
-    return;
-  }
-  yield* fs.makeDirectory(path.dirname(outputPath), { recursive: true }).pipe(
-    Effect.andThen(fs.writeFileString(outputPath, expected, { mode: 0o644 })),
-    Effect.mapError(() =>
-      FlectSkillGenerationError.make({
-        reason: "io",
-        message: "Flect could not write the generated skill.",
-      }),
-    ),
-  );
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	const outputPath =
+		options.outputPath ??
+		(yield* path.fromFileUrl(new URL('../.agents/skills/flect/SKILL.md', import.meta.url)));
+	const expected = renderFlectSkill(options.commands ?? FLECT_COMMAND_METADATA);
+	if (options.check) {
+		const current = yield* fs.readFileString(outputPath).pipe(
+			Effect.mapError(() =>
+				FlectSkillGenerationError.make({
+					reason: 'stale',
+					message: 'The checked-in Flect skill is missing or stale.'
+				})
+			)
+		);
+		if (current !== expected) {
+			return yield* Effect.fail(
+				FlectSkillGenerationError.make({
+					reason: 'stale',
+					message: 'The checked-in Flect skill is missing or stale.'
+				})
+			);
+		}
+		return;
+	}
+	yield* fs.makeDirectory(path.dirname(outputPath), { recursive: true }).pipe(
+		Effect.andThen(fs.writeFileString(outputPath, expected, { mode: 0o644 })),
+		Effect.mapError(() =>
+			FlectSkillGenerationError.make({
+				reason: 'io',
+				message: 'Flect could not write the generated skill.'
+			})
+		)
+	);
 });
 
 if (import.meta.main) {
-  generateFlectSkill({ check: process.argv.includes("--check") }).pipe(
-    Effect.provide(Layer.merge(BunFileSystem.layer, BunPath.layer)),
-    BunRuntime.runMain,
-  );
+	generateFlectSkill({ check: process.argv.includes('--check') }).pipe(
+		Effect.provide(Layer.merge(BunFileSystem.layer, BunPath.layer)),
+		BunRuntime.runMain
+	);
 }
