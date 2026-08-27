@@ -2,18 +2,19 @@
 name: Flect
 description: The interface that takes your shape.
 colors:
-  void: "oklch(0.095 0 0)"
-  canvas: "oklch(0.125 0.004 340)"
-  surface: "oklch(0.165 0.006 340)"
-  surface-raised: "oklch(0.205 0.008 340)"
-  ink: "oklch(0.955 0.006 340)"
-  muted: "oklch(0.690 0.012 340)"
-  quiet: "oklch(0.500 0.012 340)"
-  line: "oklch(0.300 0.010 340)"
-  primary: "oklch(0.922 0 0)"
-  primary-hover: "oklch(0.870 0 0)"
-  ready: "oklch(0.780 0.120 158)"
-  danger: "oklch(0.660 0.170 27)"
+  # Dark-mode values as shipped in src/styles.css; light-mode noted inline.
+  void: "oklch(0.145 0 0)" # light: oklch(1 0 0)
+  canvas: "oklch(0.145 0 0)" # aliases void; light: oklch(1 0 0)
+  surface: "oklch(0.205 0 0)" # light: oklch(1 0 0)
+  surface-raised: "oklch(0.269 0 0)" # light: oklch(0.97 0 0)
+  ink: "oklch(0.985 0 0)" # light: oklch(0.145 0 0)
+  muted: "oklch(0.708 0 0)" # light: oklch(0.45 0 0)
+  quiet: "oklch(0.708 0 0)" # aliases muted; light: oklch(0.45 0 0)
+  line: "oklch(1 0 0 / 10%)" # light: oklch(0.922 0 0)
+  primary: "oklch(0.922 0 0)" # light: oklch(0.205 0 0)
+  primary-hover: "oklch(0.922 0 0)" # light: oklch(0.205 0 0)
+  ready: "oklch(0.985 0 0)" # aliases ink until a mint accent ships; light: oklch(0.145 0 0)
+  danger: "oklch(0.704 0.191 22.216)" # light: oklch(0.577 0.245 27.325)
 typography:
   headline:
     fontFamily: "-apple-system, BlinkMacSystemFont, SF Pro Display, Inter, sans-serif"
@@ -39,6 +40,8 @@ rounded:
   prompt: "16px"
   pill: "999px"
 spacing:
+  # hairline is 1px logically; on 2dppx+ displays structural separators render
+  # at 0.5px via the --hairline token, restored to 1px under prefers-contrast.
   hairline: "1px"
   xs: "4px"
   sm: "8px"
@@ -202,24 +205,31 @@ warning, or failure states.
 
 ### Secondary
 
-- **Ready Mint** (`oklch(0.780 0.120 158)`): runtime readiness and successful
-  completion. Always paired with a label or accessible name.
-- **Failure Red** (`oklch(0.660 0.170 27)`): actionable failures and destructive
+- **Ready** (`oklch(0.985 0 0)` dark, `oklch(0.145 0 0)` light): runtime
+  readiness and successful completion. Currently an alias of Ink; a mint
+  accent is a later, deliberate decision. Always paired with a label or
+  accessible name.
+- **Failure Red** (`oklch(0.704 0.191 22.216)` dark,
+  `oklch(0.577 0.245 27.325)` light): actionable failures and destructive
   status only.
 
 ### Neutral
 
-- **Void** (`oklch(0.095 0 0)`): application background.
-- **Canvas** (`oklch(0.125 0.004 340)`): conversation canvas and protected
-  shell.
-- **Surface** (`oklch(0.165 0.006 340)`): the prompt and primary controls.
-- **Raised Surface** (`oklch(0.205 0.008 340)`): hover, menus, and temporary
-  elevation.
-- **Ink** (`oklch(0.955 0.006 340)`): primary text and high-emphasis icons.
-- **Muted** (`oklch(0.690 0.012 340)`): secondary text with readable contrast.
-- **Quiet** (`oklch(0.500 0.012 340)`): disabled detail and decorative marks,
-  never essential copy.
-- **Line** (`oklch(0.300 0.010 340)`): structural separators.
+- **Void** (`oklch(0.145 0 0)` dark, `oklch(1 0 0)` light): application
+  background.
+- **Canvas** (same as Void): conversation canvas and protected shell.
+- **Surface** (`oklch(0.205 0 0)` dark, `oklch(1 0 0)` light): the prompt and
+  primary controls.
+- **Raised Surface** (`oklch(0.269 0 0)` dark, `oklch(0.97 0 0)` light):
+  hover, menus, and temporary elevation.
+- **Ink** (`oklch(0.985 0 0)` dark, `oklch(0.145 0 0)` light): primary text
+  and high-emphasis icons.
+- **Muted** (`oklch(0.708 0 0)` dark, `oklch(0.45 0 0)` light): secondary text
+  with readable contrast.
+- **Quiet** (same as Muted today): disabled detail and decorative marks, never
+  essential copy.
+- **Line** (`oklch(1 0 0 / 10%)` dark, `oklch(0.922 0 0)` light): structural
+  separators.
 
 ### Named Rules
 
@@ -261,10 +271,14 @@ a tighter shadow because they temporarily sit above the working plane.
 
 ### Shadow Vocabulary
 
-- **Prompt Lift** (`0 6px 8px oklch(0.02 0 0 / 0.24)`): focused or active prompt
-  only, without a simultaneous decorative border.
-- **Menu Lift** (`0 8px 8px oklch(0.02 0 0 / 0.32)`): temporary popovers and
-  menus.
+- **Prompt Lift** (`0 1px 0` Ink at 4% + `0 8px 24px` soft shadow at 72%): the
+  composer surface, without a simultaneous decorative border.
+- **Menu Lift** (`0 8px 8px var(--shadow-strong)`, `oklch(0 0 0 / 0.32)` dark
+  and `oklch(0 0 0 / 0.16)` light): temporary popovers and menus.
+- **Active Edge Light** (`inset 0 0.5px 0` Ink at 7%): a top-edge inner
+  highlight on the focused composer and open popovers or menus only. It marks
+  the one surface that is temporarily above the working plane and must never
+  appear on resting cards (the Flat-Until-Active Rule).
 
 ### Named Rules
 
@@ -278,8 +292,11 @@ to communicate focus, movement, or temporary hierarchy.
 - **Shape:** circular for icon-only controls; 8px for labeled controls.
 - **Primary:** Ink fill with Void content, using the neighboring neutral when
   active.
-- **Hover / Focus:** 180ms tonal transition and a visible 2px primary focus
-  ring with offset.
+- **Hover / Focus:** two motion tiers. Small-control hover and press tints
+  (color, background, opacity) use the 90ms `--interaction-motion` tier;
+  layout, elevation, and sheet or rail movement keep the 180ms
+  `--state-motion` tier. Focus uses a visible 2px primary focus ring with
+  offset.
 - **Ghost:** transparent at rest, Raised Surface on hover, never a faint outline
   box.
 

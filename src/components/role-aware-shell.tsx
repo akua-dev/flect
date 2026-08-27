@@ -23,6 +23,7 @@ import type { ShareInstallationRecord } from "../../shared/share-installation";
 import type { ShareReview as ShareReviewContract } from "../../shared/share-review";
 import type { AgentWorkspaceController } from "../hooks/use-agent-session";
 import { isAgentSessionActive } from "../hooks/use-agent-session";
+import { useFocusRestoration } from "../hooks/use-focus-restoration";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
 import type { CapsulePresentationState } from "../lib/workspace-controller";
 import type { WorkspacePhase } from "../lib/workspace-phase";
@@ -426,6 +427,26 @@ export function RoleAwareShell({
         ?.focus();
     });
   }, []);
+
+  const restoreLostFocus = useCallback(() => {
+    if (collapsed) {
+      reopenRef.current?.focus();
+      return;
+    }
+    const container = railContainerRef.current;
+    const composerInput = container?.querySelector<HTMLTextAreaElement>(
+      '.composer textarea[name="message"]',
+    );
+    if (composerInput !== undefined && composerInput !== null) {
+      composerInput.focus({ preventScroll: true });
+      return;
+    }
+    container
+      ?.querySelector<HTMLElement>(".agent-rail__header button:not(:disabled)")
+      ?.focus();
+  }, [collapsed]);
+
+  useFocusRestoration(shellRef, restoreLostFocus);
 
   const focusComposer = useCallback(() => {
     if (preferences.value.railCollapsed) {
