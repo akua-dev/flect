@@ -30,7 +30,6 @@
         "fflate": "0.8.3",
         "just-bash": "3.2.0",
         "lucide-react": "1.30.0",
-        "playwright-core": "1.62.1",
         "preact": "10.29.8",
         "quickjs-emscripten-core": "0.32.0",
         "radix-ui": "1.6.7",
@@ -54,7 +53,7 @@
         "@astrojs/preact": "6.0.2",
         "@axe-core/playwright": "4.12.1",
         "@biomejs/biome": "2.5.6",
-        "@effect/vitest": "4.0.0-beta.102",
+        "@effect/vitest": "4.0.0-rc.109",
         "@modelcontextprotocol/client": "2.0.0",
         "@playwright/test": "1.62.1",
         "@tailwindcss/vite": "4.1.18",
@@ -320,7 +319,7 @@
 
     "@effect/platform-node-shared": ["@effect/platform-node-shared@4.0.0-beta.102", "", { "dependencies": { "@types/ws": "^8.18.1", "ws": "^8.21.0" }, "peerDependencies": { "effect": "^4.0.0-beta.102" } }, "sha512-gVd793I72MrkX4dXo7eYtRKfNj0RW4eMRfVEKEJI16h2+mBDCzQ+gqMrog2hSTHQnaIbvbYShNQ4TVGuRCYZeQ=="],
 
-    "@effect/vitest": ["@effect/vitest@4.0.0-beta.102", "", { "peerDependencies": { "effect": "^4.0.0-beta.102", "vitest": "^3.0.0 || ^4.0.0" } }, "sha512-4dipFAYG6imOzrY3zy3BgzCJkbb9xESyzUef0WSx8bsK0/SpITqbJpdwKeOyDWLZ+rimjua8IbTFMAde865pIQ=="],
+    "@effect/vitest": ["@effect/vitest@4.0.0-rc.109", "", { "peerDependencies": { "effect": "^4.0.0-rc.109", "vitest": ">=4.1.0 <5.0.0" } }, "sha512-vu5ZkidJ/gM/+a0M07Jnq1PV4duFlYc+4Vj9TsJysK4Us7LL5bwV6uXiT7mi1/IM/3HgfAwc7Q9ROj8M65G4pA=="],
 
     "@emnapi/core": ["@emnapi/core@2.0.0-alpha.3", "", { "dependencies": { "@emnapi/wasi-threads": "2.0.1", "tslib": "^2.4.0" } }, "sha512-AZypUeJ/yByuxyS7BlSNRDOMLMlROYtjYdIAuBmJssVz1UJDSeYxLrdizhXCFYhedC5bqd/ASy8EuNXbVVXp9g=="],
 
