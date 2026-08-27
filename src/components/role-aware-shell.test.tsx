@@ -11,7 +11,11 @@ import {
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { InterfaceDocument } from "../../shared/interface-document";
+import { ControlStateSnapshot } from "../../shared/control";
+import {
+  defaultInterfaceDocument,
+  InterfaceDocument,
+} from "../../shared/interface-document";
 import { ShellPreferencesValue } from "../../shared/shell-preferences";
 import type {
   AgentSessionStatus,
@@ -19,7 +23,7 @@ import type {
 } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
 import type { ShapingController } from "./agent-rail";
-import { RoleAwareShell } from "./role-aware-shell";
+import { RoleAwareShell, type RoleAwareShellProps } from "./role-aware-shell";
 
 afterEach(cleanup);
 
@@ -104,7 +108,12 @@ const workspace = (
   },
   shaper: {
     ...shaperRole(),
-    shape: vi.fn(() => Promise.resolve(documentWithoutPrompt)),
+    shape: vi.fn(() =>
+      Promise.resolve({
+        kind: "document" as const,
+        document: documentWithoutPrompt,
+      }),
+    ),
   },
   diagnoseRecovery: vi.fn(() =>
     Promise.resolve({
@@ -138,6 +147,8 @@ function ShellHarness({
   shapingController = shaping(),
   controlledMode,
   onModeChange,
+  diagnostics,
+  document = documentWithoutPrompt,
 }: {
   readonly initialCollapsed?: boolean;
   readonly initialWidth?: number;
@@ -146,6 +157,8 @@ function ShellHarness({
   readonly shapingController?: ShapingController;
   readonly controlledMode?: "edit" | "run";
   readonly onModeChange?: (mode: "edit" | "run") => Promise<void>;
+  readonly diagnostics?: RoleAwareShellProps["diagnostics"];
+  readonly document?: InterfaceDocument;
 }) {
   const [value, setValue] = useState(
     ShellPreferencesValue.make({
@@ -173,7 +186,8 @@ function ShellHarness({
   return (
     <RoleAwareShell
       controlledMode={controlledMode}
-      document={documentWithoutPrompt}
+      document={document}
+      diagnostics={diagnostics}
       onOpenSafeMode={vi.fn()}
       onModeChange={onModeChange}
       onRestoreSafeMode={vi.fn(() => Promise.resolve())}
@@ -187,6 +201,97 @@ function ShellHarness({
 }
 
 describe("RoleAwareShell", () => {
+  it("keeps the starter workspace free of canvas-only actions", () => {
+    render(
+      <ShellHarness document={defaultInterfaceDocument} phase="accepted" />,
+    );
+
+    expect(screen.getByText("What do you need?")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Flect makes a live interface from your outcome. You can keep using and changing it here.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", {
+        name: "Try A calm project planner for this week",
+      }),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Select element" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Start building" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", {
+        name: "Ask Flect about this interface",
+      }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "Flect home" }),
+    ).not.toBeInTheDocument();
+    expect(document.querySelector(".window-drag-region")).toHaveAttribute(
+      "data-tauri-drag-region",
+      "true",
+    );
+  });
+
+  it("keeps an untouched starter workspace centered until work begins", () => {
+    const { container } = render(
+      <ShellHarness document={defaultInterfaceDocument} phase="accepted" />,
+    );
+
+    expect(container.querySelector(".role-shell")).toHaveClass(
+      "role-shell--centered",
+    );
+    expect(
+      container.querySelector('.agent-rail-container[data-layout="center"]'),
+    ).toBeVisible();
+    expect(container.querySelector(".workspace-canvas")).toHaveClass(
+      "workspace-canvas--starter",
+    );
+    expect(
+      screen.queryByRole("separator", { name: "Resize agent panel" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens Settings across the canvas instead of inside the agent rail", async () => {
+    const user = userEvent.setup();
+    render(
+      <ShellHarness
+        diagnostics={{
+          control: ControlStateSnapshot.make({ enabled: false, clients: [] }),
+          onToggleControl: vi.fn(() => Promise.resolve()),
+          operations: [],
+        }}
+      />,
+    );
+
+    const [trigger] = screen.getAllByRole("button", {
+      name: "Open settings",
+    });
+    await user.click(trigger);
+
+    expect(
+      await screen.findByRole("heading", { name: "Settings" }),
+    ).toBeVisible();
+    expect(document.querySelector(".workspace-canvas")).toHaveClass(
+      "workspace-canvas--settings",
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Close settings" }),
+      ).toHaveFocus(),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Close settings" }));
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(
+      screen.queryByRole("heading", { name: "Settings" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("announces the active agent and protected workbench state atomically", () => {
     const { rerender } = render(<ShellHarness phase="accepted" />);
 
@@ -211,7 +316,7 @@ describe("RoleAwareShell", () => {
     rerender(<ShellHarness phase="safe" />);
     expect(
       screen.getByRole("status", { name: "Workbench status" }),
-    ).toHaveTextContent("Safe mode. Customized interface state is bypassed.");
+    ).toHaveTextContent("Recovery mode. Custom interface changes are hidden.");
   });
 
   it("does not expose internal mode controls", () => {
@@ -267,7 +372,7 @@ describe("RoleAwareShell", () => {
     const { container } = render(<MovingHarness />);
     const input = screen.getByRole("textbox", { name: "Message Flect" });
     const originalComposer = input.closest(".composer");
-    expect(screen.getByText("What do you want to make?")).toBeVisible();
+    expect(screen.getByText("What do you need?")).toBeVisible();
     expect(
       container.querySelector(".role-shell--centered"),
     ).toBeInTheDocument();
@@ -328,9 +433,11 @@ describe("RoleAwareShell", () => {
 
     const composer = screen.getByRole("textbox", { name: "Message Flect" });
     await waitFor(() => expect(composer).toHaveFocus());
-    expect(
-      document.querySelector(".canvas-edit-toolbar__selection"),
-    ).toHaveTextContent("Projects");
+    await waitFor(() =>
+      expect(
+        document.querySelector(".canvas-edit-palette__target"),
+      ).toHaveTextContent("Projects"),
+    );
     await user.type(composer, "Make this calmer{Enter}");
 
     expect(requestTargeted).toHaveBeenCalledWith(
@@ -365,7 +472,7 @@ describe("RoleAwareShell", () => {
     );
   });
 
-  it("shows one history and one stop control during internal work", () => {
+  it("shows one history and one stop control during internal work", async () => {
     const controller = workspace({
       app: {
         ...appRole(),
@@ -377,15 +484,20 @@ describe("RoleAwareShell", () => {
         messages: [
           { id: "shape-1", role: "assistant", content: "Shaper history" },
         ],
-        shape: vi.fn(() => Promise.resolve(documentWithoutPrompt)),
+        shape: vi.fn(() =>
+          Promise.resolve({
+            kind: "document" as const,
+            document: documentWithoutPrompt,
+          }),
+        ),
       },
     });
     const { rerender } = render(
       <ShellHarness phase="accepted" workspaceController={controller} />,
     );
 
-    expect(screen.getByText("App history")).toBeVisible();
-    expect(screen.getByText("Shaper history")).toBeVisible();
+    expect(await screen.findByText("App history")).toBeVisible();
+    expect(await screen.findByText("Shaper history")).toBeVisible();
 
     rerender(
       <ShellHarness

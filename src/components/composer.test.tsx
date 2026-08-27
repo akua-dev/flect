@@ -105,25 +105,70 @@ describe("Composer", () => {
     );
   });
 
-  it("grows with the draft and scrolls only after the height bound", () => {
+  it("fills a starter idea without sending it", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn(() => Promise.resolve());
+    const onDraftChange = vi.fn(() => Promise.resolve());
+    render(
+      <Composer
+        {...props({
+          onDraftChange,
+          onSubmit,
+          starterPrompts: ["A calm project planner for this week"],
+        })}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Try A calm project planner for this week",
+      }),
+    );
+
+    expect(screen.getByRole("textbox", { name: "Message Flect" })).toHaveValue(
+      "A calm project planner for this week",
+    );
+    expect(onDraftChange).toHaveBeenLastCalledWith(
+      "acceptedUse",
+      "A calm project planner for this week",
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("does not replace an in-progress draft with a stale persistence update", async () => {
+    const user = userEvent.setup();
+    const initial = props({
+      drafts: {
+        acceptedUse: "",
+        candidateUse: "",
+        shape: "",
+      },
+    });
+    const { rerender } = render(<Composer {...initial} />);
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
+
+    await user.type(input, "Current draft");
+    rerender(
+      <Composer
+        {...props({
+          drafts: {
+            acceptedUse: "Current",
+            candidateUse: "",
+            shape: "",
+          },
+        })}
+      />,
+    );
+
+    expect(input).toHaveValue("Current draft");
+  });
+
+  it("uses the AI Elements field-sizing composer with a bounded height", () => {
     render(<Composer {...props()} />);
     const input = screen.getByRole("textbox", { name: "Message Flect" });
 
-    Object.defineProperty(input, "scrollHeight", {
-      configurable: true,
-      value: 96,
-    });
     fireEvent.change(input, { target: { value: "Two\nlines" } });
-    expect(input).toHaveStyle({ height: "96px", overflowY: "hidden" });
-
-    Object.defineProperty(input, "scrollHeight", {
-      configurable: true,
-      value: 240,
-    });
-    fireEvent.change(input, {
-      target: { value: "One\nTwo\nThree\nFour\nFive\nSix\nSeven" },
-    });
-    expect(input).toHaveStyle({ height: "168px", overflowY: "auto" });
+    expect(input).toHaveClass("field-sizing-content", "max-h-48");
   });
 
   it("exposes implemented protected actions without placeholder controls", async () => {

@@ -1,4 +1,5 @@
 import { Effect, Schema, type SchemaAST } from "effect";
+import { OperationId } from "./control";
 import { RevisionId } from "./revisions";
 
 export const ROLE_CONTINUITY_MAX_BYTES = 512 * 1_024;
@@ -25,6 +26,7 @@ export class ContinuityMessage extends Schema.Class<ContinuityMessage>(
 )({
   version: Schema.Literal(1),
   id: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100)),
+  turnId: Schema.optionalKey(OperationId),
   role: Schema.Literals(["user", "assistant"]),
   content: Schema.String.check(Schema.isMaxLength(100_000)),
   createdAt: Timestamp,

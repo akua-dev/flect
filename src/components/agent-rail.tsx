@@ -28,48 +28,37 @@ import {
   ProductCapabilityDenyChoice,
 } from "../../shared/product-capability";
 import type { RevisionId } from "../../shared/revisions";
-import type {
-  AgentWorkspaceController,
-  ConversationMessage,
-} from "../hooks/use-agent-session";
+import type { AgentWorkspaceController } from "../hooks/use-agent-session";
 import { isAgentSessionActive } from "../hooks/use-agent-session";
 import type { ShellPreferencesController } from "../hooks/use-shell-preferences";
-import { useStickyFollow } from "../hooks/use-sticky-follow";
 import type { WebProjectImportResult } from "../lib/web-project-import";
 import type { CapsuleReview } from "../lib/workspace-controller";
 import { Composer } from "./composer";
-import type {
-  DiagnosticsPanelProps,
-  NativeSetupView,
-  NativeUpdateView,
-} from "./diagnostics-panel";
+import type { NativeSetupView, NativeUpdateView } from "./diagnostics-panel";
 import type { ExtensionReviewKey } from "./extension-review";
 import { PanelCloseIcon, RefreshIcon } from "./icons";
 import type { ConversationTarget, ShellMode } from "./role-switcher";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
 
-const ActivityCard = lazy(() =>
-  import("./activity-card").then((module) => ({
-    default: module.ActivityCard,
-  })),
-);
-const DiagnosticsPanel = lazy(() =>
-  import("./diagnostics-panel").then((module) => ({
-    default: module.DiagnosticsPanel,
-  })),
-);
 const ExtensionReview = lazy(() =>
   import("./extension-review").then((module) => ({
     default: module.ExtensionReview,
   })),
 );
-const MessageContent = lazy(() =>
-  import("./message-content").then((module) => ({
-    default: module.MessageContent,
-  })),
-);
 const ProviderAuthPanel = lazy(() =>
   import("./provider-auth-panel").then((module) => ({
     default: module.ProviderAuthPanel,
+  })),
+);
+const ConversationTimeline = lazy(() =>
+  import("./conversation-timeline").then((module) => ({
+    default: module.ConversationTimeline,
   })),
 );
 
@@ -79,57 +68,18 @@ const SurfaceFallback = ({ label }: { readonly label: string }) => (
   </span>
 );
 
-const diagnosticsLabel = (
-  control: DiagnosticsPanelProps["control"],
-  persistence: DiagnosticsPanelProps["persistence"],
-) =>
-  persistence?.source !== "durable"
-    ? "Storage unavailable"
-    : persistence.capsule === "session"
-      ? "Session-only storage"
-      : persistence.capsule === "unavailable"
-        ? "Storage degraded"
-        : control.enabled
-          ? `${control.clients.length} client${control.clients.length === 1 ? "" : "s"}`
-          : "Local control off";
-
-function DeferredDiagnosticsPanel(props: DiagnosticsPanelProps) {
-  const [requested, setRequested] = useState(false);
-  if (requested) {
-    return (
-      <Suspense
-        fallback={
-          <details className="diagnostics-panel" open>
-            {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
-            <summary aria-label="Diagnostics" role="button">
-              <span>Diagnostics</span>
-              <small>
-                {diagnosticsLabel(props.control, props.persistence)}
-              </small>
-            </summary>
-            <SurfaceFallback label="Opening diagnostics" />
-          </details>
-        }
-      >
-        <DiagnosticsPanel {...props} defaultOpen />
-      </Suspense>
-    );
-  }
-  return (
-    <details
-      className="diagnostics-panel"
-      onToggle={(event) => {
-        if (event.currentTarget.open) setRequested(true);
-      }}
-    >
-      {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
-      <summary aria-label="Diagnostics" role="button">
-        <span>Diagnostics</span>
-        <small>{diagnosticsLabel(props.control, props.persistence)}</small>
-      </summary>
-    </details>
-  );
-}
+const settingsSummary = (diagnostics: AgentRailProps["diagnostics"]) =>
+  diagnostics === undefined
+    ? undefined
+    : diagnostics.persistence?.source !== "durable"
+      ? "Storage unavailable"
+      : diagnostics.persistence?.capsule === "session"
+        ? "Session-only storage"
+        : diagnostics.persistence?.capsule === "unavailable"
+          ? "Storage degraded"
+          : diagnostics.control.enabled
+            ? `${diagnostics.control.clients.length} client${diagnostics.control.clients.length === 1 ? "" : "s"}`
+            : "Local control off";
 
 export interface ShapingController {
   readonly status: "idle" | "shaping" | "preview" | "error";
@@ -162,6 +112,7 @@ export interface AgentRailProps {
   readonly useDisabled?: boolean;
   readonly canvasSelection?: CanvasSelection;
   readonly selectedNodeId?: string;
+  readonly starter?: boolean;
   readonly document: InterfaceDocument;
   readonly workspace: AgentWorkspaceController;
   readonly shaping: ShapingController;
@@ -175,6 +126,8 @@ export interface AgentRailProps {
   readonly onOpenShareSource?: () => void;
   readonly onOpenShareFile?: () => void;
   readonly onManageSharedSources?: () => void;
+  readonly onOpenSettings?: () => void;
+  readonly settingsInDock?: boolean;
   readonly onRestoreSafeMode: () => Promise<void>;
   readonly onDecideProductCapability?: (
     capsuleId: string,
@@ -474,118 +427,28 @@ export function ProductCapabilities({
   );
 }
 
-function Conversation({
-  messages,
-  activities,
-  status,
-  label,
-  onFixFailure,
-}: {
-  readonly messages: ReadonlyArray<ConversationMessage>;
-  readonly activities: NonNullable<
-    AgentWorkspaceController["app"]["activities"]
-  >;
-  readonly status: AgentWorkspaceController["app"]["status"];
-  readonly label: string;
-  readonly onFixFailure?: (activity: ToolActivity) => void;
-}) {
-  const lastMessage = messages.at(-1);
-  const lastActivity = activities.at(-1);
-  const follow = useStickyFollow(
-    label,
-    [
-      lastMessage?.id ?? "no-message",
-      lastMessage?.content.length ?? 0,
-      lastActivity?.id ?? "no-activity",
-      lastActivity?.phase ?? "",
-      lastActivity?.updatedAt ?? 0,
-    ].join(":"),
-  );
-
+function EmptyConversation({ label }: { readonly label: string }) {
   return (
     <div
       aria-label={`${label} conversation`}
-      aria-live="polite"
-      className="conversation"
-      onScroll={follow.onScroll}
-      ref={follow.containerRef}
+      className="conversation conversation-shell"
       role="log"
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: the overflowing transcript must be keyboard-focusable so users can scroll it without a pointer.
-      tabIndex={0}
     >
-      {messages.length === 0 && activities.length === 0 && (
-        <div className="conversation__empty">
-          <strong>Build and use the product in one conversation.</strong>
-          <p>
-            Ask for a change, use the current interface, or call an approved
-            action. Flect routes the work for you.
-          </p>
+      <div className="conversation__scroll">
+        <div className="conversation__content flex min-h-full flex-col gap-8 p-4">
+          <div className="conversation__empty flex size-full flex-col items-center justify-center gap-3 p-8 text-center">
+            <div className="space-y-1">
+              <h3 className="font-medium text-sm">
+                Build and use the product in one conversation.
+              </h3>
+              <p className="text-muted-foreground text-sm">
+                Ask for a change, use the current interface, or call an approved
+                action. Flect routes the work for you.
+              </p>
+            </div>
+          </div>
         </div>
-      )}
-      {messages.map((message, index) => {
-        const isLatest = index === messages.length - 1;
-        return (
-          <article
-            className={`message message--${message.role}`}
-            key={message.id}
-          >
-            <span className="sr-only">
-              {message.role === "user"
-                ? "You"
-                : message.role === "activity"
-                  ? "Activity"
-                  : label}
-            </span>
-            {message.content ? (
-              <Suspense fallback={<span>{message.content}</span>}>
-                <MessageContent
-                  content={message.content}
-                  messageRole={message.role}
-                  streaming={
-                    message.role === "assistant" &&
-                    isLatest &&
-                    status === "streaming"
-                  }
-                />
-              </Suspense>
-            ) : (
-              isLatest &&
-              (status === "submitting" || status === "streaming") && (
-                <span className="thinking" role="status">
-                  <span className="sr-only">{label} is responding</span>
-                  <span aria-hidden="true" />
-                  <span aria-hidden="true" />
-                  <span aria-hidden="true" />
-                </span>
-              )
-            )}
-          </article>
-        );
-      })}
-      {activities.map((activity) => (
-        <Suspense
-          fallback={<SurfaceFallback label="Opening activity details" />}
-          key={activity.id}
-        >
-          <ActivityCard
-            activity={activity}
-            {...(onFixFailure === undefined
-              ? {}
-              : { onFixInShape: onFixFailure })}
-          />
-        </Suspense>
-      ))}
-      {!follow.following && (
-        <button
-          className="jump-to-latest"
-          onClick={follow.jumpToLatest}
-          type="button"
-        >
-          {follow.unreadCount > 0
-            ? `Jump to latest (${follow.unreadCount})`
-            : "Jump to latest"}
-        </button>
-      )}
+      </div>
     </div>
   );
 }
@@ -601,6 +464,7 @@ export function AgentRail({
   useDisabled = false,
   canvasSelection,
   selectedNodeId,
+  starter = false,
   document,
   workspace,
   shaping,
@@ -610,6 +474,8 @@ export function AgentRail({
   onOpenShareSource,
   onOpenShareFile,
   onManageSharedSources,
+  onOpenSettings,
+  settingsInDock = false,
   onRestoreSafeMode,
   onDecideProductCapability,
   onRevokeProductCapability,
@@ -625,7 +491,7 @@ export function AgentRail({
     workspace.app,
     workspace.previewApp,
     workspace.shaper,
-  ] as const;
+  ];
   const preferredController = preview
     ? workspace.previewApp
     : useDisabled
@@ -656,6 +522,8 @@ export function AgentRail({
     isAgentSessionActive(workspace.previewApp.status) ||
     isAgentSessionActive(workspace.shaper.status) ||
     shaping.status === "shaping";
+  const showStarterPrompts = starter && messages.length === 0;
+  const settingsStatus = settingsSummary(diagnostics);
   const cancel = async () => {
     const active = conversationControllers.filter((entry) =>
       isAgentSessionActive(entry.status),
@@ -682,9 +550,8 @@ export function AgentRail({
         : preview && candidateRevisionId !== undefined
           ? (text: string) =>
               workspace.previewApp.submit(text, document, candidateRevisionId)
-          : useDisabled
-            ? shaping.request
-            : workspace.app.submit;
+          : (workspace.submitConversation ??
+            (useDisabled ? shaping.request : workspace.app.submit));
   const externalExtensionsEnabled =
     workspace.externalExtensions.app && workspace.externalExtensions.shaper;
   const toggleExternalExtensions = async () => {
@@ -976,6 +843,7 @@ export function AgentRail({
       aria-label="Flect agent"
       className="agent-rail"
       data-mode={mode}
+      data-status={controller.status}
       tabIndex={-1}
     >
       <header className="agent-rail__header">
@@ -984,6 +852,22 @@ export function AgentRail({
           <span>{mode === "safe" ? "Protected shell" : "Live canvas"}</span>
         </div>
         <div className="agent-rail__header-actions">
+          {!settingsInDock &&
+            diagnostics !== undefined &&
+            onOpenSettings !== undefined && (
+              <button
+                aria-label="Open settings"
+                className="agent-rail__settings"
+                data-settings-trigger
+                onClick={onOpenSettings}
+                type="button"
+              >
+                <span>Settings</span>
+                {settingsStatus !== undefined && (
+                  <small>{settingsStatus}</small>
+                )}
+              </button>
+            )}
           <RuntimeState status={controller.status} />
           <button
             aria-label="Collapse agent"
@@ -996,13 +880,19 @@ export function AgentRail({
         </div>
       </header>
 
-      <Conversation
-        activities={activities}
-        label={roleLabel}
-        messages={messages}
-        status={controller.status}
-        onFixFailure={(activity) => void shaping.fixFailure(activity)}
-      />
+      {messages.length === 0 && activities.length === 0 ? (
+        <EmptyConversation label={roleLabel} />
+      ) : (
+        <Suspense fallback={<SurfaceFallback label="Opening conversation" />}>
+          <ConversationTimeline
+            activities={activities}
+            label={roleLabel}
+            messages={messages}
+            status={controller.status}
+            onFixFailure={(activity) => void shaping.fixFailure(activity)}
+          />
+        </Suspense>
+      )}
 
       <div className="agent-rail__dock">
         {build !== undefined && build.phase !== "succeeded" && (
@@ -1023,21 +913,25 @@ export function AgentRail({
         {mode === "safe" && (
           <section className="recovery-banner" role="status">
             <div>
-              <strong>Custom interface state is bypassed.</strong>
-              <p>Restore the last-known-good revision to return.</p>
+              <strong>Your interface is protected.</strong>
+              <p>
+                Flect temporarily hid custom changes. Restore the last working
+                interface when you are ready.
+              </p>
               <small>
                 {workspace.continuity?.recovery === undefined
-                  ? `Session continuity generation ${workspace.continuity?.generation ?? 0}, revision ${workspace.continuity?.revisionSequence ?? 0}.`
-                  : `Session continuity needs recovery: ${workspace.continuity.recovery}.`}
+                  ? "Your saved conversation and drafts are available."
+                  : "Saved conversation data needs repair before it can be restored."}
               </small>
             </div>
             <div className="revision-banner__actions">
               <button
+                aria-label="Restore working interface"
                 className="decision-button decision-button--primary"
                 onClick={() => void onRestoreSafeMode()}
                 type="button"
               >
-                Restore interface
+                Restore working interface
               </button>
               <button
                 className="decision-button"
@@ -1045,14 +939,14 @@ export function AgentRail({
                 onClick={() => void exportContinuity()}
                 type="button"
               >
-                Export session continuity
+                Download recovery backup
               </button>
               <button
                 className="decision-button"
                 onClick={() => void workspace.discardContinuity?.()}
                 type="button"
               >
-                Discard session continuity
+                Discard saved conversation
               </button>
               {workspace.continuity?.recovery !== undefined && (
                 <button
@@ -1060,7 +954,7 @@ export function AgentRail({
                   onClick={() => void workspace.retryContinuity?.()}
                   type="button"
                 >
-                  Retry session continuity
+                  Retry recovery
                 </button>
               )}
             </div>
@@ -1324,30 +1218,39 @@ export function AgentRail({
         )}
 
         {controller.status === "setup-required" && (
-          <div className="runtime-alert runtime-alert--setup" role="alert">
-            <div>
-              <strong>Connect an agent</strong>
-              <p>
-                Choose a Pi-owned provider below. You can write your first
-                message now; Flect keeps it private until sign-in succeeds.
-              </p>
-            </div>
-            <Suspense
-              fallback={<SurfaceFallback label="Opening provider setup" />}
-            >
-              <ProviderAuthPanel
-                authEvent={workspace.authEvent}
-                compact
-                disabled={operationActive}
-                onCancel={workspace.cancelProviderAuth}
-                onLogin={workspace.loginProvider}
-                onLogout={workspace.logoutProvider}
-                onRefresh={workspace.refreshProviderAuth}
-                onReply={workspace.replyProviderAuth}
-                providers={workspace.providers}
-              />
-            </Suspense>
-          </div>
+          <section
+            aria-labelledby="provider-setup-title"
+            className="provider-setup"
+          >
+            <Card>
+              <CardHeader>
+                <CardTitle id="provider-setup-title">
+                  Connect an agent
+                </CardTitle>
+                <CardDescription>
+                  Sign in once, then tell Flect what you want to make. Your
+                  draft stays private until the connection succeeds.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Suspense
+                  fallback={<SurfaceFallback label="Opening provider setup" />}
+                >
+                  <ProviderAuthPanel
+                    authEvent={workspace.authEvent}
+                    compact
+                    disabled={operationActive}
+                    onCancel={workspace.cancelProviderAuth}
+                    onLogin={workspace.loginProvider}
+                    onLogout={workspace.logoutProvider}
+                    onRefresh={workspace.refreshProviderAuth}
+                    onReply={workspace.replyProviderAuth}
+                    providers={workspace.providers}
+                  />
+                </Suspense>
+              </CardContent>
+            </Card>
+          </section>
         )}
 
         {controller.status === "unavailable" && (
@@ -1384,16 +1287,21 @@ export function AgentRail({
           </div>
         )}
 
-        {diagnostics !== undefined && (
-          <DeferredDiagnosticsPanel
-            control={diagnostics.control}
-            onToggleControl={diagnostics.onToggleControl}
-            operations={diagnostics.operations}
-            persistence={diagnostics.persistence}
-            setup={diagnostics.setup}
-            update={diagnostics.update}
-          />
-        )}
+        {settingsInDock &&
+          diagnostics !== undefined &&
+          onOpenSettings !== undefined &&
+          controller.status !== "setup-required" && (
+            <button
+              aria-label="Open settings"
+              className="agent-rail__settings agent-rail__settings--dock"
+              data-settings-trigger
+              onClick={onOpenSettings}
+              type="button"
+            >
+              <span>Settings</span>
+              {settingsStatus !== undefined && <small>{settingsStatus}</small>}
+            </button>
+          )}
 
         <Composer
           disabled={mode === "safe"}
@@ -1438,6 +1346,15 @@ export function AgentRail({
           onSubmit={submit}
           onToggleModelFavorite={preferences.toggleModelFavorite}
           placeholder="Build, change, use, or connect anything"
+          starterPrompts={
+            showStarterPrompts
+              ? [
+                  "A calm project planner for this week",
+                  "A simple place to track my reading",
+                  "A clear view of today's deliveries",
+                ]
+              : undefined
+          }
           rollbackAvailable={shaping.rollbackAvailable}
           selectedModel={workspace.selectedModel}
           status={controller.status}

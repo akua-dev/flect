@@ -67,7 +67,12 @@ model responses. The static view-only route fetches neither the Preact renderer
 nor Effect. Compiler, package, shell, Worker, and Wasm implementations are
 separate dynamic boundaries after workspace activation. Astro production uses
 Preact compatibility for the protected components; the direct Vite SPA remains
-a React fallback.
+a React fallback. UI primitives follow the official Shadcn v4 composition
+model with its Radix primitives and the official AI Elements registry. Radix
+and Tailwind are workspace implementation details behind the Astro island
+boundary; they do not
+own workflows, persistence, or the static view-only route, and each added
+primitive must preserve the browser budgets.
 
 ## Effect application kernel
 
@@ -161,9 +166,10 @@ runtime. Trusted browser and native clients schema-encode validated documents
 before JSON transport. An `InterfaceDocument` contains no generated HTML, CSS,
 JSX, or executable code path.
 
-Shaper must terminate a proposal turn through its role-bound browser shell:
-it writes `/workspace/interface.json`, runs `flect interface validate`, then
-runs `flect interface propose` as its final action. The reserved command reads
+Shaper must terminate a proposal turn through its role-bound browser shell
+using exactly one of two reserved paths. For a schema interface it writes
+`/workspace/interface.json`, runs `flect interface validate`, then runs
+`flect interface propose` as its final action. The reserved command reads
 only that disposable workspace, decodes unknown JSON through the closed
 `InterfaceDocument` Effect Schema, and sends the validated value over the
 bounded `AgentCommandBus`; the controller never receives a sandbox path.
@@ -172,6 +178,23 @@ identifiers, and tree bounds become safe path-specific output. Shaper receives
 one bounded corrective retry in the same Pi session. A second missing or
 invalid proposal ends without creating a revision and leaves field-level tool
 evidence in the activity UI and journal.
+
+For an authored web app it writes complete self-contained source under
+`/workspace/project`, runs `flect app validate`, then runs
+`flect app propose` as its final action. The reserved Shaper-only command
+packages that sandbox directory through the same bounded pre-capsule adapter
+as project import, so path validation, secret and ignore rules, file and byte
+limits, the single root `index.html` requirement, and capability findings all
+apply before an archive can latch on the turn. The controller stages the
+authored archive through the existing capsule pipeline: guarded
+`flect/authoring` source checkpoint, portable compilation for framework
+entrypoints, and the isolated compiled presentation. Because the authorship
+trust domain equals a declarative proposal while the runtime confinement is
+strictly stronger (the opaque-origin frame instead of the trusted shell DOM),
+a review without blocked activation accepts automatically as one local Git
+transition; a review with required ungranted capabilities falls back to the
+explicit candidate ceremony. The rationale is recorded in
+[`docs/decisions/0005-conversational-authored-apps.md`](docs/decisions/0005-conversational-authored-apps.md).
 
 The `ShapingKernel` owns the active, proposed, previewed, superseded, accepted,
 last-known-good, rejected, and recovered revision transitions. A Shaper result
@@ -216,8 +239,9 @@ Its primary session set contains three isolated agent sessions:
 - **Shaper** receives the current validated document and a shaping instruction.
   It has no ambient host resources. Its only Pi tool is custom `bash`, which
   runs in a disposable browser workspace and returns through a typed
-  request/result bridge. The reserved `flect interface validate/propose`
-  commands are the terminating proposal path.
+  request/result bridge. The reserved `flect interface validate/propose` and
+  `flect app validate/propose` commands are the two terminating proposal
+  paths.
   Configured external Pi extensions remain disabled unless the user explicitly
   enables them for Shaper. A shaped document still returns as an untrusted
   candidate for Flect to validate.

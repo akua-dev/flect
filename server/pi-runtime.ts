@@ -228,7 +228,9 @@ const appSystemPrompt =
   "You are Flect App Agent, the user-facing agent inside the current product experience. Help the user operate the product through its exposed interface and API capabilities. You may use the bash tool only inside Flect's disposable App workspace. It cannot access Shaper source, the host filesystem, credentials, the parent UI, the canonical workspace, or ambient network. You cannot reshape or activate revisions, modify Guardian or safe mode, or load user resources. When and only when the user clearly asks to change the interface, request a visible handoff through request_interface_edit; questions and ordinary product actions stay in this session.";
 
 const shaperSystemPrompt =
-  "You are Flect Shaper, the user-facing interface agent. Help the user describe and shape schema-defined interfaces. You may use the bash tool only inside Flect's disposable browser workspace. It cannot access the host filesystem, credentials, parent UI, canonical workspace, or ambient network; the reserved compatible bun command provides bounded run, build, package, preview, and stop operations. You cannot activate revisions, modify Guardian or safe mode, or load user resources.";
+  "You are Flect Shaper, the user-facing interface agent. Help the user build and change their running experience: author complete self-contained web apps under /workspace/project, or shape schema-defined interface documents, and submit either through the reserved flect commands. You may use the bash tool only inside Flect's disposable browser workspace. It cannot access the host filesystem, credentials, parent UI, canonical workspace, or ambient network; the reserved compatible bun command provides bounded run, build, package, preview, and stop operations. You cannot activate revisions, modify Guardian or safe mode, or load user resources.";
+
+const SHAPER_GENERATION_TIMEOUT = "180 seconds";
 
 const systemPrompt = (policy: PiSessionPolicy) => {
   const extensionBoundary =
@@ -865,18 +867,56 @@ const makeBoundedResponse = (
 const shapePrompt = (
   instruction: string,
   document: InterfaceDocument,
-) => `Propose a revised Flect interface document using only Bash.
+) => `Change the user's running Flect experience using only Bash. Choose
+exactly one terminal path for this turn and finish with its propose command as
+your final action.
 
-Run \`flect interface schema\`, write the candidate to
-\`/workspace/interface.json\`, run
+Path A - authored web app. Choose this whenever the request should look like a
+real website or application: landing pages, marketing or content sites,
+portfolios, articles, games, or any experience with its own visual design.
+Write complete self-contained source under \`/workspace/project\` with exactly
+one \`/workspace/project/index.html\` at its root, plus \`styles.css\` and
+other relative assets as needed. Then run
+\`flect app validate /workspace/project --name "<display name>"\`, fix every
+reported warning, and run
+\`flect app propose /workspace/project --name "<display name>"\` exactly once
+as your final action.
+The app runs fully isolated with no network: never reference remote URLs,
+CDNs, web fonts, analytics, storage APIs, or workers. Use system font stacks,
+inline SVG, CSS gradients, and \`#\`-anchor links only. Design it like a real
+product: a deliberate palette, a typographic scale, generous spacing, distinct
+sections, and a responsive layout.
+Do not spend commands exploring the sandbox; go straight to writing files.
+Write every file in small appends. Start each file with one short
+\`mkdir -p /workspace/project && cat > /workspace/project/<file> <<'EOF' ... EOF\`
+of at most about 30 lines, then extend it with further
+\`cat >> ... <<'EOF' ... EOF\` blocks of the same size. Keep every Bash tool
+call small; a single call that tries to emit a whole page will be truncated
+and rejected before it runs.
+When the user is revising an existing authored app, run \`git restore .\`
+first to materialize its current source under \`/workspace/project\`, read the
+exact files, and change only the lines the request affects. Preserve every
+other line byte-for-byte; never regenerate unchanged sections or invent new
+content the user did not ask for. Then validate and propose again.
+
+Path B - schema interface. Choose this for simple tool-style panels and forms
+that should match the surrounding Flect shell. Run \`flect interface schema\`,
+write the candidate to \`/workspace/interface.json\`, run
 \`flect interface validate /workspace/interface.json\`, then run
 \`flect interface propose /workspace/interface.json\` exactly once as your
-final action. Never return the document as prose, Markdown, or a JSON code
-block. Preserve stable node IDs when possible.
-Never invent executable code, URLs, credentials, HTML, CSS, scripts, tools, or
-capabilities.
+final action. The candidate must be strict JSON: double-quoted keys and
+strings, no comments or trailing commas. Preserve stable node IDs when
+possible and keep the candidate compact (at most 18 nodes). Never invent node
+types, URLs, credentials, tools, or capabilities in a schema document.
 
-Current validated document:
+Never return your result as prose, Markdown, or a code block; only the
+reserved flect commands submit it. Use the provided validate commands as the
+only validation step; if one fails, correct the files and validate again. Do
+not probe with \`cat\`, \`node\`, \`python\`, or commands outside the provided
+browser shell, and complete every Bash tool argument promptly.
+
+Current validated document (for an authored app this is only a fallback
+summary; the real source lives in Git):
 ${JSON.stringify(document)}
 
 User instruction:
@@ -1368,9 +1408,19 @@ export const FlectRuntimeLive = Layer.effect(
                     },
                   );
 
-                  yield* record.shaper
+                  const completion = yield* record.shaper
                     .prompt(promptText)
-                    .pipe(Effect.ensuring(Effect.sync(() => unsubscribe())));
+                    .pipe(
+                      Effect.timeoutOption(SHAPER_GENERATION_TIMEOUT),
+                      Effect.ensuring(Effect.sync(() => unsubscribe())),
+                    );
+
+                  if (Option.isNone(completion)) {
+                    yield* record.shaper
+                      .abort()
+                      .pipe(Effect.catch(() => Effect.void));
+                    return yield* Effect.fail(piFailure("shape"));
+                  }
 
                   if (response.isExceeded()) {
                     return yield* Effect.fail(piFailure("shape"));

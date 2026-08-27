@@ -295,7 +295,7 @@ test("shapes a blank workspace in one continuous live canvas", async ({
   page,
 }) => {
   await expect(
-    page.getByRole("heading", { name: "What do you want to make?" }),
+    page.getByRole("heading", { name: "What do you need?" }),
   ).toBeVisible();
 
   await shapeFirstInterface(page);
@@ -308,6 +308,162 @@ test("shapes a blank workspace in one continuous live canvas", async ({
     page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeFocused();
   await expect(page.locator(".composer")).toHaveCount(1);
+});
+
+test("keeps completed agent work quiet behind the final answer", async ({
+  page,
+}) => {
+  await shapeFirstInterface(page);
+
+  const work = page.getByRole("region", { name: "2 tool calls" });
+  await expect(work).toContainText("Worked for 44 ms");
+  await expect(work).toContainText("2 steps");
+  await expect(
+    work.getByRole("button", { name: "Show 2 completed steps" }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(work.locator(".work-log__entries")).toBeHidden();
+  await expect(
+    page.getByText("Change complete: Focused project overview"),
+  ).toBeVisible();
+
+  await work.getByRole("button", { name: "Show 2 completed steps" }).click();
+  const commandRows = work.locator(".activity-card__summary");
+  await expect(commandRows).toHaveCount(2);
+  await expect(commandRows.first()).toBeVisible();
+  const expandedLayout = await work.evaluate((region) => {
+    const bounds = region.getBoundingClientRect();
+    const rows = [
+      ...region.querySelectorAll<HTMLElement>(".activity-card__summary"),
+    ];
+    return rows.map((row) => {
+      const rowBounds = row.getBoundingClientRect();
+      const style = getComputedStyle(row);
+      return {
+        borderWidth: style.borderTopWidth,
+        contained: rowBounds.right <= bounds.right + 0.5,
+        scrollContained: row.scrollWidth <= row.clientWidth,
+      };
+    });
+  });
+  expect(expandedLayout).toEqual([
+    { borderWidth: "0px", contained: true, scrollContained: true },
+    { borderWidth: "0px", contained: true, scrollContained: true },
+  ]);
+
+  await commandRows.first().click();
+  const commandDetails = work.locator(".activity-card__details").first();
+  await expect(commandDetails).toBeVisible();
+  const detailsLayout = await commandDetails.evaluate((details) => {
+    const style = getComputedStyle(details);
+    return {
+      borderBottomWidth: style.borderBottomWidth,
+      borderLeftWidth: style.borderLeftWidth,
+      borderRightWidth: style.borderRightWidth,
+      borderTopWidth: style.borderTopWidth,
+      contained: details.scrollWidth <= details.clientWidth,
+    };
+  });
+  expect(detailsLayout).toEqual({
+    borderBottomWidth: "0px",
+    borderLeftWidth: "1px",
+    borderRightWidth: "0px",
+    borderTopWidth: "0px",
+    contained: true,
+  });
+
+  const railLayout = await page.locator(".agent-rail").evaluate((rail) => {
+    const railStyle = getComputedStyle(rail);
+    const workLog = rail.querySelector(".work-log");
+    const workStyle = workLog === null ? undefined : getComputedStyle(workLog);
+    return {
+      borderLeftWidth: railStyle.borderLeftWidth,
+      railContained: rail.scrollWidth <= rail.clientWidth,
+      workBorderWidth: workStyle?.borderTopWidth,
+    };
+  });
+  expect(railLayout).toEqual({
+    borderLeftWidth: "0px",
+    railContained: true,
+    workBorderWidth: "0px",
+  });
+});
+
+test("gives the static home screen one clear starting action", async ({
+  page,
+}) => {
+  const staticView = new URL(page.url());
+  staticView.searchParams.set("view", "1");
+  await page.goto(staticView.href);
+
+  await expect(
+    page.getByRole("heading", { name: "Describe the app you want to make." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toHaveAttribute(
+    "placeholder",
+    "For example: a calm project planner for this week",
+  );
+  await expect(
+    page.getByRole("button", { name: "Create with Flect" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "A calm project planner for this week" })
+    .click();
+  await expect(
+    page.getByRole("textbox", { name: "Message Flect" }),
+  ).toHaveValue("A calm project planner for this week");
+  await expect(
+    page.getByRole("heading", { name: "Describe the app you want to make." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Start building" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Select element" }),
+  ).toHaveCount(0);
+
+  const dragHandle = await page
+    .locator(".activation-shell__bar")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      const indicator = getComputedStyle(element, "::after");
+      return {
+        cursor: style.cursor,
+        height: Number.parseFloat(style.height),
+        indicatorWidth: Number.parseFloat(indicator.width),
+      };
+    });
+  expect(dragHandle.cursor).toBe("grab");
+  expect(dragHandle.height).toBeGreaterThanOrEqual(56);
+  expect(dragHandle.indicatorWidth).toBe(68);
+
+  completedShapePages.add(page);
+  await page.getByRole("button", { name: "Create with Flect" }).click();
+  await expect(page.locator("#flect-static-shell")).toBeHidden();
+  await expect(page.locator(".role-shell")).toHaveClass(/role-shell--split/);
+  await expect(
+    page.getByRole("heading", { name: "Focused project overview" }),
+  ).toBeVisible();
+});
+
+test("keeps a visible, spacious drag handle above the workspace", async ({
+  page,
+}) => {
+  const dragHandle = await page
+    .locator(".window-drag-region")
+    .evaluate((element) => {
+      const style = getComputedStyle(element);
+      const indicator = getComputedStyle(element, "::after");
+      return {
+        cursor: style.cursor,
+        height: Number.parseFloat(style.height),
+        indicatorWidth: Number.parseFloat(indicator.width),
+      };
+    });
+  expect(dragHandle.cursor).toBe("grab");
+  expect(dragHandle.height).toBeGreaterThanOrEqual(64);
+  expect(dragHandle.indicatorWidth).toBe(68);
 });
 
 test("selects and directly edits the running canvas through the same agent", async ({
@@ -1027,11 +1183,9 @@ test("previews and accepts compiled UI only inside the isolated capsule frame", 
   if (exported === null) throw new Error("Compiled capsule was not exported.");
   expect(await readFile(exported)).toEqual(Buffer.from(archive));
 
-  await page.getByRole("button", { name: "Safe mode" }).click();
+  await page.getByRole("button", { name: "Open recovery mode" }).click();
   await expect(page.locator('iframe[title="Compiled fixture"]')).toHaveCount(0);
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toBeVisible();
+  await expect(page.getByText("Your interface is protected.")).toBeVisible();
 });
 
 test("restores a compiled candidate for review without replacing accepted state", async ({
@@ -1107,6 +1261,14 @@ test("keeps one draft and one conversation while Flect routes product and edit w
     .click();
   await composer.fill("Fail candidate extension");
   await composer.press("Enter");
+  await expect(page.locator("form.composer")).toHaveAttribute(
+    "aria-busy",
+    "false",
+  );
+  const failedWork = page.getByRole("region", { name: "1 tool call" }).last();
+  await failedWork
+    .getByRole("button", { name: "Show 1 completed step" })
+    .click();
   const failedActivity = page.getByRole("button", {
     name: "Trusted Pi extension details",
   });
@@ -1123,10 +1285,14 @@ test("keeps one draft and one conversation while Flect routes product and edit w
   await expect(fix).toBeVisible();
   await fix.click();
   await page.getByRole("button", { name: "Actions" }).click();
-  await expect(
-    page.getByRole("menuitem", { name: "Disable trusted Pi extensions" }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
+  const disableExtensions = page.getByRole("menuitem", {
+    name: "Disable trusted Pi extensions",
+  });
+  await expect(disableExtensions).toBeVisible();
+  await disableExtensions.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Flect actions" })).toHaveCount(
+    0,
+  );
   await expect(page.getByText("Fail candidate extension")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Fix with Flect" }).last(),
@@ -1151,19 +1317,83 @@ test("routes product questions and typed edit requests without exposing agent mo
   await shapeFirstInterface(page);
   const appInput = page.getByRole("textbox", { name: "Message Flect" });
   await appInput.fill("Which interface is active?");
+  completedPromptPages.add(page);
   await appInput.press("Enter");
   await expect(page.getByText("The product action completed.")).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
 
-  await appInput.fill("Explicitly change the interface");
+  const activeRevision = await page
+    .locator(".role-shell")
+    .getAttribute("data-active-revision");
+  await appInput.fill(
+    "Build a premium Northstar AI meeting-notes page: nav, hero, dashboard, CTAs, logos, 3 features.",
+  );
   await appInput.press("Enter");
   await expect(
     page.getByRole("region", { name: "Import decision" }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", {
+      name: "Meetings, remembered. Work, unblocked.",
+    }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start free" })).toBeVisible();
+  await expect(
+    page.getByText("Live capture · Instant summaries · Action tracking", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".role-shell")).not.toHaveAttribute(
+    "data-active-revision",
+    activeRevision ?? "",
+  );
   await expect(appInput).toBeEnabled();
-  await expect(page.getByText("Explicitly change the interface")).toBeVisible();
+  await expect(
+    page.getByText(
+      "Build a premium Northstar AI meeting-notes page: nav, hero, dashboard, CTAs, logos, 3 features.",
+    ),
+  ).toBeVisible();
+});
+
+test("authors a real landing page website into the isolated canvas without ceremony", async ({
+  page,
+}) => {
+  const input = page.getByRole("textbox", { name: "Message Flect" });
+  await input.fill("Make a landing page website for Driftwood Coffee.");
+  completedShapePages.add(page);
+  await input.press("Enter");
+
+  const frame = page.frameLocator(".capsule-frame");
+  await expect(
+    frame.getByRole("heading", { name: "Driftwood Coffee", level: 1 }),
+  ).toBeVisible();
+  await expect(frame.getByRole("link", { name: "See the menu" })).toBeVisible();
+  await expect(frame.getByText("Signature Drift Latte")).toBeVisible();
+
+  // A conversationally authored app is a local edit: no Activate/Discard
+  // ceremony, the running canvas simply becomes the website.
+  await expect(
+    page.getByRole("region", { name: "Import decision" }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Activate app" })).toHaveCount(
+    0,
+  );
+  await expect(page.locator(".role-shell")).toHaveAttribute(
+    "data-phase",
+    "accepted",
+  );
+  await expect(
+    page.getByText("Change complete: Driftwood Coffee"),
+  ).toBeVisible();
+
+  // The website owns its own visual ground inside the isolated frame instead
+  // of inheriting the shell background.
+  const background = await frame
+    .locator("body")
+    .evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(background).toBe("rgb(250, 246, 240)");
 });
 
 test("keeps essential composer qualifiers at AA contrast", async ({ page }) => {
@@ -1184,12 +1414,44 @@ test("keeps one chronological conversation across internal routing and reload", 
   await appInput.fill("Open the latest project");
   await appInput.press("Enter");
   await expect(page.getByText("The product action completed.")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Bash details" }).first(),
-  ).toContainText("Completed");
+  const latestWork = page.getByRole("region", { name: "1 tool call" }).last();
+  await expect(latestWork).toContainText("Worked for 10 ms");
+  await latestWork
+    .getByRole("button", { name: "Show 1 completed step" })
+    .click();
+  const bashDetails = latestWork.getByRole("button", {
+    name: "Bash details",
+  });
+  await expect(bashDetails).toContainText("Completed");
+  await expect(latestWork.locator(".activity-card__details")).toBeHidden();
+  await bashDetails.click();
+  await expect(latestWork.locator(".activity-card__details")).toBeVisible();
   completedPromptPages.add(page);
   await expect(
     page.getByText("Change complete: Focused project overview"),
+  ).toBeVisible();
+  const earlierTurn = page.getByRole("region", {
+    name: "Earlier turn: Create a focused project overview",
+  });
+  await expect(earlierTurn).toBeVisible();
+  await expect(
+    earlierTurn.getByRole("button", {
+      name: "Show earlier request: Create a focused project overview",
+    }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    earlierTurn.locator(".historical-turn__context .message--user"),
+  ).toBeHidden();
+  await expect(
+    earlierTurn.getByText("Change complete: Focused project overview"),
+  ).toBeVisible();
+  await earlierTurn
+    .getByRole("button", {
+      name: "Show earlier request: Create a focused project overview",
+    })
+    .click();
+  await expect(
+    earlierTurn.locator(".historical-turn__context .message--user"),
   ).toBeVisible();
   const conversation = page.getByRole("log", { name: "Flect conversation" });
   await expect(conversation).toContainText("Create a focused project overview");
@@ -1241,6 +1503,13 @@ test("normalizes an interrupted Shaper turn without restoring partial output", a
   await input.fill("Create a candidate that will be cancelled");
   completedShapePages.add(page);
   await input.press("Enter");
+  const conversation = page.getByRole("log", { name: "Flect conversation" });
+  await expect(conversation).toContainText(
+    "Create a candidate that will be cancelled",
+  );
+  await expect(
+    page.getByRole("status", { name: "Workbench status" }),
+  ).toContainText("Flect is responding");
   await expect(page.getByRole("button", { name: "Stop Flect" })).toBeVisible();
 
   await page.reload();
@@ -1288,8 +1557,12 @@ test("rejects a stale draft writer across two real same-origin tabs", async ({
     await page.evaluate(() => localStorage.getItem("flect.role-continuity.v1")),
   ).not.toContain("Stale draft from the second tab");
 
-  await second.getByRole("button", { name: "Safe mode" }).click();
-  await expect(second.getByText(/stale-write/)).toBeVisible();
+  await second.getByRole("button", { name: "Open recovery mode" }).click();
+  await expect(
+    second.getByText(
+      "Saved conversation data needs repair before it can be restored.",
+    ),
+  ).toBeVisible();
   await second.close();
 });
 
@@ -1321,8 +1594,12 @@ test("preserves the prior continuity record when browser quota rejects a write",
   const input = page.getByRole("textbox", { name: "Message Flect" });
   await expect(input).toHaveValue("Last durable draft");
   await input.fill("This write exceeds quota");
-  await page.getByRole("button", { name: "Safe mode" }).click();
-  await expect(page.getByText(/storage-unavailable/)).toBeVisible();
+  await page.getByRole("button", { name: "Open recovery mode" }).click();
+  await expect(
+    page.getByText(
+      "Saved conversation data needs repair before it can be restored.",
+    ),
+  ).toBeVisible();
   expect(
     await page.evaluate(() => localStorage.getItem("flect.role-continuity.v1")),
   ).toBe(durable);
@@ -1442,14 +1719,15 @@ test("keeps a reader's position until they choose to jump to new activity", asyn
   const conversation = page.getByRole("log", {
     name: "Flect conversation",
   });
+  const conversationScroll = conversation.locator(".conversation__scroll");
   await expect
     .poll(() =>
-      conversation.evaluate(
+      conversationScroll.evaluate(
         (element) => element.scrollHeight > element.clientHeight,
       ),
     )
     .toBe(true);
-  await conversation.evaluate((element) => {
+  await conversationScroll.evaluate((element) => {
     element.scrollTop = 0;
     element.dispatchEvent(new Event("scroll"));
   });
@@ -1460,13 +1738,13 @@ test("keeps a reader's position until they choose to jump to new activity", asyn
     page.getByRole("button", { name: /Jump to latest/ }),
   ).toBeVisible();
   expect(
-    await conversation.evaluate((element) => element.scrollTop),
+    await conversationScroll.evaluate((element) => element.scrollTop),
   ).toBeLessThan(50);
 
   await page.getByRole("button", { name: /Jump to latest/ }).click();
   await expect
     .poll(() =>
-      conversation.evaluate(
+      conversationScroll.evaluate(
         (element) =>
           element.scrollHeight - element.clientHeight - element.scrollTop,
       ),
@@ -1626,8 +1904,13 @@ test("uses right and full-height sheets at compact breakpoints", async ({
     ),
   ).toBe(false);
 
+  await page
+    .getByRole("region", { name: "2 tool calls" })
+    .getByRole("button", { name: "Show 2 completed steps" })
+    .click();
+
   for (const name of [
-    "Safe mode",
+    "Open recovery mode",
     "Select element",
     "Collapse agent",
     "Fix with Flect",
@@ -1642,6 +1925,37 @@ test("uses right and full-height sheets at compact breakpoints", async ({
       `${name} touch target height`,
     ).toBeGreaterThanOrEqual(44);
   }
+});
+
+test("keeps Settings in a foreground overlay above the running canvas", async ({
+  page,
+}) => {
+  await shapeFirstInterface(page);
+
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
+
+  const settings = page.locator(".diagnostics-panel--workspace");
+  const rail = page.locator(".agent-rail-container");
+  const settingsBox = await settings.boundingBox();
+  const railBox = await rail.boundingBox();
+  expect(settingsBox).not.toBeNull();
+  expect(railBox).not.toBeNull();
+  expect(settingsBox?.x ?? 0).toBeGreaterThan(0);
+  expect(settingsBox?.width ?? 0).toBeLessThan(railBox?.x ?? 0);
+  await expect(
+    page.getByRole("heading", { name: "Focused project overview" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Close settings" }).click();
+  await expect(
+    page.getByRole("button", { name: "Open settings" }),
+  ).toBeFocused();
+
+  await page.setViewportSize({ width: 720, height: 780 });
+  await page.getByRole("button", { name: "Open settings" }).click();
+  await expect(settings).toHaveCSS("width", "720px");
+  await expect(rail).toBeHidden();
 });
 
 test("keeps safe mode and promptless products inside the protected shell", async ({
@@ -1724,11 +2038,9 @@ test("keeps safe mode and promptless products inside the protected shell", async
 
   await page.goto("/?safe=1");
   await expect(
-    page.locator(".topbar").getByText("Safe mode", { exact: true }),
+    page.locator(".topbar").getByText("Recovery mode", { exact: true }),
   ).toBeVisible();
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toBeVisible();
+  await expect(page.getByText("Your interface is protected.")).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Message Flect" }),
   ).toBeDisabled();
@@ -1736,31 +2048,27 @@ test("keeps safe mode and promptless products inside the protected shell", async
     page.getByRole("textbox", { name: "Message Flect" }),
   ).toHaveValue("");
   await expect(
-    page.getByRole("button", { name: "Restore interface" }),
+    page.getByRole("button", { name: "Restore working interface" }),
   ).toBeVisible();
   const downloadEvent = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export session continuity" }).click();
+  await page.getByRole("button", { name: "Download recovery backup" }).click();
   const download = await downloadEvent;
   expect(download.suggestedFilename()).toBe("flect-role-continuity.json");
   await page
-    .getByRole("button", { name: "Discard session continuity" })
+    .getByRole("button", { name: "Discard saved conversation" })
     .click();
   await expect
     .poll(() =>
       page.evaluate(() => localStorage.getItem("flect.role-continuity.v1")),
     )
     .toBeNull();
-  await page.getByRole("button", { name: "Restore interface" }).click();
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Restore working interface" }).click();
+  await expect(page.getByText("Your interface is protected.")).toHaveCount(0);
   await expect
     .poll(() => new URL(page.url()).searchParams.has("safe"))
     .toBe(false);
   await page.reload();
-  await expect(
-    page.getByText("Custom interface state is bypassed."),
-  ).toHaveCount(0);
+  await expect(page.getByText("Your interface is protected.")).toHaveCount(0);
 });
 
 test("supports keyboard shaping and reduced motion", async ({ page }) => {
@@ -1788,11 +2096,12 @@ test("supports keyboard shaping and reduced motion", async ({ page }) => {
 test("lets an outside agent drive the same reactive workspace through flect", async ({
   page,
 }) => {
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await page.getByRole("button", { name: "Open settings" }).click();
   await page.getByRole("button", { name: "Enable local control" }).click();
   await expect(
     page.getByRole("button", { name: "Disable local control" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Close settings" }).click();
 
   await expect
     .poll(async () => {
@@ -1812,9 +2121,6 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   await expect(
     page.getByRole("heading", { name: "Focused project overview" }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Bash details" }).first(),
-  ).toContainText("Completed");
 
   const repository = (await runFlect("repository", "status")) as {
     readonly acceptedCommit?: string;
@@ -1828,9 +2134,6 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   await runFlect("prompt", "Open the latest project");
   completedPromptPages.add(page);
   await expect(page.getByText("The product action completed.")).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Bash details" }).first(),
-  ).toContainText("Completed");
 
   const logs = (await runFlect("logs")) as {
     readonly operations?: ReadonlyArray<{
@@ -1859,7 +2162,9 @@ test("lets an outside agent drive the same reactive workspace through flect", as
   expect(enteredSafeMode.acceptedCommit).toBe(beforeSafeMode.acceptedCommit);
   await runFlect("safe", "restore");
   await expect(page.locator(".topbar .safe-mode")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Safe mode" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open recovery mode" }),
+  ).toBeVisible();
   await expect
     .poll(async () => {
       const restored = (await runFlect("repository", "status")) as {
@@ -1869,12 +2174,13 @@ test("lets an outside agent drive the same reactive workspace through flect", as
     })
     .not.toBe(enteredSafeMode.acceptedCommit);
   await runFlect("control", "disable");
+  await page.getByRole("button", { name: "Open settings" }).click();
   await expect(
     page.getByRole("button", { name: "Enable local control" }),
   ).toBeVisible();
   await page.reload();
   await expect(page.locator(".topbar .safe-mode")).toHaveCount(0);
   await expect(
-    page.getByRole("heading", { name: "What do you want to make?" }),
+    page.getByRole("heading", { name: "What do you need?" }),
   ).toBeVisible();
 });

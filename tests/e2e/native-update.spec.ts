@@ -29,7 +29,7 @@ test.afterEach(async ({ page }) => {
 });
 
 const openUpdate = async (page: Page) => {
-  await page.getByRole("button", { name: "Diagnostics" }).click();
+  await page.getByRole("button", { name: "Open settings" }).click();
   await expect(
     page.getByRole("region", { name: "Flect update" }),
   ).toBeVisible();

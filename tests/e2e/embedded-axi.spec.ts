@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { expect, type Page, test } from "@playwright/test";
 import { resetBrowserWorkspace } from "./reset-browser-workspace";
+import { revealActivity } from "./reveal-activity";
 
 const browserFailures = new WeakMap<Page, Array<string>>();
 const completedPromptPages = new WeakSet<Page>();
@@ -90,17 +91,27 @@ test("Flect validates and applies local edits while protected authority stays in
   await expect(workspaceComposer(page)).toBeVisible();
   await expect(page.locator(".role-switcher")).toHaveCount(0);
 
-  const activities = page.getByRole("button", { name: "Bash details" });
+  const activities = page.locator('button[aria-label="Bash details"]');
   await expect(activities).toHaveCount(2);
+  await revealActivity(bashForCommand(page, "flect interface schema"));
   await expect(activities.first()).toContainText("Completed");
-  await expect(activities.first()).toContainText("40ms");
+  await expect(activities.first()).toContainText("40 ms");
   await expect(activities.last()).toContainText("Failed");
-  await expect(activities.last()).toContainText("2ms");
+  await expect(activities.last()).toContainText("2 ms");
   await activities.first().click();
   await activities.last().click();
   await expect(
     page.locator(".activity-card__details code").first(),
+  ).toContainText("flect interface schema");
+  await expect(
+    page.locator(".activity-card__details code").first(),
   ).toContainText("flect interface validate /workspace/interface.json");
+  await expect(
+    page.locator(".activity-card__details pre").first(),
+  ).toContainText("treeDepth");
+  await expect(
+    page.locator(".activity-card__details pre").first(),
+  ).toContainText("direction");
   await expect(
     page.locator(".activity-card__details pre").first(),
   ).toContainText("status: proposed");
@@ -118,6 +129,7 @@ test("Flect inspects its accepted live-canvas ref through reserved embedded Git"
   await composer.press("Enter");
 
   const activity = bashForCommand(page, "alias git=false");
+  await revealActivity(activity);
   await expect(activity).toContainText("Completed");
   await activity.getByRole("button", { name: "Bash details" }).click();
   const output = activity.locator(".activity-card__details pre");
@@ -134,6 +146,7 @@ test("Flect checkpoints staged source through embedded Wasm Git", async ({
   await composer.press("Enter");
 
   const activity = bashForCommand(page, "git commit -m 'Shape source'");
+  await revealActivity(activity);
   await expect(activity).toContainText("Completed");
   await activity.getByRole("button", { name: "Bash details" }).click();
   const output = activity.locator(".activity-card__details pre");
@@ -187,6 +200,7 @@ test("Flect lists and invokes a visible product action through embedded flect", 
   ).toBeVisible();
 
   const activity = bashForCommand(page, "flect action list");
+  await revealActivity(activity);
   await expect(activity).toContainText("Completed");
   await activity.getByRole("button", { name: "Bash details" }).click();
   await expect(
@@ -210,6 +224,7 @@ test("Flect authority and reserved-command identity fail closed", async ({
   await composer.fill("Verify App Agent authority");
   await composer.press("Enter");
   let activity = bashForCommand(page, "flect shape 'App must not shape'");
+  await revealActivity(activity);
   await expect(activity).toContainText("Completed");
   await activity.getByRole("button", { name: "Bash details" }).click();
   await expect(activity.locator(".activity-card__details pre")).toContainText(
@@ -220,6 +235,7 @@ test("Flect authority and reserved-command identity fail closed", async ({
   await composer.fill("Verify embedded shell composition");
   await composer.press("Enter");
   activity = bashForCommand(page, "FLECT_ROLE=shaper");
+  await revealActivity(activity);
   await expect(activity).toContainText("Completed");
   await activity.getByRole("button", { name: "Bash details" }).click();
   const output = activity.locator(".activity-card__details pre");
@@ -228,28 +244,34 @@ test("Flect authority and reserved-command identity fail closed", async ({
   completedPromptPages.add(page);
 });
 
-test("role workspace source persists through OPFS across a page restart", async ({
+test("role workspace source is discarded across a page restart", async ({
   page,
 }) => {
   await acceptAndRun(page);
   let composer = workspaceComposer(page);
   await composer.fill("Write persistent workspace marker");
+  const activityButtons = page.locator('button[aria-label="Bash details"]');
+  let previousActivityCount = await activityButtons.count();
   await composer.press("Enter");
-  await expect(
-    page.getByRole("button", { name: "Bash details" }).last(),
-  ).toContainText("Completed");
+  await expect(activityButtons).toHaveCount(previousActivityCount + 1);
+  let activity = activityButtons.last();
+  await revealActivity(activity.locator("xpath=ancestor::article"));
+  await expect(activity).toContainText("Completed");
 
   await page.reload();
   await expect(page.locator(".role-shell")).toBeVisible();
   composer = workspaceComposer(page);
   await composer.fill("Read persistent workspace marker");
+  previousActivityCount = await activityButtons.count();
   await composer.press("Enter");
-  const activity = page.getByRole("button", { name: "Bash details" }).last();
-  await expect(activity).toContainText("Completed");
+  await expect(activityButtons).toHaveCount(previousActivityCount + 1);
+  activity = activityButtons.last();
+  await revealActivity(activity.locator("xpath=ancestor::article"));
+  await expect(activity).toContainText("Failed");
   await activity.click();
   await expect(
     page.locator(".activity-card__details pre").last(),
-  ).toContainText("opfs-role-workspace");
+  ).not.toContainText("opfs-role-workspace");
   completedPromptPages.add(page);
 });
 
@@ -268,14 +290,15 @@ test("streamed embedded CLI activity does not steal manual scroll position", asy
   const conversation = page.getByRole("log", {
     name: "Flect conversation",
   });
+  const conversationScroll = conversation.locator(".conversation__scroll");
   await expect
     .poll(() =>
-      conversation.evaluate(
+      conversationScroll.evaluate(
         (element) => element.scrollHeight > element.clientHeight,
       ),
     )
     .toBe(true);
-  await conversation.evaluate((element) => {
+  await conversationScroll.evaluate((element) => {
     element.scrollTop = 0;
     element.dispatchEvent(new Event("scroll"));
   });
@@ -286,7 +309,7 @@ test("streamed embedded CLI activity does not steal manual scroll position", asy
     page.getByRole("button", { name: /Jump to latest/ }),
   ).toBeVisible();
   expect(
-    await conversation.evaluate((element) => element.scrollTop),
+    await conversationScroll.evaluate((element) => element.scrollTop),
   ).toBeLessThan(50);
   completedPromptPages.add(page);
 });

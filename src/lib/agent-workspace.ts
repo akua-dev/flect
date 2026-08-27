@@ -83,6 +83,14 @@ export interface ProviderAuthUiState {
   readonly event?: AuthLoginEvent;
 }
 
+export type ShaperTurnOutcome =
+  | { readonly kind: "document"; readonly document: InterfaceDocument }
+  | {
+      readonly kind: "app";
+      readonly archive: Uint8Array;
+      readonly name: string;
+    };
+
 export interface AgentWorkspaceShape {
   readonly snapshot: Effect.Effect<AgentWorkspaceSnapshot>;
   readonly changes: Stream.Stream<AgentWorkspaceSnapshot>;
@@ -130,6 +138,17 @@ export interface AgentWorkspaceShape {
     },
     CommandRejected
   >;
+  readonly proposeShaperApp: (
+    source: AgentCommandSource,
+    archive: Uint8Array,
+    name: string,
+  ) => Effect.Effect<
+    {
+      readonly status: "proposed" | "duplicate";
+      readonly name: string;
+    },
+    CommandRejected
+  >;
   readonly submitAppPrompt: (
     operation: OperationContext,
     text: string,
@@ -145,7 +164,7 @@ export interface AgentWorkspaceShape {
     instruction: string,
     document: InterfaceDocument,
     visibleInstruction?: string,
-  ) => Effect.Effect<InterfaceDocument, AgentWorkspaceError>;
+  ) => Effect.Effect<ShaperTurnOutcome, AgentWorkspaceError>;
   readonly cancel: (
     role: InteractiveAgentRole,
   ) => Effect.Effect<void, FlectUnavailableError>;
@@ -329,10 +348,12 @@ const message = (
   content: string,
   source: FlectCommandSource,
   createdAt: number,
+  turnId: string,
 ) =>
   ConversationMessage.make({
     version: 1,
     id: `message-${crypto.randomUUID()}`,
+    turnId,
     role,
     content,
     createdAt,
@@ -381,7 +402,14 @@ export const AgentWorkspaceLive = Layer.effect(
     const shaperProposals = yield* Ref.make<
       ReadonlyMap<
         string,
-        { readonly requestId?: string; readonly document?: InterfaceDocument }
+        {
+          readonly requestId?: string;
+          readonly document?: InterfaceDocument;
+          readonly app?: {
+            readonly archive: Uint8Array;
+            readonly name: string;
+          };
+        }
       >
     >(new Map());
 
@@ -418,6 +446,13 @@ export const AgentWorkspaceLive = Layer.effect(
           }),
         );
       }
+      if (latch.app !== undefined) {
+        return yield* Effect.fail(
+          CommandRejected.make({
+            message: "This Shaper turn already proposed an authored app.",
+          }),
+        );
+      }
       if (latch.document !== undefined) {
         if (Equal.equals(latch.document, document)) {
           return { status: "duplicate", document } as const;
@@ -438,6 +473,60 @@ export const AgentWorkspaceLive = Layer.effect(
       });
       return { status: "proposed", document } as const;
     });
+
+    const proposeShaperApp = Effect.fn("Flect.AgentWorkspace.proposeShaperApp")(
+      function* (
+        source: AgentCommandSource,
+        archive: Uint8Array,
+        name: string,
+      ) {
+        if (source.role !== "shaper") {
+          return yield* Effect.fail(
+            CommandRejected.make({
+              message: "Only Shaper can propose an authored app.",
+            }),
+          );
+        }
+        const current = yield* Ref.get(shaperProposals);
+        const latch = current.get(source.parentOperationId);
+        if (latch === undefined) {
+          return yield* Effect.fail(
+            CommandRejected.make({
+              message: "No Shaper proposal turn is active.",
+            }),
+          );
+        }
+        if (latch.document !== undefined) {
+          return yield* Effect.fail(
+            CommandRejected.make({
+              message: "This Shaper turn already proposed an interface.",
+            }),
+          );
+        }
+        if (latch.app !== undefined) {
+          const equalBytes =
+            latch.app.archive.byteLength === archive.byteLength &&
+            latch.app.archive.every((byte, index) => byte === archive[index]);
+          if (equalBytes) {
+            return { status: "duplicate", name } as const;
+          }
+          return yield* Effect.fail(
+            CommandRejected.make({
+              message: "This Shaper turn already proposed another app.",
+            }),
+          );
+        }
+        yield* Ref.update(shaperProposals, (proposals) => {
+          const next = new Map(proposals);
+          next.set(source.parentOperationId, {
+            requestId: source.requestId,
+            app: { archive, name },
+          });
+          return next;
+        });
+        return { status: "proposed", name } as const;
+      },
+    );
 
     const updateRole = (
       role: InteractiveAgentRole,
@@ -683,6 +772,7 @@ export const AgentWorkspaceLive = Layer.effect(
               id: existing?.id ?? `activity-${crypto.randomUUID()}`,
               callId: event.callId,
               operationId: operation.operationId,
+              turnId: operation.operationId,
               role,
               toolName: event.toolName,
               phase: "running",
@@ -701,6 +791,7 @@ export const AgentWorkspaceLive = Layer.effect(
                   id: `activity-${crypto.randomUUID()}`,
                   callId: event.callId,
                   operationId: operation.operationId,
+                  turnId: operation.operationId,
                   role,
                   toolName: event.toolName,
                   phase: "running",
@@ -723,6 +814,7 @@ export const AgentWorkspaceLive = Layer.effect(
                   id: `activity-${crypto.randomUUID()}`,
                   callId: event.callId,
                   operationId: operation.operationId,
+                  turnId: operation.operationId,
                   role,
                   toolName: event.toolName,
                   phase: "running",
@@ -805,6 +897,7 @@ export const AgentWorkspaceLive = Layer.effect(
         id: `activity-${crypto.randomUUID()}`,
         callId: event.failureId,
         operationId: operation.operationId,
+        turnId: operation.operationId,
         role,
         toolName: "Trusted Pi extension",
         phase: "failed",
@@ -862,6 +955,7 @@ export const AgentWorkspaceLive = Layer.effect(
               id: `activity-${crypto.randomUUID()}`,
               callId: event.requestId,
               operationId: operation.operationId,
+              turnId: operation.operationId,
               role,
               toolName: "bash",
               phase: "running",
@@ -957,6 +1051,7 @@ export const AgentWorkspaceLive = Layer.effect(
         id: `activity-${crypto.randomUUID()}`,
         callId: `proposal-validation-${event.attempt}-${crypto.randomUUID()}`,
         operationId: operation.operationId,
+        turnId: operation.operationId,
         role: "shaper",
         toolName: "flect",
         phase: "failed",
@@ -1284,6 +1379,7 @@ export const AgentWorkspaceLive = Layer.effect(
       prompt: string,
       source: FlectCommandSource,
       includeAssistant: boolean,
+      turnId: string,
     ) {
       const now = yield* Clock.currentTimeMillis;
       const assistantId = `message-${crypto.randomUUID()}`;
@@ -1295,13 +1391,14 @@ export const AgentWorkspaceLive = Layer.effect(
         ) {
           return [false, current];
         }
-        const user = message("user", prompt, source, now);
+        const user = message("user", prompt, source, now, turnId);
         const nextMessages = includeAssistant
           ? [
               user,
               ConversationMessage.make({
                 version: 1,
                 id: assistantId,
+                turnId,
                 role: "assistant",
                 content: "",
                 createdAt: now,
@@ -1356,6 +1453,7 @@ export const AgentWorkspaceLive = Layer.effect(
           prompt,
           operation.source,
           true,
+          operation.operationId,
         );
         yield* appendJournal(operation, {
           category: "turn",
@@ -1477,6 +1575,7 @@ export const AgentWorkspaceLive = Layer.effect(
         prompt,
         operation.source,
         true,
+        operation.operationId,
       );
       yield* appendJournal(operation, {
         category: "turn",
@@ -1616,6 +1715,7 @@ export const AgentWorkspaceLive = Layer.effect(
         visibleInstruction?.trim() || prompt,
         operation.source,
         false,
+        operation.operationId,
       );
       yield* appendJournal(operation, {
         category: "turn",
@@ -1657,19 +1757,32 @@ export const AgentWorkspaceLive = Layer.effect(
               error._tag === "SessionBusy" ? Effect.void : releaseSession(),
             ),
           );
+        const latchedOutcome = () =>
+          Ref.get(shaperProposals).pipe(
+            Effect.map((proposals): ShaperTurnOutcome | undefined => {
+              const latch = proposals.get(operation.operationId);
+              if (latch?.app !== undefined) {
+                return { kind: "app", ...latch.app };
+              }
+              if (latch?.document !== undefined) {
+                return { kind: "document", document: latch.document };
+              }
+              return undefined;
+            }),
+          );
         yield* runShapeAttempt(prompt);
-        let latched = (yield* Ref.get(shaperProposals)).get(
-          operation.operationId,
-        )?.document;
+        let latched = yield* latchedOutcome();
         if (latched === undefined) {
           yield* runShapeAttempt(
-            "No valid proposal reached Flect. Inspect the prior Bash output, correct /workspace/interface.json, validate it, then run flect interface propose /workspace/interface.json as your final action.",
+            "No valid proposal reached Flect. Inspect the prior Bash output. For a schema interface, correct /workspace/interface.json, validate it, then run flect interface propose /workspace/interface.json as your final action. For an authored web app, correct the source under /workspace/project, then run flect app propose /workspace/project as your final action.",
           );
-          latched = (yield* Ref.get(shaperProposals)).get(
-            operation.operationId,
-          )?.document;
+          latched = yield* latchedOutcome();
         }
         const candidate = latched ?? (yield* Effect.fail(unavailable()));
+        const candidateName =
+          candidate.kind === "document"
+            ? candidate.document.name
+            : candidate.name;
         const now = yield* Clock.currentTimeMillis;
         yield* updateRole("shaper", (current) =>
           RoleConversationSnapshot.make({
@@ -1678,9 +1791,10 @@ export const AgentWorkspaceLive = Layer.effect(
             messages: boundedMessages(current.messages, [
               message(
                 "assistant",
-                `Change complete: ${candidate.name}`,
+                `Change complete: ${candidateName}`,
                 operation.source,
                 now,
+                operation.operationId,
               ),
             ]),
           }),
@@ -1836,6 +1950,7 @@ export const AgentWorkspaceLive = Layer.effect(
       setModelFavorite,
       setExternalExtensions,
       proposeShaperInterface,
+      proposeShaperApp,
       submitAppPrompt,
       submitPreviewPrompt,
       submitShaperInstruction,

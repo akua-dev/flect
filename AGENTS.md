@@ -9,6 +9,8 @@ Before changing Flect:
   `AGENTS.md` covering the files in scope.
 - Read `.agents/skills/effect-ts/SKILL.md` and the relevant references it
   routes to before changing application architecture or Effect code.
+- Read `.agents/skills/flect-ui-state/SKILL.md` before adding or changing
+  React components, hooks, or any Effect-to-React state wiring.
 - Run `bun run prepare` if `.repos/effect` is missing, then use that pinned
   checkout as the primary Effect API reference.
 - Inspect the worktree and preserve unrelated or unfinished work.
@@ -149,6 +151,11 @@ Repository-wide constraints:
 - Keep platform behavior behind Effect services and Layers. The browser,
   Tauri host, and macOS Swift code are adapters to shared application
   capabilities, not alternate homes for product workflows or interface state.
+- Every user-triggered native operation, including window chrome such as
+  dragging or resizing, must enter through a named Effect capability and its
+  provided runtime. React components and page scripts must not import or call
+  `@tauri-apps/api/*` directly; only the named platform Layer may adapt that
+  API. Tests provide that capability through a test Layer.
 - Test observable behavior through exported contracts, HTTP requests, and the
   rendered interface. Do not assert that source files contain selected text.
 - Treat documentation as guidance, not proof that a boundary or lifecycle is

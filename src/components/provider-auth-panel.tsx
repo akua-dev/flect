@@ -1,3 +1,5 @@
+import { Effect } from "effect";
+import { useState } from "react";
 import {
   type AuthLoginEvent,
   AuthLoginReference,
@@ -5,6 +7,14 @@ import {
   AuthSelectionReply,
   type ProviderAuthSummary,
 } from "../../shared/contracts";
+import { Button } from "./ui/button";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemTitle,
+} from "./ui/item";
 
 export interface ProviderAuthPanelProps {
   readonly providers: ReadonlyArray<ProviderAuthSummary>;
@@ -52,36 +62,38 @@ function AuthStep({
     case "auth_url":
       return (
         <div className="provider-auth__step">
-          <a href={event.url} rel="noreferrer noopener" target="_blank">
-            Open provider sign-in
-          </a>
-          <button
+          <Button asChild variant="default">
+            <a href={event.url} rel="noreferrer noopener" target="_blank">
+              Open provider sign-in
+            </a>
+          </Button>
+          <Button
             disabled={disabled}
             onClick={() => onCopy(event.url, "Sign-in link")}
-            type="button"
           >
             Copy link
-          </button>
+          </Button>
         </div>
       );
     case "auth_device_code":
       return (
         <div className="provider-auth__step">
           <code>{event.userCode}</code>
-          <button
+          <Button
             disabled={disabled}
             onClick={() => onCopy(event.userCode, "Device code")}
-            type="button"
           >
             Copy code
-          </button>
-          <a
-            href={event.verificationUrl}
-            rel="noreferrer noopener"
-            target="_blank"
-          >
-            Open verification page
-          </a>
+          </Button>
+          <Button asChild variant="default">
+            <a
+              href={event.verificationUrl}
+              rel="noreferrer noopener"
+              target="_blank"
+            >
+              Open verification page
+            </a>
+          </Button>
         </div>
       );
     case "auth_selection_required":
@@ -89,7 +101,7 @@ function AuthStep({
         <div className="provider-auth__step">
           <p>{event.message}</p>
           {event.options.map((option) => (
-            <button
+            <Button
               disabled={disabled}
               key={option.id}
               onClick={() =>
@@ -101,10 +113,9 @@ function AuthStep({
                   }),
                 )
               }
-              type="button"
             >
               {option.label}
-            </button>
+            </Button>
           ))}
         </div>
       );
@@ -112,16 +123,17 @@ function AuthStep({
       return (
         <div className="provider-auth__step">
           <p>{event.label}</p>
-          <a href={event.url} rel="noreferrer noopener" target="_blank">
-            Continue securely
-          </a>
-          <button
+          <Button asChild variant="default">
+            <a href={event.url} rel="noreferrer noopener" target="_blank">
+              Continue securely
+            </a>
+          </Button>
+          <Button
             disabled={disabled}
             onClick={() => onCopy(event.url, "Secure-entry link")}
-            type="button"
           >
             Copy secure link
-          </button>
+          </Button>
         </div>
       );
     case "auth_connected":
@@ -137,14 +149,11 @@ function AuthStep({
         <div className="provider-auth__step">
           <p>{event.message}</p>
           {event.links?.map((link) => (
-            <a
-              href={link.url}
-              key={link.url}
-              rel="noreferrer noopener"
-              target="_blank"
-            >
-              {link.label ?? "Open provider information"}
-            </a>
+            <Button asChild key={link.url} variant="ghost">
+              <a href={link.url} rel="noreferrer noopener" target="_blank">
+                {link.label ?? "Open provider information"}
+              </a>
+            </Button>
           ))}
         </div>
       );
@@ -218,41 +227,46 @@ export function ProviderAuthPanel({
           <strong>Pi providers</strong>
           <small>Credentials stay in Pi’s local runtime.</small>
         </div>
-        <button
+        <Button
           aria-label="Refresh providers"
           disabled={disabled}
           onClick={() => void onRefresh()}
-          type="button"
+          variant="ghost"
         >
           Refresh
-        </button>
+        </Button>
       </header>
 
       <div className="provider-auth__providers">
         {visibleProviders.map((provider) => (
-          <div className="provider-auth__provider" key={provider.id}>
-            <span>
-              <strong>{provider.name}</strong>
-              <small>
+          <Item
+            className="provider-auth__provider"
+            key={provider.id}
+            size="sm"
+            variant="outline"
+          >
+            <ItemContent>
+              <ItemTitle>{provider.name}</ItemTitle>
+              <ItemDescription>
                 {provider.status === "connected"
                   ? (provider.sourceLabel ?? "Connected through Pi")
                   : provider.status === "needs-attention"
                     ? "Needs attention"
                     : "Not connected"}
-              </small>
-            </span>
-            <div className="provider-auth__actions">
+              </ItemDescription>
+            </ItemContent>
+            <ItemActions className="provider-auth__actions">
               {provider.status === "connected" ? (
-                <button
+                <Button
                   disabled={disabled || isActive(authEvent)}
                   onClick={() => setLogoutConfirmation(provider.id)}
-                  type="button"
+                  variant="ghost"
                 >
                   Disconnect
-                </button>
+                </Button>
               ) : (
                 provider.methods.map((method) => (
-                  <button
+                  <Button
                     aria-label={method.label}
                     disabled={disabled || isActive(authEvent)}
                     key={method.type}
@@ -264,48 +278,50 @@ export function ProviderAuthPanel({
                         }),
                       )
                     }
-                    type="button"
+                    variant={
+                      provider === recommendedProvider ? "default" : "secondary"
+                    }
                   >
                     {method.label}
-                  </button>
+                  </Button>
                 ))
               )}
               {logoutConfirmation === provider.id && (
                 <div className="provider-auth__confirmation">
                   <small>Active private sessions will restart.</small>
-                  <button
+                  <Button
                     onClick={() => setLogoutConfirmation(undefined)}
-                    type="button"
+                    variant="ghost"
                   >
                     Cancel
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => {
                       setLogoutConfirmation(undefined);
                       void onLogout(provider.id);
                     }}
-                    type="button"
+                    variant="destructive"
                   >
                     Confirm disconnect
-                  </button>
+                  </Button>
                 </div>
               )}
-            </div>
-          </div>
+            </ItemActions>
+          </Item>
         ))}
         {providers.length === 0 && <p>No Pi providers are available.</p>}
         {compact && providers.length > 1 && (
-          <button
+          <Button
             aria-expanded={showAllProviders}
             className="provider-auth__more"
             disabled={disabled || isActive(authEvent)}
             onClick={() => setShowAllProviders((current) => !current)}
-            type="button"
+            variant="ghost"
           >
             {showAllProviders
               ? "Show recommended provider"
               : `Other providers (${hiddenProviderCount})`}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -318,17 +334,17 @@ export function ProviderAuthPanel({
             onReply={onReply}
           />
           {isActive(authEvent) && (
-            <button
+            <Button
               disabled={disabled}
               onClick={() =>
                 void onCancel(
                   AuthLoginReference.make({ loginId: authEvent.loginId }),
                 )
               }
-              type="button"
+              variant="ghost"
             >
               Cancel login
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -340,6 +356,3 @@ export function ProviderAuthPanel({
     </section>
   );
 }
-
-import { Effect } from "effect";
-import { useState } from "react";

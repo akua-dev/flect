@@ -76,46 +76,135 @@ This fixture is reproducible.[^1]
 
 <script>window.__flectUnsafeMarkdown = true</script>`;
 
-const shapedDocument = (_current: InterfaceDocument): InterfaceDocument =>
-  InterfaceDocumentSchema.make({
-    version: 2,
-    name: "Focused project overview",
-    root: {
-      id: "root",
-      type: "stack",
-      direction: "column",
-      gap: "lg",
-      children: [
-        {
-          id: "headline",
-          type: "text",
-          text: "Focused project overview",
-          style: "headline",
-        },
-        {
-          id: "prompt",
-          type: "prompt",
-          placeholder: "Ask Flect to shape this workspace",
-        },
-        {
-          id: "secondary-actions",
+const shapedDocument = (
+  _current: InterfaceDocument,
+  instruction = "",
+): InterfaceDocument =>
+  instruction.includes("Northstar AI meeting-notes page")
+    ? InterfaceDocumentSchema.make({
+        version: 2,
+        name: "Northstar AI meeting notes",
+        root: {
+          id: "northstar-root",
           type: "stack",
-          direction: "row",
-          gap: "sm",
+          direction: "column",
+          gap: "lg",
           children: [
             {
-              id: "shape-interface",
-              type: "button",
-              label: "Shape interface",
-              action: "shape",
+              id: "northstar-nav",
+              type: "text",
+              text: "Northstar · Product · Customers · Pricing",
+              style: "body",
+            },
+            {
+              id: "northstar-hero",
+              type: "text",
+              text: "Meetings, remembered. Work, unblocked.",
+              style: "headline",
+            },
+            {
+              id: "northstar-copy",
+              type: "text",
+              text: "AI meeting notes that turn every conversation into clear decisions, owners, and next steps.",
+              style: "body",
+            },
+            {
+              id: "northstar-actions",
+              type: "stack",
+              direction: "row",
+              gap: "sm",
+              children: [
+                {
+                  id: "northstar-start",
+                  type: "button",
+                  label: "Start free",
+                  action: "shape",
+                },
+                {
+                  id: "northstar-demo",
+                  type: "button",
+                  label: "Watch demo",
+                  action: "shape",
+                },
+              ],
+            },
+            {
+              id: "northstar-proof",
+              type: "text",
+              text: "Trusted by Linear · Vercel · Loom · Notion",
+              style: "body",
+            },
+            {
+              id: "northstar-features",
+              type: "text",
+              text: "Live capture · Instant summaries · Action tracking",
+              style: "body",
             },
           ],
         },
-      ],
-    },
-  });
+      })
+    : InterfaceDocumentSchema.make({
+        version: 2,
+        name: "Focused project overview",
+        root: {
+          id: "root",
+          type: "stack",
+          direction: "column",
+          gap: "lg",
+          children: [
+            {
+              id: "headline",
+              type: "text",
+              text: "Focused project overview",
+              style: "headline",
+            },
+            {
+              id: "prompt",
+              type: "prompt",
+              placeholder: "Ask Flect to shape this workspace",
+            },
+            {
+              id: "secondary-actions",
+              type: "stack",
+              direction: "row",
+              gap: "sm",
+              children: [
+                {
+                  id: "shape-interface",
+                  type: "button",
+                  label: "Shape interface",
+                  action: "shape",
+                },
+              ],
+            },
+          ],
+        },
+      });
 
 const shellQuote = (value: string) => `'${value.replaceAll("'", `'"'"'`)}'`;
+
+const authoredLandingHtml = [
+  "<!doctype html>",
+  '<html lang="en"><head><meta charset="utf-8">',
+  "<title>Driftwood Coffee</title>",
+  '<link rel="stylesheet" href="styles.css">',
+  "</head><body>",
+  '<header class="hero"><h1>Driftwood Coffee</h1>',
+  "<p>Slow mornings, harbor views, daily-roasted beans.</p>",
+  '<a class="cta" href="#menu">See the menu</a></header>',
+  '<main id="menu"><h2>Menu highlights</h2>',
+  "<ul><li>Signature Drift Latte</li><li>Cold Brew Tide</li></ul></main>",
+  "<footer>Driftwood Coffee - 123 Harbor Lane</footer>",
+  "</body></html>",
+].join("");
+
+const authoredLandingCss = [
+  "body{margin:0;font-family:Georgia,serif;background:#faf6f0;color:#2d2118}",
+  ".hero{padding:96px 24px;text-align:center;background:#2d2118;color:#faf6f0}",
+  ".cta{display:inline-block;margin-top:16px;padding:12px 28px;background:#c98d4b;color:#fff;border-radius:999px;text-decoration:none}",
+  "main{max-width:640px;margin:0 auto;padding:48px 24px}",
+  "footer{padding:24px;text-align:center;color:#7a6a58}",
+].join("\n");
 
 const matchesUserRequest = (text: string, request: string) =>
   text === request ||
@@ -380,7 +469,7 @@ export const FlectTestRuntimeLive = Layer.effect(
           : Stream.unwrap(
               Effect.gen(function* () {
                 const document = yield* validateInterfaceDocument(input);
-                const candidate = shapedDocument(document);
+                const candidate = shapedDocument(document, instruction);
                 const requestId = `shell-${crypto.randomUUID()}`;
                 const deniedRequestId = `shell-${crypto.randomUUID()}`;
                 const startedAt = Date.now();
@@ -393,6 +482,7 @@ export const FlectTestRuntimeLive = Layer.effect(
                   return next;
                 });
                 const proposalCommands = [
+                  "flect interface schema",
                   `printf %s ${shellQuote(JSON.stringify(candidate))} > /workspace/interface.json`,
                   "flect interface validate /workspace/interface.json",
                   "flect interface propose /workspace/interface.json",
@@ -450,22 +540,33 @@ export const FlectTestRuntimeLive = Layer.effect(
                             ].join("; ")
                           : matchesUserRequest(
                                 instruction,
-                                "Commit Shaper source",
+                                "Make a landing page website for Driftwood Coffee.",
                               )
                             ? [
-                                "printf 'export const shaped = true;\\n' > /workspace/shaped.ts",
-                                "git add -A",
-                                "git commit -m 'Shape source'",
-                                "git branch --show-current",
-                                "git rev-parse HEAD",
-                                "printf 'export const shaped = false;\\n' > /workspace/shaped.ts",
-                                "git status --short | grep shaped.ts",
-                                "git restore .",
-                                "grep 'shaped = true' /workspace/shaped.ts",
-                                'test -z "$(git status --short)"',
-                                ...proposalCommands,
+                                "mkdir -p /workspace/project",
+                                `printf %s ${shellQuote(authoredLandingHtml)} > /workspace/project/index.html`,
+                                `printf %s ${shellQuote(authoredLandingCss)} > /workspace/project/styles.css`,
+                                "flect app validate /workspace/project --name 'Driftwood Coffee'",
+                                "flect app propose /workspace/project --name 'Driftwood Coffee'",
                               ].join(" && ")
-                            : proposalCommands.join(" && ");
+                            : matchesUserRequest(
+                                  instruction,
+                                  "Commit Shaper source",
+                                )
+                              ? [
+                                  "printf 'export const shaped = true;\\n' > /workspace/shaped.ts",
+                                  "git add -A",
+                                  "git commit -m 'Shape source'",
+                                  "git branch --show-current",
+                                  "git rev-parse HEAD",
+                                  "printf 'export const shaped = false;\\n' > /workspace/shaped.ts",
+                                  "git status --short | grep shaped.ts",
+                                  "git restore .",
+                                  "grep 'shaped = true' /workspace/shaped.ts",
+                                  'test -z "$(git status --short)"',
+                                  ...proposalCommands,
+                                ].join(" && ")
+                              : proposalCommands.join(" && ");
                 return Stream.make(
                   ToolExecutionStarted.make({
                     type: "tool_execution_started",

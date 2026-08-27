@@ -1,5 +1,5 @@
 import type { Fetcher } from "@riftydev/npm-client";
-import { MemoryVfs, OpfsVfs } from "@riftydev/vfs";
+import { MemoryVfs } from "@riftydev/vfs";
 import {
   Effect,
   Layer,
@@ -28,7 +28,10 @@ import { BunCommand } from "./bun-command";
 import { makeShellBunCommandLiveLayer } from "./bun-command-live";
 import { makeFlectCommand } from "./flect-command";
 import { makeGitCommand } from "./git-command";
-import { makePersistentWorkspaceFs } from "./persistent-workspace-fs";
+import {
+  makePersistentWorkspaceFs,
+  snapshotWorkspaceFiles,
+} from "./persistent-workspace-fs";
 import {
   type FlectAgentRole,
   type SandboxedAgentContext,
@@ -224,6 +227,14 @@ const makeSandboxedShellWorkspace = Effect.fn(
     bus,
     context: () => agentContext,
     readFile: (path) => fileSystem.readFileBuffer(path),
+    readTree: async (directory) => {
+      const prefix = `${directory.replace(/\/$/, "").slice(`${WORKSPACE_ROOT}/`.length)}/`;
+      return (await snapshotWorkspaceFiles(fileSystem)).flatMap((file) =>
+        file.path.startsWith(prefix)
+          ? [{ path: file.path.slice(prefix.length), contents: file.contents }]
+          : [],
+      );
+    },
   });
   const gitCommand = makeGitCommand({
     role: options.role,
@@ -535,16 +546,10 @@ export const makeLiveRoleSandboxedShellLayer = (options: {
   Layer.effect(
     SandboxedShell,
     Effect.gen(function* () {
-      const vfs = yield* Effect.promise(async () => {
-        if (OpfsVfs.isSupported()) {
-          try {
-            const opfs = new OpfsVfs();
-            await opfs.init();
-            return opfs;
-          } catch {}
-        }
-        return new MemoryVfs();
-      });
+      // Role workspaces are deliberately disposable. They must not share the
+      // canonical browser persistence surface used by accepted interface and
+      // repository state.
+      const vfs = new MemoryVfs();
       const workspaceId = options.workspaceId ?? "default";
       const makeFs = (
         workspace: SandboxedShellWorkspace,

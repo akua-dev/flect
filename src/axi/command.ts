@@ -107,6 +107,12 @@ export const FLECT_COMMAND_METADATA: ReadonlyArray<FlectCommandMetadata> = [
     audiences: ["shaper"],
   },
   {
+    usage: "flect app validate|propose <sandbox-dir> [--name <text>]",
+    summary:
+      "Package authored web app source from Shaper's sandbox and propose it as the running canvas.",
+    audiences: ["shaper"],
+  },
+  {
     usage: "flect proposal accept|reject",
     summary:
       "Resolve the current validated preview as a protected user decision.",
@@ -271,6 +277,16 @@ export type AxiReadCommand =
   | { readonly kind: "interface-schema" }
   | { readonly kind: "interface-validate"; readonly path: string }
   | { readonly kind: "interface-propose"; readonly path: string }
+  | {
+      readonly kind: "app-validate";
+      readonly path: string;
+      readonly name?: string;
+    }
+  | {
+      readonly kind: "app-propose";
+      readonly path: string;
+      readonly name?: string;
+    }
   | { readonly kind: "revision-list" }
   | { readonly kind: "revision-rollback"; readonly revisionId?: string }
   | { readonly kind: "repository-status" }
@@ -448,7 +464,39 @@ const parseCommand = Effect.fn("Flect.Axi.parseCommand")(function* (
     return yield* unknownFlag(noun);
   }
   switch (noun) {
-    case "app":
+    case "app": {
+      if (verb === undefined) {
+        return { kind: "app" };
+      }
+      if (verb === "validate" || verb === "propose") {
+        if (value === undefined || value.startsWith("-")) {
+          return yield* failed(
+            "missing-argument",
+            `app ${verb} requires a sandbox directory.`,
+          );
+        }
+        let name: string | undefined;
+        if (rest.length > 0) {
+          if (rest[0] !== "--name" || rest[1] === undefined) {
+            return yield* rest[0]?.startsWith("-") === true &&
+            rest[0] !== "--name"
+              ? unknownFlag(rest[0] ?? "")
+              : failed(
+                  "invalid-argument",
+                  `Usage: flect app ${verb} <sandbox-dir> [--name <text>].`,
+                );
+          }
+          name = rest[1];
+          yield* requireNoExtra(rest.slice(2));
+        }
+        return {
+          kind: verb === "validate" ? "app-validate" : "app-propose",
+          path: value,
+          ...(name === undefined ? {} : { name }),
+        };
+      }
+      return yield* failed("unknown-command", `Unknown app command: ${verb}`);
+    }
     case "status":
     case "mcp":
       yield* requireNoExtra(args.slice(1));

@@ -21,12 +21,23 @@ export type AgentGatewayOperation =
   | { readonly type: "inspect" }
   | { readonly type: "logs" }
   | { readonly type: "propose-interface"; readonly document: InterfaceDocument }
+  | {
+      readonly type: "propose-app";
+      readonly archive: Uint8Array;
+      readonly name: string;
+    }
   | { readonly type: "command"; readonly command: FlectCommand };
 
 export class AgentGatewayResult extends Schema.Class<AgentGatewayResult>(
   "AgentGatewayResult",
 )({
-  type: Schema.Literals(["inspect", "logs", "propose-interface", "command"]),
+  type: Schema.Literals([
+    "inspect",
+    "logs",
+    "propose-interface",
+    "propose-app",
+    "command",
+  ]),
   value: Schema.Unknown,
 }) {}
 

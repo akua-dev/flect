@@ -1,4 +1,18 @@
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  CircleIcon,
+  ClockIcon,
+  TerminalIcon,
+  WrenchIcon,
+  XIcon,
+} from "lucide-react";
 import type { ToolActivity } from "../../shared/control";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "./ui/collapsible";
 
 const label = (toolName: string) =>
   toolName === "bash" ? "Bash" : toolName === "flect" ? "Flect" : toolName;
@@ -11,6 +25,28 @@ const phaseLabel = (phase: ToolActivity["phase"]) =>
       : phase === "failed"
         ? "Failed"
         : "Queued";
+
+const actionLabel = (activity: ToolActivity) => {
+  if (activity.toolName !== "bash") return label(activity.toolName);
+  return activity.phase === "running"
+    ? "Running command"
+    : activity.phase === "succeeded"
+      ? "Ran command"
+      : activity.phase === "failed"
+        ? "Command failed"
+        : "Command queued";
+};
+
+const PhaseIcon = ({ phase }: { readonly phase: ToolActivity["phase"] }) =>
+  phase === "running" ? (
+    <ClockIcon />
+  ) : phase === "succeeded" ? (
+    <CheckIcon />
+  ) : phase === "failed" ? (
+    <XIcon />
+  ) : (
+    <CircleIcon />
+  );
 
 export function ActivityCard({
   activity,
@@ -28,25 +64,27 @@ export function ActivityCard({
 
   return (
     <article className={`activity-card activity-card--${activity.phase}`}>
-      <details className="activity-card__disclosure">
-        {/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
-        <summary
+      <Collapsible className="activity-card__disclosure">
+        <CollapsibleTrigger
           aria-label={`${label(activity.toolName)} details`}
           className="activity-card__summary"
-          role="button"
         >
-          <span aria-hidden="true" className="activity-card__dot" />
-          <strong>{label(activity.toolName)}</strong>
-          <span>{phaseLabel(activity.phase)}</span>
+          <span className="activity-card__tool" aria-hidden="true">
+            {activity.toolName === "bash" ? <TerminalIcon /> : <WrenchIcon />}
+          </span>
+          <strong>{actionLabel(activity)}</strong>
+          {activity.command !== undefined && <code>{activity.command}</code>}
+          <span className="activity-card__phase">
+            <PhaseIcon phase={activity.phase} />
+            <span className="sr-only">{phaseLabel(activity.phase)}</span>
+          </span>
           {activity.durationMs !== undefined && (
-            <time>{`${activity.durationMs}ms`}</time>
+            <time>{`${activity.durationMs} ms`}</time>
           )}
-          {!detail && activity.resultSummary !== undefined && (
-            <small>{activity.resultSummary}</small>
-          )}
-        </summary>
+          <ChevronDownIcon className="activity-card__chevron" />
+        </CollapsibleTrigger>
         {detail && (
-          <div className="activity-card__details">
+          <CollapsibleContent className="activity-card__details">
             {activity.command !== undefined && (
               <section>
                 <span>Command</span>
@@ -74,6 +112,13 @@ export function ActivityCard({
               </section>
             )}
             <footer>
+              <span>{phaseLabel(activity.phase)}</span>
+              {activity.durationMs !== undefined && (
+                <time>{`${activity.durationMs}ms`}</time>
+              )}
+              {activity.resultSummary !== undefined && (
+                <small>{activity.resultSummary}</small>
+              )}
               {activity.exitCode !== undefined && (
                 <span>{`Exit ${activity.exitCode}`}</span>
               )}
@@ -84,9 +129,9 @@ export function ActivityCard({
                 </a>
               )}
             </footer>
-          </div>
+          </CollapsibleContent>
         )}
-      </details>
+      </Collapsible>
       {activity.phase === "failed" && onFixInShape !== undefined && (
         <button
           className="activity-card__fix"

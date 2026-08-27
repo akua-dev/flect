@@ -118,7 +118,9 @@ const workspace: AgentWorkspaceController = {
     messages: [{ id: "s", role: "assistant", content: "Shaper only" }],
     lastPrompt: "",
     error: undefined,
-    shape: vi.fn(() => Promise.resolve(document)),
+    shape: vi.fn(() =>
+      Promise.resolve({ kind: "document" as const, document }),
+    ),
     cancel: vi.fn(() => Promise.resolve()),
   },
   diagnoseRecovery: vi.fn(() =>
@@ -380,7 +382,9 @@ describe("AgentRail", () => {
       />,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Connect an agent");
+    expect(
+      screen.getByRole("region", { name: "Connect an agent" }),
+    ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Try again" }),
     ).not.toBeInTheDocument();
@@ -486,9 +490,7 @@ describe("AgentRail", () => {
       />,
     );
 
-    expect(
-      screen.getByText("Custom interface state is bypassed."),
-    ).toBeVisible();
+    expect(screen.getByText("Your interface is protected.")).toBeVisible();
     expect(
       screen.getByRole("textbox", { name: "Message Flect" }),
     ).toBeDisabled();

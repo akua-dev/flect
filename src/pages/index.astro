@@ -20,13 +20,12 @@ import FlectWorkspaceIsland from "../workspace-entry";
   <body>
     <div class="activation-shell" id="flect-static-shell">
       <header class="activation-shell__bar" data-tauri-drag-region>
-        <a class="activation-shell__wordmark" href="/">Flect</a>
       </header>
       <main class="activation-shell__main">
-        <h1>What do you want to make?</h1>
+        <h1>Describe the app you want to make.</h1>
         <p>
-          Build, use, and refine a real product in one conversation. The full
-          local workspace opens only when you need it.
+          Start with the outcome you need. Flect turns it into a live interface
+          that you can continue using and changing here.
         </p>
         <form class="activation-shell__composer" data-flect-starter>
           <label class="sr-only" for="flect-starter-prompt">Message Flect</label>
@@ -34,16 +33,37 @@ import FlectWorkspaceIsland from "../workspace-entry";
             data-flect-activate
             id="flect-starter-prompt"
             name="prompt"
-            placeholder="Describe what you want to make or change…"
+            placeholder="For example: a calm project planner for this week"
             required
             rows="3"></textarea>
-          <button data-flect-activate type="submit">Send to Flect</button>
+          <button data-flect-activate type="submit">Create with Flect</button>
+          <div aria-label="Starter ideas" class="activation-shell__examples">
+            <button
+              data-flect-example="A calm project planner for this week"
+              type="button"
+            >
+              A calm project planner for this week
+            </button>
+            <button
+              data-flect-example="A simple place to track my reading"
+              type="button"
+            >
+              A simple place to track my reading
+            </button>
+            <button
+              data-flect-example="A clear view of today's deliveries"
+              type="button"
+            >
+              A clear view of today's deliveries
+            </button>
+          </div>
           <p
             aria-live="polite"
             class="activation-shell__status"
             id="flect-activation-status"
           >
-            Ready when you are. Press ⌘K or Ctrl+K from anywhere.
+            Describe the outcome, not the implementation. You can refine it
+            after the first result.
           </p>
         </form>
       </main>

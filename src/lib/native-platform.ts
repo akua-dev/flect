@@ -1,11 +1,12 @@
-import { Context, Effect, Layer, Schema } from "effect";
+import { Context, Effect, Layer } from "effect";
 import {
-  NativeAccentColor,
+  type NativeAccentColor,
   NativePlatformCapabilityFailure,
 } from "../../shared/native-platform";
-import { TauriNativeHost } from "./tauri-native-host";
 
-const unavailable = (reason: NativePlatformCapabilityFailure["reason"]) =>
+export const nativePlatformUnavailable = (
+  reason: NativePlatformCapabilityFailure["reason"],
+) =>
   NativePlatformCapabilityFailure.make({
     reason,
     message: "The native platform capability is unavailable.",
@@ -16,6 +17,10 @@ export interface NativePlatformShape {
     NativeAccentColor,
     NativePlatformCapabilityFailure
   >;
+  readonly startWindowDrag: Effect.Effect<
+    void,
+    NativePlatformCapabilityFailure
+  >;
 }
 
 export class NativePlatform extends Context.Service<
@@ -24,26 +29,6 @@ export class NativePlatform extends Context.Service<
 >()("flect/NativePlatform") {}
 
 export const NativePlatformUnavailableLive = Layer.succeed(NativePlatform)({
-  systemAccentColor: Effect.fail(unavailable("unavailable")),
+  systemAccentColor: Effect.fail(nativePlatformUnavailable("unavailable")),
+  startWindowDrag: Effect.fail(nativePlatformUnavailable("unavailable")),
 });
-
-export const makeTauriNativePlatformLayer = () =>
-  Layer.effect(
-    NativePlatform,
-    Effect.gen(function* () {
-      const host = yield* TauriNativeHost;
-      return {
-        systemAccentColor: host.invoke("native_system_accent_color").pipe(
-          Effect.mapError(() => unavailable("unavailable")),
-          Effect.flatMap((result) =>
-            Schema.decodeUnknownEffect(NativeAccentColor, {
-              errors: "all",
-              onExcessProperty: "error",
-            })(result).pipe(
-              Effect.mapError(() => unavailable("invalid-result")),
-            ),
-          ),
-        ),
-      };
-    }),
-  );
