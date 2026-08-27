@@ -532,6 +532,19 @@ const documentHasNode = (document: InterfaceDocument, nodeId: string) => {
 
 const commandRejected = (message: string) => CommandRejected.make({ message });
 
+const boundedFailureReason = (error: unknown): string => {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof error.message === "string" &&
+    error.message.trim().length > 0
+  ) {
+    return error.message.trim().slice(0, 300);
+  }
+  return "The change could not be applied safely.";
+};
+
 const modeFromWorkbench = (
   workbench: WorkbenchSnapshot,
   shaping: ShapingSnapshot,
@@ -2440,17 +2453,49 @@ export const FlectWorkspaceControllerLive = Layer.effect(
             : { lastKnownGoodReview: current.lastKnownGoodReview }),
         }));
         if (outcome.kind === "app") {
-          if (shaping.proposal !== undefined) {
-            return yield* Effect.fail(
-              commandRejected(
-                "Resolve the current preview before authoring an app.",
-              ),
+          // The Shaper turn latched the authored archive without claiming
+          // completion; the conversation stays truthful by confirming only
+          // after acceptance below succeeds, and by reporting a bounded
+          // failure while the canvas stays last-known-good otherwise.
+          const operation = operationContext(envelope, operationId);
+          yield* Effect.gen(function* () {
+            if (shaping.proposal !== undefined) {
+              return yield* Effect.fail(
+                commandRejected(
+                  "Resolve the current preview before authoring an app.",
+                ),
+              );
+            }
+            yield* stageCapsuleProposal(
+              envelope,
+              operationId,
+              outcome.archive,
+              {
+                proposer: "shaper",
+                finalize: "local",
+              },
             );
+          }).pipe(
+            Effect.tapError((error) =>
+              agent
+                .concludeShaperTurn(operation, {
+                  kind: "failed",
+                  reason: boundedFailureReason(error),
+                })
+                .pipe(Effect.andThen(syncAgentProjection())),
+            ),
+          );
+          const staged = yield* SubscriptionRef.get(capsulePresentation);
+          if (staged.candidateReview === undefined) {
+            // A blocked review falls back to the explicit Activate/Discard
+            // candidate instead of accepting, so it must not be announced
+            // as a completed change.
+            yield* agent.concludeShaperTurn(operation, {
+              kind: "completed",
+              name: outcome.name,
+            });
+            yield* syncAgentProjection();
           }
-          yield* stageCapsuleProposal(envelope, operationId, outcome.archive, {
-            proposer: "shaper",
-            finalize: "local",
-          });
           return;
         }
         const candidate = outcome.document;
