@@ -91,6 +91,10 @@ export type ShaperTurnOutcome =
       readonly name: string;
     };
 
+export type ShaperTurnConclusion =
+  | { readonly kind: "completed"; readonly name: string }
+  | { readonly kind: "failed"; readonly reason: string };
+
 export interface AgentWorkspaceShape {
   readonly snapshot: Effect.Effect<AgentWorkspaceSnapshot>;
   readonly changes: Stream.Stream<AgentWorkspaceSnapshot>;
@@ -165,6 +169,10 @@ export interface AgentWorkspaceShape {
     document: InterfaceDocument,
     visibleInstruction?: string,
   ) => Effect.Effect<ShaperTurnOutcome, AgentWorkspaceError>;
+  readonly concludeShaperTurn: (
+    operation: OperationContext,
+    conclusion: ShaperTurnConclusion,
+  ) => Effect.Effect<void>;
   readonly cancel: (
     role: InteractiveAgentRole,
   ) => Effect.Effect<void, FlectUnavailableError>;
@@ -1779,26 +1787,30 @@ export const AgentWorkspaceLive = Layer.effect(
           latched = yield* latchedOutcome();
         }
         const candidate = latched ?? (yield* Effect.fail(unavailable()));
-        const candidateName =
-          candidate.kind === "document"
-            ? candidate.document.name
-            : candidate.name;
-        const now = yield* Clock.currentTimeMillis;
-        yield* updateRole("shaper", (current) =>
-          RoleConversationSnapshot.make({
-            ...requiredRoleFields(current),
-            status: "ready",
-            messages: boundedMessages(current.messages, [
-              message(
-                "assistant",
-                `Change complete: ${candidateName}`,
-                operation.source,
-                now,
-                operation.operationId,
-              ),
-            ]),
-          }),
-        );
+        if (candidate.kind === "document") {
+          const now = yield* Clock.currentTimeMillis;
+          yield* updateRole("shaper", (current) =>
+            RoleConversationSnapshot.make({
+              ...requiredRoleFields(current),
+              status: "ready",
+              messages: boundedMessages(current.messages, [
+                message(
+                  "assistant",
+                  `Change complete: ${candidate.document.name}`,
+                  operation.source,
+                  now,
+                  operation.operationId,
+                ),
+              ]),
+            }),
+          );
+        } else {
+          // An authored app is accepted by the controller after this turn
+          // returns. The controller confirms success or failure through
+          // concludeShaperTurn, so the conversation never claims completion
+          // before the canvas actually changed.
+          yield* setOperationalStatus("shaper", "ready");
+        }
         yield* appendJournal(operation, {
           category: "turn",
           phase: "succeeded",
@@ -1829,6 +1841,52 @@ export const AgentWorkspaceLive = Layer.effect(
       yield* setRoleFiber("shaper", fiber);
       return yield* awaitRoleFiber("shaper", fiber).pipe(
         Effect.ensuring(setRoleFiber("shaper", undefined)),
+      );
+    });
+
+    const concludeShaperTurn = Effect.fn(
+      "Flect.AgentWorkspace.concludeShaperTurn",
+    )(function* (
+      operation: OperationContext,
+      conclusion: ShaperTurnConclusion,
+    ) {
+      const now = yield* Clock.currentTimeMillis;
+      if (conclusion.kind === "completed") {
+        yield* updateRole("shaper", (current) =>
+          RoleConversationSnapshot.make({
+            ...requiredRoleFields(current),
+            status: "ready",
+            messages: boundedMessages(current.messages, [
+              message(
+                "assistant",
+                `Change complete: ${conclusion.name}`,
+                operation.source,
+                now,
+                operation.operationId,
+              ),
+            ]),
+          }),
+        );
+        return;
+      }
+      const reason =
+        conclusion.reason.trim().slice(0, 300) ||
+        "The change could not be applied safely.";
+      yield* updateRole("shaper", (current) =>
+        RoleConversationSnapshot.make({
+          ...requiredRoleFields(current),
+          status: "error",
+          error: reason,
+          messages: boundedMessages(current.messages, [
+            message(
+              "assistant",
+              `The app could not be activated: ${reason} Your previous canvas is unchanged.`,
+              operation.source,
+              now,
+              operation.operationId,
+            ),
+          ]),
+        }),
       );
     });
 
@@ -1954,6 +2012,7 @@ export const AgentWorkspaceLive = Layer.effect(
       submitAppPrompt,
       submitPreviewPrompt,
       submitShaperInstruction,
+      concludeShaperTurn,
       cancel,
       cancelPreview: cancelPreview(),
       releasePreview: releasePreview(),
