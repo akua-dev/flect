@@ -171,6 +171,7 @@ const makeLayer = () => {
     submitPreviewPrompt: () => Effect.succeed(AgentPromptOutcome.make({})),
     submitShaperInstruction: (_operation, _instruction, document) =>
       Effect.succeed({ kind: "document", document }),
+    concludeShaperTurn: () => Effect.void,
     cancel: () => Effect.void,
     cancelPreview: Effect.void,
     releasePreview: Effect.void,
