@@ -62,6 +62,31 @@ const documentWithoutPrompt = InterfaceDocument.make({
   },
 });
 
+const documentWithAction = InterfaceDocument.make({
+  version: 2,
+  name: "Projects",
+  root: {
+    id: "root",
+    type: "stack",
+    direction: "column",
+    gap: "lg",
+    children: [
+      {
+        id: "headline",
+        type: "text",
+        text: "Projects",
+        style: "headline",
+      },
+      {
+        id: "archive",
+        type: "button",
+        label: "Archive",
+        action: "shape",
+      },
+    ],
+  },
+});
+
 const conversation = (status: AgentSessionStatus = "ready") => ({
   status,
   messages: [],
@@ -391,6 +416,47 @@ describe("RoleAwareShell", () => {
     expect(
       screen.getByRole("textbox", { name: "Message Flect" }),
     ).toHaveFocus();
+  });
+
+  it("restores focus to the composer when the focused canvas control disappears", async () => {
+    const { rerender } = render(
+      <ShellHarness document={documentWithAction} phase="accepted" />,
+    );
+
+    const canvasButton = await screen.findByRole("button", {
+      name: "Archive",
+    });
+    canvasButton.focus();
+    expect(canvasButton).toHaveFocus();
+
+    rerender(
+      <ShellHarness document={documentWithoutPrompt} phase="accepted" />,
+    );
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("textbox", { name: "Message Flect" }),
+      ).toHaveFocus(),
+    );
+  });
+
+  it("leaves focus alone when it legitimately moved before a canvas update", async () => {
+    const { rerender } = render(
+      <ShellHarness document={documentWithAction} phase="accepted" />,
+    );
+
+    const canvasButton = await screen.findByRole("button", {
+      name: "Archive",
+    });
+    canvasButton.focus();
+    const input = screen.getByRole("textbox", { name: "Message Flect" });
+    input.focus();
+
+    rerender(
+      <ShellHarness document={documentWithoutPrompt} phase="accepted" />,
+    );
+
+    expect(input).toHaveFocus();
   });
 
   it("starts an accepted experience in Run and submits only to App Agent", async () => {

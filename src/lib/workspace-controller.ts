@@ -25,7 +25,6 @@ import {
   ShareLocalSource,
   type ShareSource,
 } from "../../packages/product/src/share";
-import { ProposalBuildRequest } from "../../shared/browser-build";
 import { canvasSelectionSummary } from "../../shared/canvas-selection";
 import {
   type DecodedCapsule,
@@ -73,7 +72,6 @@ import {
   defaultInterfaceDocument,
   type InterfaceDocument,
   type InterfaceNode,
-  validateInterfaceDocument,
 } from "../../shared/interface-document";
 import {
   ProductCapabilityProjection,
