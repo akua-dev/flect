@@ -77,10 +77,13 @@
   --shadow-float: oklch(0 0 0 / 0.12);
   --shadow-strong: oklch(0 0 0 / 0.16);
   --surface-shine: oklch(0 0 0 / 0.03);
+  --edge-light: color-mix(in oklch, var(--ink) 7%, transparent);
   --sheet-backdrop: oklch(0 0 0 / 0.4);
   --placeholder: var(--muted-foreground);
   --focus-ring: 0 0 0 2px var(--void), 0 0 0 4px var(--primary);
   --state-motion: 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  --interaction-motion: 90ms ease;
+  --hairline: 1px;
   --font-mono: "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
   --flect-rail-width: 400px;
   --z-dropdown: 20;
@@ -88,6 +91,18 @@
   --z-backdrop: 40;
   --z-sheet: 50;
   --z-modal: 60;
+}
+
+@media (min-resolution: 2dppx) {
+  :root {
+    --hairline: 0.5px;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --hairline: 1px;
+  }
 }
 
 @media (prefers-color-scheme: dark) {
@@ -335,10 +350,6 @@ textarea:focus-visible,
   -webkit-backdrop-filter: blur(8px);
   color: var(--ink);
   box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--line) 55%, transparent);
-}
-
-.workspace-canvas--app .capsule-surface {
-  min-height: 100dvh;
 }
 
 .role-shell--split:not(.role-shell--collapsed) .workspace-canvas--starter {
@@ -614,7 +625,9 @@ textarea:focus-visible,
   padding: 0;
   background: var(--canvas);
   color: var(--ink);
-  box-shadow: 0 8px 8px var(--shadow-strong);
+  box-shadow:
+    inset 0 0.5px 0 var(--edge-light),
+    0 8px 8px var(--shadow-strong);
 }
 
 .share-source-dialog::backdrop {
@@ -1006,9 +1019,9 @@ textarea:focus-visible,
   line-height: 1.35;
   text-align: left;
   transition:
-    color var(--state-motion),
-    background var(--state-motion),
-    border-color var(--state-motion);
+    color var(--interaction-motion),
+    background var(--interaction-motion),
+    border-color var(--interaction-motion);
 }
 
 .composer__starter-prompt:hover {
@@ -1109,8 +1122,8 @@ textarea:focus-visible,
   cursor: pointer;
   font-size: 13px;
   transition:
-    color var(--state-motion),
-    background var(--state-motion);
+    color var(--interaction-motion),
+    background var(--interaction-motion);
 }
 
 .canvas-agent-entry:hover,
@@ -1228,7 +1241,7 @@ textarea:focus-visible,
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hairline) solid var(--line);
   padding: 0 16px 0 18px;
 }
 
@@ -1320,6 +1333,9 @@ textarea:focus-visible,
   background: transparent;
   color: var(--muted);
   cursor: pointer;
+  transition:
+    color var(--interaction-motion),
+    background var(--interaction-motion);
 }
 
 .icon-button:hover {
@@ -1421,6 +1437,7 @@ textarea:focus-visible,
   cursor: pointer;
   font-size: 0.75rem;
   text-align: start;
+  transition: background var(--interaction-motion);
 }
 
 .historical-turn__summary:hover,
@@ -1455,7 +1472,7 @@ textarea:focus-visible,
   min-width: 0;
   gap: 8px;
   padding-inline-start: 8px;
-  border-inline-start: 1px solid var(--line);
+  border-inline-start: var(--hairline) solid var(--line);
 }
 
 .historical-turn__context[hidden] {
@@ -1482,6 +1499,7 @@ textarea:focus-visible,
   cursor: pointer;
   font-size: 0.6875rem;
   text-align: start;
+  transition: background var(--interaction-motion);
 }
 
 .work-log__summary:hover,
@@ -1662,7 +1680,8 @@ textarea:focus-visible,
   min-width: 0;
   gap: 10px;
   border: 0;
-  border-left: 1px solid color-mix(in oklch, var(--line) 56%, transparent);
+  border-left: var(--hairline) solid
+    color-mix(in oklch, var(--line) 56%, transparent);
   margin: 2px 0 6px 14px;
   padding: 5px 4px 5px 14px;
   background: transparent;
@@ -1981,8 +2000,8 @@ textarea:focus-visible,
   cursor: pointer;
   font: inherit;
   transition:
-    background var(--state-motion),
-    color var(--state-motion);
+    background var(--interaction-motion),
+    color var(--interaction-motion);
 }
 
 .markdown-action:hover {
@@ -2198,9 +2217,17 @@ textarea:focus-visible,
   border-color: color-mix(in oklch, var(--line) 84%, transparent);
   border-radius: var(--radius);
   background: var(--card);
+  --active-edge: transparent;
+
   box-shadow:
+    inset 0 0.5px 0 var(--active-edge),
     0 1px 0 color-mix(in oklch, var(--ink) 4%, transparent),
     0 8px 24px color-mix(in oklch, var(--shadow-soft) 72%, transparent);
+}
+
+/* Active Edge Light: focused surfaces only, never resting cards. */
+.composer:focus-within {
+  --active-edge: var(--edge-light);
 }
 
 .composer textarea {
@@ -2230,6 +2257,10 @@ textarea:focus-visible,
   width: 100%;
   height: 100%;
   min-height: 420px;
+}
+
+.workspace-canvas--app .capsule-surface {
+  min-height: 100dvh;
 }
 
 .canvas-selection-outline {
@@ -2341,7 +2372,9 @@ textarea:focus-visible,
   border-radius: 10px;
   padding: 4px;
   background: color-mix(in oklch, var(--surface) 96%, transparent);
-  box-shadow: 0 10px 28px var(--shadow-float);
+  box-shadow:
+    inset 0 0.5px 0 var(--edge-light),
+    0 10px 28px var(--shadow-float);
   color: var(--ink);
   backdrop-filter: blur(18px);
 }
@@ -2435,7 +2468,7 @@ textarea:focus-visible,
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hairline) solid var(--line);
   padding: 20px clamp(24px, 5vw, 64px);
 }
 
@@ -2521,7 +2554,7 @@ textarea:focus-visible,
   max-height: min(42dvh, 360px);
   gap: 10px;
   overflow-y: auto;
-  border-top: 1px solid var(--line);
+  border-top: var(--hairline) solid var(--line);
   padding: 10px;
 }
 
@@ -2596,8 +2629,8 @@ textarea:focus-visible,
   font-size: 0.6875rem;
   font-weight: 590;
   transition:
-    background var(--state-motion),
-    color var(--state-motion);
+    background var(--interaction-motion),
+    color var(--interaction-motion);
 }
 
 .diagnostics-panel__control button:hover:not(:disabled),
@@ -2618,7 +2651,7 @@ textarea:focus-visible,
 .diagnostics-panel__setup {
   display: grid;
   gap: 8px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hairline) solid var(--line);
   padding-top: 10px;
 }
 
@@ -2860,8 +2893,8 @@ textarea:focus-visible,
   font-size: 12px;
   font-weight: 520;
   transition:
-    color var(--state-motion),
-    background var(--state-motion);
+    color var(--interaction-motion),
+    background var(--interaction-motion);
 }
 
 .composer-control--icon {
@@ -2897,7 +2930,9 @@ textarea:focus-visible,
   border-radius: 12px;
   padding: 6px;
   background: var(--surface-raised);
-  box-shadow: 0 8px 8px var(--shadow-strong);
+  box-shadow:
+    inset 0 0.5px 0 var(--edge-light),
+    0 8px 8px var(--shadow-strong);
 }
 
 .composer-popover--actions {
@@ -2937,7 +2972,7 @@ textarea:focus-visible,
   display: grid;
   gap: 3px;
   margin: 2px 4px 6px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hairline) solid var(--line);
   padding: 7px 6px 10px;
 }
 
@@ -2973,6 +3008,7 @@ textarea:focus-visible,
   color: var(--ink);
   cursor: pointer;
   text-align: left;
+  transition: background var(--interaction-motion);
 }
 
 .composer-popover__item:hover:not(:disabled),
@@ -3007,7 +3043,7 @@ textarea:focus-visible,
 
 .composer-popover__section {
   margin: 6px 4px 2px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hairline) solid var(--line);
   padding: 10px 6px 3px;
   color: var(--quiet);
   font-size: 10px;
@@ -3049,7 +3085,7 @@ textarea:focus-visible,
   flex-direction: column;
   gap: 4px;
   overflow-y: auto;
-  border-right: 1px solid var(--line);
+  border-right: var(--hairline) solid var(--line);
   padding: 4px;
   background: var(--canvas);
   scrollbar-width: none;
@@ -3107,7 +3143,7 @@ textarea:focus-visible,
   min-height: 44px;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: var(--hairline) solid var(--line);
   padding: 0 12px;
   color: var(--muted);
 }
@@ -3173,7 +3209,21 @@ textarea:focus-visible,
 }
 
 .model-menu__option[aria-checked="true"] {
+  position: relative;
   background: var(--accent-soft);
+}
+
+/* Leading bar reinforces selection beside the background and check mark;
+   it must never become the only selection signal. A pseudo-element keeps
+   the global focus-ring box-shadow intact. */
+.model-menu__option[aria-checked="true"]::before {
+  position: absolute;
+  inset-block: 6px;
+  inset-inline-start: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
 }
 
 .model-menu__check {
@@ -3212,7 +3262,7 @@ textarea:focus-visible,
 .model-menu__reasoning {
   display: grid;
   gap: 8px;
-  border-top: 1px solid var(--line);
+  border-top: var(--hairline) solid var(--line);
   padding: 10px 12px 12px;
 }
 
@@ -3413,8 +3463,8 @@ textarea:focus-visible,
   background: var(--ink);
   color: var(--void);
   transition:
-    color var(--state-motion),
-    background var(--state-motion),
+    color var(--interaction-motion),
+    background var(--interaction-motion),
     transform var(--state-motion);
 }
 
@@ -4276,7 +4326,10 @@ textarea:focus-visible,
   border-radius: 14px;
   padding: 0;
   background: var(--surface-raised);
-  box-shadow: var(--shadow-popover);
+  /* --shadow-popover was never defined; use the Menu Lift stack directly. */
+  box-shadow:
+    inset 0 0.5px 0 var(--edge-light),
+    0 8px 8px var(--shadow-strong);
   color: var(--ink);
 }
 
@@ -4667,6 +4720,7 @@ button.decision-button--primary:hover:not(:disabled) {
 @media (prefers-reduced-motion: reduce) {
   :root {
     --state-motion: 0.01ms linear;
+    --interaction-motion: 0.01ms linear;
   }
 
   .thinking span,
