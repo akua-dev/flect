@@ -1,25 +1,35 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import { Slot } from 'radix-ui';
-import type * as React from 'react';
+import * as React from 'react';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/class-names';
 
-function ItemGroup({ className, ...props }: React.ComponentProps<'div'>) {
+// ItemGroup is a real <ul> (not a <div role="list">): the native element
+// already implies list semantics, so nothing extra needs announcing to
+// assistive tech. Item/ItemSeparator read this context to render as valid
+// <ul> children (<li>) only while actually inside a group -- both also
+// support standalone use outside ItemGroup (matching upstream shadcn's
+// Item, which is documented both ways), where they keep rendering their
+// plain, non-list element.
+const ItemGroupContext = React.createContext(false);
+
+function ItemGroup({ className, ...props }: React.ComponentProps<'ul'>) {
 	return (
-		<div
-			role='list'
-			data-slot='item-group'
-			className={cn(
-				'group/item-group flex w-full flex-col gap-4 has-data-[size=sm]:gap-2.5 has-data-[size=xs]:gap-2',
-				className
-			)}
-			{...props}
-		/>
+		<ItemGroupContext.Provider value={true}>
+			<ul
+				data-slot='item-group'
+				className={cn(
+					'group/item-group flex w-full flex-col gap-4 has-data-[size=sm]:gap-2.5 has-data-[size=xs]:gap-2',
+					className
+				)}
+				{...props}
+			/>
+		</ItemGroupContext.Provider>
 	);
 }
 
 function ItemSeparator({ className, ...props }: React.ComponentProps<typeof Separator>) {
-	return (
+	const separator = (
 		<Separator
 			data-slot='item-separator'
 			orientation='horizontal'
@@ -27,6 +37,10 @@ function ItemSeparator({ className, ...props }: React.ComponentProps<typeof Sepa
 			{...props}
 		/>
 	);
+	// <ul>'s content model only permits <li> (plus script-supporting
+	// elements) as direct children -- wrap the separator in one when it's
+	// actually a sibling of <li>-rendering Items inside an ItemGroup.
+	return React.useContext(ItemGroupContext) ? <li aria-hidden='true'>{separator}</li> : separator;
 }
 
 const itemVariants = cva(
@@ -58,7 +72,8 @@ function Item({
 	asChild = false,
 	...props
 }: React.ComponentProps<'div'> & VariantProps<typeof itemVariants> & { asChild?: boolean }) {
-	const Comp = asChild ? Slot.Root : 'div';
+	const inGroup = React.useContext(ItemGroupContext);
+	const Comp: React.ElementType = asChild ? Slot.Root : inGroup ? 'li' : 'div';
 	return (
 		<Comp
 			data-slot='item'
