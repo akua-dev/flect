@@ -1,0 +1,20 @@
+# gitleaks fingerprints that are known-safe, publicly-visible test fixtures —
+# not real secrets. Verified by running `gitleaks git` over the projected
+# `:/apps/flect` history (cnap#866); every entry below is one of exactly two
+# fixtures, each appearing once per historical commit that touched it.
+#
+# This file lives at the projection's root (apps/flect/ becomes public repo
+# root after `josh-filter ':/apps/flect'`) so it applies with gitleaks'
+# default lookup wherever the projected history is scanned — the outbound
+# sync's temporary worktree, and any local or advisory-CI `gitleaks git .`
+# run against the public repo itself. It must never widen beyond these two
+# fixtures; new findings abort the sync (see cnap delivery flect-sync).
+
+# apps/flect/src-tauri/src/lib.rs — placeholder hex token in a unit test
+2bf3a9142fc4298435d022f3205298fa54761973:src-tauri/src/lib.rs:generic-api-key:647
+4f0a4ddfba91798060b15aa24a6b372870264dbe:src-tauri/src/lib.rs:generic-api-key:647
+
+# apps/flect/src/lib/operation-journal.test.ts — placeholder bearer token in a redaction test
+d8ba332f600d9f9f8c0ece31431fab701fb9812d:src/lib/operation-journal.test.ts:curl-auth-header:180
+2bf3a9142fc4298435d022f3205298fa54761973:src/lib/operation-journal.test.ts:curl-auth-header:191
+4f0a4ddfba91798060b15aa24a6b372870264dbe:src/lib/operation-journal.test.ts:curl-auth-header:191
