@@ -680,7 +680,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			}
 		);
 
-		const upsertToolActivity = (
+		const upsertToolActivity = Effect.fn('AgentWorkspace.upsertToolActivity')(function* (
 			operation: OperationContext,
 			event: Extract<
 				FlectEvent | ShapeEvent,
@@ -693,119 +693,116 @@ export const AgentWorkspaceLive = Layer.effect(
 			>,
 			slot: ConversationSlot = event.role,
 			revisionId?: RevisionId
-		) =>
-			Effect.gen(function* () {
-				const role = runtimeRoleFor(slot);
-				const current = yield* SubscriptionRef.get(state);
-				const conversation = conversationFor(current, slot);
-				const existing = conversation.activities.find(
-					(activity) => activity.callId === event.callId
-				);
-				let activity: ToolActivity;
-				switch (event.type) {
-					case 'tool_execution_started':
-						activity = ToolActivity.make({
-							version: 1,
-							id: existing?.id ?? `activity-${crypto.randomUUID()}`,
-							callId: event.callId,
-							operationId: operation.operationId,
-							turnId: operation.operationId,
-							role,
-							toolName: event.toolName,
-							phase: 'running',
-							startedAt: event.startedAt,
-							updatedAt: event.startedAt,
-							...(event.inputSummary === undefined ? {} : { resultSummary: event.inputSummary })
-						});
-						break;
-					case 'tool_execution_updated':
-						activity = ToolActivity.make({
-							...(existing ??
-								ToolActivity.make({
-									version: 1,
-									id: `activity-${crypto.randomUUID()}`,
-									callId: event.callId,
-									operationId: operation.operationId,
-									turnId: operation.operationId,
-									role,
-									toolName: event.toolName,
-									phase: 'running',
-									startedAt: event.updatedAt,
-									updatedAt: event.updatedAt
-								})),
-							updatedAt: event.updatedAt,
-							...(event.output === undefined ? {} : { output: event.output })
-						});
-						break;
-					case 'tool_execution_completed': {
-						const failedShellExit =
-							existing?.toolName === 'bash' &&
-							existing.exitCode !== undefined &&
-							existing.exitCode !== 0;
-						activity = ToolActivity.make({
-							...(existing ??
-								ToolActivity.make({
-									version: 1,
-									id: `activity-${crypto.randomUUID()}`,
-									callId: event.callId,
-									operationId: operation.operationId,
-									turnId: operation.operationId,
-									role,
-									toolName: event.toolName,
-									phase: 'running',
-									startedAt: Math.max(0, event.completedAt - event.durationMs),
-									updatedAt: event.completedAt
-								})),
-							phase: event.status === 'succeeded' && !failedShellExit ? 'succeeded' : 'failed',
-							updatedAt: event.completedAt,
-							completedAt: event.completedAt,
-							durationMs: event.durationMs,
-							...(failedShellExit
+		) {
+			const role = runtimeRoleFor(slot);
+			const current = yield* SubscriptionRef.get(state);
+			const conversation = conversationFor(current, slot);
+			const existing = conversation.activities.find((activity) => activity.callId === event.callId);
+			let activity: ToolActivity;
+			switch (event.type) {
+				case 'tool_execution_started':
+					activity = ToolActivity.make({
+						version: 1,
+						id: existing?.id ?? `activity-${crypto.randomUUID()}`,
+						callId: event.callId,
+						operationId: operation.operationId,
+						turnId: operation.operationId,
+						role,
+						toolName: event.toolName,
+						phase: 'running',
+						startedAt: event.startedAt,
+						updatedAt: event.startedAt,
+						...(event.inputSummary === undefined ? {} : { resultSummary: event.inputSummary })
+					});
+					break;
+				case 'tool_execution_updated':
+					activity = ToolActivity.make({
+						...(existing ??
+							ToolActivity.make({
+								version: 1,
+								id: `activity-${crypto.randomUUID()}`,
+								callId: event.callId,
+								operationId: operation.operationId,
+								turnId: operation.operationId,
+								role,
+								toolName: event.toolName,
+								phase: 'running',
+								startedAt: event.updatedAt,
+								updatedAt: event.updatedAt
+							})),
+						updatedAt: event.updatedAt,
+						...(event.output === undefined ? {} : { output: event.output })
+					});
+					break;
+				case 'tool_execution_completed': {
+					const failedShellExit =
+						existing?.toolName === 'bash' &&
+						existing.exitCode !== undefined &&
+						existing.exitCode !== 0;
+					activity = ToolActivity.make({
+						...(existing ??
+							ToolActivity.make({
+								version: 1,
+								id: `activity-${crypto.randomUUID()}`,
+								callId: event.callId,
+								operationId: operation.operationId,
+								turnId: operation.operationId,
+								role,
+								toolName: event.toolName,
+								phase: 'running',
+								startedAt: Math.max(0, event.completedAt - event.durationMs),
+								updatedAt: event.completedAt
+							})),
+						phase: event.status === 'succeeded' && !failedShellExit ? 'succeeded' : 'failed',
+						updatedAt: event.completedAt,
+						completedAt: event.completedAt,
+						durationMs: event.durationMs,
+						...(failedShellExit
+							? {}
+							: event.resultSummary === undefined
 								? {}
-								: event.resultSummary === undefined
-									? {}
-									: { resultSummary: event.resultSummary }),
-							...(event.output === undefined ? {} : { output: event.output }),
-							...(event.exitCode === undefined ? {} : { exitCode: event.exitCode }),
-							...(event.previewUrl === undefined ? {} : { previewUrl: event.previewUrl })
-						});
-						break;
-					}
+								: { resultSummary: event.resultSummary }),
+						...(event.output === undefined ? {} : { output: event.output }),
+						...(event.exitCode === undefined ? {} : { exitCode: event.exitCode }),
+						...(event.previewUrl === undefined ? {} : { previewUrl: event.previewUrl })
+					});
+					break;
 				}
+			}
 
-				yield* updateConversation(slot, (roleState) =>
-					RoleConversationSnapshot.make({
-						...roleState,
-						activities:
-							existing === undefined
-								? boundedActivities(roleState.activities, activity)
-								: roleState.activities.map((candidate) =>
-										candidate.callId === event.callId ? activity : candidate
-									)
-					})
-				);
-				yield* appendJournal(operation, {
-					category: 'tool',
-					phase:
-						event.type === 'tool_execution_started'
-							? 'started'
-							: event.type === 'tool_execution_updated'
-								? 'updated'
-								: activity.phase === 'failed'
-									? 'failed'
-									: 'succeeded',
-					summary:
-						event.type === 'tool_execution_started'
-							? `${event.toolName} started`
-							: event.type === 'tool_execution_updated'
-								? `${event.toolName} updated`
-								: `${event.toolName} ${activity.phase}`,
-					role,
-					...(revisionId === undefined ? {} : { revisionId }),
-					toolCallId: event.callId,
-					tool: activity
-				});
+			yield* updateConversation(slot, (roleState) =>
+				RoleConversationSnapshot.make({
+					...roleState,
+					activities:
+						existing === undefined
+							? boundedActivities(roleState.activities, activity)
+							: roleState.activities.map((candidate) =>
+									candidate.callId === event.callId ? activity : candidate
+								)
+				})
+			);
+			yield* appendJournal(operation, {
+				category: 'tool',
+				phase:
+					event.type === 'tool_execution_started'
+						? 'started'
+						: event.type === 'tool_execution_updated'
+							? 'updated'
+							: activity.phase === 'failed'
+								? 'failed'
+								: 'succeeded',
+				summary:
+					event.type === 'tool_execution_started'
+						? `${event.toolName} started`
+						: event.type === 'tool_execution_updated'
+							? `${event.toolName} updated`
+							: `${event.toolName} ${activity.phase}`,
+				role,
+				...(revisionId === undefined ? {} : { revisionId }),
+				toolCallId: event.callId,
+				tool: activity
 			});
+		});
 
 		const recordExternalExtensionFailure = Effect.fn(
 			'AgentWorkspace.recordExternalExtensionFailure'
