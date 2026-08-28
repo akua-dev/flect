@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import { encodeCapsule } from './capsule';
+import { encodeCapsule } from '../packages/product/src/capsule';
 
 export const capsuleHostFixture = encodeCapsule({
 	manifest: {

@@ -1,18 +1,29 @@
 import { Context, Effect, Layer, Schema, type SchemaAST } from 'effect';
 import {
+	makeProductEventsLayer,
+	type ProductEventConnector
+} from '../../packages/product/src/host/product-events';
+import {
+	makeProductGraphqlLayer,
+	ProductGraphql
+} from '../../packages/product/src/host/product-graphql';
+import {
 	AuthorizedProductOperation,
 	ProductCapabilityManifest,
 	ProductCapabilityRequestContext,
 	type ProductJson,
 	type ProductOperationFailure
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import {
 	ProductEventPolicy,
 	ProductEventRequest,
 	ProductEventSequence
-} from '../../shared/product-events';
-import { ProductGraphqlPolicy, ProductGraphqlRequest } from '../../shared/product-graphql';
-import type { ProductHttpHeader } from '../../shared/product-http';
+} from '../../packages/product/src/product-events';
+import {
+	ProductGraphqlPolicy,
+	ProductGraphqlRequest
+} from '../../packages/product/src/product-graphql';
+import type { ProductHttpHeader } from '../../packages/product/src/product-http';
 import { makeProductCapabilityBrokerLayer } from '../../src/capabilities/product-capability-broker';
 import {
 	makeProductCapabilityRegistryLayer,
@@ -22,11 +33,6 @@ import {
 	makeProductEventRegistryLayer,
 	type ProductEventDefinition
 } from '../../src/capabilities/product-event-registry';
-import {
-	makeProductEventsLayer,
-	type ProductEventConnector
-} from '../../src/capabilities/product-events';
-import { makeProductGraphqlLayer, ProductGraphql } from '../../src/capabilities/product-graphql';
 import { productOperationFailure } from '../../src/capabilities/product-operation-failure';
 
 const strict: SchemaAST.ParseOptions = {

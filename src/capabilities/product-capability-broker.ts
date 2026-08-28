@@ -10,7 +10,7 @@ import {
 	type ProductCapabilityRequestContext,
 	ProductCapabilityReservation,
 	ProductCapabilityUsage
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import {
 	ProductCapabilityDecisionStore,
 	type ProductCapabilityDecisionStoreFailure,

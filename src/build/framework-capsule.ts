@@ -1,7 +1,11 @@
 import { Effect, Schema } from 'effect';
 import packageMetadata from '../../package.json';
+import {
+	decodeCapsule,
+	encodeCapsule,
+	type InvalidCapsule
+} from '../../packages/product/src/capsule';
 import type { BrowserBuildArtifact } from '../../shared/browser-build';
-import { decodeCapsule, encodeCapsule, type InvalidCapsule } from '../../shared/capsule';
 import { PROJECT_IMPORT_REPORT_PATH } from '../../shared/project-import';
 
 const decoder = new TextDecoder('utf-8', { fatal: true });

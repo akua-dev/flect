@@ -4,7 +4,7 @@ import {
 	ProductCapabilityDecisionRecord,
 	ProductCapabilityGrantRecord,
 	type ProductCapabilityManifest
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { InterfaceStorage } from '../lib/interface-store';
 
 const LEGACY_STORAGE_KEY = 'flect.product-capability-grants.v1';

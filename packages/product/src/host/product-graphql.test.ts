@@ -4,7 +4,7 @@ import {
 	ProductGraphqlFailure,
 	ProductGraphqlPolicy,
 	ProductGraphqlRequest
-} from '../../shared/product-graphql';
+} from '../product-graphql';
 import {
 	makeProductGraphqlLayer,
 	ProductGraphql,

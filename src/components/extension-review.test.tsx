@@ -8,7 +8,7 @@ import {
 	PortableExtensionFailure,
 	PortableExtensionPackage,
 	PortableExtensionRoleState
-} from '../../shared/extensions';
+} from '../../packages/product/src/extensions';
 import { ExtensionReview } from './extension-review';
 
 afterEach(cleanup);

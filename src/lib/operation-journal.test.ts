@@ -1,12 +1,12 @@
 import { assert, describe, it } from '@effect/vitest';
 import { Effect } from 'effect';
+import { ProductCapabilityReceipt } from '../../packages/product/src/product-capability';
 import {
 	ControlCommandSource,
 	OperationRecord,
 	ToolActivity,
 	UserCommandSource
 } from '../../shared/control';
-import { ProductCapabilityReceipt } from '../../shared/product-capability';
 import { RevisionId } from '../../shared/revisions';
 import {
 	OperationJournal,

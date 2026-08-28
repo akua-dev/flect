@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { expect, type Page, test } from '@playwright/test';
 import { Effect, Schema } from 'effect';
 import { zipSync } from 'fflate';
-import { decodeCapsule, encodeCapsule } from '../../shared/capsule';
+import { decodeCapsule, encodeCapsule } from '../../packages/product/src/capsule';
 import { defaultInterfaceDocument } from '../../shared/interface-document';
 import { resetBrowserWorkspace } from './reset-browser-workspace';
 
