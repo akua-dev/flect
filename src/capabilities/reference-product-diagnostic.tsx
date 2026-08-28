@@ -5,18 +5,18 @@ import {
 	REFERENCE_OPERATIONS,
 	referenceProductContext
 } from '../../examples/product-adapter/reference-product';
+import type { ProductEventConnector } from '../../packages/product/src/host/product-events';
 import {
 	type ProductCapabilityDecisionChoice,
 	type ProductCapabilityProjection,
 	ProductOperationFailure,
 	ProductOperationInvocation
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { ProductCapabilities } from '../components/agent-rail';
 import { InterfaceStorageLive } from '../lib/interface-store';
 import { makeProductCapabilityDecisionStoreLayer } from './product-capability-decision-store';
 import { ProductCapabilityRegistry } from './product-capability-registry';
 import { ProductEventRegistry } from './product-event-registry';
-import type { ProductEventConnector } from './product-events';
 
 const diagnosticCredential = 'reference-host-secret-never-public';
 

@@ -1,9 +1,10 @@
 import { assert, describe, it, vi } from '@effect/vitest';
 import { Effect, Layer, Result, Stream } from 'effect';
+import type { ProductEventConnector } from '../../packages/product/src/host/product-events';
 import {
 	ProductCapabilityAllowChoice,
 	ProductOperationInvocation
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import {
 	ProductCapabilityDecisionStore,
 	type ProductCapabilityDecisionStoreShape
@@ -13,7 +14,6 @@ import {
 	type ProductCapabilityRegistryShape
 } from '../../src/capabilities/product-capability-registry';
 import { ProductEventRegistry } from '../../src/capabilities/product-event-registry';
-import type { ProductEventConnector } from '../../src/capabilities/product-events';
 import {
 	makeReferenceProductLayer,
 	REFERENCE_CAPABILITIES,

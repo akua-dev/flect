@@ -1,11 +1,7 @@
 import { assert, describe, it } from '@effect/vitest';
 import { Deferred, Effect, Fiber, Schema, Stream } from 'effect';
 import * as TestClock from 'effect/testing/TestClock';
-import {
-	ProductEventFailure,
-	ProductEventPolicy,
-	ProductEventRequest
-} from '../../shared/product-events';
+import { ProductEventFailure, ProductEventPolicy, ProductEventRequest } from '../product-events';
 import {
 	makeProductEventsLayer,
 	type ProductEventConnector,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
-import { decodeCapsule } from '../../shared/capsule';
+import { decodeCapsule } from '../../packages/product/src/capsule';
 import { importWebProject } from './web-project-import';
 
 const file = (path: string, contents: string) => ({

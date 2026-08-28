@@ -8,7 +8,7 @@ import {
 	ProductCapabilityDenyChoice,
 	ProductCapabilityManifest,
 	ProductCapabilityRequestContext
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import {
 	makeProductCapabilityBrokerLayer,
 	ProductCapabilityBroker

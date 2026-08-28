@@ -88,7 +88,7 @@ export const installFlectActivation = (options: FlectActivationOptions = {}) => 
 		if (workspace !== undefined) return workspace;
 		shell.setAttribute('aria-busy', 'true');
 		if (status !== null) status.textContent = 'Opening Flect…';
-		workspace = import('./workspace-activation').then(({ activateWorkspace }) =>
+		workspace = import('./workspace-activation-runtime').then(({ activateWorkspace }) =>
 			activateWorkspace({
 				document,
 				root,

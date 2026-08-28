@@ -6,7 +6,7 @@ import {
 	ProductCapabilityManifest,
 	type ProductCapabilityProjection,
 	ProductCapabilityRequestContext
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { ProductCapabilities } from '../components/agent-rail';
 import { InterfaceStorageLive } from '../lib/interface-store';
 import { makeProductCapabilityBrokerLayer } from './product-capability-broker';

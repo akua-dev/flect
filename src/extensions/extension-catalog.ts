@@ -17,7 +17,7 @@ import {
 	type PortableExtensionPackage,
 	type PortableExtensionRole,
 	PortableExtensionRoleState
-} from '../../shared/extensions';
+} from '../../packages/product/src/extensions';
 import { InterfaceStorage, type InterfaceStorageError } from '../lib/interface-store';
 import { satisfiesVersion } from '../lib/semver-compatibility';
 

@@ -1,4 +1,18 @@
 import { Effect, Schema, type SchemaAST } from 'effect';
+import {
+	ExtensionCapability,
+	PortableExtensionBinding,
+	PortableExtensionCatalogSnapshot
+} from '../packages/product/src/extensions';
+import {
+	ProductCapabilityDecisionChoice,
+	ProductCapabilityDecisionId,
+	ProductCapabilityGrantScopeId,
+	ProductCapabilityId,
+	ProductCapabilityProjection,
+	ProductCapabilityReceipt,
+	ProductOperationId
+} from '../packages/product/src/product-capability';
 import { ShareSource } from '../packages/product/src/share';
 import { CanvasSelection } from './canvas-selection';
 import {
@@ -9,22 +23,8 @@ import {
 	ReasoningLevel,
 	ValidationIssue
 } from './contracts';
-import {
-	ExtensionCapability,
-	PortableExtensionBinding,
-	PortableExtensionCatalogSnapshot
-} from './extensions';
 import { GitRepositoryStatus } from './git-workspace';
 import { InterfaceDocument } from './interface-document';
-import {
-	ProductCapabilityDecisionChoice,
-	ProductCapabilityDecisionId,
-	ProductCapabilityGrantScopeId,
-	ProductCapabilityId,
-	ProductCapabilityProjection,
-	ProductCapabilityReceipt,
-	ProductOperationId
-} from './product-capability';
 import { RevisionId, ShapingSnapshot } from './revisions';
 import {
 	ShareInstallationRefs,
