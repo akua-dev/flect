@@ -1,0 +1,407 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("//tools/bun:defs.bzl", "bun_check", "bun_run")
+load("//tools/bun:node_modules.bzl", "bun_node_modules")
+
+# ---------------------------------------------------------------------------
+# node_modules: one cacheable action, coarsely keyed on the lockfile and
+# every package.json in the (single-workspace) tree. bun install still needs
+# network on a genuine cache miss (this is not a hermetic, sandboxed fetch --
+# see MODULE.bazel/tools/bun/defs.bzl for why a pnpm-shaped hermetic
+# rules_js install doesn't apply to a bun project). The Bazel-side payoff is
+# that a *warm* cache (same lockfile) never re-runs `bun install` at all --
+# Bazel serves the previously produced node_modules tree straight from the
+# disk/GHA cache, which is the coarse "skip unchanged" behavior called for.
+# ---------------------------------------------------------------------------
+bun_node_modules(
+    name = "node_modules",
+    srcs = [
+        "package.json",
+        "bun.lock",
+        "packages/product/package.json",
+    ],
+    bun = "//tools/bun:bun",
+)
+
+# ---------------------------------------------------------------------------
+# Common source globs, shared across check targets. Grouped by the same
+# directories flect's own vitest include list and tsconfig "include" arrays
+# already use, so a change under one directory only invalidates the check
+# targets that actually read it.
+# ---------------------------------------------------------------------------
+CONFIG = [
+    "package.json",
+    "bun.lock",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "tsconfig.server.json",
+    "biome.json",
+    ".oxfmtignore",
+    ".oxfmtrc.json",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "astro.config.ts",
+    "playwright.config.ts",
+    "components.json",
+    "index.html",
+]
+
+SHARED = glob(["shared/**"])
+
+PRODUCT = glob(
+    ["packages/product/**"],
+    exclude = ["packages/product/node_modules/**", "packages/product/dist/**"],
+)
+
+SRC = glob(["src/**"])
+
+SERVER = glob(["server/**"])
+
+CLI = glob(["cli/**"])
+
+EXAMPLES = glob(["examples/**"])
+
+SCRIPTS = glob(["scripts/**"])
+
+TESTS = glob(["tests/**"])
+
+ASSETS = glob(["assets/**", "public/**"])
+
+# The full repo tree, for the two whole-tree formatters/linters. Bazel's
+# glob() does not match dotfiles/dot-directories for a bare "**/*" pattern
+# (the same convention as an unqualified shell glob), so oxfmt/biome's own
+# config -- .oxfmtrc.json, .oxfmtignore, and everything else biome/oxfmt
+# read from a dotfile or dot-directory -- needs its own explicit patterns
+# or these targets silently run with no config at all (caught on a real
+# run: oxfmt reported "No config found, using defaults"). Excludes
+# generated/ignored directories (mirrors .gitignore) plus Bazel's own
+# output symlinks, which would otherwise make the glob self-referential.
+WHOLE_TREE = glob(
+    ["**/*", ".*", ".*/**"],
+    exclude = [
+        "node_modules/**",
+        "packages/product/node_modules/**",
+        "dist/**",
+        "dist-spa/**",
+        "dist-product-sdk/**",
+        "dist-release/**",
+        "coverage/**",
+        "playwright-report/**",
+        "test-results/**",
+        "src-tauri/target/**",
+        "src-tauri/binaries/**",
+        ".repos/**",
+        ".repos",
+        ".worktrees/**",
+        ".worktrees",
+        ".git/**",
+        ".git",
+        "bazel-*/**",
+        "bazel-*",
+    ],
+    allow_empty = True,
+)
+
+# ---------------------------------------------------------------------------
+# (a) biome lint. --config-path is passed explicitly for the same reason
+# //:lint_oxfmt below does: biome's own config auto-discovery walks the real
+# cwd's directory ancestry, not the source tree inside a Bazel sandbox --
+# confirmed on a real run: biome.json's `overrides` block that turns off
+# `a11y/useSemanticElements`/`useKeyWithClickEvents` for
+# `src/components/ui/**` (shadcn-vendored primitives; see the `role='list'`
+# fix on ItemGroup below for why -- a real, deliberate a11y decision, not a
+# suppression) was silently not applied under Bazel, flagging
+# item.tsx/input-group.tsx again with the recommended preset's defaults
+# even though the same command with the same biome.json passes clean
+# outside Bazel.
+# ---------------------------------------------------------------------------
+bun_run(
+    name = "lint_biome",
+    args = "run biome check --config-path=. .",
+    srcs = WHOLE_TREE,
+)
+
+# ---------------------------------------------------------------------------
+# (b) oxfmt format check. --config/--ignore-path are passed explicitly
+# rather than relying on oxfmt's own auto-discovery: auto-discovery walks
+# the real cwd's directory ancestry looking for .oxfmtrc.json, which
+# inside a Bazel sandbox is not this source tree -- confirmed on a real
+# run ("No config found, using defaults") even with both files present
+# as declared action inputs.
+# ---------------------------------------------------------------------------
+bun_run(
+    name = "lint_oxfmt",
+    args = "run oxfmt --check --config .oxfmtrc.json --ignore-path .oxfmtignore .",
+    srcs = WHOLE_TREE,
+)
+
+# ---------------------------------------------------------------------------
+# (c) tsc typecheck (single project reference build; tsc -b already only
+# recompiles/typechecks the project graph rooted at tsconfig.json, so this
+# stays one target rather than per-tsconfig -- see README/PR body for why
+# splitting it further was not worth the duplicated project-reference cache).
+# ---------------------------------------------------------------------------
+bun_check(
+    name = "typecheck",
+    script = "typecheck",
+    srcs = CONFIG + SRC + SHARED + PRODUCT + EXAMPLES + SERVER + CLI + SCRIPTS + TESTS,
+)
+
+# ---------------------------------------------------------------------------
+# (d) vitest unit suite, sharded by directory for cache granularity. Mirrors
+# vitest.config.ts's own `include` glob, split across four shards so e.g. a
+# src/-only change does not invalidate the server/shared shard's cache entry.
+# vitest's positional args are path-substring filters, so `vitest run src`
+# runs exactly (and only) the tests vitest.config.ts's `include` already
+# scopes under src/.
+# ---------------------------------------------------------------------------
+bun_run(
+    name = "test_src",
+    # tags = ["manual"]: excludes this from `bazel test //...` (the
+    # workflow's required gate) while keeping it runnable by explicit label
+    # (`bazel test //:test_src`) for whoever picks up the KNOWN ISSUE below
+    # -- see //:known_issues at the bottom of this file, and the "native
+    # complement" step in .github/workflows/quality.yml's `bazel` job that
+    # covers what this target would have covered, until it's root-caused.
+    tags = ["manual"],
+    # KNOWN ISSUE, timeboxed (not root-caused): ~39/125 of src/'s test files
+    # intermittently fail with "Cannot find module '/@fs/.../tests/
+    # vitest.setup.ts'" or "Cannot find package 'esbuild-wasm/....wasm?url'"
+    # -- both genuinely-present files/packages, confirmed present on disk in
+    # the sandbox at the exact moment of failure, that resolve fine locally
+    # (outside Bazel) and in every other vitest-based target here. This
+    # reads as one class of bug shared with //:build's and //:test_misc's
+    # own failures (see their comments) -- all three go through Vite
+    # internally (Vitest's own module graph is Vite; `astro build` uses
+    # Vite for config loading), and //:build's error message reports an
+    # absolute path under the plain (pre-Bazel) checkout directory
+    # (/home/runner/work/.../...) rather than this action's actual
+    # sandboxed cwd, which is the shape of bug you'd expect if some
+    # Vite-internal root computation isn't using the real process cwd.
+    # Multiple theories tested and ruled out with concrete on-real-run
+    # evidence, each still present as its own commit in this branch's
+    # history:
+    #   - Missing declared input (TESTS below) -- ruled out: still fails
+    #     with TESTS correctly declared.
+    #   - Concurrent Vitest worker forks stepping on each other's absolute-
+    #     path caches -- ruled out: --no-file-parallelism (single worker,
+    #     still below) made no measurable difference (~38 vs ~39 failures).
+    #   - PWD env var leaking the plain checkout path through
+    #     use_default_shell_env -- ruled out: diagnostic logging showed PWD
+    #     already matched the real sandboxed cwd on every action, both
+    #     before and after forcing it explicitly.
+    # Next step, if picked back up: trace the actual absolute-path
+    # computation inside Vite/Rollup's own source (not just this
+    # black-box, log-driven diagnosis) or build a from-scratch Vite+Bazel
+    # minimal repro the way oven-sh/bun#40785 was built for the wildcard-
+    # exports bug above -- neither was completed this pass, per the
+    # explicit timebox on this investigation.
+    args = "run vitest run src --no-file-parallelism",
+    # TESTS (tests/vitest.setup.ts) is required by every shard, not just
+    # the ones whose own directory happens to be under tests/ -- confirmed
+    # on a real run: omitting it produced a crisp "Cannot find module
+    # '.../tests/vitest.setup.ts'" (vitest.config.ts's global setupFiles).
+    srcs = CONFIG + SRC + SHARED + PRODUCT + TESTS,
+)
+
+bun_run(
+    name = "test_server_shared",
+    args = "run vitest run server shared",
+    srcs = CONFIG + SERVER + SHARED + TESTS,
+)
+
+bun_run(
+    name = "test_product",
+    args = "run vitest run packages",
+    srcs = CONFIG + PRODUCT + SHARED + TESTS,
+)
+
+bun_run(
+    name = "test_misc",
+    # tags = ["manual"]: see //:test_src's comment above -- same reasoning,
+    # same native-complement step covering this in quality.yml.
+    tags = ["manual"],
+    args = "run vitest run cli examples scripts tests",
+    # scripts/github-quality-workflow.test.ts reads
+    # .github/workflows/quality.yml directly (it validates that file's own
+    # structure), which none of the other globs above cover -- confirmed
+    # on a real run: "ENOENT ... open '.github/workflows/quality.yml'".
+    #
+    # KNOWN ISSUE, timeboxed: `tar` (Executable not found in $PATH) is
+    # fixed -- use_default_shell_env on the action restores a real PATH,
+    # confirmed on a real run: native-update-fixture-dogfood.test.ts now
+    # passes. Two failures remain, both traced (not yet root-caused) to the
+    # same Vite-under-Bazel class of bug as //:test_src (see its comment
+    # for the theories already ruled out):
+    #   - vite-development-smoke.test.ts boots an actual Vite dev server
+    #     and fails to load /src/app.tsx through it ("Does the file
+    #     exist?") -- the file demonstrably exists.
+    #   - product-sdk-package.test.ts is not actually independent: it
+    #     shells out to `bun run build` internally (see
+    #     scripts/package-product-sdk.ts's runCommand call), so it fails
+    #     for the exact same reason //:build does and should clear once
+    #     that's root-caused.
+    srcs = CONFIG + CLI + EXAMPLES + SCRIPTS + TESTS + SHARED + PRODUCT + glob([".github/workflows/**"]),
+)
+
+# ---------------------------------------------------------------------------
+# (e) small policy scripts
+#
+# WORKAROUND, not a design choice: each of these five is invoked as
+# `vitest run scripts/<x>.check.test.ts` (or an existing companion
+# `scripts/<x>.test.ts` that already asserts the exact same thing the
+# CLI script's default/`--check` behavior does) instead of the more direct
+# `bun run check:<x>` a bare `bun_check(script = "check:<x>")` would use.
+# Root cause: on a real ubuntu-latest run, bun's native `bun run <file>.ts`
+# execution fails to resolve `@effect/platform-bun`'s wildcard `exports`
+# subpaths (`./BunFileSystem`, `./BunRuntime`, ...) that these scripts
+# import -- even though the exact same specifier resolves fine via
+# `require.resolve` moments earlier in the same process/sandbox, and the
+# exact same import resolves fine when the identical script module is
+# loaded through Vitest instead. Filed upstream:
+# https://github.com/oven-sh/bun/issues/40785. Once that's fixed and
+# confirmed on a real ubuntu-latest run, these five should revert to
+# `bun_check(script = "check:<x>")` (see git history immediately before
+# this comment for the prior form) -- this is strictly a swap of
+# execution mechanism, not a change to what any of them assert:
+# `check_rifty`/`check_flect_skill`/`check_quality` reuse the exact
+# exported Effect (`verifyRiftyDependencies`, `generateFlectSkill`,
+# `validateProductQualityCoverage`) the CLI script's own
+# `if (import.meta.main)` block invokes; `check_effect`/
+# `check_effect_concurrency` needed their check Effect exported (was
+# private to the `if (import.meta.main)` block) to be importable, and gained
+# a two-line test file that calls that same exported Effect with no
+# changes to its logic.
+# ---------------------------------------------------------------------------
+bun_run(
+    name = "check_effect",
+    args = "run vitest run scripts/prepare-effect.check.test.ts",
+    srcs = CONFIG + SCRIPTS + TESTS,
+)
+
+bun_run(
+    name = "check_effect_concurrency",
+    args = "run vitest run scripts/verify-effect-concurrency.check.test.ts",
+    srcs = CONFIG + SCRIPTS + SRC + SERVER + SHARED + PRODUCT + CLI + EXAMPLES + TESTS,
+)
+
+bun_run(
+    name = "check_rifty",
+    args = "run vitest run scripts/verify-rifty-dependencies.test.ts",
+    srcs = CONFIG + SCRIPTS + TESTS,
+)
+
+bun_run(
+    name = "check_flect_skill",
+    args = "run vitest run scripts/generate-flect-skill.test.ts",
+    srcs = CONFIG + SCRIPTS + SRC + TESTS + glob([".agents/**"]),
+)
+
+bun_run(
+    name = "check_quality",
+    args = "run vitest run scripts/product-quality-coverage.test.ts",
+    srcs = CONFIG + SCRIPTS + TESTS + glob(["docs/**"]),
+)
+
+# ---------------------------------------------------------------------------
+# (f) production build, feeding (e)'s check:bundle. flect's own "build"
+# script already sequences build:product -> tsc -b -> astro build ->
+# check:bundle as one pipeline (scripts/check-browser-bundle.ts reads
+# ../dist relative to itself, not a Bazel-visible path), so this stays one
+# target rather than splitting the bundle-size gate out: splitting it would
+# require modeling dist/ as a tracked Bazel output tree for no cache-grain
+# benefit, since check:bundle only ever runs immediately after a build.
+# ---------------------------------------------------------------------------
+bun_check(
+    name = "build",
+    script = "build",
+    # tags = ["manual"]: see //:test_src's comment above -- same reasoning,
+    # same native-complement step covering this in quality.yml.
+    tags = ["manual"],
+    # build's own "tsc -b" step needs the same full project-reference
+    # closure //:typecheck does (confirmed on a real run: without
+    # EXAMPLES/SERVER/CLI this produced real TS2307 "Cannot find module"
+    # errors for src/ files that relative-import from those directories),
+    # plus ASSETS for the astro build step.
+    #
+    # KNOWN ISSUE, timeboxed (not root-caused): "bun run build" chains
+    # build:product -> tsc -b -> astro build -> check:bundle. tsc -b (and
+    # everything before it) is confirmed clean on a real run; `astro build`
+    # itself fails with "Cannot find module '@astrojs/preact' imported from
+    # '/home/runner/work/flect-projection-staging/flect-projection-staging/
+    # astro.config.ts'" -- a real, correctly-installed dependency
+    # (confirmed present in node_modules with a valid `exports` map, and
+    # this is a bare specifier, not a subpath, so it is not
+    # oven-sh/bun#40785's wildcard-exports bug). `astro build` runs under a
+    # real `node` (its own bin is a `#!/usr/bin/env node` script; PATH
+    # restoration via use_default_shell_env, see tools/bun/defs.bzl, fixed
+    # an earlier "bun: command not found"/"node: command not found"-class
+    # failure and got this far). The error's own path
+    # (/home/runner/work/.../astro.config.ts, the plain pre-Bazel checkout
+    # location) rather than this action's real sandboxed cwd is the
+    # standout clue: something in Astro's/Vite's own config-loading
+    # resolves a root that isn't the actual process cwd. Diagnostic
+    # logging ruled out the PWD env var specifically (see //:test_misc's
+    # and //:test_src's comments for the full theory list already tested);
+    # this reads as the same underlying bug class as those two targets'
+    # remaining failures, not yet root-caused, timeboxed per explicit
+    # instruction rather than continuing to thrash on it.
+    srcs = CONFIG + SRC + SHARED + PRODUCT + EXAMPLES + SERVER + CLI + ASSETS,
+)
+
+# ---------------------------------------------------------------------------
+# Everything green, as one test_suite convenience target. `bazel test //...`
+# already reaches every non-manual build_test in this file; this just names
+# the group. Deliberately excludes :build/:test_src/:test_misc (tags =
+# ["manual"] above) -- see //:known_issues below for those, and
+# .github/workflows/quality.yml's `bazel` job for the native (non-Bazel)
+# step that covers what they would have covered, until the shared
+# Vite-under-Bazel bug they hit is root-caused.
+# (g) Playwright e2e is deliberately NOT a Bazel target -- see the PR body
+# and README for the evidence: it needs network for the browser download,
+# gains nothing from Bazel's action cache (it is not meaningfully
+# input-addressable the way a unit test is; a green run says "the app
+# still works," not "these particular files are unchanged"), and Bazel
+# would only add sandboxing overhead around a step that already runs fine
+# as a normal CI step. It stays a direct `bun run test:e2e` step in the
+# workflow YAML.
+# ---------------------------------------------------------------------------
+test_suite(
+    name = "all",
+    tests = [
+        ":check_effect",
+        ":check_effect_concurrency",
+        ":check_flect_skill",
+        ":check_quality",
+        ":check_rifty",
+        ":lint_biome",
+        ":lint_oxfmt",
+        ":test_product",
+        ":test_server_shared",
+        ":typecheck",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# The manual-tagged known-issue targets, named and grouped for visibility
+# (they don't show up in `bazel test //...`/`:all` above) and so whoever
+# picks up the Vite-under-Bazel bug can run just these three:
+# `bazel test //:known_issues`. Each target's own KNOWN ISSUE comment has
+# the full diagnosis and what's already been ruled out.
+#
+# This suite is ALSO tagged "manual": a test_suite's own `tests` list is
+# not itself subject to member-level manual filtering (confirmed on a real
+# local run -- `bazel test //...` still executed :build/:test_misc/
+# :test_src via this suite even with each of them individually tagged
+# manual, until this suite was tagged manual too), so without this tag
+# `//...` would still reach them transitively through this suite despite
+# the tags above.
+# ---------------------------------------------------------------------------
+test_suite(
+    name = "known_issues",
+    tags = ["manual"],
+    tests = [
+        ":build",
+        ":test_misc",
+        ":test_src",
+    ],
+)

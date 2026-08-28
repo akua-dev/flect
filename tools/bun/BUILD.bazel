@@ -1,0 +1,40 @@
+# Exposes the pinned bun binary for the running host platform as a single
+# executable target, //tools/bun:bun. See MODULE.bazel for the sha256-pinned
+# per-platform downloads this select()s over.
+load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+config_setting(
+    name = "linux_x64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
+config_setting(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+config_setting(
+    name = "darwin_arm64",
+    constraint_values = [
+        "@platforms//os:macos",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+native_binary(
+    name = "bun",
+    src = select({
+        ":linux_x64": "@bun_linux_x64//:bun_bin",
+        ":linux_arm64": "@bun_linux_arm64//:bun_bin",
+        ":darwin_arm64": "@bun_darwin_arm64//:bun_bin",
+    }),
+    out = "bun",
+)

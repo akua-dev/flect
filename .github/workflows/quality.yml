@@ -1,5 +1,14 @@
 name: Flect quality
 
+# Advisory only. This workflow runs on the public GitHub-hosted repository
+# and gives outside contributors fast, real signal on their pull requests --
+# it is NOT the authoritative gate. The authoritative gate is the monorepo's
+# Bazel-driven CI, which runs after a maintainer imports a contribution (see
+# CONTRIBUTING.md and cnap#866 "Workflow placement" / "CI security
+# addendum"). `permissions: contents: read`, no secrets, no self-hosted
+# runners -- this workflow can never reach anything beyond a public
+# checkout and the public bun/npm/Bazel registries.
+
 on:
   pull_request:
     branches:
@@ -49,8 +58,8 @@ jobs:
               - "!docs/**"
               - "!.agents/**"
 
-  checks:
-    name: Static checks and unit tests
+  bazel:
+    name: Bazel test suite (lint, typecheck, unit tests, build)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -61,20 +70,66 @@ jobs:
         with:
           persist-credentials: false
 
+      # ubuntu-latest ships Bazel 9.2.0 / Bazelisk preinstalled, matching
+      # .bazelversion exactly, so bazelisk-cache below is defensive (a
+      # future version bump) rather than load-bearing on a cold run.
+      # disk-cache + repository-cache are the actual cache payload; both are
+      # GitHub Actions cache under the hood, so no third-party account or
+      # remote-cache service is involved (see PR body for the alternatives
+      # considered). cache-save is disabled for pull_request runs so a fork
+      # PR can only ever *read* the shared cache, never write to it --
+      # GitHub Actions cache scoping already prevents a fork PR's cache
+      # writes from being visible outside that PR/branch, and disabling
+      # save here removes even that limited write.
+      - name: Set up Bazel with GitHub Actions-backed caching
+        uses: bazel-contrib/setup-bazel@8cb04a772ab4c1eb984e9c1b493a182e96c5e425
+        with:
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
+
+      # --jobs bounds how many check targets install+run concurrently. Each
+      # target does its own `bun install` (see tools/bun/defs.bzl for why),
+      # so unbounded parallelism on a cold cache tried to hold ~13 node_modules
+      # trees on disk at once and exhausted ubuntu-latest's disk -- measured
+      # directly on this test bed, see the PR body's timing table.
+      #
+      # `//:build`/`//:test_src`/`//:test_misc` are tags = ["manual"] (see
+      # BUILD.bazel and //:known_issues) -- all three hit the same
+      # not-yet-root-caused Vite-under-Bazel bug (astro build / Vitest
+      # dev-server / Vitest module graph all fail to resolve genuinely-
+      # present files/packages specifically inside a Bazel sandbox; see
+      # each target's own KNOWN ISSUE comment for what's been ruled out).
+      # `bazel test //...` below therefore does not cover them.
+      - name: Run the Bazel-cached quality gate
+        run: bazel test //... --keep_going --jobs=4
+
+      # Temporary complement to the manual-tagged Bazel targets above: this
+      # is exactly what //:build/:test_src/:test_misc would have covered,
+      # run the plain way (no Bazel sandbox) since that's proven green here
+      # -- the bug those three targets hit is specific to running under
+      # Bazel's sandbox, not to flect's own code. Remove this step (and the
+      # `manual` tags + //:known_issues in BUILD.bazel) once the
+      # Vite-under-Bazel class is root-caused and those targets are green
+      # under Bazel too.
       - name: Install the pinned Bun runtime
         uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979
         with:
           bun-version: "1.3.14"
 
-      - name: Install locked dependencies
+      - name: Install locked dependencies (native complement)
         run: bun install --frozen-lockfile
 
-      - name: Run the static and unit quality gate
-        run: bun run check
+      - name: Run src/cli/examples/scripts/tests unit suites (native complement for //:test_src, //:test_misc)
+        run: bun run vitest run src cli examples scripts tests
+
+      - name: Run the production build (native complement for //:build, includes check:bundle)
+        run: bun run build
 
   e2e:
     name: Browser end-to-end tests
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: changes
     if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
@@ -95,7 +150,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install the pinned Chromium runtime
-        run: ./node_modules/.bin/playwright install chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
 
       - name: Run production Chromium workflows
         run: bun run test:e2e
@@ -168,7 +223,7 @@ jobs:
     timeout-minutes: 5
     needs:
       - changes
-      - checks
+      - bazel
       - e2e
       - desktop
     if: always()
@@ -182,7 +237,7 @@ jobs:
       - name: Require every quality job to succeed
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
-          CHECKS_RESULT: ${{ needs.checks.result }}
+          BAZEL_RESULT: ${{ needs.bazel.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
           DESKTOP_RESULT: ${{ needs.desktop.result }}
           DOCS_ONLY: ${{ github.event_name == 'pull_request' && needs.changes.outputs.code != 'true' }}
@@ -204,7 +259,7 @@ jobs:
             status=1
           }
           require changes "$CHANGES_RESULT" false
-          require checks "$CHECKS_RESULT" false
+          require bazel "$BAZEL_RESULT" false
           require e2e "$E2E_RESULT" true
           require desktop "$DESKTOP_RESULT" true
           exit "$status"
