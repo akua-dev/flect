@@ -1,8 +1,12 @@
 import { expect, type Page, test } from '@playwright/test';
-import { FlectPerformanceBudgets } from '../../shared/performance-budgets';
+import { platformBrowserPerformanceBudgets } from '../../shared/performance-budgets';
 import { resetBrowserWorkspace } from './reset-browser-workspace';
 
-const budget = FlectPerformanceBudgets.browser;
+// Platform-aware, not a fixed macOS-tuned constant: see
+// shared/performance-budgets.ts's LINUX_BROWSER_OVERRIDES for why (this
+// suite runs on ubuntu-latest in CI -- akua-dev/flect#61 -- and on
+// whatever a contributor's local machine is otherwise).
+const budget = platformBrowserPerformanceBudgets();
 
 // Shared macOS runners occasionally stall the whole browser process long
 // enough for several independent budgets to fail together. Re-measure a noisy
