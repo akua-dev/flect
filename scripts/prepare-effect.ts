@@ -18,6 +18,43 @@ const repository = Effect.fn('Flect.PrepareEffect.repository')(function* () {
 	return path.join(import.meta.dirname, '..');
 });
 
+// Detects whether the flect package root sits inside a Bazel monorepo (for
+// example, grafted as apps/flect inside cnap) by walking ancestor directories
+// above it for a REPO.bazel or MODULE.bazel marker. A standalone flect
+// checkout has no such ancestor, so this stays false there.
+const findsBazelMonorepoAbove = Effect.fn('Flect.PrepareEffect.findsBazelMonorepoAbove')(
+	function* () {
+		const fs = yield* FileSystem.FileSystem;
+		const path = yield* Path.Path;
+		let dir = path.dirname(yield* repository());
+		while (true) {
+			const hasRepoBazel = yield* fs.exists(path.join(dir, 'REPO.bazel'));
+			const hasModuleBazel = yield* fs.exists(path.join(dir, 'MODULE.bazel'));
+			if (hasRepoBazel || hasModuleBazel) return true;
+			const parent = path.dirname(dir);
+			if (parent === dir) return false;
+			dir = parent;
+		}
+	}
+);
+
+// The pinned Effect checkout is a local API reference for standalone flect
+// development only. Skip cloning it when either:
+//   - flect is nested inside a Bazel monorepo (its `bun install` would
+//     materialize the checkout as CI workspace bloat unrelated to this repo), or
+//   - CI is truthy (any CI runner, monorepo or standalone).
+// Returns the human-readable reason to print, or undefined when the clone
+// should proceed as usual.
+const skipCloneReason = Effect.fn('Flect.PrepareEffect.skipCloneReason')(function* () {
+	if (process.env.CI) {
+		return 'CI is set';
+	}
+	if (yield* findsBazelMonorepoAbove()) {
+		return 'running inside a Bazel monorepo (found REPO.bazel/MODULE.bazel above the flect package root)';
+	}
+	return undefined;
+});
+
 const runGit = (args: ReadonlyArray<string>) =>
 	Effect.gen(function* () {
 		const cwd = yield* repository();
@@ -97,6 +134,13 @@ const updateToPinnedCommit = Effect.fn('Flect.PrepareEffect.updateToPinnedCommit
 });
 
 const prepareEffect = Effect.gen(function* () {
+	const skipReason = yield* skipCloneReason();
+	if (skipReason !== undefined) {
+		console.log(
+			`Skipping local Effect checkout at ${repoDir}: ${skipReason}. It is only a local API reference for standalone flect development.`
+		);
+		return;
+	}
 	yield* ensureCheckout();
 	yield* updateToPinnedCommit();
 	yield* verifyCheckout();
@@ -104,12 +148,20 @@ const prepareEffect = Effect.gen(function* () {
 
 const checkEffect = Effect.gen(function* () {
 	const exists = yield* checkoutDirectoryExists();
-	if (!exists) {
-		return yield* Effect.fail(
-			new Error(`Effect checkout is missing at ${repoDir}; run bun run prepare`)
-		);
+	if (exists) {
+		yield* verifyCheckout();
+		return;
 	}
-	yield* verifyCheckout();
+	const skipReason = yield* skipCloneReason();
+	if (skipReason !== undefined) {
+		console.log(
+			`Effect checkout absent at ${repoDir}; skipping verification: ${skipReason}. It is only a local API reference for standalone flect development.`
+		);
+		return;
+	}
+	return yield* Effect.fail(
+		new Error(`Effect checkout is missing at ${repoDir}; run bun run prepare`)
+	);
 });
 
 if (import.meta.main) {
