@@ -269,6 +269,7 @@ function ExtensionRoleReview({
 				</div>
 				{confirmRemove ? (
 					<div className='extension-review__remove-confirm'>
+						{/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here. */}
 						<span role='status'>Removal needs confirmation.</span>
 						<button
 							className='decision-button decision-button--danger'
@@ -293,6 +294,7 @@ function ExtensionRoleReview({
 			</details>
 
 			{status !== undefined && (
+				// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 				<p aria-live='polite' className='extension-review__operation' role='status'>
 					{status}
 				</p>
