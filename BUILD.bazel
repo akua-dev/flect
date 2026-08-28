@@ -169,7 +169,11 @@ bun_run(
 bun_run(
     name = "test_misc",
     args = "run vitest run cli examples scripts tests",
-    srcs = CONFIG + CLI + EXAMPLES + SCRIPTS + TESTS + SHARED + PRODUCT,
+    # scripts/github-quality-workflow.test.ts reads
+    # .github/workflows/quality.yml directly (it validates that file's own
+    # structure), which none of the other globs above cover -- confirmed
+    # on a real run: "ENOENT ... open '.github/workflows/quality.yml'".
+    srcs = CONFIG + CLI + EXAMPLES + SCRIPTS + TESTS + SHARED + PRODUCT + glob([".github/workflows/**"]),
 )
 
 # ---------------------------------------------------------------------------
