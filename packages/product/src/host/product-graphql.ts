@@ -111,7 +111,7 @@ const decodeResponse = Effect.fn('ProductGraphql.decodeResponse')(function* (
 	policyId: string,
 	status: number,
 	body: Uint8Array
-) {
+): Effect.fn.Return<ProductGraphqlResponse, ProductGraphqlFailure> {
 	if (status < 200 || status >= 300) {
 		return yield* Effect.fail(failure(policyId, 'product-denied'));
 	}
@@ -186,7 +186,7 @@ export const makeProductGraphqlLayer = (options: {
 
 			const invoke = Effect.fn('ProductGraphql.invoke')(function* (
 				candidate: ProductGraphqlRequest
-			) {
+			): Effect.fn.Return<ProductGraphqlResponse, ProductGraphqlFailure> {
 				const request = yield* Schema.decodeUnknownEffect(
 					ProductGraphqlRequest,
 					strict

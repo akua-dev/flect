@@ -223,7 +223,10 @@ export const isProductIntegration = (value: ProductIntegration): value is Produc
 	validatedIntegrations.has(value);
 
 const digestBytes = Effect.fn('ProductIntegration.digestBytes')(
-	(contents: Uint8Array, reason: ProductIntegrationFailure['reason']) =>
+	(
+		contents: Uint8Array,
+		reason: ProductIntegrationFailure['reason']
+	): Effect.Effect<string, ProductIntegrationFailure> =>
 		Effect.tryPromise({
 			try: async () => {
 				const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(contents));
@@ -235,8 +238,9 @@ const digestBytes = Effect.fn('ProductIntegration.digestBytes')(
 		})
 );
 
-const digestJson = Effect.fn('ProductIntegration.digestJson')((value: ProductJson) =>
-	digestBytes(encoder.encode(JSON.stringify(value)), 'invalid-metadata')
+const digestJson = Effect.fn('ProductIntegration.digestJson')(
+	(value: ProductJson): Effect.Effect<string, ProductIntegrationFailure> =>
+		digestBytes(encoder.encode(JSON.stringify(value)), 'invalid-metadata')
 );
 
 const sanitizeArchive = (effect: Effect.Effect<Uint8Array, ProductIntegrationFailure>) =>
@@ -250,7 +254,7 @@ const sanitizeArchive = (effect: Effect.Effect<Uint8Array, ProductIntegrationFai
 
 export const defineProductIntegration = Effect.fn('ProductIntegration.define')(function* (
 	input: ProductIntegrationInput
-) {
+): Effect.fn.Return<ProductIntegration, ProductIntegrationFailure> {
 	const metadata = yield* Schema.decodeUnknownEffect(
 		ProductIntegrationMetadata,
 		strict

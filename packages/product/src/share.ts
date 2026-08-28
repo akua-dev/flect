@@ -138,7 +138,7 @@ const expectedRoot = (kind: ShareArtifactKind) =>
 
 export const validateShareManifest = Effect.fn('Share.validateManifest')(function* (
 	input: unknown
-) {
+): Effect.fn.Return<ShareManifest, ShareContractFailure> {
 	const manifest = yield* Schema.decodeUnknownEffect(
 		ShareManifest,
 		strict
@@ -202,7 +202,7 @@ export const hashShareArtifactSource = Effect.fn('Share.hashArtifactSource')(fun
 		readonly path: string;
 		readonly contents: Uint8Array;
 	}>
-) {
+): Effect.fn.Return<string, ShareContractFailure> {
 	const root = yield* Schema.decodeUnknownEffect(
 		PortablePath,
 		strict

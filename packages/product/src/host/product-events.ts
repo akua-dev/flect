@@ -103,7 +103,9 @@ export const makeProductEventsLayer = (options: {
 						const cursor = yield* SynchronizedRef.make(request.resumeAfter);
 						const controller = new AbortController();
 
-						const emit = Effect.fn('ProductEvents.emit')(function* (candidateEvent: unknown) {
+						const emit = Effect.fn('ProductEvents.emit')(function* (
+							candidateEvent: unknown
+						): Effect.fn.Return<void, ProductEventFailure> {
 							const event = yield* Schema.decodeUnknownEffect(
 								ProductEvent,
 								strict

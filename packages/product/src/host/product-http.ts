@@ -96,99 +96,103 @@ export const makeProductHttpLayer = (options: {
 	const credentials = options.credentialHeaders ?? (() => Effect.succeed([]));
 
 	return Layer.succeed(ProductHttp)({
-		invoke: Effect.fn('ProductHttp.invoke')((request) =>
-			Effect.gen(function* () {
-				const policy = policies.get(request.policyId);
-				if (policy === undefined || !validPolicy(policy)) {
-					return yield* Effect.fail(failed(request.policyId, 'invalid-policy'));
-				}
-				if (
-					!policy.methods.includes(request.method) ||
-					(request.body?.byteLength ?? 0) > policy.requestBytes
-				) {
-					return yield* Effect.fail(
-						failed(
-							policy.id,
-							(request.body?.byteLength ?? 0) > policy.requestBytes ? 'oversized-request' : 'denied'
-						)
-					);
-				}
-				let url: URL;
-				try {
-					if (/^[a-z][a-z0-9+.-]*:/i.test(request.path) || request.path.startsWith('//')) {
-						throw new Error('absolute URL');
+		invoke: Effect.fn('ProductHttp.invoke')(
+			(request): Effect.Effect<ProductHttpResponse, ProductHttpFailure> =>
+				Effect.gen(function* () {
+					const policy = policies.get(request.policyId);
+					if (policy === undefined || !validPolicy(policy)) {
+						return yield* Effect.fail(failed(request.policyId, 'invalid-policy'));
 					}
-					url = new URL(request.path, `${policy.origin}/`);
-				} catch {
-					return yield* Effect.fail(failed(policy.id, 'denied'));
-				}
-				if (
-					url.origin !== policy.origin ||
-					url.hash !== '' ||
-					(url.pathname !== policy.pathPrefix && !url.pathname.startsWith(`${policy.pathPrefix}/`))
-				) {
-					return yield* Effect.fail(failed(policy.id, 'denied'));
-				}
-				const allowed = new Set(policy.requestHeaders.map((name) => name.toLowerCase()));
-				const seen = new Set<string>();
-				const headers = new Headers();
-				for (const header of request.headers) {
-					const name = header.name.toLowerCase();
 					if (
-						seen.has(name) ||
-						!allowed.has(name) ||
-						['authorization', 'cookie', 'host', 'content-length'].includes(name)
+						!policy.methods.includes(request.method) ||
+						(request.body?.byteLength ?? 0) > policy.requestBytes
+					) {
+						return yield* Effect.fail(
+							failed(
+								policy.id,
+								(request.body?.byteLength ?? 0) > policy.requestBytes
+									? 'oversized-request'
+									: 'denied'
+							)
+						);
+					}
+					let url: URL;
+					try {
+						if (/^[a-z][a-z0-9+.-]*:/i.test(request.path) || request.path.startsWith('//')) {
+							throw new Error('absolute URL');
+						}
+						url = new URL(request.path, `${policy.origin}/`);
+					} catch {
+						return yield* Effect.fail(failed(policy.id, 'denied'));
+					}
+					if (
+						url.origin !== policy.origin ||
+						url.hash !== '' ||
+						(url.pathname !== policy.pathPrefix &&
+							!url.pathname.startsWith(`${policy.pathPrefix}/`))
 					) {
 						return yield* Effect.fail(failed(policy.id, 'denied'));
 					}
-					seen.add(name);
-					headers.set(name, header.value);
-				}
-				const credentialValues = yield* credentials(policy.id).pipe(
-					Effect.catchCause((cause) =>
-						Cause.hasInterrupts(cause)
-							? Effect.failCause(cause)
-							: Effect.fail(failed(policy.id, 'transport'))
-					)
-				);
-				for (const header of credentialValues) {
-					headers.set(header.name, header.value);
-				}
-				const transport = Effect.tryPromise({
-					try: (signal) =>
-						fetch(url, {
-							method: request.method,
-							headers,
-							...(request.body === undefined ? {} : { body: Uint8Array.from(request.body) }),
-							credentials: 'omit',
-							redirect: 'error',
-							signal
-						}),
-					catch: () => failed(policy.id, 'transport')
-				}).pipe(
-					Effect.flatMap((response) =>
-						boundedBody(response, policy).pipe(
-							Effect.map((body) =>
-								ProductHttpResponse.make({
-									version: 1,
-									status: response.status,
-									headers: policy.responseHeaders.flatMap((name) => {
-										const value = response.headers.get(name);
-										return value === null ? [] : [{ name: name.toLowerCase(), value }];
-									}),
-									body
-								})
+					const allowed = new Set(policy.requestHeaders.map((name) => name.toLowerCase()));
+					const seen = new Set<string>();
+					const headers = new Headers();
+					for (const header of request.headers) {
+						const name = header.name.toLowerCase();
+						if (
+							seen.has(name) ||
+							!allowed.has(name) ||
+							['authorization', 'cookie', 'host', 'content-length'].includes(name)
+						) {
+							return yield* Effect.fail(failed(policy.id, 'denied'));
+						}
+						seen.add(name);
+						headers.set(name, header.value);
+					}
+					const credentialValues = yield* credentials(policy.id).pipe(
+						Effect.catchCause((cause) =>
+							Cause.hasInterrupts(cause)
+								? Effect.failCause(cause)
+								: Effect.fail(failed(policy.id, 'transport'))
+						)
+					);
+					for (const header of credentialValues) {
+						headers.set(header.name, header.value);
+					}
+					const transport = Effect.tryPromise({
+						try: (signal) =>
+							fetch(url, {
+								method: request.method,
+								headers,
+								...(request.body === undefined ? {} : { body: Uint8Array.from(request.body) }),
+								credentials: 'omit',
+								redirect: 'error',
+								signal
+							}),
+						catch: () => failed(policy.id, 'transport')
+					}).pipe(
+						Effect.flatMap((response) =>
+							boundedBody(response, policy).pipe(
+								Effect.map((body) =>
+									ProductHttpResponse.make({
+										version: 1,
+										status: response.status,
+										headers: policy.responseHeaders.flatMap((name) => {
+											const value = response.headers.get(name);
+											return value === null ? [] : [{ name: name.toLowerCase(), value }];
+										}),
+										body
+									})
+								)
 							)
 						)
-					)
-				);
-				return yield* transport.pipe(
-					Effect.timeoutOrElse({
-						duration: policy.deadlineMs,
-						orElse: () => Effect.fail(failed(policy.id, 'deadline'))
-					})
-				);
-			})
+					);
+					return yield* transport.pipe(
+						Effect.timeoutOrElse({
+							duration: policy.deadlineMs,
+							orElse: () => Effect.fail(failed(policy.id, 'deadline'))
+						})
+					);
+				})
 		)
 	});
 };
