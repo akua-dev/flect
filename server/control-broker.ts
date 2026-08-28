@@ -437,6 +437,15 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 					Stream.encodeText
 				);
 
+			// oxlint-disable effecttsgo/missing-effect-error -- false positive: `tsc -b`
+			// confirms `disable` (built from `mutateState(disableUnlocked)`, itself composed
+			// from `Ref`/`Queue`/`Deferred` operations that are all `E = never` plus
+			// `removeControlDescriptor(...).pipe(Effect.provide(platform))`, which is also
+			// `E = never`) is `Effect<void, never, never>` end to end - trivially assignable
+			// to this function's declared `ControlBrokerError`. effecttsgo cannot fully
+			// resolve the error channel through the `Semaphore.withPermits`/
+			// `Layer.provide(Layer.merge(...))` composition here and falls back to reporting
+			// `unknown` - same class of false positive as `makeControlBrokerLayer` above.
 			const externalRequest = Effect.fn('ControlBroker.externalRequest')(function* (
 				request: HttpServerRequest.HttpServerRequest
 			): Effect.fn.Return<HttpServerResponse.HttpServerResponse, ControlBrokerError> {
