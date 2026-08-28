@@ -567,6 +567,7 @@ export function CapsuleFrame({
 
 	if (failedSource === source) {
 		return (
+			// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 			<section className='capsule-fallback' role='status'>
 				<strong>This Flect app was stopped safely.</strong>
 				<p>Use the protected agent rail to recover or choose another revision.</p>
@@ -576,6 +577,7 @@ export function CapsuleFrame({
 
 	if (mountedFrameSource === undefined) {
 		return (
+			// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 			<section className='capsule-fallback' role='status'>
 				<p>Opening this Flect app.</p>
 			</section>

@@ -289,6 +289,7 @@ export function ProviderAuthPanel({
 			</div>
 
 			{authEvent !== undefined && (
+				// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 				<div aria-live='polite' className='provider-auth__flow' role='status'>
 					<AuthStep
 						disabled={disabled}

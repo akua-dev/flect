@@ -1,0 +1,39 @@
+{
+	"$schema": "./node_modules/@effect/tsgo/oxlint-schema.json",
+	"extends": ["./node_modules/@effect/tsgo/oxlint-presets/recommended.json"],
+	"plugins": ["jsx-a11y", "react"],
+	"rules": {
+		"jsx-a11y/click-events-have-key-events": "error",
+		"jsx-a11y/prefer-tag-over-role": "error",
+		"react/no-danger": "error"
+	},
+	"overrides": [
+		{
+			"files": ["src/components/ui/**"],
+			"rules": {
+				"jsx-a11y/click-events-have-key-events": "off",
+				"jsx-a11y/prefer-tag-over-role": "off"
+			}
+		}
+	],
+	"ignorePatterns": [
+		".astro/",
+		".repos/",
+		"assets/agent-integrations/",
+		"bun.lock",
+		"coverage/",
+		"dist/",
+		"dist-product-sdk/",
+		"dist-release/",
+		"dist-spa/",
+		"node_modules/",
+		"packages/product/node_modules/",
+		"playwright-report/",
+		"public/",
+		"src-tauri/binaries/",
+		"src-tauri/gen/",
+		"src-tauri/icons/",
+		"src-tauri/target/",
+		"test-results/"
+	]
+}

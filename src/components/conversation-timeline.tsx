@@ -26,6 +26,7 @@ const StreamingReasoning = lazy(() =>
 );
 
 const SurfaceFallback = ({ label }: { readonly label: string }) => (
+	// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 	<span className='sr-only' role='status'>
 		{label}
 	</span>
