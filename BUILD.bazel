@@ -1,0 +1,232 @@
+load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("//tools/bun:defs.bzl", "bun_check", "bun_run")
+load("//tools/bun:node_modules.bzl", "bun_node_modules")
+
+# ---------------------------------------------------------------------------
+# node_modules: one cacheable action, coarsely keyed on the lockfile and
+# every package.json in the (single-workspace) tree. bun install still needs
+# network on a genuine cache miss (this is not a hermetic, sandboxed fetch --
+# see MODULE.bazel/tools/bun/defs.bzl for why a pnpm-shaped hermetic
+# rules_js install doesn't apply to a bun project). The Bazel-side payoff is
+# that a *warm* cache (same lockfile) never re-runs `bun install` at all --
+# Bazel serves the previously produced node_modules tree straight from the
+# disk/GHA cache, which is the coarse "skip unchanged" behavior called for.
+# ---------------------------------------------------------------------------
+bun_node_modules(
+    name = "node_modules",
+    srcs = [
+        "package.json",
+        "bun.lock",
+        "packages/product/package.json",
+    ],
+    bun = "//tools/bun:bun",
+)
+
+# ---------------------------------------------------------------------------
+# Common source globs, shared across check targets. Grouped by the same
+# directories flect's own vitest include list and tsconfig "include" arrays
+# already use, so a change under one directory only invalidates the check
+# targets that actually read it.
+# ---------------------------------------------------------------------------
+CONFIG = [
+    "package.json",
+    "bun.lock",
+    "tsconfig.json",
+    "tsconfig.app.json",
+    "tsconfig.server.json",
+    "biome.json",
+    ".oxfmtignore",
+    ".oxfmtrc.json",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "astro.config.ts",
+    "playwright.config.ts",
+    "components.json",
+    "index.html",
+]
+
+SHARED = glob(["shared/**"])
+
+PRODUCT = glob(
+    ["packages/product/**"],
+    exclude = ["packages/product/node_modules/**", "packages/product/dist/**"],
+)
+
+SRC = glob(["src/**"])
+
+SERVER = glob(["server/**"])
+
+CLI = glob(["cli/**"])
+
+EXAMPLES = glob(["examples/**"])
+
+SCRIPTS = glob(["scripts/**"])
+
+TESTS = glob(["tests/**"])
+
+ASSETS = glob(["assets/**", "public/**"])
+
+# The full repo tree, for the two whole-tree formatters/linters. Excludes
+# generated/ignored directories (mirrors .gitignore) plus Bazel's own output
+# symlinks, which would otherwise make the glob self-referential.
+WHOLE_TREE = glob(
+    ["**/*"],
+    exclude = [
+        "node_modules/**",
+        "packages/product/node_modules/**",
+        "dist/**",
+        "dist-spa/**",
+        "dist-product-sdk/**",
+        "dist-release/**",
+        "coverage/**",
+        "playwright-report/**",
+        "test-results/**",
+        "src-tauri/target/**",
+        "src-tauri/binaries/**",
+        ".repos/**",
+        ".worktrees/**",
+        "bazel-*/**",
+        "bazel-*",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# (a) biome lint
+# ---------------------------------------------------------------------------
+bun_run(
+    name = "lint_biome",
+    args = "run biome check .",
+    srcs = WHOLE_TREE,
+)
+
+# ---------------------------------------------------------------------------
+# (b) oxfmt format check
+# ---------------------------------------------------------------------------
+bun_run(
+    name = "lint_oxfmt",
+    args = "run oxfmt --check --ignore-path .oxfmtignore .",
+    srcs = WHOLE_TREE,
+)
+
+# ---------------------------------------------------------------------------
+# (c) tsc typecheck (single project reference build; tsc -b already only
+# recompiles/typechecks the project graph rooted at tsconfig.json, so this
+# stays one target rather than per-tsconfig -- see README/PR body for why
+# splitting it further was not worth the duplicated project-reference cache).
+# ---------------------------------------------------------------------------
+bun_check(
+    name = "typecheck",
+    script = "typecheck",
+    srcs = CONFIG + SRC + SHARED + PRODUCT + EXAMPLES + SERVER + CLI + SCRIPTS + TESTS,
+)
+
+# ---------------------------------------------------------------------------
+# (d) vitest unit suite, sharded by directory for cache granularity. Mirrors
+# vitest.config.ts's own `include` glob, split across four shards so e.g. a
+# src/-only change does not invalidate the server/shared shard's cache entry.
+# vitest's positional args are path-substring filters, so `vitest run src`
+# runs exactly (and only) the tests vitest.config.ts's `include` already
+# scopes under src/.
+# ---------------------------------------------------------------------------
+bun_run(
+    name = "test_src",
+    args = "run vitest run src",
+    srcs = CONFIG + SRC + SHARED + PRODUCT,
+)
+
+bun_run(
+    name = "test_server_shared",
+    args = "run vitest run server shared",
+    srcs = CONFIG + SERVER + SHARED,
+)
+
+bun_run(
+    name = "test_product",
+    args = "run vitest run packages",
+    srcs = CONFIG + PRODUCT + SHARED,
+)
+
+bun_run(
+    name = "test_misc",
+    args = "run vitest run cli examples scripts tests",
+    srcs = CONFIG + CLI + EXAMPLES + SCRIPTS + TESTS + SHARED + PRODUCT,
+)
+
+# ---------------------------------------------------------------------------
+# (e) small policy scripts
+# ---------------------------------------------------------------------------
+bun_check(
+    name = "check_effect",
+    script = "check:effect",
+    srcs = CONFIG + SCRIPTS,
+)
+
+bun_check(
+    name = "check_effect_concurrency",
+    script = "check:effect-concurrency",
+    srcs = CONFIG + SCRIPTS + SRC + SERVER + SHARED + PRODUCT + CLI + EXAMPLES + TESTS,
+)
+
+bun_check(
+    name = "check_rifty",
+    script = "check:rifty",
+    srcs = CONFIG + SCRIPTS,
+)
+
+bun_check(
+    name = "check_flect_skill",
+    script = "check:flect-skill",
+    srcs = CONFIG + SCRIPTS + SRC + glob([".agents/**"]),
+)
+
+bun_check(
+    name = "check_quality",
+    script = "check:quality",
+    srcs = CONFIG + SCRIPTS + glob(["docs/**"]),
+)
+
+# ---------------------------------------------------------------------------
+# (f) production build, feeding (e)'s check:bundle. flect's own "build"
+# script already sequences build:product -> tsc -b -> astro build ->
+# check:bundle as one pipeline (scripts/check-browser-bundle.ts reads
+# ../dist relative to itself, not a Bazel-visible path), so this stays one
+# target rather than splitting the bundle-size gate out: splitting it would
+# require modeling dist/ as a tracked Bazel output tree for no cache-grain
+# benefit, since check:bundle only ever runs immediately after a build.
+# ---------------------------------------------------------------------------
+bun_check(
+    name = "build",
+    script = "build",
+    srcs = CONFIG + SRC + SHARED + PRODUCT + ASSETS,
+)
+
+# ---------------------------------------------------------------------------
+# Everything above, as one test_suite convenience target. `bazel test //...`
+# already reaches every build_test in this file; this just names the group.
+# (g) Playwright e2e is deliberately NOT a Bazel target -- see the PR body
+# and README for the evidence: it needs network for the browser download,
+# gains nothing from Bazel's action cache (it is not meaningfully
+# input-addressable the way a unit test is; a green run says "the app
+# still works," not "these particular files are unchanged"), and Bazel
+# would only add sandboxing overhead around a step that already runs fine
+# as a normal CI step. It stays a direct `bun run test:e2e` step in the
+# workflow YAML.
+# ---------------------------------------------------------------------------
+test_suite(
+    name = "all",
+    tests = [
+        ":build",
+        ":check_effect",
+        ":check_effect_concurrency",
+        ":check_flect_skill",
+        ":check_quality",
+        ":check_rifty",
+        ":lint_biome",
+        ":lint_oxfmt",
+        ":test_misc",
+        ":test_product",
+        ":test_server_shared",
+        ":test_src",
+        ":typecheck",
+    ],
+)

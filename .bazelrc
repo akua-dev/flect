@@ -1,0 +1,19 @@
+# Bazel configuration for the flect module. This file travels with the
+# public projection (apps/flect/.bazelrc -> public repo root .bazelrc), so it
+# must not reference anything outside this directory (see MODULE.bazel).
+
+# node_modules and every check genrule shell out to a real toolchain (bun);
+# run their actions locally rather than attempting to sandbox/dynamic-exec
+# them away, and let a real failure show real output.
+build --show_timestamps
+test --test_output=errors
+test --test_summary=short
+test --test_verbose_timeout_warnings
+
+# Disk cache: CI wires --disk_cache to a GitHub Actions-cache-backed
+# directory via bazel-contrib/setup-bazel (see
+# .github/workflows/quality.yml); local development gets Bazel's own
+# output_base action cache for free with no config needed, so this file
+# does not hardcode a disk_cache path.
+
+common --color=yes

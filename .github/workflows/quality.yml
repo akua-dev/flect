@@ -1,5 +1,14 @@
 name: Flect quality
 
+# Advisory only. This workflow runs on the public GitHub-hosted repository
+# and gives outside contributors fast, real signal on their pull requests --
+# it is NOT the authoritative gate. The authoritative gate is the monorepo's
+# Bazel-driven CI, which runs after a maintainer imports a contribution (see
+# CONTRIBUTING.md and cnap#866 "Workflow placement" / "CI security
+# addendum"). `permissions: contents: read`, no secrets, no self-hosted
+# runners -- this workflow can never reach anything beyond a public
+# checkout and the public bun/npm/Bazel registries.
+
 on:
   pull_request:
     branches:
@@ -49,8 +58,8 @@ jobs:
               - "!docs/**"
               - "!.agents/**"
 
-  checks:
-    name: Static checks and unit tests
+  bazel:
+    name: Bazel test suite (lint, typecheck, unit tests, build)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -61,20 +70,31 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install the pinned Bun runtime
-        uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979
+      # ubuntu-latest ships Bazel 9.2.0 / Bazelisk preinstalled, matching
+      # .bazelversion exactly, so bazelisk-cache below is defensive (a
+      # future version bump) rather than load-bearing on a cold run.
+      # disk-cache + repository-cache are the actual cache payload; both are
+      # GitHub Actions cache under the hood, so no third-party account or
+      # remote-cache service is involved (see PR body for the alternatives
+      # considered). cache-save is disabled for pull_request runs so a fork
+      # PR can only ever *read* the shared cache, never write to it --
+      # GitHub Actions cache scoping already prevents a fork PR's cache
+      # writes from being visible outside that PR/branch, and disabling
+      # save here removes even that limited write.
+      - name: Set up Bazel with GitHub Actions-backed caching
+        uses: bazel-contrib/setup-bazel@8cb04a772ab4c1eb984e9c1b493a182e96c5e425
         with:
-          bun-version: "1.3.14"
+          bazelisk-cache: true
+          disk-cache: ${{ github.workflow }}
+          repository-cache: true
+          cache-save: ${{ github.event_name != 'pull_request' }}
 
-      - name: Install locked dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Run the static and unit quality gate
-        run: bun run check
+      - name: Run the Bazel-cached quality gate
+        run: bazel test //... --keep_going
 
   e2e:
     name: Browser end-to-end tests
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: changes
     if: github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'
@@ -95,7 +115,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Install the pinned Chromium runtime
-        run: ./node_modules/.bin/playwright install chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
 
       - name: Run production Chromium workflows
         run: bun run test:e2e
@@ -168,7 +188,7 @@ jobs:
     timeout-minutes: 5
     needs:
       - changes
-      - checks
+      - bazel
       - e2e
       - desktop
     if: always()
@@ -182,7 +202,7 @@ jobs:
       - name: Require every quality job to succeed
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
-          CHECKS_RESULT: ${{ needs.checks.result }}
+          BAZEL_RESULT: ${{ needs.bazel.result }}
           E2E_RESULT: ${{ needs.e2e.result }}
           DESKTOP_RESULT: ${{ needs.desktop.result }}
           DOCS_ONLY: ${{ github.event_name == 'pull_request' && needs.changes.outputs.code != 'true' }}
@@ -204,7 +224,7 @@ jobs:
             status=1
           }
           require changes "$CHANGES_RESULT" false
-          require checks "$CHECKS_RESULT" false
+          require bazel "$BAZEL_RESULT" false
           require e2e "$E2E_RESULT" true
           require desktop "$DESKTOP_RESULT" true
           exit "$status"
