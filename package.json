@@ -52,6 +52,7 @@
 		"@earendil-works/pi-coding-agent": "0.82.1",
 		"@effect/platform-browser": "4.0.0-beta.102",
 		"@effect/platform-bun": "4.0.0-beta.102",
+		"@effect/platform-node": "4.0.0-beta.102",
 		"@flect/product": "workspace:*",
 		"@jitl/quickjs-ng-wasmfile-release-sync": "0.32.0",
 		"@modelcontextprotocol/server": "2.0.0",
