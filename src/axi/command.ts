@@ -1,4 +1,9 @@
 import { Effect, Schema } from 'effect';
+import {
+	ProductCapabilityDecisionId,
+	type ProductJson,
+	ProductOperationId
+} from '../../packages/product/src/product-capability';
 import { ShareGitSource, ShareUrlSource } from '../../packages/product/src/share';
 import { ModelSelection } from '../../shared/contracts';
 import {
@@ -20,11 +25,6 @@ import {
 	SetRailCollapsed,
 	SetRailWidth
 } from '../../shared/control';
-import {
-	ProductCapabilityDecisionId,
-	type ProductJson,
-	ProductOperationId
-} from '../../shared/product-capability';
 import type { AxiAudience, AxiFormat } from './contracts';
 
 export interface FlectCommandMetadata {

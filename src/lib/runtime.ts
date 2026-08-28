@@ -10,7 +10,7 @@ import {
 	ProductCapabilityManifest,
 	type ProductJson,
 	ProductOperationFailure
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import type { CapabilityIntent, ExtensionIntentContext } from '../../shared/sandbox';
 import { type AgentCommandBridge, AgentCommandBridgeLive } from '../axi/agent-command-bridge';
 import { type AgentCommandBus, AgentCommandBusLive } from '../axi/agent-command-bus';

@@ -1,7 +1,7 @@
 import variant from '@jitl/quickjs-ng-wasmfile-release-sync';
 import { Effect, Option, Schema, type SchemaAST } from 'effect';
 import { newQuickJSWASMModuleFromVariant, type QuickJSWASMModule } from 'quickjs-emscripten-core';
-import { MAX_PORTABLE_EXTENSION_SOURCE_BYTES } from '../../shared/extensions';
+import { MAX_PORTABLE_EXTENSION_SOURCE_BYTES } from '../../packages/product/src/extensions';
 import {
 	type QuickJsExtensionRequest,
 	SandboxExecutionFailed,

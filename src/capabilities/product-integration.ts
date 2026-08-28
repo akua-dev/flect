@@ -1,9 +1,9 @@
 import type { ProductIntegration } from '@flect/product';
 import { Layer } from 'effect';
+import type { ProductEvents } from '../../packages/product/src/host/product-events';
 import { makeProductCapabilityBrokerLayer } from './product-capability-broker';
 import { makeProductCapabilityRegistryLayer } from './product-capability-registry';
 import { makeProductEventRegistryLayer } from './product-event-registry';
-import type { ProductEvents } from './product-events';
 
 export interface ProductIntegrationRuntimeOptions<EventsError, EventsRequirements> {
 	readonly integration: ProductIntegration;

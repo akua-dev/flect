@@ -1,11 +1,11 @@
 import { Context, Effect, Layer, Schema } from 'effect';
-import { decodeCapsule } from '../../shared/capsule';
+import { decodeCapsule } from '../../packages/product/src/capsule';
 import {
 	ExtensionManifest,
 	PortableExtensionDescriptor,
 	type PortableExtensionPackage,
 	type PortableExtensionRole
-} from '../../shared/extensions';
+} from '../../packages/product/src/extensions';
 import type { SandboxExecutionFailed, SandboxResult } from '../../shared/sandbox';
 import { ExtensionIntentContext } from '../../shared/sandbox';
 import { CapsuleStore } from '../capsule/capsule-store';

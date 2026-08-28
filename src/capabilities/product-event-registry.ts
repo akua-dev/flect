@@ -1,18 +1,18 @@
 import type { ProductEventDefinition } from '@flect/product';
 import { Context, Effect, Layer, Schema, type SchemaAST, Stream } from 'effect';
+import { ProductEvents } from '../../packages/product/src/host/product-events';
 import {
 	AuthorizedProductOperation,
 	type ProductCapabilityRequestContext,
 	type ProductOperationFailure,
 	type ProductOperationInvocation
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import {
 	type ProductEvent,
 	type ProductEventFailure,
 	ProductEventRequest
-} from '../../shared/product-events';
+} from '../../packages/product/src/product-events';
 import { ProductCapabilityBroker } from './product-capability-broker';
-import { ProductEvents } from './product-events';
 import {
 	productOperationFailure,
 	productOperationFailureFromBroker

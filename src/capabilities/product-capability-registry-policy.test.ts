@@ -7,7 +7,7 @@ import {
 	ProductCapabilityRequestContext,
 	ProductOperationFailure,
 	ProductOperationInvocation
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { makeProductCapabilityBrokerLayer } from './product-capability-broker';
 import { ProductCapabilityDecisionStore } from './product-capability-decision-store';
 import {

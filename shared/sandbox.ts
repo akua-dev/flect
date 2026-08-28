@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import * as Rpc from 'effect/unstable/rpc/Rpc';
 import * as RpcGroup from 'effect/unstable/rpc/RpcGroup';
-import { MAX_PORTABLE_EXTENSION_SOURCE_BYTES } from './extensions';
+import { MAX_PORTABLE_EXTENSION_SOURCE_BYTES } from '../packages/product/src/extensions';
 
 const IdentifierText = Schema.String.check(
 	Schema.isMinLength(1),

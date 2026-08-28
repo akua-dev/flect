@@ -1,6 +1,9 @@
 import { Effect } from 'effect';
-import { encodeCapsule } from '../../../shared/capsule';
-import type { ExtensionCapability, PortableExtensionRole } from '../../../shared/extensions';
+import { encodeCapsule } from '../../../packages/product/src/capsule';
+import type {
+	ExtensionCapability,
+	PortableExtensionRole
+} from '../../../packages/product/src/extensions';
 
 export type PortableExtensionFixtureVariant =
 	| 'noop'

@@ -6,7 +6,7 @@ import type {
 	PortableExtensionPackage,
 	PortableExtensionRole,
 	PortableExtensionRoleState
-} from '../../shared/extensions';
+} from '../../packages/product/src/extensions';
 
 export interface ExtensionReviewKey {
 	readonly capsuleId: string;

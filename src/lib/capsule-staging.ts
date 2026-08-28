@@ -1,6 +1,6 @@
 import { Effect, SubscriptionRef } from 'effect';
+import { type DecodedCapsule, decodeCapsule } from '../../packages/product/src/capsule';
 import { ProposalBuildRequest } from '../../shared/browser-build';
-import { type DecodedCapsule, decodeCapsule } from '../../shared/capsule';
 import {
 	CommandRejected,
 	type FlectCommandEnvelope,

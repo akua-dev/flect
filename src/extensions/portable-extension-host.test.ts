@@ -1,6 +1,9 @@
 import { assert, describe, it } from '@effect/vitest';
 import { Effect, Layer, Ref } from 'effect';
-import { PortableExtensionPackage, type PortableExtensionRole } from '../../shared/extensions';
+import {
+	PortableExtensionPackage,
+	type PortableExtensionRole
+} from '../../packages/product/src/extensions';
 import { SandboxExecutionFailed, SandboxResult, SetTextIntent } from '../../shared/sandbox';
 import { InterfaceStorage } from '../lib/interface-store';
 import { CapabilityAdapter, SandboxCapabilityBrokerLive } from '../sandbox/capability-broker';

@@ -7,15 +7,15 @@ import {
 	ProductOperationFailure
 } from '@flect/product';
 import { Effect, Layer } from 'effect';
+import { makeProductEventsLayer } from '../../packages/product/src/host/product-events';
 import {
 	ProductCapabilityAllowChoice,
 	ProductCapabilityRequestContext,
 	ProductOperationInvocation
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { ProductCapabilityBroker } from './product-capability-broker';
 import { ProductCapabilityDecisionStore } from './product-capability-decision-store';
 import { ProductCapabilityRegistry } from './product-capability-registry';
-import { makeProductEventsLayer } from './product-events';
 import { makeProductIntegrationRuntimeLayer } from './product-integration';
 
 const archive = new TextEncoder().encode('bridge-capsule');

@@ -11,7 +11,7 @@ import {
 	type ProductOperationFailure,
 	type ProductOperationInvocation,
 	ProductOperationSummary
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { ProductCapabilityBroker } from './product-capability-broker';
 import type { ProductCapabilityDecisionStoreFailure } from './product-capability-decision-store';
 import {

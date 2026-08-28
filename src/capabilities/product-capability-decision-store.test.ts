@@ -3,7 +3,7 @@ import { Effect, Layer } from 'effect';
 import {
 	ProductCapabilityDecision,
 	ProductCapabilityManifest
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { InterfaceStorage, InterfaceStorageError } from '../lib/interface-store';
 import {
 	makeProductCapabilityDecisionStoreLayer,

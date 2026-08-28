@@ -1,5 +1,9 @@
 import type { Effect } from 'effect';
-import { type DecodedCapsule, decodeCapsule, type InvalidCapsule } from '../shared/capsule';
+import {
+	type DecodedCapsule,
+	decodeCapsule,
+	type InvalidCapsule
+} from '../packages/product/src/capsule';
 
 // Native hosts read bytes through their platform picker, then enter the exact
 // same portable decoder as the browser. No host-specific manifest exists.
