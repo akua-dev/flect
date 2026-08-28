@@ -105,6 +105,21 @@ OUT="$2"
 # PATH) bun's own script-runner apparently prepended its own directory by
 # default and this worked.
 export PATH="$(dirname "$BUN"):$PATH"
+# Candidate fix for //:build ("Cannot find module '@astrojs/preact'",
+# a real, installed, bare-specifier dependency) and the Vite-powered
+# vitest/astro targets' shared symptom (Vite/Astro's own config-loading or
+# dev-server failing to resolve genuinely-present files/packages under this
+# sandbox, e.g. test_misc's vite-development-smoke.test.ts: "Failed to load
+# url /src/app.tsx ... Does the file exist?"): use_default_shell_env (above)
+# restores not just PATH but a small allowlist of other vars from the
+# invoking shell, which may include PWD -- a shell convention some tools
+# (Vite/Rollup among them) prefer over the real process cwd for root
+# detection specifically because it survives symlink traversal the way
+# getcwd() doesn't. If PWD still pointed at the original (non-Bazel)
+# checkout directory here, that would explain every one of these symptoms
+# at once: the packages/files in question are only actually installed/
+# built inside this sandboxed cwd, not at the plain checkout path.
+export PWD="$(pwd)"
 export HOME="$(mktemp -d)"
 export CI=1
 # 13 check targets each running their own `bun install` in parallel (see
@@ -164,6 +179,7 @@ BUNFIG
 # confirm/refute whether cwd-visibility is actually the trigger there.
 echo "=== bun action diagnostics: $(pwd) ==="
 echo "PATH=$PATH" >&2
+echo "PWD env var (pre-fixup)=$PWD vs real cwd=$(pwd)" >&2
 which node >&2 2>&1 || echo "node NOT ON PATH" >&2
 which tar >&2 2>&1 || echo "tar NOT ON PATH" >&2
 ls -la node_modules >&2 2>&1 | head -5 || echo "node_modules NOT VISIBLE" >&2
