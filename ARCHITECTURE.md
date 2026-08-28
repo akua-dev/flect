@@ -919,7 +919,9 @@ The implementation was checked against:
   plugin `2.3.5`;
 - `quickjs-emscripten-core` and the QuickJS-NG release-sync variant `0.32.0`;
 - Playwright `1.62.0`; and
-- Model Context Protocol split server/client packages `2.0.0` and Zod
-  `4.2.0`.
+- `@modelcontextprotocol/client` `2.0.0`, kept only as a devDependency for the
+  MCP adapter's in-memory round-trip test - the MCP server itself is
+  `effect/unstable/ai`'s `McpServer`, part of the pinned Effect release above,
+  and Zod is not a Flect dependency.
 
 Exact package versions are recorded in `package.json` and `bun.lock`.

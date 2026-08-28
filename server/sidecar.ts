@@ -46,12 +46,7 @@ const runSidecar = Effect.fn('Flect.Sidecar.run')(function* (argv: ReadonlyArray
 			return;
 		}
 		case 'mcp':
-			return yield* Effect.scoped(
-				Effect.acquireRelease(
-					Effect.sync(() => serveFlectMcp()),
-					(server) => Effect.promise(() => server.close())
-				).pipe(Effect.andThen(Effect.never))
-			);
+			return yield* serveFlectMcp();
 	}
 });
 

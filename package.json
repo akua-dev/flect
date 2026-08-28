@@ -56,7 +56,6 @@
 		"@effect/platform-node": "4.0.0-beta.102",
 		"@flect/product": "workspace:*",
 		"@jitl/quickjs-ng-wasmfile-release-sync": "0.32.0",
-		"@modelcontextprotocol/server": "2.0.0",
 		"@radix-ui/react-use-controllable-state": "1.2.6",
 		"@riftydev/npm-client": "0.2.0",
 		"@riftydev/runtime-js": "0.2.0",
