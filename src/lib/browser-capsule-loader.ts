@@ -5,7 +5,7 @@ import {
 	MAX_CAPSULE_BYTES
 } from '../../packages/product/src/capsule';
 
-export const loadBrowserCapsule = Effect.fn('Flect.Capsule.loadBrowser')((file: Blob) =>
+export const loadBrowserCapsule = Effect.fn('Capsule.loadBrowser')((file: Blob) =>
 	Effect.tryPromise({
 		try: async () => new Uint8Array(await file.arrayBuffer()),
 		catch: () => InvalidCapsule.make({ message: 'The capsule file could not be read.' })
@@ -14,7 +14,7 @@ export const loadBrowserCapsule = Effect.fn('Flect.Capsule.loadBrowser')((file: 
 
 const downloadFailed = (message: string) => InvalidCapsule.make({ message });
 
-export const loadBrowserCapsuleArchiveFromUrl = Effect.fn('Flect.Capsule.loadBrowserUrl')(
+export const loadBrowserCapsuleArchiveFromUrl = Effect.fn('Capsule.loadBrowserUrl')(
 	(input: string) =>
 		Effect.tryPromise({
 			try: async (signal) => {

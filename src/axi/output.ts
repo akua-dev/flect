@@ -37,7 +37,7 @@ const projectBounded = (value: unknown, full: boolean, depth = 0): unknown => {
 
 const formatError = (message: AxiFormatError['message']) => AxiFormatError.make({ message });
 
-const encodeOutput = Effect.fn('Flect.Axi.encodeOutput')(function* (
+const encodeOutput = Effect.fn('Axi.encodeOutput')(function* (
 	value: unknown,
 	format: AxiFormat,
 	maxBytes: number
@@ -63,7 +63,7 @@ export interface RenderAxiSuccessOptions {
 	readonly maxBytes?: number;
 }
 
-export const renderAxiSuccess = Effect.fn('Flect.Axi.renderSuccess')(function* (
+export const renderAxiSuccess = Effect.fn('Axi.renderSuccess')(function* (
 	options: RenderAxiSuccessOptions
 ) {
 	const stdout = yield* encodeOutput(
@@ -74,7 +74,7 @@ export const renderAxiSuccess = Effect.fn('Flect.Axi.renderSuccess')(function* (
 	return AxiRunResult.make({ exitCode: 0, stdout, stderr: '' });
 });
 
-export const renderAxiFailure = Effect.fn('Flect.Axi.renderFailure')(function* (
+export const renderAxiFailure = Effect.fn('Axi.renderFailure')(function* (
 	error: AxiPublicError,
 	format: AxiFormat,
 	exitCode: 1 | 2

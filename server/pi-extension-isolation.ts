@@ -22,7 +22,7 @@ import {
  * contract used by Flect.
  */
 export const runTrustedExtensionFailureProbe = Effect.fn(
-	'Flect.PiExtensionIsolation.runTrustedExtensionFailureProbe'
+	'PiExtensionIsolation.runTrustedExtensionFailureProbe'
 )(function* (extensionPath: string, role: InteractiveAgentRole) {
 	return yield* Effect.tryPromise({
 		try: async () => {

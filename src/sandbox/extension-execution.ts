@@ -43,7 +43,7 @@ export const ExtensionExecutionLive = Layer.effect(
 		const kernel = yield* ShapingKernel;
 
 		return {
-			execute: Effect.fn('Flect.ExtensionExecution.execute')(
+			execute: Effect.fn('ExtensionExecution.execute')(
 				function* (
 					manifest: ExtensionManifest,
 					input: unknown,

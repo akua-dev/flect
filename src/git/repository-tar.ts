@@ -101,7 +101,7 @@ const isLfsPointer = (contents: Uint8Array) => {
 	);
 };
 
-const validatePackedRefs = Effect.fn('Flect.RepositoryTar.validatePackedRefs')(function* (
+const validatePackedRefs = Effect.fn('RepositoryTar.validatePackedRefs')(function* (
 	contents: Uint8Array
 ) {
 	const value = yield* Effect.try({
@@ -122,7 +122,7 @@ const validatePackedRefs = Effect.fn('Flect.RepositoryTar.validatePackedRefs')(f
 	}
 });
 
-const validateGitEntry = Effect.fn('Flect.RepositoryTar.validateGitEntry')(function* (
+const validateGitEntry = Effect.fn('RepositoryTar.validateGitEntry')(function* (
 	entry: DecodedRepositoryArchiveEntry
 ): Effect.fn.Return<boolean, RepositoryArchiveError> {
 	const { path } = entry;
@@ -174,7 +174,7 @@ const validateGitEntry = Effect.fn('Flect.RepositoryTar.validateGitEntry')(funct
 	return yield* Effect.fail(repositoryArchiveError('prohibited'));
 });
 
-export const decodeRepositoryTar = Effect.fn('Flect.RepositoryTar.decode')(function* (
+export const decodeRepositoryTar = Effect.fn('RepositoryTar.decode')(function* (
 	archive: Uint8Array
 ): Effect.fn.Return<ReadonlyArray<DecodedRepositoryArchiveEntry>, RepositoryArchiveError> {
 	if (archive.byteLength > MAX_ARCHIVE_BYTES || archive.byteLength < BLOCK_BYTES * 3) {

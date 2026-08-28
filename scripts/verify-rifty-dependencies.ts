@@ -46,60 +46,62 @@ type ManifestReader = (
 	path: string
 ) => Effect.Effect<unknown, RiftyDependencyVerificationFailed, FileSystem.FileSystem>;
 
-const readManifest: ManifestReader = (path) =>
-	Effect.gen(function* () {
+const readManifest: ManifestReader = Effect.fn('VerifyRiftyDependencies.readManifest')(
+	function* (path) {
 		const fs = yield* FileSystem.FileSystem;
 		const source = yield* fs.readFileString(path);
 		return JSON.parse(source) as unknown;
-	}).pipe(
+	},
+	(effect, path) =>
+		effect.pipe(
+			Effect.mapError(() =>
+				RiftyDependencyVerificationFailed.make({
+					packageName: path,
+					message: 'The installed Rifty package manifest could not be read.'
+				})
+			)
+		)
+);
+
+const verifyOne = Effect.fn('VerifyRiftyDependencies.verifyOne')(function* (
+	read: ManifestReader,
+	name: string
+): Effect.fn.Return<
+	VerifiedRiftyDependency,
+	RiftyDependencyVerificationFailed,
+	FileSystem.FileSystem
+> {
+	const path = `node_modules/${name}/package.json`;
+	const input = yield* read(path);
+	const manifest = yield* decodeManifest(input).pipe(
 		Effect.mapError(() =>
 			RiftyDependencyVerificationFailed.make({
-				packageName: path,
-				message: 'The installed Rifty package manifest could not be read.'
+				packageName: name,
+				message: 'The installed Rifty package manifest is invalid.'
 			})
 		)
 	);
 
-const verifyOne = (
-	read: ManifestReader,
-	name: string
-): Effect.Effect<
-	VerifiedRiftyDependency,
-	RiftyDependencyVerificationFailed,
-	FileSystem.FileSystem
-> =>
-	Effect.gen(function* () {
-		const path = `node_modules/${name}/package.json`;
-		const input = yield* read(path);
-		const manifest = yield* decodeManifest(input).pipe(
-			Effect.mapError(() =>
-				RiftyDependencyVerificationFailed.make({
-					packageName: name,
-					message: 'The installed Rifty package manifest is invalid.'
-				})
-			)
+	if (
+		manifest.name !== name ||
+		manifest.version !== '0.2.0' ||
+		manifest.license !== 'MIT' ||
+		!manifest.repository.url.includes('github.com/vanilla-wave/rifty')
+	) {
+		return yield* Effect.fail(
+			RiftyDependencyVerificationFailed.make({
+				packageName: name,
+				message: 'The installed Rifty package does not match the approved pin.'
+			})
 		);
+	}
 
-		if (
-			manifest.name !== name ||
-			manifest.version !== '0.2.0' ||
-			manifest.license !== 'MIT' ||
-			!manifest.repository.url.includes('github.com/vanilla-wave/rifty')
-		) {
-			return yield* Effect.fail(
-				RiftyDependencyVerificationFailed.make({
-					packageName: name,
-					message: 'The installed Rifty package does not match the approved pin.'
-				})
-			);
-		}
-
-		return VerifiedRiftyDependency.make({
-			name,
-			version: manifest.version,
-			license: manifest.license
-		});
+	return VerifiedRiftyDependency.make({
+		name,
+		version: manifest.version,
+		license: manifest.license
 	});
+});
 
 export const makeVerifyRiftyDependencies = (read: ManifestReader) =>
 	Effect.forEach(RIFTY_DEPENDENCIES, (name) => verifyOne(read, name), {

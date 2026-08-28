@@ -107,37 +107,40 @@ const isJsonObject = (
 ): value is Readonly<Record<string, typeof Schema.Json.Type>> =>
 	typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const decodeResponse = (policyId: string, status: number, body: Uint8Array) =>
-	Effect.gen(function* () {
-		if (status < 200 || status >= 300) {
-			return yield* Effect.fail(failure(policyId, 'product-denied'));
-		}
-		const text = yield* Effect.try({
-			try: () => decoder.decode(body),
-			catch: () => failure(policyId, 'invalid-response')
-		});
-		const json = yield* Schema.decodeUnknownEffect(
-			Schema.fromJsonString(Schema.Json),
-			strict
-		)(text).pipe(Effect.mapError(() => failure(policyId, 'invalid-response')));
-		if (!isJsonObject(json)) {
-			return yield* Effect.fail(failure(policyId, 'invalid-response'));
-		}
-		const errors = json.errors;
-		if (Array.isArray(errors) && errors.length > 0) {
-			return yield* Effect.fail(failure(policyId, 'product-denied'));
-		}
-		if (!('data' in json)) {
-			return yield* Effect.fail(failure(policyId, 'invalid-response'));
-		}
-		return yield* Schema.decodeUnknownEffect(
-			ProductGraphqlResponse,
-			strict
-		)({
-			version: 1,
-			data: json.data
-		}).pipe(Effect.mapError(() => failure(policyId, 'invalid-response')));
+const decodeResponse = Effect.fn('ProductGraphql.decodeResponse')(function* (
+	policyId: string,
+	status: number,
+	body: Uint8Array
+) {
+	if (status < 200 || status >= 300) {
+		return yield* Effect.fail(failure(policyId, 'product-denied'));
+	}
+	const text = yield* Effect.try({
+		try: () => decoder.decode(body),
+		catch: () => failure(policyId, 'invalid-response')
 	});
+	const json = yield* Schema.decodeUnknownEffect(
+		Schema.fromJsonString(Schema.Json),
+		strict
+	)(text).pipe(Effect.mapError(() => failure(policyId, 'invalid-response')));
+	if (!isJsonObject(json)) {
+		return yield* Effect.fail(failure(policyId, 'invalid-response'));
+	}
+	const errors = json.errors;
+	if (Array.isArray(errors) && errors.length > 0) {
+		return yield* Effect.fail(failure(policyId, 'product-denied'));
+	}
+	if (!('data' in json)) {
+		return yield* Effect.fail(failure(policyId, 'invalid-response'));
+	}
+	return yield* Schema.decodeUnknownEffect(
+		ProductGraphqlResponse,
+		strict
+	)({
+		version: 1,
+		data: json.data
+	}).pipe(Effect.mapError(() => failure(policyId, 'invalid-response')));
+});
 
 export const makeProductGraphqlLayer = (options: {
 	readonly registrations: ReadonlyArray<ProductGraphqlRegistration>;
@@ -181,7 +184,7 @@ export const makeProductGraphqlLayer = (options: {
 				registrations.set(policy.id, { policy, document: candidate.document });
 			}
 
-			const invoke = Effect.fn('Flect.ProductGraphql.invoke')(function* (
+			const invoke = Effect.fn('ProductGraphql.invoke')(function* (
 				candidate: ProductGraphqlRequest
 			) {
 				const request = yield* Schema.decodeUnknownEffect(

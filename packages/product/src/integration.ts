@@ -222,7 +222,7 @@ const validatedIntegrations = new WeakSet<ProductIntegration>();
 export const isProductIntegration = (value: ProductIntegration): value is ProductIntegration =>
 	validatedIntegrations.has(value);
 
-const digestBytes = Effect.fn('Flect.ProductIntegration.digestBytes')(
+const digestBytes = Effect.fn('ProductIntegration.digestBytes')(
 	(contents: Uint8Array, reason: ProductIntegrationFailure['reason']) =>
 		Effect.tryPromise({
 			try: async () => {
@@ -235,7 +235,7 @@ const digestBytes = Effect.fn('Flect.ProductIntegration.digestBytes')(
 		})
 );
 
-const digestJson = Effect.fn('Flect.ProductIntegration.digestJson')((value: ProductJson) =>
+const digestJson = Effect.fn('ProductIntegration.digestJson')((value: ProductJson) =>
 	digestBytes(encoder.encode(JSON.stringify(value)), 'invalid-metadata')
 );
 
@@ -248,7 +248,7 @@ const sanitizeArchive = (effect: Effect.Effect<Uint8Array, ProductIntegrationFai
 		)
 	);
 
-export const defineProductIntegration = Effect.fn('Flect.ProductIntegration.define')(function* (
+export const defineProductIntegration = Effect.fn('ProductIntegration.define')(function* (
 	input: ProductIntegrationInput
 ) {
 	const metadata = yield* Schema.decodeUnknownEffect(

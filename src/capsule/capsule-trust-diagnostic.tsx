@@ -42,7 +42,7 @@ const source = (): CapsuleSource => ({
 	]
 });
 
-const runDiagnostic = Effect.fn('Flect.CapsuleTrust.diagnostic')(function* () {
+const runDiagnostic = Effect.fn('CapsuleTrust.diagnostic')(function* () {
 	const pair = yield* Effect.promise(() =>
 		crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify'])
 	);

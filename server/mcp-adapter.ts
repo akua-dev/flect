@@ -110,8 +110,8 @@ const makeHandlersLayer = (options: FlectMcpOptions) => {
 			Effect.flatMap(FlectCommandGateway, (gateway) =>
 				gateway.command(command, expectedSequence)
 			).pipe(Effect.mapError(toFailure)),
-		flect_wait: ({ afterSequence, timeoutMs }) =>
-			Effect.gen(function* () {
+		flect_wait: Effect.fn('FlectMcp.wait')(
+			function* ({ afterSequence, timeoutMs }) {
 				const gateway = yield* FlectCommandGateway;
 				const event = yield* Effect.race(
 					gateway.events(afterSequence).pipe(Stream.runHead, Effect.map(Option.getOrUndefined)),
@@ -123,7 +123,9 @@ const makeHandlersLayer = (options: FlectMcpOptions) => {
 					advanced: event !== undefined || snapshot.sequence > afterSequence,
 					snapshot
 				};
-			}).pipe(Effect.mapError(toFailure)),
+			},
+			(effect) => effect.pipe(Effect.mapError(toFailure))
+		),
 		flect_logs: ({ afterSequence, limit }) =>
 			Effect.flatMap(FlectCommandGateway, (gateway) => gateway.logs).pipe(
 				Effect.map((logs) =>

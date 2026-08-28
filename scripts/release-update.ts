@@ -33,28 +33,28 @@ export type UpdaterEvidence =
 			readonly signature: string;
 	  };
 
-export const validateUpdaterArchiveEntries = Effect.fn('Flect.Updater.validateArchiveEntries')(
-	function* (source: string) {
-		const entries = source
-			.split(/\r?\n/u)
-			.map((entry) => entry.trim())
-			.filter((entry) => entry.length > 0);
-		if (
-			entries.length === 0 ||
-			entries.some(
-				(entry) =>
-					entry.startsWith('/') ||
-					entry.split('/').includes('..') ||
-					(entry !== 'Flect.app' && !entry.startsWith('Flect.app/'))
-			) ||
-			!entries.includes('Flect.app/Contents/MacOS/flect') ||
-			!entries.includes('Flect.app/Contents/MacOS/flect-runtime') ||
-			entries.some((entry) => entry.endsWith('/flectctl') || entry.endsWith('/flect-mcp'))
-		) {
-			return yield* Effect.fail(evidenceError('The updater archive inventory is invalid.'));
-		}
+export const validateUpdaterArchiveEntries = Effect.fn('Updater.validateArchiveEntries')(function* (
+	source: string
+) {
+	const entries = source
+		.split(/\r?\n/u)
+		.map((entry) => entry.trim())
+		.filter((entry) => entry.length > 0);
+	if (
+		entries.length === 0 ||
+		entries.some(
+			(entry) =>
+				entry.startsWith('/') ||
+				entry.split('/').includes('..') ||
+				(entry !== 'Flect.app' && !entry.startsWith('Flect.app/'))
+		) ||
+		!entries.includes('Flect.app/Contents/MacOS/flect') ||
+		!entries.includes('Flect.app/Contents/MacOS/flect-runtime') ||
+		entries.some((entry) => entry.endsWith('/flectctl') || entry.endsWith('/flect-mcp'))
+	) {
+		return yield* Effect.fail(evidenceError('The updater archive inventory is invalid.'));
 	}
-);
+});
 
 const sha256 = (value: Uint8Array | string) => createHash('sha256').update(value).digest('hex');
 
@@ -109,7 +109,7 @@ const verifyMinisign = (
 	);
 };
 
-const requiredFile = Effect.fn('Flect.Updater.requiredFile')(
+const requiredFile = Effect.fn('Updater.requiredFile')(
 	(path: string | undefined, kind: 'archive' | 'signature') =>
 		path === undefined
 			? Effect.fail(evidenceError(`The updater ${kind} is missing.`))
@@ -125,7 +125,7 @@ const requiredFile = Effect.fn('Flect.Updater.requiredFile')(
 				})
 );
 
-export const validateUpdaterEvidence = Effect.fn('Flect.Updater.validateEvidence')(function* (
+export const validateUpdaterEvidence = Effect.fn('Updater.validateEvidence')(function* (
 	input: UpdaterEvidenceInput
 ) {
 	if (input.mode === 'development') {
@@ -192,7 +192,7 @@ export interface StaticUpdateManifestInput {
 	readonly signature: string;
 }
 
-export const writeStaticUpdateManifest = Effect.fn('Flect.Updater.writeStaticManifest')(function* (
+export const writeStaticUpdateManifest = Effect.fn('Updater.writeStaticManifest')(function* (
 	input: StaticUpdateManifestInput
 ) {
 	const manifest = {

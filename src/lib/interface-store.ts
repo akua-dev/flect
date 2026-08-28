@@ -33,7 +33,7 @@ const storageError = () =>
 
 export const makeInterfaceStorageLayer = (storage: Pick<Storage, 'getItem'>) =>
 	Layer.succeed(InterfaceStorage)({
-		read: Effect.fn('Flect.InterfaceStorage.read')((key: string) =>
+		read: Effect.fn('InterfaceStorage.read')((key: string) =>
 			Effect.try({
 				try: () => storage.getItem(key),
 				catch: storageError
@@ -46,19 +46,19 @@ export const makeInterfaceStorageLayer = (storage: Pick<Storage, 'getItem'>) =>
 export const InterfaceStorageLive = Layer.effect(
 	InterfaceStorage,
 	Effect.sync(() => ({
-		read: Effect.fn('Flect.InterfaceStorage.read')((key: string) =>
+		read: Effect.fn('InterfaceStorage.read')((key: string) =>
 			Effect.try({
 				try: () => globalThis.localStorage.getItem(key),
 				catch: storageError
 			})
 		),
-		write: Effect.fn('Flect.InterfaceStorage.write')((key: string, value: string) =>
+		write: Effect.fn('InterfaceStorage.write')((key: string, value: string) =>
 			Effect.try({
 				try: () => globalThis.localStorage.setItem(key, value),
 				catch: storageError
 			})
 		),
-		remove: Effect.fn('Flect.InterfaceStorage.remove')((key: string) =>
+		remove: Effect.fn('InterfaceStorage.remove')((key: string) =>
 			Effect.try({
 				try: () => globalThis.localStorage.removeItem(key),
 				catch: storageError
@@ -67,7 +67,7 @@ export const InterfaceStorageLive = Layer.effect(
 	}))
 );
 
-export const consumeLegacyInterfaceDocument = Effect.fn('Flect.InterfaceDocument.consumeLegacy')(
+export const consumeLegacyInterfaceDocument = Effect.fn('InterfaceDocument.consumeLegacy')(
 	function* () {
 		const storage = yield* InterfaceStorage;
 		yield* storage.write(INTERFACE_DOCUMENT_MIGRATED_KEY, INTERFACE_DOCUMENT_MIGRATED_VALUE);
@@ -75,7 +75,7 @@ export const consumeLegacyInterfaceDocument = Effect.fn('Flect.InterfaceDocument
 	}
 );
 
-export const loadInterfaceDocument = Effect.fn('Flect.InterfaceDocument.load')(function* ({
+export const loadInterfaceDocument = Effect.fn('InterfaceDocument.load')(function* ({
 	safeMode
 }: {
 	readonly safeMode: boolean;

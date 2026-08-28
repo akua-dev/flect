@@ -102,33 +102,32 @@ export const makeShellBunCommandLiveLayer = (options: {
 			const modules = yield* BunModuleExecution;
 			const packages = yield* BunPackageMutation;
 
-			const execute = (call: BunOperationCall) =>
-				Effect.gen(function* () {
-					if (call.operation === 'stop') {
-						return yield* modules.stop();
-					}
-					const workspace = yield* snapshotWorkspace(options.fs);
-					if (call.operation === 'run' || call.operation === 'build') {
-						const operation = {
-							cwd: call.cwd,
-							args: call.args,
-							workspace
-						};
-						if (call.operation === 'run') {
-							return yield* modules.run(operation);
-						}
-						const built = yield* modules.build(operation);
-						yield* applyDelta(options.fs, built.delta);
-						return built.result;
-					}
-					const output = yield* packages[call.operation]({
+			const execute = Effect.fn('BunCommand.execute')(function* (call: BunOperationCall) {
+				if (call.operation === 'stop') {
+					return yield* modules.stop();
+				}
+				const workspace = yield* snapshotWorkspace(options.fs);
+				if (call.operation === 'run' || call.operation === 'build') {
+					const operation = {
 						cwd: call.cwd,
 						args: call.args,
 						workspace
-					});
-					yield* applyDelta(options.fs, output.delta);
-					return packageResult(call.operation, output.packageCount);
+					};
+					if (call.operation === 'run') {
+						return yield* modules.run(operation);
+					}
+					const built = yield* modules.build(operation);
+					yield* applyDelta(options.fs, built.delta);
+					return built.result;
+				}
+				const output = yield* packages[call.operation]({
+					cwd: call.cwd,
+					args: call.args,
+					workspace
 				});
+				yield* applyDelta(options.fs, output.delta);
+				return packageResult(call.operation, output.packageCount);
+			});
 
 			return makeBunCommandService({ execute });
 		})

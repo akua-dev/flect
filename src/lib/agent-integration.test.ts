@@ -23,7 +23,7 @@ const withFixture = <A, E>(
 		})
 	).pipe(Effect.provide(PlatformLive));
 
-const readJson = Effect.fn('Flect.Test.readJson')(function* (path: string) {
+const readJson = Effect.fn('Test.readJson')(function* (path: string) {
 	const fs = yield* FileSystem.FileSystem;
 	const source = yield* fs.readFileString(path);
 	return { source, decoded: JSON.parse(source) as unknown };

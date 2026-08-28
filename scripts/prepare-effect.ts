@@ -13,7 +13,7 @@ interface CommandResult {
 	readonly stdout: string;
 }
 
-const repository = Effect.fn('Flect.PrepareEffect.repository')(function* () {
+const repository = Effect.fn('PrepareEffect.repository')(function* () {
 	const path = yield* Path.Path;
 	return path.join(import.meta.dirname, '..');
 });
@@ -22,21 +22,19 @@ const repository = Effect.fn('Flect.PrepareEffect.repository')(function* () {
 // example, grafted as apps/flect inside cnap) by walking ancestor directories
 // above it for a REPO.bazel or MODULE.bazel marker. A standalone flect
 // checkout has no such ancestor, so this stays false there.
-const findsBazelMonorepoAbove = Effect.fn('Flect.PrepareEffect.findsBazelMonorepoAbove')(
-	function* () {
-		const fs = yield* FileSystem.FileSystem;
-		const path = yield* Path.Path;
-		let dir = path.dirname(yield* repository());
-		while (true) {
-			const hasRepoBazel = yield* fs.exists(path.join(dir, 'REPO.bazel'));
-			const hasModuleBazel = yield* fs.exists(path.join(dir, 'MODULE.bazel'));
-			if (hasRepoBazel || hasModuleBazel) return true;
-			const parent = path.dirname(dir);
-			if (parent === dir) return false;
-			dir = parent;
-		}
+const findsBazelMonorepoAbove = Effect.fn('PrepareEffect.findsBazelMonorepoAbove')(function* () {
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	let dir = path.dirname(yield* repository());
+	while (true) {
+		const hasRepoBazel = yield* fs.exists(path.join(dir, 'REPO.bazel'));
+		const hasModuleBazel = yield* fs.exists(path.join(dir, 'MODULE.bazel'));
+		if (hasRepoBazel || hasModuleBazel) return true;
+		const parent = path.dirname(dir);
+		if (parent === dir) return false;
+		dir = parent;
 	}
-);
+});
 
 // The pinned Effect checkout is a local API reference for standalone flect
 // development only. Skip cloning it when either:
@@ -45,7 +43,7 @@ const findsBazelMonorepoAbove = Effect.fn('Flect.PrepareEffect.findsBazelMonorep
 //   - CI is truthy (any CI runner, monorepo or standalone).
 // Returns the human-readable reason to print, or undefined when the clone
 // should proceed as usual.
-const skipCloneReason = Effect.fn('Flect.PrepareEffect.skipCloneReason')(function* () {
+const skipCloneReason = Effect.fn('PrepareEffect.skipCloneReason')(function* () {
 	if (process.env.CI) {
 		return 'CI is set';
 	}
@@ -55,35 +53,34 @@ const skipCloneReason = Effect.fn('Flect.PrepareEffect.skipCloneReason')(functio
 	return undefined;
 });
 
-const runGit = (args: ReadonlyArray<string>) =>
-	Effect.gen(function* () {
-		const cwd = yield* repository();
-		const fail = (cause: unknown) => new Error(`git ${args.join(' ')} could not run`, { cause });
-		const child = yield* Effect.sync(() =>
-			Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
-		);
-		const [exitCode, stdout, stderr] = yield* Effect.all(
-			[
-				Effect.tryPromise({ try: () => child.exited, catch: fail }),
-				Effect.tryPromise({ try: () => new Response(child.stdout).text(), catch: fail }),
-				Effect.tryPromise({ try: () => new Response(child.stderr).text(), catch: fail })
-			],
-			{ concurrency: 'unbounded' }
-		);
-		return { exitCode, stdout: stdout.trim(), stderr: stderr.trim() } satisfies CommandResult;
-	});
+const runGit = Effect.fn('PrepareEffect.runGit')(function* (args: ReadonlyArray<string>) {
+	const cwd = yield* repository();
+	const fail = (cause: unknown) => new Error(`git ${args.join(' ')} could not run`, { cause });
+	const child = yield* Effect.sync(() =>
+		Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
+	);
+	const [exitCode, stdout, stderr] = yield* Effect.all(
+		[
+			Effect.tryPromise({ try: () => child.exited, catch: fail }),
+			Effect.tryPromise({ try: () => new Response(child.stdout).text(), catch: fail }),
+			Effect.tryPromise({ try: () => new Response(child.stderr).text(), catch: fail })
+		],
+		{ concurrency: 'unbounded' }
+	);
+	return { exitCode, stdout: stdout.trim(), stderr: stderr.trim() } satisfies CommandResult;
+});
 
-const isGitCheckout = Effect.fn('Flect.PrepareEffect.isGitCheckout')(function* () {
+const isGitCheckout = Effect.fn('PrepareEffect.isGitCheckout')(function* () {
 	const result = yield* runGit(['-C', repoDir, 'rev-parse', '--git-dir']);
 	return result.exitCode === 0;
 });
 
-const currentEffectCommit = Effect.fn('Flect.PrepareEffect.currentCommit')(function* () {
+const currentEffectCommit = Effect.fn('PrepareEffect.currentCommit')(function* () {
 	const result = yield* runGit(['-C', repoDir, 'rev-parse', 'HEAD']);
 	return result.exitCode === 0 ? result.stdout : undefined;
 });
 
-const verifyCheckout = Effect.fn('Flect.PrepareEffect.verifyCheckout')(function* () {
+const verifyCheckout = Effect.fn('PrepareEffect.verifyCheckout')(function* () {
 	const actual = yield* currentEffectCommit();
 	if (actual !== effectCommit) {
 		return yield* Effect.fail(
@@ -93,15 +90,13 @@ const verifyCheckout = Effect.fn('Flect.PrepareEffect.verifyCheckout')(function*
 	console.log(`Effect checkout verified at ${effectCommit}`);
 });
 
-const checkoutDirectoryExists = Effect.fn('Flect.PrepareEffect.checkoutDirectoryExists')(
-	function* () {
-		const fs = yield* FileSystem.FileSystem;
-		const path = yield* Path.Path;
-		return yield* fs.exists(path.join(yield* repository(), repoDir));
-	}
-);
+const checkoutDirectoryExists = Effect.fn('PrepareEffect.checkoutDirectoryExists')(function* () {
+	const fs = yield* FileSystem.FileSystem;
+	const path = yield* Path.Path;
+	return yield* fs.exists(path.join(yield* repository(), repoDir));
+});
 
-const ensureCheckout = Effect.fn('Flect.PrepareEffect.ensureCheckout')(function* () {
+const ensureCheckout = Effect.fn('PrepareEffect.ensureCheckout')(function* () {
 	const exists = yield* checkoutDirectoryExists();
 	if (exists) {
 		if (!(yield* isGitCheckout())) {
@@ -120,7 +115,7 @@ const ensureCheckout = Effect.fn('Flect.PrepareEffect.ensureCheckout')(function*
 	}
 });
 
-const updateToPinnedCommit = Effect.fn('Flect.PrepareEffect.updateToPinnedCommit')(function* () {
+const updateToPinnedCommit = Effect.fn('PrepareEffect.updateToPinnedCommit')(function* () {
 	const actual = yield* currentEffectCommit();
 	if (actual === effectCommit) return;
 	const fetched = yield* runGit(['-C', repoDir, 'fetch', '--depth=1', 'origin', effectCommit]);

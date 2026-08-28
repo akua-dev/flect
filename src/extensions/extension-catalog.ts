@@ -108,7 +108,7 @@ const emptySnapshot = (warning?: PortableExtensionCatalogSnapshot['warning']) =>
 		...(warning === undefined ? {} : { warning })
 	});
 
-const decodeStored = Effect.fn('Flect.ExtensionCatalog.decodeStored')((raw: string) =>
+const decodeStored = Effect.fn('ExtensionCatalog.decodeStored')((raw: string) =>
 	Effect.try({
 		try: (): unknown => JSON.parse(raw),
 		catch: () => undefined
@@ -183,7 +183,7 @@ export const makeExtensionCatalogLayer = () =>
 							);
 			const state = yield* SubscriptionRef.make(initial);
 
-			const persist = Effect.fn('Flect.ExtensionCatalog.persist')(
+			const persist = Effect.fn('ExtensionCatalog.persist')(
 				(next: PortableExtensionCatalogSnapshot) =>
 					storage
 						.write(
@@ -198,7 +198,7 @@ export const makeExtensionCatalogLayer = () =>
 						.pipe(Effect.mapError(storageFailure))
 			);
 
-			const mutate = Effect.fn('Flect.ExtensionCatalog.mutate')(
+			const mutate = Effect.fn('ExtensionCatalog.mutate')(
 				<A>(
 					change: (
 						current: PortableExtensionCatalogSnapshot
@@ -212,7 +212,7 @@ export const makeExtensionCatalogLayer = () =>
 					)
 			);
 
-			const updateEntry = Effect.fn('Flect.ExtensionCatalog.updateEntry')(
+			const updateEntry = Effect.fn('ExtensionCatalog.updateEntry')(
 				<A>(
 					key: PortableExtensionKey,
 					change: (
@@ -239,7 +239,7 @@ export const makeExtensionCatalogLayer = () =>
 					})
 			);
 
-			const stageCandidate = Effect.fn('Flect.ExtensionCatalog.stageCandidate')(
+			const stageCandidate = Effect.fn('ExtensionCatalog.stageCandidate')(
 				(input: StagePortableExtensions) =>
 					Effect.gen(function* () {
 						const compatibility = new Map(
@@ -340,7 +340,7 @@ export const makeExtensionCatalogLayer = () =>
 					})
 			);
 
-			const enable = Effect.fn('Flect.ExtensionCatalog.enable')(
+			const enable = Effect.fn('ExtensionCatalog.enable')(
 				(key: PortableExtensionKey, grants: ReadonlyArray<ExtensionCapability>) =>
 					updateEntry(key, (entry) => {
 						if (entry.state === 'incompatible' || entry.state === 'conflict')
@@ -371,7 +371,7 @@ export const makeExtensionCatalogLayer = () =>
 					})
 			);
 
-			const disable = Effect.fn('Flect.ExtensionCatalog.disable')((key: PortableExtensionKey) =>
+			const disable = Effect.fn('ExtensionCatalog.disable')((key: PortableExtensionKey) =>
 				updateEntry(key, (entry) =>
 					Effect.succeed([
 						undefined,
@@ -384,17 +384,16 @@ export const makeExtensionCatalogLayer = () =>
 				)
 			);
 
-			const pin = Effect.fn('Flect.ExtensionCatalog.pin')(
-				(key: PortableExtensionKey, pinned: boolean) =>
-					updateEntry(key, (entry) =>
-						Effect.succeed([
-							undefined,
-							PortableExtensionRoleState.make({ ...entry, pinned })
-						] as const)
-					)
+			const pin = Effect.fn('ExtensionCatalog.pin')((key: PortableExtensionKey, pinned: boolean) =>
+				updateEntry(key, (entry) =>
+					Effect.succeed([
+						undefined,
+						PortableExtensionRoleState.make({ ...entry, pinned })
+					] as const)
+				)
 			);
 
-			const fork = Effect.fn('Flect.ExtensionCatalog.fork')(
+			const fork = Effect.fn('ExtensionCatalog.fork')(
 				(key: PortableExtensionKey, revision: string) =>
 					updateEntry(key, (entry) =>
 						Effect.succeed([
@@ -407,7 +406,7 @@ export const makeExtensionCatalogLayer = () =>
 					)
 			);
 
-			const resolveUpdate = Effect.fn('Flect.ExtensionCatalog.resolveUpdate')(
+			const resolveUpdate = Effect.fn('ExtensionCatalog.resolveUpdate')(
 				(key: PortableExtensionKey, choice: 'upstream' | 'fork') =>
 					choice === 'fork'
 						? Effect.fail(failure('invalid-transition'))
@@ -425,7 +424,7 @@ export const makeExtensionCatalogLayer = () =>
 							)
 			);
 
-			const remove = Effect.fn('Flect.ExtensionCatalog.remove')((key: PortableExtensionKey) =>
+			const remove = Effect.fn('ExtensionCatalog.remove')((key: PortableExtensionKey) =>
 				mutate((current) => {
 					const entries = current.entries.filter((entry) => !sameKey(entry, key));
 					return entries.length === current.entries.length
@@ -440,7 +439,7 @@ export const makeExtensionCatalogLayer = () =>
 				})
 			);
 
-			const recordSuccess = Effect.fn('Flect.ExtensionCatalog.recordSuccess')(
+			const recordSuccess = Effect.fn('ExtensionCatalog.recordSuccess')(
 				(key: PortableExtensionKey) =>
 					updateEntry(key, (entry) =>
 						Effect.succeed([
@@ -455,7 +454,7 @@ export const makeExtensionCatalogLayer = () =>
 					)
 			);
 
-			const recordFailure = Effect.fn('Flect.ExtensionCatalog.recordFailure')(
+			const recordFailure = Effect.fn('ExtensionCatalog.recordFailure')(
 				(key: PortableExtensionKey, reason: PortableExtensionFailure['reason']) =>
 					updateEntry(key, (entry) =>
 						Effect.succeed([
@@ -520,7 +519,7 @@ export const makeExtensionCatalogLayer = () =>
 				] as const)
 			);
 
-			const restore = Effect.fn('Flect.ExtensionCatalog.restore')(
+			const restore = Effect.fn('ExtensionCatalog.restore')(
 				(snapshot: PortableExtensionCatalogSnapshot) =>
 					mutate(() => Effect.succeed([undefined, snapshot] as const))
 			);

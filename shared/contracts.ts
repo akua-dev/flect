@@ -585,23 +585,21 @@ export const FlectRuntimeError = Schema.Union([
 ]);
 export type FlectRuntimeError = typeof FlectRuntimeError.Type;
 
-export const decodeModelSummary = Effect.fn('Flect.Contracts.decodeModelSummary')(
-	(input: unknown) =>
-		Schema.decodeUnknownEffect(
-			ModelSummary,
-			strictOptions
-		)(input).pipe(Effect.mapError(invalidContract))
+export const decodeModelSummary = Effect.fn('Contracts.decodeModelSummary')((input: unknown) =>
+	Schema.decodeUnknownEffect(
+		ModelSummary,
+		strictOptions
+	)(input).pipe(Effect.mapError(invalidContract))
 );
 
-export const decodeRuntimeStatus = Effect.fn('Flect.Contracts.decodeRuntimeStatus')(
-	(input: unknown) =>
-		Schema.decodeUnknownEffect(
-			RuntimeStatus,
-			strictOptions
-		)(input).pipe(Effect.mapError(invalidContract))
+export const decodeRuntimeStatus = Effect.fn('Contracts.decodeRuntimeStatus')((input: unknown) =>
+	Schema.decodeUnknownEffect(
+		RuntimeStatus,
+		strictOptions
+	)(input).pipe(Effect.mapError(invalidContract))
 );
 
-export const decodeSessionSelection = Effect.fn('Flect.Contracts.decodeSessionSelection')(
+export const decodeSessionSelection = Effect.fn('Contracts.decodeSessionSelection')(
 	(input: unknown) =>
 		Schema.decodeUnknownEffect(
 			SessionSelection,
@@ -609,37 +607,35 @@ export const decodeSessionSelection = Effect.fn('Flect.Contracts.decodeSessionSe
 		)(input).pipe(Effect.mapError(invalidContract))
 );
 
-export const decodePromptRequest = Effect.fn('Flect.Contracts.decodePromptRequest')(
-	(input: unknown) =>
-		Schema.decodeUnknownEffect(
-			PromptRequest,
-			strictOptions
-		)(input).pipe(Effect.mapError(invalidContract))
+export const decodePromptRequest = Effect.fn('Contracts.decodePromptRequest')((input: unknown) =>
+	Schema.decodeUnknownEffect(
+		PromptRequest,
+		strictOptions
+	)(input).pipe(Effect.mapError(invalidContract))
 );
 
-export const decodeFlectEvent = Effect.fn('Flect.Contracts.decodeFlectEvent')((input: unknown) =>
+export const decodeFlectEvent = Effect.fn('Contracts.decodeFlectEvent')((input: unknown) =>
 	Schema.decodeUnknownEffect(
 		FlectEvent,
 		strictOptions
 	)(input).pipe(Effect.mapError(invalidContract))
 );
 
-export const decodeShapeEvent = Effect.fn('Flect.Contracts.decodeShapeEvent')((input: unknown) =>
+export const decodeShapeEvent = Effect.fn('Contracts.decodeShapeEvent')((input: unknown) =>
 	Schema.decodeUnknownEffect(
 		ShapeEvent,
 		strictOptions
 	)(input).pipe(Effect.mapError(invalidContract))
 );
 
-export const decodeModelsResponse = Effect.fn('Flect.Contracts.decodeModelsResponse')(
-	(input: unknown) =>
-		Schema.decodeUnknownEffect(
-			ModelsResponse,
-			strictOptions
-		)(input).pipe(Effect.mapError(invalidContract))
+export const decodeModelsResponse = Effect.fn('Contracts.decodeModelsResponse')((input: unknown) =>
+	Schema.decodeUnknownEffect(
+		ModelsResponse,
+		strictOptions
+	)(input).pipe(Effect.mapError(invalidContract))
 );
 
-export const decodeSessionResponse = Effect.fn('Flect.Contracts.decodeSessionResponse')(
+export const decodeSessionResponse = Effect.fn('Contracts.decodeSessionResponse')(
 	(input: unknown) =>
 		Schema.decodeUnknownEffect(
 			SessionResponse,
@@ -647,10 +643,9 @@ export const decodeSessionResponse = Effect.fn('Flect.Contracts.decodeSessionRes
 		)(input).pipe(Effect.mapError(invalidContract))
 );
 
-export const decodeCancelResponse = Effect.fn('Flect.Contracts.decodeCancelResponse')(
-	(input: unknown) =>
-		Schema.decodeUnknownEffect(
-			CancelResponse,
-			strictOptions
-		)(input).pipe(Effect.mapError(invalidContract))
+export const decodeCancelResponse = Effect.fn('Contracts.decodeCancelResponse')((input: unknown) =>
+	Schema.decodeUnknownEffect(
+		CancelResponse,
+		strictOptions
+	)(input).pipe(Effect.mapError(invalidContract))
 );

@@ -218,8 +218,8 @@ const makeRiftyJavaScriptExecutionLayer = Layer.effect(
 				)
 			);
 		return {
-			evaluate: Effect.fn('Flect.RiftyJavaScript.evaluate')((request) => execute(request.source)),
-			runModule: Effect.fn('Flect.RiftyJavaScript.runModule')((request) =>
+			evaluate: Effect.fn('RiftyJavaScript.evaluate')((request) => execute(request.source)),
+			runModule: Effect.fn('RiftyJavaScript.runModule')((request) =>
 				execute(
 					[
 						`globalThis.Bun = Object.freeze({ argv: ${JSON.stringify(['bun', request.entry, ...request.args])}, env: Object.freeze({}), version: "flect-browser/1"${request.previewProbe === undefined ? '' : ', serve() { globalThis.__flectPreviewRequested = true; return Object.freeze({ stop() {} }); }'} });`,

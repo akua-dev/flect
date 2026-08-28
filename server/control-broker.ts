@@ -119,7 +119,7 @@ const controlJson = (value: unknown, options?: { readonly status?: number }) =>
  * read, and the decoded text is re-checked against the cap in case the
  * header was absent or understated.
  */
-const readBody = Effect.fn('Flect.ControlBroker.readBody')(function* (
+const readBody = Effect.fn('ControlBroker.readBody')(function* (
 	request: HttpServerRequest.HttpServerRequest
 ) {
 	const declared = Number(request.headers['content-length'] ?? 0);
@@ -163,30 +163,27 @@ interface LoopbackServer {
  * loopback." The server and its request-serving fiber are scoped to the
  * broker layer, so both are torn down together when the layer is released.
  */
-const startLoopbackServer = (
+const startLoopbackServer = Effect.fn('ControlBroker.startLoopbackServer')(function* (
 	handler: (
 		request: HttpServerRequest.HttpServerRequest
 	) => Effect.Effect<HttpServerResponse.HttpServerResponse>
-): Effect.Effect<LoopbackServer, ControlBrokerError, Scope.Scope> =>
-	Effect.gen(function* () {
-		const server = yield* NodeHttpServer.make(() => createServer(), {
-			host: '127.0.0.1',
-			port: 0
-		}).pipe(Effect.mapError(() => brokerError('The loopback control listener could not start.')));
-		if (server.address._tag !== 'TcpAddress') {
-			return yield* Effect.fail(brokerError('The loopback control listener could not start.'));
-		}
-		const httpApp = Effect.gen(function* () {
-			const request = yield* HttpServerRequest.HttpServerRequest;
-			return yield* handler(request);
-		}).pipe(
-			Effect.catchDefect(() =>
-				controlJson({ version: 1, error: 'Invalid request' }, { status: 400 })
-			)
-		);
-		yield* server.serve(httpApp).pipe(Effect.forkScoped);
-		return { port: server.address.port };
-	});
+): Effect.fn.Return<LoopbackServer, ControlBrokerError, Scope.Scope> {
+	const server = yield* NodeHttpServer.make(() => createServer(), {
+		host: '127.0.0.1',
+		port: 0
+	}).pipe(Effect.mapError(() => brokerError('The loopback control listener could not start.')));
+	if (server.address._tag !== 'TcpAddress') {
+		return yield* Effect.fail(brokerError('The loopback control listener could not start.'));
+	}
+	const httpApp = Effect.gen(function* () {
+		const request = yield* HttpServerRequest.HttpServerRequest;
+		return yield* handler(request);
+	}).pipe(
+		Effect.catchDefect(() => controlJson({ version: 1, error: 'Invalid request' }, { status: 400 }))
+	);
+	yield* server.serve(httpApp).pipe(Effect.forkScoped);
+	return { port: server.address.port };
+});
 
 // oxlint-disable effecttsgo/missing-effect-context -- false positive: `tsc -b`
 // confirms this whole layer's R resolves to never (control-descriptor's
@@ -228,7 +225,7 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 				)
 			);
 
-			const failPending = Effect.fn('Flect.ControlBroker.failPending')((active: ActiveGrant) =>
+			const failPending = Effect.fn('ControlBroker.failPending')((active: ActiveGrant) =>
 				Effect.forEach(
 					active.pending.values(),
 					(deferred) => Deferred.fail(deferred, brokerError('The Flect workspace is unavailable.')),
@@ -248,7 +245,7 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 			const mutateState = statePermit.withPermits(1);
 			const disable = mutateState(disableUnlocked);
 
-			const enable = Effect.fn('Flect.ControlBroker.enable')(function* (
+			const enable = Effect.fn('ControlBroker.enable')(function* (
 				snapshot: FlectWorkspaceSnapshot
 			) {
 				return yield* mutateState(
@@ -298,7 +295,7 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 					)
 				);
 
-			const nextCommand = Effect.fn('Flect.ControlBroker.nextCommand')((workspaceId: string) =>
+			const nextCommand = Effect.fn('ControlBroker.nextCommand')((workspaceId: string) =>
 				withActive((active) =>
 					active.workspaceId !== workspaceId
 						? Effect.fail(brokerError('The Flect workspace is unavailable.'))
@@ -312,31 +309,30 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 				)
 			);
 
-			const complete = Effect.fn('Flect.ControlBroker.complete')(
-				(completion: ControlCommandCompletion) =>
-					mutateState(
-						withActive((active) => {
-							const deferred = active.pending.get(completion.commandId);
-							if (deferred === undefined) {
-								return Effect.fail(brokerError('The control operation is no longer pending.'));
-							}
-							return Ref.update(state, (current) =>
-								current === undefined
-									? current
-									: {
-											...current,
-											pending: new Map(
-												[...current.pending].filter(
-													([commandId]) => commandId !== completion.commandId
-												)
+			const complete = Effect.fn('ControlBroker.complete')((completion: ControlCommandCompletion) =>
+				mutateState(
+					withActive((active) => {
+						const deferred = active.pending.get(completion.commandId);
+						if (deferred === undefined) {
+							return Effect.fail(brokerError('The control operation is no longer pending.'));
+						}
+						return Ref.update(state, (current) =>
+							current === undefined
+								? current
+								: {
+										...current,
+										pending: new Map(
+											[...current.pending].filter(
+												([commandId]) => commandId !== completion.commandId
 											)
-										}
-							).pipe(Effect.andThen(Deferred.succeed(deferred, completion.outcome)), Effect.asVoid);
-						})
-					)
+										)
+									}
+						).pipe(Effect.andThen(Deferred.succeed(deferred, completion.outcome)), Effect.asVoid);
+					})
+				)
 			);
 
-			const publishSnapshot = Effect.fn('Flect.ControlBroker.publishSnapshot')(
+			const publishSnapshot = Effect.fn('ControlBroker.publishSnapshot')(
 				(snapshot: FlectWorkspaceSnapshot) =>
 					mutateState(
 						withActive((active) =>
@@ -347,21 +343,20 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 					)
 			);
 
-			const publishEvent = Effect.fn('Flect.ControlBroker.publishEvent')(
-				(event: FlectWorkspaceEvent) =>
-					mutateState(
-						withActive((active) =>
-							active.workspaceId !== event.workspaceId
-								? Effect.fail(brokerError('The Flect workspace is unavailable.'))
-								: Ref.set(state, {
-										...active,
-										events: [...active.events, event].slice(-MAX_EVENTS)
-									})
-						)
+			const publishEvent = Effect.fn('ControlBroker.publishEvent')((event: FlectWorkspaceEvent) =>
+				mutateState(
+					withActive((active) =>
+						active.workspaceId !== event.workspaceId
+							? Effect.fail(brokerError('The Flect workspace is unavailable.'))
+							: Ref.set(state, {
+									...active,
+									events: [...active.events, event].slice(-MAX_EVENTS)
+								})
 					)
+				)
 			);
 
-			const submit = Effect.fn('Flect.ControlBroker.submit')((command: FlectCommandEnvelope) =>
+			const submit = Effect.fn('ControlBroker.submit')((command: FlectCommandEnvelope) =>
 				Effect.gen(function* () {
 					const registered = yield* mutateState(
 						withActive((active) =>
@@ -429,7 +424,7 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 					Stream.encodeText
 				);
 
-			const externalRequest = Effect.fn('Flect.ControlBroker.externalRequest')(function* (
+			const externalRequest = Effect.fn('ControlBroker.externalRequest')(function* (
 				request: HttpServerRequest.HttpServerRequest
 			) {
 				if (!(yield* authenticated(request))) {

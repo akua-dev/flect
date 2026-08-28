@@ -87,7 +87,7 @@ export const makeShareSourceResolverLayer = (options?: { readonly maxArchiveByte
 			const privateSources: PrivateShareSourceRegistryShape = yield* PrivateShareSourceRegistry;
 			const maxArchiveBytes = options?.maxArchiveBytes ?? MAX_SHARE_ARCHIVE_BYTES;
 
-			const download = Effect.fn('Flect.ShareSourceResolver.download')((url: string) =>
+			const download = Effect.fn('ShareSourceResolver.download')((url: string) =>
 				Effect.gen(function* () {
 					const response = yield* HttpClientRequest.get(url).pipe(
 						HttpClientRequest.setHeader(
@@ -128,9 +128,7 @@ export const makeShareSourceResolverLayer = (options?: { readonly maxArchiveByte
 				)
 			);
 
-			const resolve = Effect.fn('Flect.ShareSourceResolver.resolve')(function* (
-				input: ShareSourceValue
-			) {
+			const resolve = Effect.fn('ShareSourceResolver.resolve')(function* (input: ShareSourceValue) {
 				const source = yield* Schema.decodeUnknownEffect(
 					ShareSource,
 					strict

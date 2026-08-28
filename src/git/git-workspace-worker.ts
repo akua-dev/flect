@@ -1753,8 +1753,8 @@ const executeOperation = async (operation: GitWorkspaceOperation): Promise<GitWo
 	}
 };
 
-const handle = (value: unknown) =>
-	Effect.gen(function* () {
+const handle = Effect.fn('GitWorkspaceWorker.handle')(
+	function* (value: unknown) {
 		const frame = yield* decodeRequest(value);
 		const result = yield* Effect.tryPromise({
 			try: () => executeOperation(frame.operation),
@@ -1768,35 +1768,38 @@ const handle = (value: unknown) =>
 			id: frame.id,
 			result
 		});
-	}).pipe(
-		Effect.catch((error) => {
-			const id =
-				typeof value === 'object' &&
-				value !== null &&
-				'id' in value &&
-				typeof value.id === 'string' &&
-				/^request-[a-z0-9]+$/.test(value.id)
-					? value.id
-					: 'request-invalid';
-			return Effect.succeed(
-				GitWorkerFailure.make({
-					type: 'failure',
-					id,
-					error: Schema.is(GitWorkspaceFailure)(error)
-						? GitWorkspaceFailureFrame.make({
-								reason: error.reason,
-								operation: error.operation,
-								message: error.message
-							})
-						: GitWorkspaceFailureFrame.make({
-								reason: 'invalid-input',
-								operation: 'open',
-								message: 'The embedded Git request was invalid.'
-							})
-				})
-			);
-		})
-	);
+	},
+	(effect, value) =>
+		effect.pipe(
+			Effect.catch((error) => {
+				const id =
+					typeof value === 'object' &&
+					value !== null &&
+					'id' in value &&
+					typeof value.id === 'string' &&
+					/^request-[a-z0-9]+$/.test(value.id)
+						? value.id
+						: 'request-invalid';
+				return Effect.succeed(
+					GitWorkerFailure.make({
+						type: 'failure',
+						id,
+						error: Schema.is(GitWorkspaceFailure)(error)
+							? GitWorkspaceFailureFrame.make({
+									reason: error.reason,
+									operation: error.operation,
+									message: error.message
+								})
+							: GitWorkspaceFailureFrame.make({
+									reason: 'invalid-input',
+									operation: 'open',
+									message: 'The embedded Git request was invalid.'
+								})
+					})
+				);
+			})
+		)
+);
 
 const operationPermit = Effect.runSync(Semaphore.make(1));
 worker.addEventListener('message', (event: MessageEvent<unknown>) => {

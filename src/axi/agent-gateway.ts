@@ -94,7 +94,7 @@ export const makeAgentFlectCommandGatewayLayer = (
 	if (readInterface === undefined) {
 		return commandLayer;
 	}
-	const validate = Effect.fn('Flect.AgentGateway.validateInterface')((path: string) =>
+	const validate = Effect.fn('AgentGateway.validateInterface')((path: string) =>
 		readInterface(path).pipe(
 			Effect.flatMap(validateInterfaceDocument),
 			Effect.mapError((error) =>
@@ -107,7 +107,7 @@ export const makeAgentFlectCommandGatewayLayer = (
 			)
 		)
 	);
-	const packageApp = Effect.fn('Flect.AgentGateway.packageApp')(function* (
+	const packageApp = Effect.fn('AgentGateway.packageApp')(function* (
 		directory: string,
 		name: string | undefined
 	) {

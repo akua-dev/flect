@@ -8,7 +8,7 @@ import {
 
 const failure = (message: string) => WebProjectImportFailure.make({ message });
 
-export const importWebProjectFromGit = Effect.fn('Flect.WebProject.importGit')(function* (
+export const importWebProjectFromGit = Effect.fn('WebProject.importGit')(function* (
 	url: string,
 	commit: string,
 	options?: {

@@ -31,7 +31,7 @@ const SidecarLive = RpcServer.layer(FlectRpcs).pipe(
 	Layer.provide(BunCompiledStdioLive)
 );
 
-const runSidecar = Effect.fn('Flect.Sidecar.run')(function* (argv: ReadonlyArray<string>) {
+const runSidecar = Effect.fn('Sidecar.run')(function* (argv: ReadonlyArray<string>) {
 	const selected = yield* selectSidecarMode(argv);
 	switch (selected.mode) {
 		case 'rpc':

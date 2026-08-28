@@ -8,7 +8,7 @@ export interface BrowserPersistentStorage {
 
 let persistentStorage: Promise<BrowserPersistentStorage> | undefined;
 
-const openDurableVfs = Effect.fn('Flect.BrowserPersistentVfs.openDurable')(function* () {
+const openDurableVfs = Effect.fn('BrowserPersistentVfs.openDurable')(function* () {
 	const vfs = new OpfsVfs();
 	yield* Effect.tryPromise(() => vfs.init());
 	return { vfs, persistence: 'durable' as const };

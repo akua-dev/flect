@@ -22,9 +22,7 @@ const normalize = (value: ShellPreferencesValue) =>
 		modelFavorites: [...new Set(value.modelFavorites)]
 	});
 
-const decodeStoredPreferences = Effect.fn('Flect.ShellPreferences.decodeStored')(function* (
-	raw: string
-) {
+const decodeStoredPreferences = Effect.fn('ShellPreferences.decodeStored')(function* (raw: string) {
 	const input = yield* Effect.try({
 		try: (): unknown => JSON.parse(raw),
 		catch: () => undefined
@@ -46,7 +44,7 @@ export const makeShellPreferencesLayer = Layer.effect(
 	Effect.gen(function* () {
 		const storage = yield* InterfaceStorage;
 
-		const load = Effect.fn('Flect.ShellPreferences.load')(() =>
+		const load = Effect.fn('ShellPreferences.load')(() =>
 			storage.read(SHELL_PREFERENCES_KEY).pipe(
 				Effect.flatMap((raw) =>
 					raw === null ? Effect.succeed(defaultShellPreferences) : decodeStoredPreferences(raw)
@@ -55,7 +53,7 @@ export const makeShellPreferencesLayer = Layer.effect(
 			)
 		);
 
-		const save = Effect.fn('Flect.ShellPreferences.save')((value: ShellPreferencesValue) =>
+		const save = Effect.fn('ShellPreferences.save')((value: ShellPreferencesValue) =>
 			storage.write(SHELL_PREFERENCES_KEY, JSON.stringify(normalize(value)))
 		);
 

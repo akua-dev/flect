@@ -34,7 +34,7 @@ const portableHtml = (source: string, hasCss: boolean, hasJavaScript: boolean) =
 		: `${withStyles}${script}`;
 };
 
-export const buildFrameworkCapsule = Effect.fn('Flect.FrameworkCapsule.build')(function* ({
+export const buildFrameworkCapsule = Effect.fn('FrameworkCapsule.build')(function* ({
 	sourceArchive,
 	artifact
 }: {

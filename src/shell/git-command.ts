@@ -106,7 +106,7 @@ const readWorkspaceSource = (fileSystem: IFileSystem) =>
 const changed = (left: Uint8Array | undefined, right: Uint8Array | undefined) =>
 	left === undefined ? right !== undefined : right === undefined || !bytesEqual(left, right);
 
-const workspaceStatus = Effect.fn('Flect.Shell.gitStatus')(function* (
+const workspaceStatus = Effect.fn('Shell.gitStatus')(function* (
 	options: GitCommandOptions,
 	repository: GitRepositoryStatus,
 	state: GitCommandState
@@ -168,7 +168,7 @@ const workspaceStatus = Effect.fn('Flect.Shell.gitStatus')(function* (
 	});
 });
 
-const execute = Effect.fn('Flect.Shell.git')(function* (
+const execute = Effect.fn('Shell.git')(function* (
 	options: GitCommandOptions,
 	state: GitCommandState,
 	context: SandboxedAgentContext,

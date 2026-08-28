@@ -265,7 +265,7 @@ const unsupported = (message: string) =>
 const gatewayFailure = (reason: FlectGatewayError['reason'], message: string) =>
 	Effect.fail(FlectGatewayError.make({ reason, message }));
 
-const inspectAfterReceipt = Effect.fn('Flect.Axi.inspectAfterReceipt')(function* (
+const inspectAfterReceipt = Effect.fn('Axi.inspectAfterReceipt')(function* (
 	gateway: FlectCommandGatewayShape,
 	receipt: FlectCommandReceipt
 ) {
@@ -282,7 +282,7 @@ const inspectAfterReceipt = Effect.fn('Flect.Axi.inspectAfterReceipt')(function*
 	);
 });
 
-const execute = Effect.fn('Flect.Axi.execute')(function* (parsed: ParsedAxiArguments) {
+const execute = Effect.fn('Axi.execute')(function* (parsed: ParsedAxiArguments) {
 	const gateway = yield* FlectCommandGateway;
 	const command: AxiReadCommand = parsed.command;
 	switch (command.kind) {
@@ -768,7 +768,7 @@ const execute = Effect.fn('Flect.Axi.execute')(function* (parsed: ParsedAxiArgum
 	}
 });
 
-export const runFlect = Effect.fn('Flect.Axi.run')(function* (argv: ReadonlyArray<string>) {
+export const runFlect = Effect.fn('Axi.run')(function* (argv: ReadonlyArray<string>) {
 	const gateway = yield* FlectCommandGateway;
 	const format = requestedFormat(argv);
 	const parsed = yield* Effect.result(parseAxiArguments(argv, gateway.audience));
