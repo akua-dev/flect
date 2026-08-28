@@ -178,35 +178,61 @@ bun_run(
 
 # ---------------------------------------------------------------------------
 # (e) small policy scripts
+#
+# WORKAROUND, not a design choice: each of these five is invoked as
+# `vitest run scripts/<x>.check.test.ts` (or an existing companion
+# `scripts/<x>.test.ts` that already asserts the exact same thing the
+# CLI script's default/`--check` behavior does) instead of the more direct
+# `bun run check:<x>` a bare `bun_check(script = "check:<x>")` would use.
+# Root cause: on a real ubuntu-latest run, bun's native `bun run <file>.ts`
+# execution fails to resolve `@effect/platform-bun`'s wildcard `exports`
+# subpaths (`./BunFileSystem`, `./BunRuntime`, ...) that these scripts
+# import -- even though the exact same specifier resolves fine via
+# `require.resolve` moments earlier in the same process/sandbox, and the
+# exact same import resolves fine when the identical script module is
+# loaded through Vitest instead. Filed upstream:
+# https://github.com/oven-sh/bun/issues/40785. Once that's fixed and
+# confirmed on a real ubuntu-latest run, these five should revert to
+# `bun_check(script = "check:<x>")` (see git history immediately before
+# this comment for the prior form) -- this is strictly a swap of
+# execution mechanism, not a change to what any of them assert:
+# `check_rifty`/`check_flect_skill`/`check_quality` reuse the exact
+# exported Effect (`verifyRiftyDependencies`, `generateFlectSkill`,
+# `validateProductQualityCoverage`) the CLI script's own
+# `if (import.meta.main)` block invokes; `check_effect`/
+# `check_effect_concurrency` needed their check Effect exported (was
+# private to the `if (import.meta.main)` block) to be importable, and gained
+# a two-line test file that calls that same exported Effect with no
+# changes to its logic.
 # ---------------------------------------------------------------------------
-bun_check(
+bun_run(
     name = "check_effect",
-    script = "check:effect",
-    srcs = CONFIG + SCRIPTS,
+    args = "run vitest run scripts/prepare-effect.check.test.ts",
+    srcs = CONFIG + SCRIPTS + TESTS,
 )
 
-bun_check(
+bun_run(
     name = "check_effect_concurrency",
-    script = "check:effect-concurrency",
+    args = "run vitest run scripts/verify-effect-concurrency.check.test.ts",
     srcs = CONFIG + SCRIPTS + SRC + SERVER + SHARED + PRODUCT + CLI + EXAMPLES + TESTS,
 )
 
-bun_check(
+bun_run(
     name = "check_rifty",
-    script = "check:rifty",
-    srcs = CONFIG + SCRIPTS,
+    args = "run vitest run scripts/verify-rifty-dependencies.test.ts",
+    srcs = CONFIG + SCRIPTS + TESTS,
 )
 
-bun_check(
+bun_run(
     name = "check_flect_skill",
-    script = "check:flect-skill",
-    srcs = CONFIG + SCRIPTS + SRC + glob([".agents/**"]),
+    args = "run vitest run scripts/generate-flect-skill.test.ts",
+    srcs = CONFIG + SCRIPTS + SRC + TESTS + glob([".agents/**"]),
 )
 
-bun_check(
+bun_run(
     name = "check_quality",
-    script = "check:quality",
-    srcs = CONFIG + SCRIPTS + glob(["docs/**"]),
+    args = "run vitest run scripts/product-quality-coverage.test.ts",
+    srcs = CONFIG + SCRIPTS + TESTS + glob(["docs/**"]),
 )
 
 # ---------------------------------------------------------------------------
