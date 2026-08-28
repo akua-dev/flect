@@ -102,11 +102,21 @@ WHOLE_TREE = glob(
 )
 
 # ---------------------------------------------------------------------------
-# (a) biome lint
+# (a) biome lint. --config-path is passed explicitly for the same reason
+# //:lint_oxfmt below does: biome's own config auto-discovery walks the real
+# cwd's directory ancestry, not the source tree inside a Bazel sandbox --
+# confirmed on a real run: biome.json's `overrides` block that turns off
+# `a11y/useSemanticElements`/`useKeyWithClickEvents` for
+# `src/components/ui/**` (shadcn-vendored primitives; see the `role='list'`
+# fix on ItemGroup below for why -- a real, deliberate a11y decision, not a
+# suppression) was silently not applied under Bazel, flagging
+# item.tsx/input-group.tsx again with the recommended preset's defaults
+# even though the same command with the same biome.json passes clean
+# outside Bazel.
 # ---------------------------------------------------------------------------
 bun_run(
     name = "lint_biome",
-    args = "run biome check .",
+    args = "run biome check --config-path=. .",
     srcs = WHOLE_TREE,
 )
 

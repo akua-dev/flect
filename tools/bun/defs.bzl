@@ -94,6 +94,17 @@ def _bun_action_impl(ctx):
 set -euo pipefail
 BUN="$1"
 OUT="$2"
+# use_default_shell_env (above) restores a real PATH so `tar`/`astro build`'s
+# `#!/usr/bin/env node` shebang resolve -- but that real PATH doesn't know
+# about the Bazel-downloaded bun binary's own (execroot-relative, generated)
+# location. Package.json scripts that shell out to a bare `bun ...` (e.g.
+# "build": "bun run build:product && ...") need that directory on PATH too:
+# confirmed regression on a real run -- with a real PATH now restored but
+# missing bun's own dir, `bun run build:product` inside the script string
+# failed with "bun: command not found" (exit 127), where previously (empty
+# PATH) bun's own script-runner apparently prepended its own directory by
+# default and this worked.
+export PATH="$(dirname "$BUN"):$PATH"
 export HOME="$(mktemp -d)"
 export CI=1
 # 13 check targets each running their own `bun install` in parallel (see
