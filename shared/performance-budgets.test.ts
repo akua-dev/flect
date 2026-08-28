@@ -37,7 +37,7 @@ describe('platformBrowserPerformanceBudgets', () => {
 	);
 
 	it.effect(
-		'on linux, only overrides coldInteractiveMs/composerP95Ms/interactionLatencyMs, and only loosens them',
+		'on linux, only overrides coldInteractiveMs/composerP95Ms/interactionLatencyMs/markdownRenderMs, and only loosens them',
 		() =>
 			Effect.sync(() => {
 				const macos = FlectPerformanceBudgets.browser;
@@ -47,7 +47,8 @@ describe('platformBrowserPerformanceBudgets', () => {
 					if (
 						key === 'coldInteractiveMs' ||
 						key === 'composerP95Ms' ||
-						key === 'interactionLatencyMs'
+						key === 'interactionLatencyMs' ||
+						key === 'markdownRenderMs'
 					) {
 						expect(linux[key], key).toBeGreaterThan(macos[key]);
 					} else {

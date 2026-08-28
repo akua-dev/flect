@@ -89,35 +89,44 @@ export const FlectPerformanceBudgets: FlectPerformanceBudgets = Schema.decodeUnk
 // ubuntu-latest (cnap#866); on GitHub-hosted ubuntu-latest's shared,
 // lower-per-core-throughput runners, the same interaction/activation work
 // consistently takes longer, not because anything regressed but because
-// the two runner classes are not equivalent hardware. Three of `browser`'s
-// fields measured consistently, materially over-budget there across three
+// the two runner classes are not equivalent hardware. Four of `browser`'s
+// fields measured consistently, materially over-budget there across four
 // separate real ubuntu-latest runs (flect-projection-staging, 2026-08-28,
-// runs 33179409709 / 33181595439 / 33182118334; `test:e2e -- performance
-// .spec.ts --repeat-each=3`, values are the assertion's own Playwright
-// "Received:" numbers, i.e. the exact same measurement the assertion
-// already takes -- no new instrumentation):
+// runs 33179409709 / 33181595439 / 33182118334 / 33183111898; values are
+// the assertion's own Playwright "Received:" numbers, i.e. the exact same
+// measurement the assertion already takes -- no new instrumentation):
 //   - coldInteractiveMs ("cold Flect activation milliseconds" /
 //     "warmed protected workspace on Fast 4G / 4x CPU milliseconds"):
-//     27 samples, median ~1.62s (Fast-4G-throttled path) / ~1.01s
-//     (untethered path), max 2.37s.
-//   - composerP95Ms ("composer input p95 milliseconds"): 6 samples,
-//     median ~54ms, max ~72ms.
-//   - interactionLatencyMs ("model menu milliseconds"): 8 samples,
-//     median ~116ms, max ~140ms.
+//     27 samples (`test:e2e -- performance.spec.ts --repeat-each=3`),
+//     median ~1.62s (Fast-4G-throttled path) / ~1.01s (untethered path),
+//     max 2.37s.
+//   - composerP95Ms ("composer input p95 milliseconds"): 6 samples
+//     (`--repeat-each=3`), median ~54ms, max ~72ms.
+//   - interactionLatencyMs ("model menu milliseconds"): 8 samples
+//     (`--repeat-each=3`), median ~116ms, max ~140ms.
+//   - markdownRenderMs ("Markdown render milliseconds"): missed by the
+//     narrower `--repeat-each=3` sweep above (that sweep did not include
+//     this spec) and only surfaced once the full suite ran for real on run
+//     33183111898, where it failed all 3 attempts (Playwright's automatic
+//     retries are independent full re-runs, so these are 3 independent
+//     samples): 1045.73ms, 1070.52ms, 1074.58ms; median ~1070.52ms, max
+//     ~1074.58ms.
 // Every other field (including lcpFast4gMs/lcpSlow4gMs -- the LCP
-// assertions never failed once across all three runs, so they are not
-// touched here) stayed comfortably inside `browser`'s existing numbers on
-// every sample, so only these three get a linux-specific value, each set
+// assertions never failed once across any of the four runs, so they are
+// not touched here) stayed comfortably inside `browser`'s existing numbers
+// on every sample, so only these four get a linux-specific value, each set
 // to roughly 1.5-2x the observed median with real margin above the
 // observed max: coldInteractiveMs 3_000 (~1.8x median, ~1.27x max),
 // composerP95Ms 100 (~1.85x median, ~1.4x max), interactionLatencyMs 200
-// (~1.7x median, ~1.4x max). The assertion structure and margins are
-// otherwise unchanged -- this only supplies a different number to the
-// same `expect(...).toBeLessThan(budget.<field>)` calls.
+// (~1.7x median, ~1.4x max), markdownRenderMs 2_000 (~1.87x median, ~1.86x
+// max). The assertion structure and margins are otherwise unchanged --
+// this only supplies a different number to the same
+// `expect(...).toBeLessThan(budget.<field>)` calls.
 const LINUX_BROWSER_OVERRIDES = {
 	coldInteractiveMs: 3_000,
 	composerP95Ms: 100,
-	interactionLatencyMs: 200
+	interactionLatencyMs: 200,
+	markdownRenderMs: 2_000
 } as const satisfies Partial<FlectPerformanceBudgets['browser']>;
 
 const LinuxBrowserPerformanceBudgets: FlectPerformanceBudgets['browser'] = Schema.decodeUnknownSync(
