@@ -8,7 +8,7 @@
 		"packages/*"
 	],
 	"scripts": {
-		"prepare": "bun scripts/prepare-effect.ts && effect-tsgo patch --no-typescript --oxlint",
+		"prepare": "bun scripts/prepare-effect.ts",
 		"dev": "bun scripts/dev.ts",
 		"dev:server": "bun --watch server/index.ts",
 		"dev:web": "ASTRO_TELEMETRY_DISABLED=1 astro dev --host 127.0.0.1",
@@ -39,7 +39,8 @@
 		"test:pi-smoke": "bun scripts/smoke-pi.ts",
 		"test:watch": "vitest",
 		"typecheck": "tsc -b",
-		"lint": "oxlint --type-aware --tsconfig=tsconfig.json -c .oxlintrc.json . && oxfmt --check --ignore-path .oxfmtignore .",
+		"lint:oxlint": "effect-tsgo patch --no-typescript --oxlint && oxlint --type-aware --tsconfig=tsconfig.json -c .oxlintrc.json .",
+		"lint": "bun run lint:oxlint && oxfmt --check --ignore-path .oxfmtignore .",
 		"format": "oxfmt --write --ignore-path .oxfmtignore .",
 		"check:effect": "bun scripts/prepare-effect.ts --check",
 		"check:effect-concurrency": "bun scripts/verify-effect-concurrency.ts",
