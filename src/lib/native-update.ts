@@ -28,14 +28,14 @@ const candidateToken = (snapshot: NativeUpdateSnapshot) =>
 		? snapshot.candidate.token
 		: undefined;
 
-export const makeGuardedNativeUpdate = Effect.fn('Flect.NativeUpdate.makeGuarded')(function* (
+export const makeGuardedNativeUpdate = Effect.fn('NativeUpdate.makeGuarded')(function* (
 	adapter: NativeUpdateAdapterShape
 ): Effect.fn.Return<NativeUpdateShape> {
 	const reviewedToken = yield* Ref.make<string | undefined>(undefined);
 	const check = adapter.check.pipe(
 		Effect.tap((snapshot) => Ref.set(reviewedToken, candidateToken(snapshot)))
 	);
-	const install = Effect.fn('Flect.NativeUpdate.install')(function* (token: string) {
+	const install = Effect.fn('NativeUpdate.install')(function* (token: string) {
 		const claimed = yield* Ref.modify(reviewedToken, (current) =>
 			current === token ? ([true, undefined] as const) : ([false, current] as const)
 		);

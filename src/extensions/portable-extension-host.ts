@@ -66,7 +66,7 @@ export const PortableExtensionSourceLive = Layer.effect(
 	Effect.gen(function* () {
 		const store = yield* CapsuleStore;
 		return {
-			list: Effect.fn('Flect.PortableExtensionSource.list')((binding) =>
+			list: Effect.fn('PortableExtensionSource.list')((binding) =>
 				Effect.gen(function* () {
 					const archives = yield* store.load;
 					const archive = binding === 'accepted' ? archives.accepted : archives.candidate;
@@ -176,7 +176,7 @@ export const PortableExtensionHostLive = Layer.effect(
 		const sandbox = yield* ExtensionSandbox;
 		const broker = yield* SandboxCapabilityBroker;
 
-		const descriptor = Effect.fn('Flect.PortableExtensionHost.descriptor')(function* (
+		const descriptor = Effect.fn('PortableExtensionHost.descriptor')(function* (
 			role: PortableExtensionRole,
 			binding: 'accepted' | 'candidate',
 			extensionId: string
@@ -243,7 +243,7 @@ export const PortableExtensionHostLive = Layer.effect(
 			};
 		});
 
-		const list = Effect.fn('Flect.PortableExtensionHost.list')(function* (
+		const list = Effect.fn('PortableExtensionHost.list')(function* (
 			role: PortableExtensionRole,
 			binding: 'accepted' | 'candidate'
 		) {
@@ -289,7 +289,7 @@ export const PortableExtensionHostLive = Layer.effect(
 				.sort((left, right) => left.id.localeCompare(right.id));
 		});
 
-		const describe = Effect.fn('Flect.PortableExtensionHost.describe')(function* (
+		const describe = Effect.fn('PortableExtensionHost.describe')(function* (
 			role: PortableExtensionRole,
 			binding: 'accepted' | 'candidate',
 			extensionId: string
@@ -297,7 +297,7 @@ export const PortableExtensionHostLive = Layer.effect(
 			return (yield* descriptor(role, binding, extensionId)).descriptor;
 		});
 
-		const call = Effect.fn('Flect.PortableExtensionHost.call')(function* (
+		const call = Effect.fn('PortableExtensionHost.call')(function* (
 			callSource: PortableExtensionCallSource,
 			extensionId: string,
 			input: unknown

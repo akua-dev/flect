@@ -20,7 +20,7 @@ const unavailable = () =>
 	});
 
 export const ClipboardLive = Layer.succeed(Clipboard)({
-	writeText: Effect.fn('Flect.Clipboard.writeText')((value: string) =>
+	writeText: Effect.fn('Clipboard.writeText')((value: string) =>
 		Effect.tryPromise({
 			try: () => {
 				if (globalThis.navigator?.clipboard?.writeText === undefined) {

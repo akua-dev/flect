@@ -17,7 +17,7 @@ export class SidecarModeError extends Schema.TaggedErrorClass<SidecarModeError>(
 const markerPrefix = '--flect-private-mode=';
 const invalid = () => SidecarModeError.make({ message: 'Invalid private Flect runtime mode.' });
 
-export const selectSidecarMode = Effect.fn('Flect.Sidecar.selectMode')(function* (
+export const selectSidecarMode = Effect.fn('Sidecar.selectMode')(function* (
 	argv: ReadonlyArray<string>
 ): Effect.fn.Return<SidecarModeSelection, SidecarModeError> {
 	if (argv.length === 0) {

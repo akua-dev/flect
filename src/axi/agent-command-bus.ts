@@ -85,7 +85,7 @@ export const AgentCommandBusLive = Layer.effect(
 				return next;
 			});
 
-		const shutdown = Effect.fn('Flect.AgentCommandBus.shutdown')(function* () {
+		const shutdown = Effect.fn('AgentCommandBus.shutdown')(function* () {
 			const wasClosed = yield* Ref.getAndSet(closed, true);
 			if (wasClosed) {
 				return;
@@ -99,7 +99,7 @@ export const AgentCommandBusLive = Layer.effect(
 			yield* Queue.shutdown(queue);
 		});
 
-		const submit = Effect.fn('Flect.AgentCommandBus.submit')(function* (
+		const submit = Effect.fn('AgentCommandBus.submit')(function* (
 			source: AgentCommandSource,
 			operation: AgentGatewayOperation
 		) {
@@ -139,7 +139,7 @@ export const AgentCommandBusLive = Layer.effect(
 			);
 		});
 
-		const takeOpen = Effect.fn('Flect.AgentCommandBus.take')(function* (): Effect.fn.Return<
+		const takeOpen = Effect.fn('AgentCommandBus.take')(function* (): Effect.fn.Return<
 			AgentCommandRequest,
 			AgentCommandBusError
 		> {

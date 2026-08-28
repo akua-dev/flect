@@ -106,7 +106,7 @@ const installIntoDisposableVfs = (request: PackageMirrorRequest, fetch: Fetcher)
 
 export const makeRiftyPackageMirrorLayer = (options: { readonly fetch: Fetcher }) =>
 	Layer.succeed(RiftyPackageMirror)({
-		install: Effect.fn('Flect.RiftyPackageMirror.install')((request) =>
+		install: Effect.fn('RiftyPackageMirror.install')((request) =>
 			installIntoDisposableVfs(request, options.fetch)
 		)
 	});

@@ -70,7 +70,7 @@ const integrationError = (
 	message: string
 ) => AgentIntegrationError.make({ host, reason, message });
 
-const readJsonObject = Effect.fn('Flect.AgentIntegration.readJson')(function* (
+const readJsonObject = Effect.fn('AgentIntegration.readJson')(function* (
 	fs: FileSystem.FileSystem,
 	host: 'codex' | 'claude',
 	file: string
@@ -121,7 +121,7 @@ const handlerList = (
 	return Effect.succeed(group.hooks);
 };
 
-const ownedHookCount = Effect.fn('Flect.AgentIntegration.ownedHookCount')(function* (
+const ownedHookCount = Effect.fn('AgentIntegration.ownedHookCount')(function* (
 	host: 'codex' | 'claude',
 	root: JsonObject
 ) {
@@ -146,7 +146,7 @@ const ownedHookCount = Effect.fn('Flect.AgentIntegration.ownedHookCount')(functi
 	return { owned, exact };
 });
 
-const withoutOwnedHooks = Effect.fn('Flect.AgentIntegration.withoutOwnedHooks')(function* (
+const withoutOwnedHooks = Effect.fn('AgentIntegration.withoutOwnedHooks')(function* (
 	host: 'codex' | 'claude',
 	root: JsonObject
 ) {
@@ -170,7 +170,7 @@ const withoutOwnedHooks = Effect.fn('Flect.AgentIntegration.withoutOwnedHooks')(
 	return { ...root, hooks } satisfies JsonObject;
 });
 
-const addOwnedHook = Effect.fn('Flect.AgentIntegration.addOwnedHook')(function* (
+const addOwnedHook = Effect.fn('AgentIntegration.addOwnedHook')(function* (
 	host: 'codex' | 'claude',
 	root: JsonObject
 ) {
@@ -306,7 +306,7 @@ export const makeAgentIntegrationLayer = (root: string) =>
 			const fs = yield* FileSystem.FileSystem;
 			const path = yield* Path.Path;
 
-			const writePrivate = Effect.fn('Flect.AgentIntegration.writePrivate')(function* (
+			const writePrivate = Effect.fn('AgentIntegration.writePrivate')(function* (
 				host: AgentIntegrationHostType,
 				file: string,
 				content: string
@@ -327,7 +327,7 @@ export const makeAgentIntegrationLayer = (root: string) =>
 				);
 			});
 
-			const status = Effect.fn('Flect.AgentIntegration.status')(function* (
+			const status = Effect.fn('AgentIntegration.status')(function* (
 				host: AgentIntegrationHostType
 			) {
 				const file = integrationPath(path, root, host);
@@ -386,7 +386,7 @@ export const makeAgentIntegrationLayer = (root: string) =>
 				});
 			});
 
-			const install = Effect.fn('Flect.AgentIntegration.install')(function* (
+			const install = Effect.fn('AgentIntegration.install')(function* (
 				host: AgentIntegrationHostType
 			) {
 				const before = yield* status(host);
@@ -427,7 +427,7 @@ export const makeAgentIntegrationLayer = (root: string) =>
 				});
 			});
 
-			const remove = Effect.fn('Flect.AgentIntegration.remove')(function* (
+			const remove = Effect.fn('AgentIntegration.remove')(function* (
 				host: AgentIntegrationHostType
 			) {
 				const before = yield* status(host);

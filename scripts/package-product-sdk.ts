@@ -74,7 +74,7 @@ interface CommandResult {
 	readonly stderr: string;
 }
 
-const runCommand = Effect.fn('Flect.ProductSdk.runCommand')(function* (
+const runCommand = Effect.fn('ProductSdk.runCommand')(function* (
 	command: ReadonlyArray<string>,
 	cwd: string,
 	reason: ProductSdkPackagingError['reason']
@@ -153,7 +153,7 @@ const makeTempDirectory = (
 		(path) => Effect.promise(() => rm(path, { force: true, recursive: true })).pipe(Effect.orDie)
 	);
 
-const readManifest = Effect.fn('Flect.ProductSdk.readManifest')(function* () {
+const readManifest = Effect.fn('ProductSdk.readManifest')(function* () {
 	const source = yield* Effect.tryPromise({
 		try: () => readFile(resolve(packageRoot, 'package.json'), 'utf8'),
 		catch: () => packagingError('manifest')
@@ -186,7 +186,7 @@ export interface ProductSdkConsumerEvidence {
 	readonly output: 'offline-ready';
 }
 
-export const packageProductSdk = Effect.fn('Flect.ProductSdk.package')(function* (options?: {
+export const packageProductSdk = Effect.fn('ProductSdk.package')(function* (options?: {
 	readonly outputDirectory?: string;
 }) {
 	const manifest = yield* readManifest();
@@ -251,7 +251,7 @@ export const packageProductSdk = Effect.fn('Flect.ProductSdk.package')(function*
 	};
 });
 
-export const verifyProductSdkConsumer = Effect.fn('Flect.ProductSdk.verifyConsumer')(function* (
+export const verifyProductSdkConsumer = Effect.fn('ProductSdk.verifyConsumer')(function* (
 	tarball: string
 ) {
 	const consumer = yield* makeTempDirectory('flect-product-consumer-');

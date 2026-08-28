@@ -528,7 +528,7 @@ export class FlectCommandEnvelope extends Schema.Class<FlectCommandEnvelope>(
 	command: FlectCommand
 }) {}
 
-export const decodeFlectCommandEnvelope = Effect.fn('Flect.Control.decodeCommandEnvelope')(
+export const decodeFlectCommandEnvelope = Effect.fn('Control.decodeCommandEnvelope')(
 	(input: unknown) =>
 		Schema.decodeUnknownEffect(
 			FlectCommandEnvelope,

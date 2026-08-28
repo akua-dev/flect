@@ -181,7 +181,7 @@ export const makeProductGraphqlLayer = (options: {
 				registrations.set(policy.id, { policy, document: candidate.document });
 			}
 
-			const invoke = Effect.fn('Flect.ProductGraphql.invoke')(function* (
+			const invoke = Effect.fn('ProductGraphql.invoke')(function* (
 				candidate: ProductGraphqlRequest
 			) {
 				const request = yield* Schema.decodeUnknownEffect(

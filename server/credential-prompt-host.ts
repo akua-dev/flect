@@ -157,7 +157,7 @@ export const ProtectedPromptHostLive = Layer.succeed(ProtectedPromptHost)({
 			// other pending work tear down independently.
 			const terminate = Effect.forkDetach(close);
 
-			const handleEntry = Effect.fn('Flect.CredentialPromptHost.handleEntry')(function* (
+			const handleEntry = Effect.fn('CredentialPromptHost.handleEntry')(function* (
 				request: HttpServerRequest.HttpServerRequest
 			) {
 				const headers = responseHeaders(nonce);

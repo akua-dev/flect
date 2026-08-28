@@ -66,7 +66,7 @@ const encodedSize = (input: unknown) =>
 
 const decode = Schema.decodeUnknownEffect(CapsuleMessage, strict);
 
-export const decodeCapsuleMessage = Effect.fn('Flect.Capsule.decodeMessage')((input: unknown) => {
+export const decodeCapsuleMessage = Effect.fn('Capsule.decodeMessage')((input: unknown) => {
 	return encodedSize(input).pipe(
 		Effect.filterOrFail((bytes) => bytes <= 64 * 1024, invalid),
 		Effect.flatMap(() => decode(input)),
@@ -138,11 +138,10 @@ export type CapsuleHostMessage = typeof CapsuleHostMessage.Type;
 
 const decodeHost = Schema.decodeUnknownEffect(CapsuleHostMessage, strict);
 
-export const decodeCapsuleHostMessage = Effect.fn('Flect.Capsule.decodeHostMessage')(
-	(input: unknown) =>
-		encodedSize(input).pipe(
-			Effect.filterOrFail((bytes) => bytes <= 64 * 1024, invalid),
-			Effect.flatMap(() => decodeHost(input)),
-			Effect.mapError(invalid)
-		)
+export const decodeCapsuleHostMessage = Effect.fn('Capsule.decodeHostMessage')((input: unknown) =>
+	encodedSize(input).pipe(
+		Effect.filterOrFail((bytes) => bytes <= 64 * 1024, invalid),
+		Effect.flatMap(() => decodeHost(input)),
+		Effect.mapError(invalid)
+	)
 );

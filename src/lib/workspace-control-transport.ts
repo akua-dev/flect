@@ -54,16 +54,15 @@ export const makeBrowserWorkspaceControlTransportLayer = (baseUrl = '/api/contro
 				HttpClient.filterStatusOk
 			);
 
-			const enable = Effect.fn('Flect.ControlTransport.enable')(
-				(snapshot: FlectWorkspaceSnapshot) =>
-					HttpClientRequest.post('/enable').pipe(
-						HttpClientRequest.schemaBodyJson(ControlWorkspaceRegistration)(
-							ControlWorkspaceRegistration.make({ snapshot })
-						),
-						Effect.flatMap(transport.execute),
-						Effect.flatMap(HttpClientResponse.schemaBodyJson(ControlBrokerStatus)),
-						Effect.mapError(unavailable)
-					)
+			const enable = Effect.fn('ControlTransport.enable')((snapshot: FlectWorkspaceSnapshot) =>
+				HttpClientRequest.post('/enable').pipe(
+					HttpClientRequest.schemaBodyJson(ControlWorkspaceRegistration)(
+						ControlWorkspaceRegistration.make({ snapshot })
+					),
+					Effect.flatMap(transport.execute),
+					Effect.flatMap(HttpClientResponse.schemaBodyJson(ControlBrokerStatus)),
+					Effect.mapError(unavailable)
+				)
 			);
 
 			const status = HttpClientRequest.get('/status').pipe(
@@ -79,7 +78,7 @@ export const makeBrowserWorkspaceControlTransportLayer = (baseUrl = '/api/contro
 				Effect.mapError(unavailable)
 			);
 
-			const publishSnapshot = Effect.fn('Flect.ControlTransport.publishSnapshot')(
+			const publishSnapshot = Effect.fn('ControlTransport.publishSnapshot')(
 				(snapshot: FlectWorkspaceSnapshot) =>
 					HttpClientRequest.post('/snapshot').pipe(
 						HttpClientRequest.schemaBodyJson(ControlSnapshotPublication)(
@@ -92,7 +91,7 @@ export const makeBrowserWorkspaceControlTransportLayer = (baseUrl = '/api/contro
 					)
 			);
 
-			const publishEvent = Effect.fn('Flect.ControlTransport.publishEvent')(
+			const publishEvent = Effect.fn('ControlTransport.publishEvent')(
 				(event: FlectWorkspaceEvent) =>
 					HttpClientRequest.post('/event').pipe(
 						HttpClientRequest.schemaBodyJson(ControlEventPublication)(
@@ -105,7 +104,7 @@ export const makeBrowserWorkspaceControlTransportLayer = (baseUrl = '/api/contro
 					)
 			);
 
-			const nextCommand = Effect.fn('Flect.ControlTransport.nextCommand')((workspaceId: string) =>
+			const nextCommand = Effect.fn('ControlTransport.nextCommand')((workspaceId: string) =>
 				HttpClientRequest.post('/commands/next').pipe(
 					HttpClientRequest.schemaBodyJson(ControlNextCommandRequest)(
 						ControlNextCommandRequest.make({ workspaceId })
@@ -121,7 +120,7 @@ export const makeBrowserWorkspaceControlTransportLayer = (baseUrl = '/api/contro
 				)
 			);
 
-			const complete = Effect.fn('Flect.ControlTransport.complete')(
+			const complete = Effect.fn('ControlTransport.complete')(
 				(completion: ControlCommandCompletion) =>
 					HttpClientRequest.post('/commands/complete').pipe(
 						HttpClientRequest.schemaBodyJson(ControlCommandCompletion)(completion),

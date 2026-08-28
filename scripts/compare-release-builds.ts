@@ -90,7 +90,7 @@ const changedOffsets = async (first: string, second: string) => {
 	return offsets;
 };
 
-export const compareUnsignedReleaseTrees = Effect.fn('Flect.Release.compareUnsignedTrees')(
+export const compareUnsignedReleaseTrees = Effect.fn('Release.compareUnsignedTrees')(
 	(firstApp: string, secondApp: string) =>
 		Effect.tryPromise({
 			try: async (): Promise<ReleaseBuildComparison> => {
@@ -154,7 +154,7 @@ const stripActualSignatures = async (app: string) => {
 
 const validAppPath = (path: string) => path.endsWith('/Flect.app');
 
-export const compareReleaseBuilds = Effect.fn('Flect.Release.compareBuilds')((
+export const compareReleaseBuilds = Effect.fn('Release.compareBuilds')((
 	firstApp: string,
 	secondApp: string
 ) => {

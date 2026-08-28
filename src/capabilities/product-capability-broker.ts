@@ -194,7 +194,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
 			});
 			const manifests = new Map(options.manifests.map((manifest) => [manifest.id, manifest]));
 
-			const ensureLoaded = Effect.fn('Flect.ProductCapabilityBroker.load')(function* (
+			const ensureLoaded = Effect.fn('ProductCapabilityBroker.load')(function* (
 				context: ProductCapabilityRequestContext
 			) {
 				const contextKey = `${context.scopeId}\u0000${context.requestDigest}`;
@@ -236,7 +236,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
 				});
 			});
 
-			const catalog = Effect.fn('Flect.ProductCapabilityBroker.catalog')(function* (
+			const catalog = Effect.fn('ProductCapabilityBroker.catalog')(function* (
 				context: ProductCapabilityRequestContext
 			) {
 				yield* ensureLoaded(context);
@@ -261,7 +261,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
 				});
 			});
 
-			const decide = Effect.fn('Flect.ProductCapabilityBroker.decide')(function* (
+			const decide = Effect.fn('ProductCapabilityBroker.decide')(function* (
 				context: ProductCapabilityRequestContext,
 				capabilityId: string,
 				choice: ProductCapabilityDecisionChoice
@@ -371,9 +371,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
 					: projection;
 			});
 
-			const revoke = Effect.fn('Flect.ProductCapabilityBroker.revoke')(function* (
-				decisionId: string
-			) {
+			const revoke = Effect.fn('ProductCapabilityBroker.revoke')(function* (decisionId: string) {
 				const now = yield* Clock.currentTimeMillis;
 				const fibers = yield* SynchronizedRef.modifyEffect(state, (current) => {
 					const existing = current.decisions.find((decision) => decision.decisionId === decisionId);
@@ -409,7 +407,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
 				yield* Fiber.interruptAll(fibers);
 			});
 
-			const reserve = Effect.fn('Flect.ProductCapabilityBroker.reserve')(function* (
+			const reserve = Effect.fn('ProductCapabilityBroker.reserve')(function* (
 				context: ProductCapabilityRequestContext,
 				operation: AuthorizedProductOperation
 			) {
@@ -501,7 +499,7 @@ export const makeProductCapabilityBrokerLayer = (options: {
 				});
 			});
 
-			const validate = Effect.fn('Flect.ProductCapabilityBroker.validate')(function* (
+			const validate = Effect.fn('ProductCapabilityBroker.validate')(function* (
 				reservation: ProductCapabilityReservation,
 				operation: AuthorizedProductOperation
 			) {
@@ -515,35 +513,35 @@ export const makeProductCapabilityBrokerLayer = (options: {
 				}
 			});
 
-			const inspectReservation = Effect.fn('Flect.ProductCapabilityBroker.inspectReservation')(
-				function* (reservation: ProductCapabilityReservation) {
-					const current = yield* SynchronizedRef.get(state);
-					const decision = current.decisions.find(
-						(candidate) => candidate.decisionId === reservation.decisionId
-					);
-					if (
-						decision === undefined ||
-						decision.capabilityId !== reservation.capabilityId ||
-						!decision.operationIds.includes(reservation.operationId) ||
-						!isSubset(reservation.approvedResourceIds, decision.resourceIds) ||
-						!isSubset(reservation.approvedDataClassIds, decision.dataClassIds)
-					) {
-						return yield* Effect.fail(brokerFailure('denied', reservation.capabilityId));
-					}
-					if (decision.status === 'revoked') {
-						return yield* Effect.fail(brokerFailure('revoked', reservation.capabilityId));
-					}
-					if (decision.status !== 'granted') {
-						return yield* Effect.fail(brokerFailure('denied', reservation.capabilityId));
-					}
-					const now = yield* Clock.currentTimeMillis;
-					if (decision.expiresAtMillis !== undefined && decision.expiresAtMillis <= now) {
-						return yield* Effect.fail(brokerFailure('expired', reservation.capabilityId));
-					}
+			const inspectReservation = Effect.fn('ProductCapabilityBroker.inspectReservation')(function* (
+				reservation: ProductCapabilityReservation
+			) {
+				const current = yield* SynchronizedRef.get(state);
+				const decision = current.decisions.find(
+					(candidate) => candidate.decisionId === reservation.decisionId
+				);
+				if (
+					decision === undefined ||
+					decision.capabilityId !== reservation.capabilityId ||
+					!decision.operationIds.includes(reservation.operationId) ||
+					!isSubset(reservation.approvedResourceIds, decision.resourceIds) ||
+					!isSubset(reservation.approvedDataClassIds, decision.dataClassIds)
+				) {
+					return yield* Effect.fail(brokerFailure('denied', reservation.capabilityId));
 				}
-			);
+				if (decision.status === 'revoked') {
+					return yield* Effect.fail(brokerFailure('revoked', reservation.capabilityId));
+				}
+				if (decision.status !== 'granted') {
+					return yield* Effect.fail(brokerFailure('denied', reservation.capabilityId));
+				}
+				const now = yield* Clock.currentTimeMillis;
+				if (decision.expiresAtMillis !== undefined && decision.expiresAtMillis <= now) {
+					return yield* Effect.fail(brokerFailure('expired', reservation.capabilityId));
+				}
+			});
 
-			const withReservation = Effect.fn('Flect.ProductCapabilityBroker.withReservation')(
+			const withReservation = Effect.fn('ProductCapabilityBroker.withReservation')(
 				<A, E>(
 					reservation: ProductCapabilityReservation,
 					operation: AuthorizedProductOperation,

@@ -222,7 +222,7 @@ const projectName = (value: string) =>
 		.replace(/^-|-$/g, '')
 		.slice(0, 60) || 'web-project';
 
-export const importWebProject = Effect.fn('Flect.WebProject.import')(function* (
+export const importWebProject = Effect.fn('WebProject.import')(function* (
 	input: ReadonlyArray<WebProjectFile>,
 	options: WebProjectImportOptions = {
 		source: 'directory',

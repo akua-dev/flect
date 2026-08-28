@@ -86,7 +86,7 @@ export const SandboxCapabilityBrokerLive = Layer.effect(
 		const adapter = yield* CapabilityAdapter;
 
 		return {
-			apply: Effect.fn('Flect.SandboxCapabilityBroker.apply')(function* (
+			apply: Effect.fn('SandboxCapabilityBroker.apply')(function* (
 				context: ExtensionIntentContext,
 				manifest: ExtensionManifest,
 				result: SandboxResult,

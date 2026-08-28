@@ -12,7 +12,7 @@ type MarkdownTableProps = ComponentProps<'table'> & {
 	readonly node?: unknown;
 };
 
-const copyTable = Effect.fn('Flect.Markdown.copyTable')(function* (value: string) {
+const copyTable = Effect.fn('Markdown.copyTable')(function* (value: string) {
 	const clipboard = yield* Clipboard;
 	yield* clipboard.writeText(value);
 });

@@ -200,7 +200,7 @@ class LegacyInterfaceDocument extends Schema.Class<LegacyInterfaceDocument>(
 
 const decodeLegacyDocument = Schema.decodeUnknownEffect(LegacyInterfaceDocument, strictOptions);
 
-const migrateLegacyDocument = Effect.fn('Flect.InterfaceDocument.migrateLegacy')(function* (
+const migrateLegacyDocument = Effect.fn('InterfaceDocument.migrateLegacy')(function* (
 	input: unknown
 ) {
 	const legacy = yield* decodeLegacyDocument(input);
@@ -269,9 +269,7 @@ export const defaultInterfaceDocument: InterfaceDocument = Object.freeze(
 	})
 );
 
-const validateTree = Effect.fn('Flect.InterfaceDocument.validateTree')(function* (
-	root: InterfaceNode
-) {
+const validateTree = Effect.fn('InterfaceDocument.validateTree')(function* (root: InterfaceNode) {
 	const identifiers = new Set<string>();
 	const pending: Array<readonly [InterfaceNode, number]> = [[root, 1]];
 	let count = 0;
@@ -297,7 +295,7 @@ const validateTree = Effect.fn('Flect.InterfaceDocument.validateTree')(function*
 	}
 });
 
-export const validateInterfaceDocument = Effect.fn('Flect.InterfaceDocument.validate')(function* (
+export const validateInterfaceDocument = Effect.fn('InterfaceDocument.validate')(function* (
 	input: unknown
 ) {
 	if (!preflightTree(input)) {
@@ -309,14 +307,14 @@ export const validateInterfaceDocument = Effect.fn('Flect.InterfaceDocument.vali
 	return document;
 });
 
-export const encodeInterfaceDocument = Effect.fn('Flect.InterfaceDocument.encode')(function* (
+export const encodeInterfaceDocument = Effect.fn('InterfaceDocument.encode')(function* (
 	document: InterfaceDocument
 ) {
 	const validated = yield* validateInterfaceDocument(document);
 	return yield* encodeCurrentDocument(validated).pipe(Effect.mapError(invalidDocument));
 });
 
-export const decodeInterfaceDocument = Effect.fn('Flect.InterfaceDocument.decodeStored')(function* (
+export const decodeInterfaceDocument = Effect.fn('InterfaceDocument.decodeStored')(function* (
 	raw: string | null | undefined
 ) {
 	if (raw === null || raw === undefined) {

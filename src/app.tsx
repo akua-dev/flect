@@ -88,7 +88,7 @@ const toMessages = (
 
 const modelKey = (model: Pick<ModelSummary, 'provider' | 'id'>) => `${model.provider}/${model.id}`;
 
-const clearSafeModeRoute = Effect.fn('Flect.App.clearSafeModeRoute')(() =>
+const clearSafeModeRoute = Effect.fn('App.clearSafeModeRoute')(() =>
 	Effect.try({
 		try: () => {
 			const url = new URL(globalThis.location.href);

@@ -87,9 +87,7 @@ export const makePrivateShareSourcesLayer = (options: {
 				)
 				.toSorted((left, right) => left.id.localeCompare(right.id));
 
-			const open = Effect.fn('Flect.PrivateShareSources.open')(function* (
-				source: SharePrivateSource
-			) {
+			const open = Effect.fn('PrivateShareSources.open')(function* (source: SharePrivateSource) {
 				const definition = sources.get(source.adapterId);
 				if (definition === undefined) {
 					return yield* Effect.fail(failure('missing-adapter'));

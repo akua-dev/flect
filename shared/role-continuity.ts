@@ -111,7 +111,7 @@ export const emptyRoleContinuityRecord = (revisionSequence: number): RoleContinu
 		shaper: []
 	});
 
-export const decodeRoleContinuityRecord = Effect.fn('Flect.RoleContinuity.decode')(function* (
+export const decodeRoleContinuityRecord = Effect.fn('RoleContinuity.decode')(function* (
 	raw: string
 ) {
 	yield* ensureBounded(raw);
@@ -125,7 +125,7 @@ export const decodeRoleContinuityRecord = Effect.fn('Flect.RoleContinuity.decode
 	)(input).pipe(Effect.mapError(invalidContinuity));
 });
 
-export const encodeRoleContinuityRecord = Effect.fn('Flect.RoleContinuity.encode')(function* (
+export const encodeRoleContinuityRecord = Effect.fn('RoleContinuity.encode')(function* (
 	record: RoleContinuityRecord
 ) {
 	const validated = yield* Schema.decodeUnknownEffect(
