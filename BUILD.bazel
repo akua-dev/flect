@@ -66,11 +66,17 @@ TESTS = glob(["tests/**"])
 
 ASSETS = glob(["assets/**", "public/**"])
 
-# The full repo tree, for the two whole-tree formatters/linters. Excludes
-# generated/ignored directories (mirrors .gitignore) plus Bazel's own output
-# symlinks, which would otherwise make the glob self-referential.
+# The full repo tree, for the two whole-tree formatters/linters. Bazel's
+# glob() does not match dotfiles/dot-directories for a bare "**/*" pattern
+# (the same convention as an unqualified shell glob), so oxfmt/biome's own
+# config -- .oxfmtrc.json, .oxfmtignore, and everything else biome/oxfmt
+# read from a dotfile or dot-directory -- needs its own explicit patterns
+# or these targets silently run with no config at all (caught on a real
+# run: oxfmt reported "No config found, using defaults"). Excludes
+# generated/ignored directories (mirrors .gitignore) plus Bazel's own
+# output symlinks, which would otherwise make the glob self-referential.
 WHOLE_TREE = glob(
-    ["**/*"],
+    ["**/*", ".*", ".*/**"],
     exclude = [
         "node_modules/**",
         "packages/product/node_modules/**",
@@ -84,10 +90,15 @@ WHOLE_TREE = glob(
         "src-tauri/target/**",
         "src-tauri/binaries/**",
         ".repos/**",
+        ".repos",
         ".worktrees/**",
+        ".worktrees",
+        ".git/**",
+        ".git",
         "bazel-*/**",
         "bazel-*",
     ],
+    allow_empty = True,
 )
 
 # ---------------------------------------------------------------------------
