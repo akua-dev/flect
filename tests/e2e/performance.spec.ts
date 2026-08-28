@@ -552,7 +552,19 @@ test('gates the static Astro shell on Fast and Slow 4G with 4x CPU', async ({ pa
 });
 
 test('bounds 50 accepted edit cycles, Markdown rendering, and heap growth', async ({ page }) => {
-	test.setTimeout(180_000);
+	// 180s was tuned on macos-15; on ubuntu-latest (akua-dev/flect#61) every
+	// one of this test's 50 sequential real edit-cycle round-trips runs
+	// slower, and the total genuinely creeps past 180s even though nothing
+	// is stuck -- confirmed on three real ubuntu-latest runs
+	// (flect-projection-staging, 2026-08-28, runs 33184979807 /
+	// 33187083212 / 33189943650): the failure's own accessibility snapshot
+	// shows all 50 "Change complete" turns and the subsequent Markdown
+	// showcase already rendered at the moment the test was killed, i.e.
+	// the work finished, the wall clock just ran out first. 360s gives
+	// real headroom (roughly 2x the ~185-190s these runs actually took)
+	// without weakening the assertions themselves -- a timeout is not an
+	// assertion.
+	test.setTimeout(360_000);
 	await activate(page);
 	await shape(page, 'Create the performance baseline', false);
 	const before = await heapUsed(page);
