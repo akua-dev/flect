@@ -192,17 +192,13 @@ const interfaceChangeVerb =
 const interfaceSurface =
 	/\b(?:button|card|color|dashboard|design|form|footer|header|hero|interface|landing page|layout|navigation|navbar|page|screen|section|site|style|theme|typography|ui|website)\b/i;
 
-const classifyConversationPrompt = Effect.fn('Workspace.classifyConversationPrompt')(
-	(
-		text: string,
-		workbenchTarget: WorkbenchSnapshot['target']
-	): Effect.Effect<ConversationPromptRoute> =>
-		Effect.succeed(
-			workbenchTarget === 'shape' || (interfaceChangeVerb.test(text) && interfaceSurface.test(text))
-				? 'shaper'
-				: 'app'
-		)
-);
+const classifyConversationPrompt = (
+	text: string,
+	workbenchTarget: WorkbenchSnapshot['target']
+): ConversationPromptRoute =>
+	workbenchTarget === 'shape' || (interfaceChangeVerb.test(text) && interfaceSurface.test(text))
+		? 'shaper'
+		: 'app';
 
 interface ShareCandidateState {
 	readonly material: ShareCandidateMaterial;
@@ -4017,7 +4013,7 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 				case 'submit-conversation-prompt': {
 					const current = yield* SubscriptionRef.get(state);
 					const workbench = current.workbench ?? initialWorkbenchState(current.shaping);
-					const route = yield* classifyConversationPrompt(command.text, workbench.target);
+					const route = classifyConversationPrompt(command.text, workbench.target);
 					return route === 'shaper'
 						? yield* shapeInstruction(envelope, operationId, command.text)
 						: yield* submitAppConversation(envelope, operationId, command.text);
