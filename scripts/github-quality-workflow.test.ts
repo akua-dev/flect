@@ -61,7 +61,7 @@ describe('GitHub quality workflow', () => {
 		assert.notInclude(source, 'secrets.');
 		assert.notInclude(source, 'pull_request_target');
 
-		assert.strictEqual(workflow.name, 'Flect quality');
+		assert.strictEqual(workflow.name, 'Flect quality (advisory)');
 		assert.deepStrictEqual(workflow.permissions, { contents: 'read' });
 
 		const triggers = record(workflow.on, 'workflow triggers');
@@ -246,7 +246,7 @@ describe('GitHub quality workflow', () => {
 	it('keeps the required summary check always reporting and failing closed', async () => {
 		const { workflow } = await loadWorkflow();
 		const gate = jobRecord(workflow, 'gate');
-		assert.strictEqual(gate.name, 'Flect quality gate');
+		assert.strictEqual(gate.name, 'Advisory quality gate');
 		assert.strictEqual(gate['runs-on'], 'ubuntu-latest');
 		assert.strictEqual(gate.if, 'always()');
 		assert.deepStrictEqual(gate.needs, ['changes', 'bazel', 'e2e', 'desktop']);
