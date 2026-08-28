@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema } from 'effect';
-import { ExtensionCapability, type ExtensionManifest } from '../../shared/extensions';
+import { ExtensionCapability, type ExtensionManifest } from '../../packages/product/src/extensions';
 import type { InvalidInterfaceDocument } from '../../shared/interface-document';
 import type { InvalidRevisionTransition } from '../../shared/revisions';
 import type { CapabilityIntent, ExtensionIntentContext, SandboxResult } from '../../shared/sandbox';

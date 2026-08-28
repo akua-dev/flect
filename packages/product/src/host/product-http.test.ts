@@ -1,11 +1,7 @@
 import { assert, describe, it, vi } from '@effect/vitest';
 import { Effect, Fiber, Schema } from 'effect';
 import * as TestClock from 'effect/testing/TestClock';
-import {
-	ProductHttpFailure,
-	ProductHttpPolicy,
-	ProductHttpRequest
-} from '../../shared/product-http';
+import { ProductHttpFailure, ProductHttpPolicy, ProductHttpRequest } from '../product-http';
 import { makeProductHttpLayer, ProductHttp } from './product-http';
 
 const encoder = new TextEncoder();

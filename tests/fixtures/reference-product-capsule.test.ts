@@ -1,6 +1,6 @@
 import { assert, describe, it } from '@effect/vitest';
 import { Effect } from 'effect';
-import { decodeCapsule } from '../../shared/capsule';
+import { decodeCapsule } from '../../packages/product/src/capsule';
 import {
 	REFERENCE_APP_AGENT_INSTRUCTIONS,
 	referenceProductCapsule

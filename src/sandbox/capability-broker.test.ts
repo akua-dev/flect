@@ -1,6 +1,6 @@
 import { assert, describe, it } from '@effect/vitest';
 import { Effect, Layer, Ref } from 'effect';
-import { ExtensionManifest } from '../../shared/extensions';
+import { ExtensionManifest } from '../../packages/product/src/extensions';
 import { ExtensionIntentContext, SandboxResult, SetTextIntent } from '../../shared/sandbox';
 import {
 	CapabilityAdapter,

@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
+import { decodeCapsule, encodeCapsule } from '../../packages/product/src/capsule';
 import { BrowserBuildArtifact } from '../../shared/browser-build';
-import { decodeCapsule, encodeCapsule } from '../../shared/capsule';
 import { buildFrameworkCapsule } from './framework-capsule';
 
 const encoder = new TextEncoder();

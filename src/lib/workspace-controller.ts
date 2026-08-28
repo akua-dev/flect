@@ -14,25 +14,33 @@ import {
 } from 'effect';
 import packageMetadata from '../../package.json';
 import {
+	type DecodedCapsule,
+	decodeCapsule,
+	encodeCapsule,
+	hashCapsuleArchive,
+	type InvalidCapsule
+} from '../../packages/product/src/capsule';
+import {
 	type CapsuleSignatureAssessment,
 	type CapsuleTrustDecision,
 	evaluateCapsuleTrustPolicy,
 	verifyCapsuleSignatures
 } from '../../packages/product/src/capsule-trust';
+import type { PortableExtensionPackage } from '../../packages/product/src/extensions';
 import type { PrivateShareSourceSummary } from '../../packages/product/src/host/share-source';
+import {
+	ProductCapabilityProjection,
+	ProductCapabilityReceipt,
+	ProductCapabilityRequestContext,
+	ProductCapabilityRequestEntry,
+	ProductOperationInvocation
+} from '../../packages/product/src/product-capability';
 import {
 	ShareGitRepository,
 	ShareLocalSource,
 	type ShareSource
 } from '../../packages/product/src/share';
 import { canvasSelectionSummary } from '../../shared/canvas-selection';
-import {
-	type DecodedCapsule,
-	decodeCapsule,
-	encodeCapsule,
-	hashCapsuleArchive,
-	type InvalidCapsule
-} from '../../shared/capsule';
 import type {
 	AuthLoginReference,
 	AuthLoginRequest,
@@ -62,7 +70,6 @@ import {
 	type WorkspaceBuildSnapshot,
 	WorkspacePersistenceSnapshot
 } from '../../shared/control';
-import type { PortableExtensionPackage } from '../../shared/extensions';
 import { GitWorkspaceFailure } from '../../shared/git-workspace';
 import { findInterfaceAction, projectInterfaceActions } from '../../shared/interface-actions';
 import {
@@ -70,13 +77,6 @@ import {
 	type InterfaceDocument,
 	type InterfaceNode
 } from '../../shared/interface-document';
-import {
-	ProductCapabilityProjection,
-	ProductCapabilityReceipt,
-	ProductCapabilityRequestContext,
-	ProductCapabilityRequestEntry,
-	ProductOperationInvocation
-} from '../../shared/product-capability';
 import { PROJECT_IMPORT_REPORT_PATH, ProjectImportReport } from '../../shared/project-import';
 import type { RevisionId, ShapingSnapshot } from '../../shared/revisions';
 import {

@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
 import packageMetadata from '../../package.json';
-import { encodeCapsule, MAX_CAPSULE_BYTES } from '../../shared/capsule';
+import { encodeCapsule, MAX_CAPSULE_BYTES } from '../../packages/product/src/capsule';
 import { PROJECT_IMPORT_REPORT_PATH, ProjectImportReport } from '../../shared/project-import';
 
 const MAX_PROJECT_FILES = 255;

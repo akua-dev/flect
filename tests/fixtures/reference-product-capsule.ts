@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import { encodeCapsule } from '../../shared/capsule';
+import { encodeCapsule } from '../../packages/product/src/capsule';
 
 const encoder = new TextEncoder();
 

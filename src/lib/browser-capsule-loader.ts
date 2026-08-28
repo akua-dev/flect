@@ -1,5 +1,9 @@
 import { Effect } from 'effect';
-import { decodeCapsule, InvalidCapsule, MAX_CAPSULE_BYTES } from '../../shared/capsule';
+import {
+	decodeCapsule,
+	InvalidCapsule,
+	MAX_CAPSULE_BYTES
+} from '../../packages/product/src/capsule';
 
 export const loadBrowserCapsule = Effect.fn('Flect.Capsule.loadBrowser')((file: Blob) =>
 	Effect.tryPromise({

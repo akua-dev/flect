@@ -2,7 +2,7 @@ import {
 	makeProductOperationFailure,
 	type ProductCapabilityBrokerFailure,
 	type ProductOperationFailure
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 
 export const productOperationFailure = (
 	operationId: string,

@@ -1,6 +1,6 @@
 import { Clock, Context, Effect, Layer, Schema, Stream, SubscriptionRef } from 'effect';
+import { ProductCapabilityId } from '../../packages/product/src/product-capability';
 import { OperationRecord, ToolActivity } from '../../shared/control';
-import { ProductCapabilityId } from '../../shared/product-capability';
 
 const MAX_RECORDS = 128;
 const MAX_ENCODED_BYTES = 512 * 1024;
