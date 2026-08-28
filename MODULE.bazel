@@ -24,25 +24,31 @@ bazel_dep(name = "bazel_skylib", version = "1.9.0")
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-# Pinned bun 1.4.0 -- bumped from 1.3.14 (cnap#866 follow-up: real
-# ubuntu-latest runs of the check_effect/check_rifty/etc. Bazel targets hit
-# "Cannot find module '@effect/platform-bun/<Subpath>'" resolving a
-# package's wildcard `exports` entry (`"./*": "./dist/*.js"`) under bun's
-# native `bun run <file>.ts` execution -- Linux only, not reproducible on
-# macOS, and not the same bare-specifier `require.resolve` that succeeds
-# moments earlier in the same sandbox. 1.4.0 is the first release after
-# 1.3.14 (2026-08-20 vs 2026-05-13) with real resolver/install/symlink
-# changes in its ~250-commit diff; no changelog entry names this exact bug,
-# so this bump is an empirical try, not a confirmed-matching fix -- see the
-# PR body for whether it actually resolved the failure on a real run.
-# This intentionally only repins the Bazel-downloaded binary here; the
-# package.json "packageManager"/"@types/bun" pins and quality.yml's
-# oven-sh/setup-bun version are bumped separately once/if this is confirmed
-# to fix the failure, to keep this experiment's blast radius minimal.
+# Pinned bun 1.3.14 (see package.json "packageManager": "bun@1.3.14" and
+# quality.yml's oven-sh/setup-bun "bun-version" -- all three pins are kept
+# in lockstep deliberately, to avoid exactly the version-skew this
+# boundary rule otherwise invites).
+#
+# Tried bumping this pin to 1.4.0 as the cheapest possible fix for a real
+# bug: check_effect/check_rifty/etc. hit "Cannot find module
+# '@effect/platform-bun/<Subpath>'" resolving a package's wildcard
+# `exports` entry (`"./*": "./dist/*.js"`) under bun's native `bun run
+# <file>.ts` execution -- Linux only, not the same bare-specifier
+# `require.resolve` that succeeds moments earlier in the same sandbox.
+# Settled result: identical failure on 1.4.0 on a real ubuntu-latest run,
+# so the bump changed nothing and was reverted here. Root-caused further
+# and filed upstream: https://github.com/oven-sh/bun/issues/40785. Worked
+# around (not fixed -- this remains an open upstream bug on both 1.3.14
+# and 1.4.0) by routing the five affected check targets through Vitest
+# instead of bun's native `.ts` execution -- see tools/bun/defs.bzl and
+# BUILD.bazel's check_effect/check_effect_concurrency/check_rifty/
+# check_flect_skill/check_quality targets for the mechanism and revert
+# instructions once the upstream issue is fixed.
+#
 # sha256 values verified directly against the GitHub release asset bytes
 # (not just SHASUMS256.txt):
 #   curl -sL <url> | shasum -a 256
-BUN_VERSION = "1.4.0"
+BUN_VERSION = "1.3.14"
 
 http_archive(
     name = "bun_linux_x64",
@@ -53,7 +59,7 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 """,
-    sha256 = "2d03fb5fb83ac8b567aca0a281b2ce1a1a19d488f56c2968d88c3f25e92fe452",
+    sha256 = "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f",
     url = "https://github.com/oven-sh/bun/releases/download/bun-v{v}/bun-linux-x64.zip".format(v = BUN_VERSION),
 )
 
@@ -66,7 +72,7 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 """,
-    sha256 = "4b1a332ee861983eb93bcfe6f770fff94e3e31b2c388bdaea3c8ed35e58eed0e",
+    sha256 = "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
     url = "https://github.com/oven-sh/bun/releases/download/bun-v{v}/bun-linux-aarch64.zip".format(v = BUN_VERSION),
 )
 
@@ -79,6 +85,6 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 """,
-    sha256 = "c669e97f6164e1c96e0701748db98dfa77492908cbd8394c7557134a735de381",
+    sha256 = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620",
     url = "https://github.com/oven-sh/bun/releases/download/bun-v{v}/bun-darwin-aarch64.zip".format(v = BUN_VERSION),
 )
