@@ -121,7 +121,7 @@ const controlJson = (value: unknown, options?: { readonly status?: number }) =>
  */
 const readBody = Effect.fn('ControlBroker.readBody')(function* (
 	request: HttpServerRequest.HttpServerRequest
-) {
+): Effect.fn.Return<unknown, ControlBrokerError> {
 	const declared = Number(request.headers['content-length'] ?? 0);
 	if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
 		return yield* Effect.fail(brokerError('The control request is invalid.'));
@@ -225,12 +225,14 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 				)
 			);
 
-			const failPending = Effect.fn('ControlBroker.failPending')((active: ActiveGrant) =>
-				Effect.forEach(
-					active.pending.values(),
-					(deferred) => Deferred.fail(deferred, brokerError('The Flect workspace is unavailable.')),
-					{ discard: true }
-				)
+			const failPending = Effect.fn('ControlBroker.failPending')(
+				(active: ActiveGrant): Effect.Effect<void, never> =>
+					Effect.forEach(
+						active.pending.values(),
+						(deferred) =>
+							Deferred.fail(deferred, brokerError('The Flect workspace is unavailable.')),
+						{ discard: true }
+					)
 			);
 
 			const platform = Layer.merge(BunFileSystem.layer, BunPath.layer);
@@ -247,7 +249,7 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 
 			const enable = Effect.fn('ControlBroker.enable')(function* (
 				snapshot: FlectWorkspaceSnapshot
-			) {
+			): Effect.fn.Return<ControlBrokerStatus, ControlBrokerError> {
 				return yield* mutateState(
 					Effect.gen(function* () {
 						yield* disableUnlocked;
@@ -295,45 +297,47 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 					)
 				);
 
-			const nextCommand = Effect.fn('ControlBroker.nextCommand')((workspaceId: string) =>
-				withActive((active) =>
-					active.workspaceId !== workspaceId
-						? Effect.fail(brokerError('The Flect workspace is unavailable.'))
-						: Queue.take(active.queue).pipe(
-								Effect.flatMap((item) =>
-									item._tag === 'command'
-										? Effect.succeed(item.command)
-										: Effect.fail(brokerError('The Flect workspace is unavailable.'))
+			const nextCommand = Effect.fn('ControlBroker.nextCommand')(
+				(workspaceId: string): Effect.Effect<FlectCommandEnvelope, ControlBrokerError> =>
+					withActive((active) =>
+						active.workspaceId !== workspaceId
+							? Effect.fail(brokerError('The Flect workspace is unavailable.'))
+							: Queue.take(active.queue).pipe(
+									Effect.flatMap((item) =>
+										item._tag === 'command'
+											? Effect.succeed(item.command)
+											: Effect.fail(brokerError('The Flect workspace is unavailable.'))
+									)
 								)
-							)
-				)
+					)
 			);
 
-			const complete = Effect.fn('ControlBroker.complete')((completion: ControlCommandCompletion) =>
-				mutateState(
-					withActive((active) => {
-						const deferred = active.pending.get(completion.commandId);
-						if (deferred === undefined) {
-							return Effect.fail(brokerError('The control operation is no longer pending.'));
-						}
-						return Ref.update(state, (current) =>
-							current === undefined
-								? current
-								: {
-										...current,
-										pending: new Map(
-											[...current.pending].filter(
-												([commandId]) => commandId !== completion.commandId
+			const complete = Effect.fn('ControlBroker.complete')(
+				(completion: ControlCommandCompletion): Effect.Effect<void, ControlBrokerError> =>
+					mutateState(
+						withActive((active) => {
+							const deferred = active.pending.get(completion.commandId);
+							if (deferred === undefined) {
+								return Effect.fail(brokerError('The control operation is no longer pending.'));
+							}
+							return Ref.update(state, (current) =>
+								current === undefined
+									? current
+									: {
+											...current,
+											pending: new Map(
+												[...current.pending].filter(
+													([commandId]) => commandId !== completion.commandId
+												)
 											)
-										)
-									}
-						).pipe(Effect.andThen(Deferred.succeed(deferred, completion.outcome)), Effect.asVoid);
-					})
-				)
+										}
+							).pipe(Effect.andThen(Deferred.succeed(deferred, completion.outcome)), Effect.asVoid);
+						})
+					)
 			);
 
 			const publishSnapshot = Effect.fn('ControlBroker.publishSnapshot')(
-				(snapshot: FlectWorkspaceSnapshot) =>
+				(snapshot: FlectWorkspaceSnapshot): Effect.Effect<void, ControlBrokerError> =>
 					mutateState(
 						withActive((active) =>
 							active.workspaceId !== snapshot.workspaceId
@@ -343,55 +347,64 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 					)
 			);
 
-			const publishEvent = Effect.fn('ControlBroker.publishEvent')((event: FlectWorkspaceEvent) =>
-				mutateState(
-					withActive((active) =>
-						active.workspaceId !== event.workspaceId
-							? Effect.fail(brokerError('The Flect workspace is unavailable.'))
-							: Ref.set(state, {
-									...active,
-									events: [...active.events, event].slice(-MAX_EVENTS)
-								})
+			const publishEvent = Effect.fn('ControlBroker.publishEvent')(
+				(event: FlectWorkspaceEvent): Effect.Effect<void, ControlBrokerError> =>
+					mutateState(
+						withActive((active) =>
+							active.workspaceId !== event.workspaceId
+								? Effect.fail(brokerError('The Flect workspace is unavailable.'))
+								: Ref.set(state, {
+										...active,
+										events: [...active.events, event].slice(-MAX_EVENTS)
+									})
+						)
 					)
-				)
 			);
 
-			const submit = Effect.fn('ControlBroker.submit')((command: FlectCommandEnvelope) =>
-				Effect.gen(function* () {
-					const registered = yield* mutateState(
-						withActive((active) =>
-							Effect.gen(function* () {
-								if (
-									command.workspaceId !== active.workspaceId ||
-									command.source.kind !== 'control' ||
-									command.command.type === 'enable-control'
-								) {
-									return yield* Effect.fail(brokerError('The control command is not authorized.'));
-								}
-								if (active.pending.size >= MAX_PENDING) {
-									return yield* Effect.fail(brokerError('The control command queue is full.'));
-								}
-								if (active.pending.has(command.commandId)) {
-									return yield* Effect.fail(brokerError('The control command is already pending.'));
-								}
-								const deferred = yield* Deferred.make<ControlCommandOutcome, ControlBrokerError>();
-								yield* Ref.set(state, {
-									...active,
-									pending: new Map(active.pending).set(command.commandId, deferred)
-								});
-								return {
-									deferred,
-									queue: active.queue
-								};
-							})
-						)
-					);
-					yield* Queue.offer(registered.queue, {
-						_tag: 'command',
-						command
-					}).pipe(Effect.mapError(() => brokerError('The Flect workspace is unavailable.')));
-					return yield* Deferred.await(registered.deferred);
-				})
+			const submit = Effect.fn('ControlBroker.submit')(
+				(command: FlectCommandEnvelope): Effect.Effect<ControlCommandOutcome, ControlBrokerError> =>
+					Effect.gen(function* () {
+						const registered = yield* mutateState(
+							withActive((active) =>
+								Effect.gen(function* () {
+									if (
+										command.workspaceId !== active.workspaceId ||
+										command.source.kind !== 'control' ||
+										command.command.type === 'enable-control'
+									) {
+										return yield* Effect.fail(
+											brokerError('The control command is not authorized.')
+										);
+									}
+									if (active.pending.size >= MAX_PENDING) {
+										return yield* Effect.fail(brokerError('The control command queue is full.'));
+									}
+									if (active.pending.has(command.commandId)) {
+										return yield* Effect.fail(
+											brokerError('The control command is already pending.')
+										);
+									}
+									const deferred = yield* Deferred.make<
+										ControlCommandOutcome,
+										ControlBrokerError
+									>();
+									yield* Ref.set(state, {
+										...active,
+										pending: new Map(active.pending).set(command.commandId, deferred)
+									});
+									return {
+										deferred,
+										queue: active.queue
+									};
+								})
+							)
+						);
+						yield* Queue.offer(registered.queue, {
+							_tag: 'command',
+							command
+						}).pipe(Effect.mapError(() => brokerError('The Flect workspace is unavailable.')));
+						return yield* Deferred.await(registered.deferred);
+					})
 			);
 
 			const snapshot = withActive((active) => Effect.succeed(active.snapshot));
@@ -424,9 +437,18 @@ export const makeControlBrokerLayer = (options: ControlBrokerOptions = {}) =>
 					Stream.encodeText
 				);
 
+			// oxlint-disable effecttsgo/missing-effect-error -- false positive: `tsc -b`
+			// confirms `disable` (built from `mutateState(disableUnlocked)`, itself composed
+			// from `Ref`/`Queue`/`Deferred` operations that are all `E = never` plus
+			// `removeControlDescriptor(...).pipe(Effect.provide(platform))`, which is also
+			// `E = never`) is `Effect<void, never, never>` end to end - trivially assignable
+			// to this function's declared `ControlBrokerError`. effecttsgo cannot fully
+			// resolve the error channel through the `Semaphore.withPermits`/
+			// `Layer.provide(Layer.merge(...))` composition here and falls back to reporting
+			// `unknown` - same class of false positive as `makeControlBrokerLayer` above.
 			const externalRequest = Effect.fn('ControlBroker.externalRequest')(function* (
 				request: HttpServerRequest.HttpServerRequest
-			) {
+			): Effect.fn.Return<HttpServerResponse.HttpServerResponse, ControlBrokerError> {
 				if (!(yield* authenticated(request))) {
 					return yield* controlJson({ version: 1, error: 'Unauthorized' }, { status: 401 });
 				}

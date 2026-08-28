@@ -104,7 +104,10 @@ const plain = (body: string, headers: Record<string, string>, status: number) =>
 	Effect.succeed(HttpServerResponse.text(body, { status, headers }));
 
 export const ProtectedPromptHostLive = Layer.succeed(ProtectedPromptHost)({
-	open: Effect.fn('ProtectedPromptHost.open')(function* (input) {
+	open: Effect.fn('ProtectedPromptHost.open')(function* (input): Effect.fn.Return<
+		ProtectedPromptLease,
+		ProviderAuthOperationFailed
+	> {
 		const submission = yield* Deferred.make<
 			Redacted.Redacted<string>,
 			ProviderAuthOperationFailed
@@ -158,7 +161,7 @@ export const ProtectedPromptHostLive = Layer.succeed(ProtectedPromptHost)({
 
 		const handleEntry = Effect.fn('CredentialPromptHost.handleEntry')(function* (
 			request: HttpServerRequest.HttpServerRequest
-		) {
+		): Effect.fn.Return<HttpServerResponse.HttpServerResponse> {
 			const headers = responseHeaders(nonce);
 			if (!isLoopbackRemote(request)) {
 				yield* terminate;

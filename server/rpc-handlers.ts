@@ -1,5 +1,7 @@
 import { Effect, Stream } from 'effect';
+import type { FlectRuntimeError, ShapeEvent } from '../shared/contracts';
 import { ControlTransportFailed } from '../shared/control-channel';
+import type { InvalidInterfaceDocument } from '../shared/interface-document';
 import { validateInterfaceDocument } from '../shared/interface-document';
 import { FlectRpcs } from '../shared/rpc';
 import { AgentIntegration } from '../src/lib/agent-integration';
@@ -32,7 +34,14 @@ export const makeFlectRpcHandlers = () =>
 				CloseSession: ({ sessionId }) => runtime.closeSession(sessionId),
 				Prompt: ({ sessionId, text }) => runtime.prompt(sessionId, text),
 				Shape: Effect.fn('FlectRpcHandlers.shape')(
-					function* ({ sessionId, instruction, document }) {
+					function* ({
+						sessionId,
+						instruction,
+						document
+					}): Effect.fn.Return<
+						Stream.Stream<ShapeEvent, FlectRuntimeError>,
+						InvalidInterfaceDocument
+					> {
 						const validated = yield* validateInterfaceDocument(document);
 						return runtime.shape(sessionId, instruction, validated);
 					},
