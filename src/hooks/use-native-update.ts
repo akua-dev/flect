@@ -30,8 +30,7 @@ function makeNativeUpdateAtoms(runtime: NativeUpdateRuntime) {
 	);
 
 	const checkAtom = atomRuntime.fn(
-		// biome-ignore lint/suspicious/noConfusingVoidType: `void` is the `Atom.fn` no-argument convention - it lets `useAtomSet` callers write `runCheck()` instead of `runCheck(undefined)`.
-		Effect.fn('NativeUpdateAtoms.check')(function* (_: void, get: Atom.FnContext) {
+		Effect.fn('NativeUpdateAtoms.check')(function* (_: undefined, get: Atom.FnContext) {
 			const updates = yield* NativeUpdate;
 			const snapshot = yield* updates.check;
 			get.set(snapshotAtom, snapshot);
@@ -135,7 +134,7 @@ export function useNativeUpdate(
 		loading,
 		error,
 		refresh,
-		check: () => runCheck(),
+		check: () => runCheck(undefined),
 		install: (token: string) => runInstall(token),
 		relaunch: () => runRelaunch()
 	};
