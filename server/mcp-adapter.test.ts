@@ -82,6 +82,10 @@ describe('Flect MCP', () => {
 		expect(JSON.stringify(tools)).not.toContain('Bearer');
 		expect(JSON.stringify(tools)).not.toContain('token');
 
+		const logsTool = tools.tools.find((tool) => tool.name === 'flect_logs');
+		expect(logsTool?.inputSchema.required ?? []).not.toContain('afterSequence');
+		expect(logsTool?.inputSchema.required ?? []).not.toContain('limit');
+
 		const response = await client.callTool({
 			name: 'flect_command',
 			arguments: {
@@ -110,5 +114,21 @@ describe('Flect MCP', () => {
 
 		expect(response.isError).toBe(true);
 		expect(JSON.stringify(response)).not.toContain('Outside clients');
+	});
+
+	it('applies flect_logs defaults for afterSequence and limit when omitted', async () => {
+		const { client } = await makeConnection();
+		const response = await client.callTool({ name: 'flect_logs', arguments: {} });
+
+		expect(response.isError).not.toBe(true);
+		expect(response.structuredContent).toMatchObject({ version: 1, operations: [] });
+	});
+
+	it('advertises flect_wait timeoutMs as optional, defaulted at decode time', async () => {
+		const { client } = await makeConnection();
+		const tools = await client.listTools();
+		const waitTool = tools.tools.find((tool) => tool.name === 'flect_wait');
+
+		expect(waitTool?.inputSchema.required ?? []).toEqual(['afterSequence']);
 	});
 });
