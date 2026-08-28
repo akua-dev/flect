@@ -136,6 +136,23 @@ echo "=== bun action diagnostics: $(pwd) ==="
 ls -la node_modules >&2 2>&1 | head -5 || echo "node_modules NOT VISIBLE" >&2
 ls node_modules/@effect >&2 2>&1 || echo "node_modules/@effect NOT VISIBLE" >&2
 "$BUN" -e "console.log(require.resolve('@effect/platform-bun'))" >&2 2>&1 || echo "require.resolve('@effect/platform-bun') FAILED" >&2
+# Round 4 rung 2 follow-up: a minimal Bazel-sandboxed repro (file: dependency
+# with a wildcard `exports` entry, akua-dev/bun-wildcard-exports-repro-bazel)
+# reproduced "Cannot find module" under this exact processwrapper-sandbox
+# shape, and the installed node_modules/<pkg>/ in that repro was missing its
+# own package.json (only dist/ was present) -- meaning the exports map bun
+# needed to resolve the subpath from was never even on disk. Check directly
+# whether the REAL @effect/platform-bun@4.0.0-beta.102 registry-installed
+# store entry (a totally different bun install code path -- .bun store +
+# symlink, not a raw file: copy) is missing the same thing here, and whether
+# the subpath resolve failure reproduces via `bun -e` (not just native
+# `bun run *.ts` execution).
+PBUN_STORE="$(find node_modules/.bun -maxdepth 1 -iname '*platform-bun*beta.102*' 2>/dev/null | head -1)"
+echo "=== platform-bun store entry: ${{PBUN_STORE:-NOT FOUND}} ===" >&2
+if [ -n "$PBUN_STORE" ]; then
+  find "$PBUN_STORE" -maxdepth 4 >&2 2>&1
+fi
+"$BUN" -e "console.log(require.resolve('@effect/platform-bun/BunFileSystem'))" >&2 2>&1 || echo "require.resolve('@effect/platform-bun/BunFileSystem') FAILED via -e eval" >&2
 "$BUN" {invocation}
 touch "$OUT"
 """.format(invocation = ctx.attr.invocation),
