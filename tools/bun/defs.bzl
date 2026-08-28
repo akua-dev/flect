@@ -99,10 +99,43 @@ for f in package.json bun.lock; do
     mv "$f.material" "$f"
   fi
 done
+# `--no-install` on the invocation below only gates a bare, top-level,
+# statically-analyzable missing specifier -- confirmed on a real ubuntu-latest
+# run (flect-projection-staging) that it does NOT stop bun's runtime
+# auto-install fallback for a transitive subpath import surfacing lazily
+# inside a dependency's own compiled code (e.g. @effect/platform-bun's
+# BunFileSystem.js -> @effect/platform-node-shared/NodeFileSystem): that
+# fallback silently fetched npm's "latest" dist-tag for both packages (an
+# old v3-era line -- 0.91.2 / 0.61.1 -- instead of the pinned
+# 4.0.0-beta.102), which then cascades into further ENOENT/"Cannot find
+# module" errors since the v3-era code's own dependency graph
+# (@effect/platform, bare) is correctly absent from this project's v4 lock.
+# bunfig.toml's `install.auto = "disable"` is documented to fully disable
+# that fallback for every resolution path, not just the one --install=<val>
+# covers, so belt-and-suspenders it here too.
+cat > bunfig.toml <<'BUNFIG'
+[install]
+auto = "disable"
+frozenLockfile = true
+BUNFIG
 # Each check installs its own node_modules in the same action/session that
 # then runs it -- see the module docstring above for why that is load-
 # bearing, not just simplicity.
 "$BUN" install --frozen-lockfile --ignore-scripts
+# Diagnostic instrumentation (cnap#866 follow-up): a real ubuntu-latest run
+# hit the auto-install fallback above immediately after a successful
+# `bun install` in this very same action/process -- bun's own --help says
+# "auto" mode (the default the fallback still uses once --no-install fails
+# to gate it) triggers "when no node_modules" is visible from cwd. Every
+# local reproduction of this exact install-then-run sequence (darwin,
+# raw filesystem AND real Bazel sandbox, single-process and 12-way
+# concurrent) found node_modules fully populated and resolvable at this
+# point, so this logs the same facts on the real failing runner to
+# confirm/refute whether cwd-visibility is actually the trigger there.
+echo "=== bun action diagnostics: $(pwd) ==="
+ls -la node_modules >&2 2>&1 | head -5 || echo "node_modules NOT VISIBLE" >&2
+ls node_modules/@effect >&2 2>&1 || echo "node_modules/@effect NOT VISIBLE" >&2
+"$BUN" -e "console.log(require.resolve('@effect/platform-bun'))" >&2 2>&1 || echo "require.resolve('@effect/platform-bun') FAILED" >&2
 "$BUN" {invocation}
 touch "$OUT"
 """.format(invocation = ctx.attr.invocation),
