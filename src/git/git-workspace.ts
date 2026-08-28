@@ -303,389 +303,384 @@ const unexpectedResult = (operation: GitWorkspaceFailure['operation']) =>
 		failure(operation, 'invalid-result', 'The embedded Git Worker returned an unexpected result.')
 	);
 
-export const makeGitWorkspace = (options?: {
+export const makeGitWorkspace = Effect.fn('GitWorkspace.make')(function* (options?: {
 	readonly defaultWorkspaceId?: string;
 	readonly deadline?: Duration.Input;
 	readonly maxWorkerOperations?: number;
 	readonly lockManager?: GitWorkspaceLockManager;
 	readonly makeWorker?: () => GitWorkspaceWorker;
-}) =>
-	Effect.gen(function* () {
-		const makeWorker =
-			options?.makeWorker ??
-			(() =>
-				new Worker(new URL('./git-workspace-worker.ts', import.meta.url), {
-					type: 'module',
-					name: 'flect-git-workspace'
-				}));
-		const liveWorkers = new Set<GitWorkspaceWorker>();
-		let activeWorker: GitWorkspaceWorker | undefined;
-		yield* Effect.acquireRelease(Effect.void, () =>
-			Effect.sync(() => {
-				for (const worker of liveWorkers) {
-					worker.terminate();
-				}
-				liveWorkers.clear();
-				activeWorker = undefined;
-			})
-		);
-		const createWorker = (operation: GitWorkspaceOperation) =>
-			Effect.try({
-				try: () => {
-					const worker = makeWorker();
-					liveWorkers.add(worker);
-					activeWorker = worker;
-					return worker;
-				},
-				catch: () =>
-					failure(operationName(operation), 'worker', 'The embedded Git Worker could not start.')
-			});
-		activeWorker = Option.getOrUndefined(
-			yield* createWorker(
-				GitOpenRequest.make({
-					type: 'open',
-					workspaceId: options?.defaultWorkspaceId ?? 'default',
-					reset: false
-				})
-			).pipe(Effect.option)
-		);
-		const semaphore = yield* Semaphore.make(1);
-		let activeWorkspaceId: string | undefined;
-		let workerWorkspaceId: string | undefined;
-		let workerOperationCount = 0;
-		const maxWorkerOperations = Math.max(1, options?.maxWorkerOperations ?? 16);
-		const locks = options?.lockManager ?? globalThis.navigator?.locks;
-		const invalidateWorkerSync = (worker: GitWorkspaceWorker) => {
-			worker.terminate();
-			liveWorkers.delete(worker);
-			if (activeWorker === worker) {
-				activeWorker = undefined;
+}) {
+	const makeWorker =
+		options?.makeWorker ??
+		(() =>
+			new Worker(new URL('./git-workspace-worker.ts', import.meta.url), {
+				type: 'module',
+				name: 'flect-git-workspace'
+			}));
+	const liveWorkers = new Set<GitWorkspaceWorker>();
+	let activeWorker: GitWorkspaceWorker | undefined;
+	yield* Effect.acquireRelease(Effect.void, () =>
+		Effect.sync(() => {
+			for (const worker of liveWorkers) {
+				worker.terminate();
 			}
-			workerWorkspaceId = undefined;
-			workerOperationCount = 0;
-		};
-		const invalidateWorker = (worker: GitWorkspaceWorker) =>
-			Effect.sync(() => invalidateWorkerSync(worker));
-		const request = Effect.fn('Flect.GitWorkspace.request')((operation: GitWorkspaceOperation) =>
-			semaphore.withPermits(1)(
-				Effect.gen(function* () {
-					// Resolve the active worker only after entering the semaphore.
-					// A queued sibling may have just completed the worker's bounded
-					// lease; capturing it earlier would post to a terminated worker.
-					const worker =
-						activeWorker ??
-						(yield* createWorker(operation).pipe(
-							Effect.tap((created) =>
-								Effect.sync(() => {
-									activeWorker = created;
-									workerOperationCount = 0;
-								})
-							)
-						));
-					const lockName = `flect-git-${
-						operation.type === 'open' ? operation.workspaceId : (activeWorkspaceId ?? 'unopened')
-					}`;
-					const operationEffect = Effect.gen(function* () {
-						const workspaceId = activeWorkspaceId;
-						if (
-							operation.type !== 'open' &&
-							workspaceId !== undefined &&
-							workerWorkspaceId !== workspaceId
-						) {
-							const reopened = yield* makeWorkerRequest(
-								worker,
-								GitOpenRequest.make({
-									type: 'open',
-									workspaceId,
-									reset: false
-								}),
-								() => invalidateWorkerSync(worker)
-							);
-							if (reopened.type !== 'opened') {
-								return yield* unexpectedResult('open');
-							}
-							workerWorkspaceId = workspaceId;
-						}
-						const result = yield* makeWorkerRequest(worker, operation, () =>
-							invalidateWorkerSync(worker)
-						);
-						if (operation.type === 'open' && result.type === 'opened') {
-							workerWorkspaceId = operation.workspaceId;
-						}
-						workerOperationCount += 1;
-						if (workerOperationCount >= maxWorkerOperations) {
-							invalidateWorkerSync(worker);
-						}
-						return result;
-					}).pipe(
-						Effect.timeoutOrElse({
-							duration: options?.deadline ?? '60 seconds',
-							orElse: () =>
-								Effect.fail(
-									failure(
-										operationName(operation),
-										'interrupted',
-										'The embedded Git operation exceeded its deadline.'
-									)
-								)
-						}),
-						Effect.tapError((error) =>
-							error.reason === 'interrupted' || error.reason === 'worker'
-								? invalidateWorker(worker)
-								: Effect.void
+			liveWorkers.clear();
+			activeWorker = undefined;
+		})
+	);
+	const createWorker = (operation: GitWorkspaceOperation) =>
+		Effect.try({
+			try: () => {
+				const worker = makeWorker();
+				liveWorkers.add(worker);
+				activeWorker = worker;
+				return worker;
+			},
+			catch: () =>
+				failure(operationName(operation), 'worker', 'The embedded Git Worker could not start.')
+		});
+	activeWorker = Option.getOrUndefined(
+		yield* createWorker(
+			GitOpenRequest.make({
+				type: 'open',
+				workspaceId: options?.defaultWorkspaceId ?? 'default',
+				reset: false
+			})
+		).pipe(Effect.option)
+	);
+	const semaphore = yield* Semaphore.make(1);
+	let activeWorkspaceId: string | undefined;
+	let workerWorkspaceId: string | undefined;
+	let workerOperationCount = 0;
+	const maxWorkerOperations = Math.max(1, options?.maxWorkerOperations ?? 16);
+	const locks = options?.lockManager ?? globalThis.navigator?.locks;
+	const invalidateWorkerSync = (worker: GitWorkspaceWorker) => {
+		worker.terminate();
+		liveWorkers.delete(worker);
+		if (activeWorker === worker) {
+			activeWorker = undefined;
+		}
+		workerWorkspaceId = undefined;
+		workerOperationCount = 0;
+	};
+	const invalidateWorker = (worker: GitWorkspaceWorker) =>
+		Effect.sync(() => invalidateWorkerSync(worker));
+	const request = Effect.fn('GitWorkspace.request')((operation: GitWorkspaceOperation) =>
+		semaphore.withPermits(1)(
+			Effect.gen(function* () {
+				// Resolve the active worker only after entering the semaphore.
+				// A queued sibling may have just completed the worker's bounded
+				// lease; capturing it earlier would post to a terminated worker.
+				const worker =
+					activeWorker ??
+					(yield* createWorker(operation).pipe(
+						Effect.tap((created) =>
+							Effect.sync(() => {
+								activeWorker = created;
+								workerOperationCount = 0;
+							})
 						)
+					));
+				const lockName = `flect-git-${
+					operation.type === 'open' ? operation.workspaceId : (activeWorkspaceId ?? 'unopened')
+				}`;
+				const operationEffect = Effect.gen(function* () {
+					const workspaceId = activeWorkspaceId;
+					if (
+						operation.type !== 'open' &&
+						workspaceId !== undefined &&
+						workerWorkspaceId !== workspaceId
+					) {
+						const reopened = yield* makeWorkerRequest(
+							worker,
+							GitOpenRequest.make({
+								type: 'open',
+								workspaceId,
+								reset: false
+							}),
+							() => invalidateWorkerSync(worker)
+						);
+						if (reopened.type !== 'opened') {
+							return yield* unexpectedResult('open');
+						}
+						workerWorkspaceId = workspaceId;
+					}
+					const result = yield* makeWorkerRequest(worker, operation, () =>
+						invalidateWorkerSync(worker)
 					);
-					return yield* withCrossContextLock(locks, lockName, operation, operationEffect);
-				})
-			)
-		);
-
-		return {
-			open: Effect.fn('Flect.GitWorkspace.open')(({ workspaceId, reset }) => {
-				const resolvedWorkspaceId =
-					workspaceId === 'default' ? (options?.defaultWorkspaceId ?? workspaceId) : workspaceId;
-				return request(
-					GitOpenRequest.make({
-						type: 'open',
-						workspaceId: resolvedWorkspaceId,
-						reset: reset ?? false
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'opened'
-							? Effect.sync(() => {
-									activeWorkspaceId = resolvedWorkspaceId;
-									return result;
-								})
-							: unexpectedResult('open')
+					if (operation.type === 'open' && result.type === 'opened') {
+						workerWorkspaceId = operation.workspaceId;
+					}
+					workerOperationCount += 1;
+					if (workerOperationCount >= maxWorkerOperations) {
+						invalidateWorkerSync(worker);
+					}
+					return result;
+				}).pipe(
+					Effect.timeoutOrElse({
+						duration: options?.deadline ?? '60 seconds',
+						orElse: () =>
+							Effect.fail(
+								failure(
+									operationName(operation),
+									'interrupted',
+									'The embedded Git operation exceeded its deadline.'
+								)
+							)
+					}),
+					Effect.tapError((error) =>
+						error.reason === 'interrupted' || error.reason === 'worker'
+							? invalidateWorker(worker)
+							: Effect.void
 					)
 				);
-			}),
-			write: Effect.fn('Flect.GitWorkspace.write')((path, contents) =>
-				request(GitWriteRequest.make({ type: 'write', path, contents })).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'written' ? Effect.succeed(result) : unexpectedResult('write')
-					)
-				)
-			),
-			read: Effect.fn('Flect.GitWorkspace.read')((path) =>
-				request(GitReadRequest.make({ type: 'read', path })).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'read' ? Effect.succeed(result) : unexpectedResult('read')
-					)
-				)
-			),
-			run: Effect.fn('Flect.GitWorkspace.run')((args) =>
-				request(GitRunRequest.make({ type: 'run', args: [...args] })).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'command' ? Effect.succeed(result) : unexpectedResult('run')
-					)
-				)
-			),
-			exportRepository: request(GitExportRequest.make({ type: 'export' })).pipe(
+				return yield* withCrossContextLock(locks, lockName, operation, operationEffect);
+			})
+		)
+	);
+
+	return {
+		open: Effect.fn('GitWorkspace.open')(({ workspaceId, reset }) => {
+			const resolvedWorkspaceId =
+				workspaceId === 'default' ? (options?.defaultWorkspaceId ?? workspaceId) : workspaceId;
+			return request(
+				GitOpenRequest.make({
+					type: 'open',
+					workspaceId: resolvedWorkspaceId,
+					reset: reset ?? false
+				})
+			).pipe(
 				Effect.flatMap((result) =>
-					result.type === 'exported' ? Effect.succeed(result) : unexpectedResult('export')
+					result.type === 'opened'
+						? Effect.sync(() => {
+								activeWorkspaceId = resolvedWorkspaceId;
+								return result;
+							})
+						: unexpectedResult('open')
 				)
-			),
-			exportRef: Effect.fn('Flect.GitWorkspace.exportRef')((options) =>
-				request(
-					GitExportRefRequest.make({
-						type: 'export-ref',
-						branch: options.branch,
-						expectedCommit: options.expectedCommit,
-						guards: (options.guards ?? []).map((guard) => ({ ...guard }))
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'exported' ? Effect.succeed(result) : unexpectedResult('export-ref')
-					)
-				)
-			),
-			remove: request(GitRemoveRequest.make({ type: 'remove' })).pipe(
+			);
+		}),
+		write: Effect.fn('GitWorkspace.write')((path, contents) =>
+			request(GitWriteRequest.make({ type: 'write', path, contents })).pipe(
 				Effect.flatMap((result) =>
-					result.type === 'removed' ? Effect.succeed(result) : unexpectedResult('remove')
-				)
-			),
-			checkpoint: Effect.fn('Flect.GitWorkspace.checkpoint')((options) =>
-				request(
-					GitCheckpointRequest.make({
-						type: 'checkpoint',
-						branch: options.branch,
-						...(options.expectedCommit === undefined
-							? {}
-							: { expectedCommit: options.expectedCommit }),
-						...(options.baseCommit === undefined ? {} : { baseCommit: options.baseCommit }),
-						files: options.files.map((file) => ({
-							path: file.path,
-							contents: file.contents
-						})),
-						removals: [...(options.removals ?? [])],
-						guards: (options.guards ?? []).map((guard) => ({ ...guard })),
-						message: options.message
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'checkpointed' ? Effect.succeed(result) : unexpectedResult('checkpoint')
-					)
-				)
-			),
-			readAtRef: Effect.fn('Flect.GitWorkspace.readAtRef')((options) =>
-				request(
-					GitReadAtRefRequest.make({
-						type: 'read-at-ref',
-						branch: options.branch,
-						expectedCommit: options.expectedCommit,
-						paths: [...options.paths],
-						guards: (options.guards ?? []).map((guard) => ({ ...guard }))
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'read-at-ref' ? Effect.succeed(result) : unexpectedResult('read-at-ref')
-					)
-				)
-			),
-			moveRef: Effect.fn('Flect.GitWorkspace.moveRef')((options) =>
-				request(
-					GitMoveRefRequest.make({
-						type: 'move-ref',
-						branch: options.branch,
-						...(options.expectedCommit === undefined
-							? {}
-							: { expectedCommit: options.expectedCommit }),
-						targetCommit: options.targetCommit,
-						guards: (options.guards ?? []).map((guard) => ({ ...guard }))
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'ref-moved' ? Effect.succeed(result) : unexpectedResult('move-ref')
-					)
-				)
-			),
-			snapshotRef: Effect.fn('Flect.GitWorkspace.snapshotRef')((options) =>
-				request(
-					GitSnapshotRefRequest.make({
-						type: 'snapshot-ref',
-						branch: options.branch,
-						expectedCommit: options.expectedCommit,
-						guards: (options.guards ?? []).map((guard) => ({ ...guard }))
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'ref-snapshot'
-							? Effect.succeed(result)
-							: unexpectedResult('snapshot-ref')
-					)
-				)
-			),
-			status: Effect.fn('Flect.GitWorkspace.status')((options = {}) =>
-				request(
-					GitStatusRequest.make({
-						type: 'status',
-						...(options.proposalBranch === undefined
-							? {}
-							: { proposalBranch: options.proposalBranch })
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'status' ? Effect.succeed(result) : unexpectedResult('status')
-					)
-				)
-			),
-			importRepository: Effect.fn('Flect.GitWorkspace.importRepository')((options) =>
-				request(
-					GitImportRepositoryRequest.make({
-						type: 'import-repository',
-						archive: options.archive,
-						commit: options.commit
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'repository-imported'
-							? Effect.succeed(result)
-							: unexpectedResult('import-repository')
-					)
-				)
-			),
-			importObjects: Effect.fn('Flect.GitWorkspace.importObjects')((options) =>
-				request(
-					GitImportObjectsRequest.make({
-						type: 'import-objects',
-						archive: options.archive,
-						commit: options.commit,
-						guards: (options.guards ?? []).map((guard) => ({ ...guard }))
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'objects-imported'
-							? Effect.succeed(result)
-							: unexpectedResult('import-objects')
-					)
-				)
-			),
-			deleteRef: Effect.fn('Flect.GitWorkspace.deleteRef')((options) =>
-				request(
-					GitDeleteRefRequest.make({
-						type: 'delete-ref',
-						branch: options.branch,
-						expectedCommit: options.expectedCommit,
-						guards: (options.guards ?? []).map((guard) => ({ ...guard }))
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'ref-deleted' ? Effect.succeed(result) : unexpectedResult('delete-ref')
-					)
-				)
-			),
-			inspectCommit: Effect.fn('Flect.GitWorkspace.inspectCommit')((commit) =>
-				request(GitInspectCommitRequest.make({ type: 'inspect-commit', commit })).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'commit-inspected'
-							? Effect.succeed(result)
-							: unexpectedResult('inspect-commit')
-					)
-				)
-			),
-			mergeRef: Effect.fn('Flect.GitWorkspace.mergeRef')((options) =>
-				request(
-					GitMergeRefRequest.make({
-						type: 'merge-ref',
-						branch: options.branch,
-						expectedCommit: options.expectedCommit,
-						upstreamBranch: options.upstreamBranch,
-						expectedUpstreamCommit: options.expectedUpstreamCommit,
-						files: options.files,
-						...(options.conflictPaths === undefined
-							? {}
-							: { conflictPaths: options.conflictPaths }),
-						guards: (options.guards ?? []).map((guard) => ({ ...guard })),
-						message: options.message
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'ref-merged' || result.type === 'ref-merge-conflict'
-							? Effect.succeed(result)
-							: unexpectedResult('merge-ref')
-					)
-				)
-			),
-			inspectShare: Effect.fn('Flect.GitWorkspace.inspectShare')((options) =>
-				request(
-					GitInspectShareRequest.make({
-						type: 'inspect-share',
-						commit: options.commit,
-						manifestRequired: options.manifestRequired,
-						...(options.url === undefined ? {} : { url: options.url })
-					})
-				).pipe(
-					Effect.flatMap((result) =>
-						result.type === 'share-inspected'
-							? Effect.succeed(result)
-							: unexpectedResult('inspect-share')
-					)
+					result.type === 'written' ? Effect.succeed(result) : unexpectedResult('write')
 				)
 			)
-		} satisfies GitWorkspaceShape;
-	});
+		),
+		read: Effect.fn('GitWorkspace.read')((path) =>
+			request(GitReadRequest.make({ type: 'read', path })).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'read' ? Effect.succeed(result) : unexpectedResult('read')
+				)
+			)
+		),
+		run: Effect.fn('GitWorkspace.run')((args) =>
+			request(GitRunRequest.make({ type: 'run', args: [...args] })).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'command' ? Effect.succeed(result) : unexpectedResult('run')
+				)
+			)
+		),
+		exportRepository: request(GitExportRequest.make({ type: 'export' })).pipe(
+			Effect.flatMap((result) =>
+				result.type === 'exported' ? Effect.succeed(result) : unexpectedResult('export')
+			)
+		),
+		exportRef: Effect.fn('GitWorkspace.exportRef')((options) =>
+			request(
+				GitExportRefRequest.make({
+					type: 'export-ref',
+					branch: options.branch,
+					expectedCommit: options.expectedCommit,
+					guards: (options.guards ?? []).map((guard) => ({ ...guard }))
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'exported' ? Effect.succeed(result) : unexpectedResult('export-ref')
+				)
+			)
+		),
+		remove: request(GitRemoveRequest.make({ type: 'remove' })).pipe(
+			Effect.flatMap((result) =>
+				result.type === 'removed' ? Effect.succeed(result) : unexpectedResult('remove')
+			)
+		),
+		checkpoint: Effect.fn('GitWorkspace.checkpoint')((options) =>
+			request(
+				GitCheckpointRequest.make({
+					type: 'checkpoint',
+					branch: options.branch,
+					...(options.expectedCommit === undefined
+						? {}
+						: { expectedCommit: options.expectedCommit }),
+					...(options.baseCommit === undefined ? {} : { baseCommit: options.baseCommit }),
+					files: options.files.map((file) => ({
+						path: file.path,
+						contents: file.contents
+					})),
+					removals: [...(options.removals ?? [])],
+					guards: (options.guards ?? []).map((guard) => ({ ...guard })),
+					message: options.message
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'checkpointed' ? Effect.succeed(result) : unexpectedResult('checkpoint')
+				)
+			)
+		),
+		readAtRef: Effect.fn('GitWorkspace.readAtRef')((options) =>
+			request(
+				GitReadAtRefRequest.make({
+					type: 'read-at-ref',
+					branch: options.branch,
+					expectedCommit: options.expectedCommit,
+					paths: [...options.paths],
+					guards: (options.guards ?? []).map((guard) => ({ ...guard }))
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'read-at-ref' ? Effect.succeed(result) : unexpectedResult('read-at-ref')
+				)
+			)
+		),
+		moveRef: Effect.fn('GitWorkspace.moveRef')((options) =>
+			request(
+				GitMoveRefRequest.make({
+					type: 'move-ref',
+					branch: options.branch,
+					...(options.expectedCommit === undefined
+						? {}
+						: { expectedCommit: options.expectedCommit }),
+					targetCommit: options.targetCommit,
+					guards: (options.guards ?? []).map((guard) => ({ ...guard }))
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'ref-moved' ? Effect.succeed(result) : unexpectedResult('move-ref')
+				)
+			)
+		),
+		snapshotRef: Effect.fn('GitWorkspace.snapshotRef')((options) =>
+			request(
+				GitSnapshotRefRequest.make({
+					type: 'snapshot-ref',
+					branch: options.branch,
+					expectedCommit: options.expectedCommit,
+					guards: (options.guards ?? []).map((guard) => ({ ...guard }))
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'ref-snapshot' ? Effect.succeed(result) : unexpectedResult('snapshot-ref')
+				)
+			)
+		),
+		status: Effect.fn('GitWorkspace.status')((options = {}) =>
+			request(
+				GitStatusRequest.make({
+					type: 'status',
+					...(options.proposalBranch === undefined
+						? {}
+						: { proposalBranch: options.proposalBranch })
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'status' ? Effect.succeed(result) : unexpectedResult('status')
+				)
+			)
+		),
+		importRepository: Effect.fn('GitWorkspace.importRepository')((options) =>
+			request(
+				GitImportRepositoryRequest.make({
+					type: 'import-repository',
+					archive: options.archive,
+					commit: options.commit
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'repository-imported'
+						? Effect.succeed(result)
+						: unexpectedResult('import-repository')
+				)
+			)
+		),
+		importObjects: Effect.fn('GitWorkspace.importObjects')((options) =>
+			request(
+				GitImportObjectsRequest.make({
+					type: 'import-objects',
+					archive: options.archive,
+					commit: options.commit,
+					guards: (options.guards ?? []).map((guard) => ({ ...guard }))
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'objects-imported'
+						? Effect.succeed(result)
+						: unexpectedResult('import-objects')
+				)
+			)
+		),
+		deleteRef: Effect.fn('GitWorkspace.deleteRef')((options) =>
+			request(
+				GitDeleteRefRequest.make({
+					type: 'delete-ref',
+					branch: options.branch,
+					expectedCommit: options.expectedCommit,
+					guards: (options.guards ?? []).map((guard) => ({ ...guard }))
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'ref-deleted' ? Effect.succeed(result) : unexpectedResult('delete-ref')
+				)
+			)
+		),
+		inspectCommit: Effect.fn('GitWorkspace.inspectCommit')((commit) =>
+			request(GitInspectCommitRequest.make({ type: 'inspect-commit', commit })).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'commit-inspected'
+						? Effect.succeed(result)
+						: unexpectedResult('inspect-commit')
+				)
+			)
+		),
+		mergeRef: Effect.fn('GitWorkspace.mergeRef')((options) =>
+			request(
+				GitMergeRefRequest.make({
+					type: 'merge-ref',
+					branch: options.branch,
+					expectedCommit: options.expectedCommit,
+					upstreamBranch: options.upstreamBranch,
+					expectedUpstreamCommit: options.expectedUpstreamCommit,
+					files: options.files,
+					...(options.conflictPaths === undefined ? {} : { conflictPaths: options.conflictPaths }),
+					guards: (options.guards ?? []).map((guard) => ({ ...guard })),
+					message: options.message
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'ref-merged' || result.type === 'ref-merge-conflict'
+						? Effect.succeed(result)
+						: unexpectedResult('merge-ref')
+				)
+			)
+		),
+		inspectShare: Effect.fn('GitWorkspace.inspectShare')((options) =>
+			request(
+				GitInspectShareRequest.make({
+					type: 'inspect-share',
+					commit: options.commit,
+					manifestRequired: options.manifestRequired,
+					...(options.url === undefined ? {} : { url: options.url })
+				})
+			).pipe(
+				Effect.flatMap((result) =>
+					result.type === 'share-inspected'
+						? Effect.succeed(result)
+						: unexpectedResult('inspect-share')
+				)
+			)
+		)
+	} satisfies GitWorkspaceShape;
+});
 
 export const makeGitWorkspaceLayer = (options?: { readonly defaultWorkspaceId?: string }) =>
 	Layer.effect(GitWorkspace, makeGitWorkspace(options));

@@ -4,7 +4,7 @@ import {
 	ProductCapabilityDecisionRecord,
 	ProductCapabilityGrantRecord,
 	type ProductCapabilityManifest
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { InterfaceStorage } from '../lib/interface-store';
 
 const LEGACY_STORAGE_KEY = 'flect.product-capability-grants.v1';
@@ -95,7 +95,7 @@ export const makeProductCapabilityDecisionStoreLayer = Layer.effect(
 	Effect.gen(function* () {
 		const storage = yield* InterfaceStorage;
 
-		const save = Effect.fn('Flect.ProductCapabilityDecisionStore.save')(function* (
+		const save = Effect.fn('ProductCapabilityDecisionStore.save')(function* (
 			decisions: ReadonlyArray<ProductCapabilityDecision>
 		) {
 			const normalized = normalize(
@@ -117,7 +117,7 @@ export const makeProductCapabilityDecisionStoreLayer = Layer.effect(
 				.pipe(Effect.mapError(() => failure('persistence-failed')));
 		});
 
-		const load = Effect.fn('Flect.ProductCapabilityDecisionStore.load')(function* (
+		const load = Effect.fn('ProductCapabilityDecisionStore.load')(function* (
 			contexts: ReadonlyArray<ProductCapabilityMigrationContext>
 		) {
 			const storedV2 = yield* storage.read(STORAGE_KEY).pipe(

@@ -46,7 +46,7 @@ export interface BunPreviewExecutionRelease {
 	readonly clearActive: (runId: string) => Effect.Effect<void>;
 }
 
-export const releaseBunPreviewExecution = Effect.fn('Flect.BunPreviewExecution.release')(
+export const releaseBunPreviewExecution = Effect.fn('BunPreviewExecution.release')(
 	(release: BunPreviewExecutionRelease) =>
 		Effect.gen(function* () {
 			yield* Effect.sync(release.stopRealm).pipe(Effect.catchDefect(() => Effect.void));
@@ -385,7 +385,7 @@ const bootstrapDocument = (token: string) => `<!doctype html>
 })();
 </script>`;
 
-const createRealm = Effect.fn('Flect.BunPreviewExecution.createRealm')(
+const createRealm = Effect.fn('BunPreviewExecution.createRealm')(
 	(source: string): Effect.Effect<RealmHandle, BunCommandFailed> =>
 		Effect.callback<RealmHandle, BunCommandFailed>((resume) => {
 			const token = crypto.randomUUID();
@@ -543,7 +543,7 @@ const waitForPreviewServiceWorkerControl = Effect.callback<undefined, BunCommand
 	}
 );
 
-const ensurePreviewServiceWorker = Effect.fn('Flect.BunPreviewExecution.ensureServiceWorker')(
+const ensurePreviewServiceWorker = Effect.fn('BunPreviewExecution.ensureServiceWorker')(
 	function* () {
 		if (!('serviceWorker' in navigator)) {
 			return yield* Effect.fail(previewFailure());
@@ -563,7 +563,7 @@ const ensurePreviewServiceWorker = Effect.fn('Flect.BunPreviewExecution.ensureSe
 	}
 );
 
-const registerPreviewRoute = Effect.fn('Flect.BunPreviewExecution.registerRoute')(function* (
+const registerPreviewRoute = Effect.fn('BunPreviewExecution.registerRoute')(function* (
 	runId: string,
 	port: number
 ) {
@@ -612,7 +612,7 @@ const registerPreviewRoute = Effect.fn('Flect.BunPreviewExecution.registerRoute'
 	});
 });
 
-const stopPreviewRoute = Effect.fn('Flect.BunPreviewExecution.stopRoute')(function* (
+const stopPreviewRoute = Effect.fn('BunPreviewExecution.stopRoute')(function* (
 	runId: string,
 	port: number
 ) {
@@ -644,7 +644,7 @@ export const BunPreviewExecutionLive = Layer.effect(
 			| undefined
 		>(undefined);
 
-		const stop = Effect.fn('Flect.BunPreviewExecution.stop')(() =>
+		const stop = Effect.fn('BunPreviewExecution.stop')(() =>
 			Effect.gen(function* () {
 				const current = yield* Ref.get(active);
 				if (current === undefined) {
@@ -707,7 +707,7 @@ export const BunPreviewExecutionLive = Layer.effect(
 		);
 
 		return {
-			start: Effect.fn('Flect.BunPreviewExecution.start')((request) =>
+			start: Effect.fn('BunPreviewExecution.start')((request) =>
 				Effect.gen(function* () {
 					yield* stop();
 					const bundle = yield* Effect.tryPromise({

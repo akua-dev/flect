@@ -1,5 +1,5 @@
 import { Context, Effect, Layer, Schema } from 'effect';
-import type { ExtensionCapability, ExtensionManifest } from '../../shared/extensions';
+import type { ExtensionCapability, ExtensionManifest } from '../../packages/product/src/extensions';
 import type { SandboxExecutionFailed, SandboxResult } from '../../shared/sandbox';
 import { ExtensionIntentContext } from '../../shared/sandbox';
 import { ShapingKernel } from '../lib/shaping-kernel';
@@ -43,7 +43,7 @@ export const ExtensionExecutionLive = Layer.effect(
 		const kernel = yield* ShapingKernel;
 
 		return {
-			execute: Effect.fn('Flect.ExtensionExecution.execute')(
+			execute: Effect.fn('ExtensionExecution.execute')(
 				function* (
 					manifest: ExtensionManifest,
 					input: unknown,

@@ -10,7 +10,7 @@ import {
 	ProductCapabilityManifest,
 	type ProductJson,
 	ProductOperationFailure
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import type { CapabilityIntent, ExtensionIntentContext } from '../../shared/sandbox';
 import { type AgentCommandBridge, AgentCommandBridgeLive } from '../axi/agent-command-bridge';
 import { type AgentCommandBus, AgentCommandBusLive } from '../axi/agent-command-bus';
@@ -316,7 +316,7 @@ const CapabilityAdapterLive = Layer.effect(
 	Effect.gen(function* () {
 		const kernel = yield* ShapingKernel;
 		return {
-			apply: Effect.fn('Flect.CapabilityAdapter.apply')(function* (
+			apply: Effect.fn('CapabilityAdapter.apply')(function* (
 				context: ExtensionIntentContext,
 				intents: ReadonlyArray<CapabilityIntent>
 			) {

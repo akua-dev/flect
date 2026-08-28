@@ -1,5 +1,9 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect, Schema } from 'effect';
+import {
+	ProductCapabilityAllowChoice,
+	ProductCapabilityDenyChoice
+} from '../packages/product/src/product-capability';
 import { ExternalPiExtensionSelection } from './contracts';
 import {
 	AgentCommandSource,
@@ -21,7 +25,6 @@ import {
 	TestPortableExtension,
 	UserCommandSource
 } from './control';
-import { ProductCapabilityAllowChoice, ProductCapabilityDenyChoice } from './product-capability';
 import { RevisionId } from './revisions';
 
 describe('Flect control contracts', () => {

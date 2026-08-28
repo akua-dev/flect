@@ -1,6 +1,11 @@
 import { assert, describe, it, vi } from '@effect/vitest';
 import { Effect, Layer, Stream } from 'effect';
 import {
+	PortableExtensionCatalogSnapshot,
+	PortableExtensionRoleState
+} from '../../packages/product/src/extensions';
+import { ProductCapabilityProjection } from '../../packages/product/src/product-capability';
+import {
 	AgentWorkspaceSnapshot,
 	ControlStateSnapshot,
 	FlectCommandReceipt,
@@ -9,13 +14,8 @@ import {
 	WorkbenchSnapshot
 } from '../../shared/control';
 import { ControlBrokerStatus } from '../../shared/control-channel';
-import {
-	PortableExtensionCatalogSnapshot,
-	PortableExtensionRoleState
-} from '../../shared/extensions';
 import { GitRepositoryStatus } from '../../shared/git-workspace';
 import { defaultInterfaceDocument, InterfaceDocument } from '../../shared/interface-document';
-import { ProductCapabilityProjection } from '../../shared/product-capability';
 import {
 	InterfaceRevision,
 	RevisionId,

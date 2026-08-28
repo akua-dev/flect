@@ -32,7 +32,7 @@ export const makeCapsuleTrustVerifierLayer = (options?: {
 	const keys = options?.keys ?? [];
 	const policy = options?.policy ?? ({ mode: 'allow-unverified' } as const);
 	return Layer.succeed(CapsuleTrustVerifier)({
-		verify: Effect.fn('Flect.CapsuleTrustVerifier.verify')((archive) =>
+		verify: Effect.fn('CapsuleTrustVerifier.verify')((archive) =>
 			verifyCapsuleSignatures(archive, keys).pipe(
 				Effect.map((assessment) => ({
 					assessment,

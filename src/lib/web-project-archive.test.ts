@@ -1,7 +1,7 @@
 import { describe, expect, it } from '@effect/vitest';
 import { Effect } from 'effect';
 import { zipSync } from 'fflate';
-import { decodeCapsule } from '../../shared/capsule';
+import { decodeCapsule } from '../../packages/product/src/capsule';
 import { makeRepositoryTar } from '../git/repository-tar';
 import { importWebProjectArchive } from './web-project-archive';
 

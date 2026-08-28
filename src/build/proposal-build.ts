@@ -37,7 +37,7 @@ export const ProposalBuildLive = Layer.effect(
 		const compiler = yield* BrowserBuild;
 		const packages = yield* BrowserPackageResolver;
 
-		const sourceAt = Effect.fn('Flect.ProposalBuild.sourceAt')((request: ProposalBuildRequest) =>
+		const sourceAt = Effect.fn('ProposalBuild.sourceAt')((request: ProposalBuildRequest) =>
 			git
 				.snapshotRef({
 					branch: request.proposalBranch,
@@ -73,7 +73,7 @@ export const ProposalBuildLive = Layer.effect(
 				)
 		);
 
-		const dependenciesFor = Effect.fn('Flect.ProposalBuild.dependenciesFor')(
+		const dependenciesFor = Effect.fn('ProposalBuild.dependenciesFor')(
 			(sourceFiles: ReadonlyArray<{ path: string; contents: Uint8Array }>) =>
 				Effect.gen(function* () {
 					const packageJson = sourceFiles.find((file) => file.path === 'package.json');
@@ -107,7 +107,7 @@ export const ProposalBuildLive = Layer.effect(
 			left.byteLength === right.byteLength && left.every((value, index) => value === right[index]);
 
 		return {
-			resolvePackageLock: Effect.fn('Flect.ProposalBuild.resolvePackageLock')(
+			resolvePackageLock: Effect.fn('ProposalBuild.resolvePackageLock')(
 				(request: ProposalBuildRequest) =>
 					Effect.gen(function* () {
 						const sourceFiles = yield* sourceAt(request);
@@ -121,7 +121,7 @@ export const ProposalBuildLive = Layer.effect(
 						};
 					})
 			),
-			compile: Effect.fn('Flect.ProposalBuild.compile')((request: ProposalBuildRequest) =>
+			compile: Effect.fn('ProposalBuild.compile')((request: ProposalBuildRequest) =>
 				Effect.gen(function* () {
 					const sourceFiles = yield* sourceAt(request);
 					if (

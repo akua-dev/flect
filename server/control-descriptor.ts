@@ -20,8 +20,8 @@ const descriptorError = () =>
 	});
 
 export const defaultControlStateDirectory = Effect.fn(
-	'Flect.ControlDescriptor.defaultControlStateDirectory'
-)(function* () {
+	'ControlDescriptor.defaultControlStateDirectory'
+)(function* (): Effect.fn.Return<string, never, Path.Path> {
 	const path = yield* Path.Path;
 	const explicit = flectServerConfig.controlStateDir;
 	if (explicit !== undefined && explicit.length > 0) {
@@ -43,9 +43,9 @@ export const defaultControlStateDirectory = Effect.fn(
 const resolveStateDirectory = (stateDirectory: string | undefined) =>
 	stateDirectory !== undefined ? Effect.succeed(stateDirectory) : defaultControlStateDirectory();
 
-export const controlDescriptorPath = Effect.fn('Flect.ControlDescriptor.path')(function* (
+export const controlDescriptorPath = Effect.fn('ControlDescriptor.path')(function* (
 	stateDirectory?: string
-) {
+): Effect.fn.Return<string, never, Path.Path> {
 	const path = yield* Path.Path;
 	return path.join(yield* resolveStateDirectory(stateDirectory), 'control.json');
 });
@@ -56,10 +56,10 @@ export const makeControlToken = () => {
 	return Buffer.from(bytes).toString('base64url');
 };
 
-export const writeControlDescriptor = Effect.fn('Flect.ControlDescriptor.write')(function* (
+export const writeControlDescriptor = Effect.fn('ControlDescriptor.write')(function* (
 	descriptor: ControlDescriptor,
 	stateDirectory?: string
-) {
+): Effect.fn.Return<void, ControlDescriptorError, FileSystem.FileSystem | Path.Path> {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
 	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
@@ -79,9 +79,9 @@ export const writeControlDescriptor = Effect.fn('Flect.ControlDescriptor.write')
 	}).pipe(Effect.mapError(descriptorError));
 });
 
-export const removeControlDescriptor = Effect.fn('Flect.ControlDescriptor.remove')(function* (
+export const removeControlDescriptor = Effect.fn('ControlDescriptor.remove')(function* (
 	stateDirectory?: string
-) {
+): Effect.fn.Return<void, never, FileSystem.FileSystem | Path.Path> {
 	const fs = yield* FileSystem.FileSystem;
 	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
 	const target = yield* controlDescriptorPath(resolvedStateDirectory);
@@ -100,10 +100,10 @@ const processExists = (pid: number) => {
 	}
 };
 
-export const readControlDescriptor = Effect.fn('Flect.ControlDescriptor.read')(function* (
+export const readControlDescriptor = Effect.fn('ControlDescriptor.read')(function* (
 	stateDirectory?: string,
 	verifyProcess = true
-) {
+): Effect.fn.Return<ControlDescriptor, ControlDescriptorError, FileSystem.FileSystem | Path.Path> {
 	const fs = yield* FileSystem.FileSystem;
 	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
 	const target = yield* controlDescriptorPath(resolvedStateDirectory);

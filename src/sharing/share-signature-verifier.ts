@@ -40,7 +40,7 @@ export const makeShareSignatureVerifierLayer = (options?: {
 	readonly verify?: (request: ShareSignatureVerificationRequest) => Effect.Effect<boolean>;
 }) =>
 	Layer.succeed(ShareSignatureVerifier)({
-		verify: Effect.fn('Flect.ShareSignatureVerifier.verify')(function* (manifest, archiveSha256) {
+		verify: Effect.fn('ShareSignatureVerifier.verify')(function* (manifest, archiveSha256) {
 			if (manifest.signatures.length === 0) {
 				return ShareSignatureAssessment.make({
 					status: 'unsigned',

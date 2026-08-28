@@ -1,6 +1,6 @@
 import { assert, describe, it } from '@effect/vitest';
 import { Effect, Layer, Ref } from 'effect';
-import { ExtensionManifest } from '../../shared/extensions';
+import { ExtensionManifest } from '../../packages/product/src/extensions';
 import { SandboxResult, SetTextIntent } from '../../shared/sandbox';
 import { makeShapingKernelTestLayer, ShapingKernel } from '../lib/shaping-kernel';
 import { CapabilityAdapter, SandboxCapabilityBrokerLive } from './capability-broker';

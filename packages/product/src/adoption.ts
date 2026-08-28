@@ -325,9 +325,9 @@ export interface EvaluateProductAdoptionInput {
  * by `defineProductIntegration` or its product ID does not match
  * `userState`/`connection`.
  */
-export const evaluateProductAdoption = Effect.fn('Flect.ProductAdoption.evaluate')(function* (
+export const evaluateProductAdoption = Effect.fn('ProductAdoption.evaluate')(function* (
 	input: EvaluateProductAdoptionInput
-) {
+): Effect.fn.Return<ProductAdoptionSnapshot, ProductIntegrationFailure> {
 	if (!isProductIntegration(input.integration)) {
 		return yield* Effect.fail(invalidIntegration());
 	}
@@ -450,8 +450,10 @@ export const evaluateProductAdoption = Effect.fn('Flect.ProductAdoption.evaluate
  * personal fork and export references remain available for the host to
  * offer continuation or export.
  */
-export const detachProduct = Effect.fn('Flect.ProductAdoption.detach')(
-	(input: Omit<EvaluateProductAdoptionInput, 'detached'>) =>
+export const detachProduct = Effect.fn('ProductAdoption.detach')(
+	(
+		input: Omit<EvaluateProductAdoptionInput, 'detached'>
+	): Effect.Effect<ProductAdoptionSnapshot, ProductIntegrationFailure> =>
 		evaluateProductAdoption({
 			...input,
 			connection: undefined,

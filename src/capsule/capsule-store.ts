@@ -99,34 +99,33 @@ const makeCapsuleStore = (
 			...(lastKnownGood === undefined ? {} : { lastKnownGood })
 		};
 	}),
-	save: (bindings) =>
-		Effect.gen(function* () {
-			yield* storageEffect(() => vfs.mkdir(OBJECTS, { recursive: true }));
-			const write = (archive: Uint8Array | undefined) =>
-				archive === undefined
-					? Effect.succeed(undefined)
-					: storageEffect(async () => {
-							const digest = await hash(archive);
-							const path = `${OBJECTS}/${digest}.flect`;
-							if (!(await vfs.exists(path))) await vfs.writeFile(path, archive);
-							return digest;
-						});
-			const [accepted, candidate, lastKnownGood] = yield* Effect.all(
-				[write(bindings.accepted), write(bindings.candidate), write(bindings.lastKnownGood)],
-				{ concurrency: 'unbounded' }
-			);
-			yield* storageEffect(() =>
-				vfs.writeFile(
-					BINDINGS,
-					JSON.stringify({
-						version: 1,
-						...(accepted === undefined ? {} : { accepted }),
-						...(candidate === undefined ? {} : { candidate }),
-						...(lastKnownGood === undefined ? {} : { lastKnownGood })
-					})
-				)
-			);
-		}),
+	save: Effect.fn('CapsuleStore.save')(function* (bindings) {
+		yield* storageEffect(() => vfs.mkdir(OBJECTS, { recursive: true }));
+		const write = (archive: Uint8Array | undefined) =>
+			archive === undefined
+				? Effect.succeed(undefined)
+				: storageEffect(async () => {
+						const digest = await hash(archive);
+						const path = `${OBJECTS}/${digest}.flect`;
+						if (!(await vfs.exists(path))) await vfs.writeFile(path, archive);
+						return digest;
+					});
+		const [accepted, candidate, lastKnownGood] = yield* Effect.all(
+			[write(bindings.accepted), write(bindings.candidate), write(bindings.lastKnownGood)],
+			{ concurrency: 'unbounded' }
+		);
+		yield* storageEffect(() =>
+			vfs.writeFile(
+				BINDINGS,
+				JSON.stringify({
+					version: 1,
+					...(accepted === undefined ? {} : { accepted }),
+					...(candidate === undefined ? {} : { candidate }),
+					...(lastKnownGood === undefined ? {} : { lastKnownGood })
+				})
+			)
+		);
+	}),
 	uninstall: Effect.tryPromise({
 		try: async () => {
 			const digests = await readBindingDigests(vfs);

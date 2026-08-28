@@ -1,7 +1,7 @@
 import variant from '@jitl/quickjs-ng-wasmfile-release-sync';
 import { Effect, Option, Schema, type SchemaAST } from 'effect';
 import { newQuickJSWASMModuleFromVariant, type QuickJSWASMModule } from 'quickjs-emscripten-core';
-import { MAX_PORTABLE_EXTENSION_SOURCE_BYTES } from '../../shared/extensions';
+import { MAX_PORTABLE_EXTENSION_SOURCE_BYTES } from '../../packages/product/src/extensions';
 import {
 	type QuickJsExtensionRequest,
 	SandboxExecutionFailed,
@@ -29,7 +29,7 @@ const sandboxFailure = (reason: SandboxExecutionFailed['reason']) =>
 		message: 'Extension execution failed safely.'
 	});
 
-const loadQuickJs = Effect.fn('Flect.Sandbox.loadQuickJs')(() =>
+const loadQuickJs = Effect.fn('Sandbox.loadQuickJs')(() =>
 	Effect.tryPromise({
 		try: () => newQuickJSWASMModuleFromVariant(variant),
 		catch: () => sandboxFailure('worker')
@@ -99,7 +99,7 @@ const disposeEvaluation = (
 	return true;
 };
 
-const executeInModule = Effect.fn('Flect.Sandbox.executeInModule')(
+const executeInModule = Effect.fn('Sandbox.executeInModule')(
 	(module: QuickJSWASMModule, source: string, serializedInput: string) =>
 		Effect.try({
 			try: () => {
@@ -178,44 +178,44 @@ const executeInModule = Effect.fn('Flect.Sandbox.executeInModule')(
 		})
 );
 
-export const executeQuickJsExtension = Effect.fn('Flect.Sandbox.executeQuickJsExtension')(
-	function* (request: QuickJsExtensionRequest) {
-		if (textEncoder.encode(request.source).byteLength > MAX_PORTABLE_EXTENSION_SOURCE_BYTES) {
-			return yield* Effect.fail(sandboxFailure('source-limit'));
-		}
-
-		const serializedInput = yield* Effect.try({
-			try: () => JSON.stringify(request.input),
-			catch: () => sandboxFailure('invalid-input')
-		});
-		if (
-			serializedInput === undefined ||
-			textEncoder.encode(serializedInput).byteLength > INPUT_LIMIT_BYTES
-		) {
-			return yield* Effect.fail(
-				sandboxFailure(serializedInput === undefined ? 'invalid-input' : 'input-limit')
-			);
-		}
-
-		const module = yield* loadQuickJs();
-		const serializedResult = yield* executeInModule(module, request.source, serializedInput);
-		if (textEncoder.encode(serializedResult).byteLength > OUTPUT_LIMIT_BYTES) {
-			return yield* Effect.fail(sandboxFailure('output-limit'));
-		}
-
-		const result = yield* Effect.try({
-			try: (): unknown => JSON.parse(serializedResult),
-			catch: () => sandboxFailure('invalid-result')
-		}).pipe(
-			Effect.flatMap((intents) =>
-				decodeResult({
-					version: 1,
-					intents
-				})
-			),
-			Effect.mapError(() => sandboxFailure('invalid-result'))
-		);
-
-		return result;
+export const executeQuickJsExtension = Effect.fn('Sandbox.executeQuickJsExtension')(function* (
+	request: QuickJsExtensionRequest
+) {
+	if (textEncoder.encode(request.source).byteLength > MAX_PORTABLE_EXTENSION_SOURCE_BYTES) {
+		return yield* Effect.fail(sandboxFailure('source-limit'));
 	}
-);
+
+	const serializedInput = yield* Effect.try({
+		try: () => JSON.stringify(request.input),
+		catch: () => sandboxFailure('invalid-input')
+	});
+	if (
+		serializedInput === undefined ||
+		textEncoder.encode(serializedInput).byteLength > INPUT_LIMIT_BYTES
+	) {
+		return yield* Effect.fail(
+			sandboxFailure(serializedInput === undefined ? 'invalid-input' : 'input-limit')
+		);
+	}
+
+	const module = yield* loadQuickJs();
+	const serializedResult = yield* executeInModule(module, request.source, serializedInput);
+	if (textEncoder.encode(serializedResult).byteLength > OUTPUT_LIMIT_BYTES) {
+		return yield* Effect.fail(sandboxFailure('output-limit'));
+	}
+
+	const result = yield* Effect.try({
+		try: (): unknown => JSON.parse(serializedResult),
+		catch: () => sandboxFailure('invalid-result')
+	}).pipe(
+		Effect.flatMap((intents) =>
+			decodeResult({
+				version: 1,
+				intents
+			})
+		),
+		Effect.mapError(() => sandboxFailure('invalid-result'))
+	);
+
+	return result;
+});

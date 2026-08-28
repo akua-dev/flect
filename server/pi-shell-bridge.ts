@@ -1,4 +1,4 @@
-import { defineTool } from '@earendil-works/pi-coding-agent';
+import { defineTool, type ToolDefinition } from '@earendil-works/pi-coding-agent';
 import { Deferred, Effect, Ref } from 'effect';
 import { Type } from 'typebox';
 import { BunCommandResult } from '../shared/bun-command';
@@ -28,14 +28,25 @@ const formatShellResult = (result: BunCommandResult) =>
 		.filter((part) => part.length > 0)
 		.join('\n');
 
-export const makePiShellBridge = Effect.fn('Flect.PiShellBridge.make')(function* (
+export const makePiShellBridge = Effect.fn('PiShellBridge.make')(function* (
 	emit: (event: AgentShellRequest) => void
-) {
+): Effect.fn.Return<{
+	readonly request: (command: string) => Effect.Effect<BunCommandResult>;
+	readonly complete: (
+		requestId: string,
+		result: BunCommandResult
+	) => Effect.Effect<void, PiOperationFailed>;
+	readonly cancel: Effect.Effect<void>;
+	readonly close: Effect.Effect<void>;
+	readonly tool: ToolDefinition;
+}> {
 	const pending = yield* Ref.make<ReadonlyMap<string, Deferred.Deferred<BunCommandResult>>>(
 		new Map()
 	);
 
-	const request = Effect.fn('Flect.PiShellBridge.request')(function* (command: string) {
+	const request = Effect.fn('PiShellBridge.request')(function* (
+		command: string
+	): Effect.fn.Return<BunCommandResult> {
 		const requestId = `shell-${crypto.randomUUID()}`;
 		const response = yield* Deferred.make<BunCommandResult>();
 		yield* Ref.update(pending, (current) => {
@@ -66,10 +77,10 @@ export const makePiShellBridge = Effect.fn('Flect.PiShellBridge.make')(function*
 		);
 	});
 
-	const complete = Effect.fn('Flect.PiShellBridge.complete')(function* (
+	const complete = Effect.fn('PiShellBridge.complete')(function* (
 		requestId: string,
 		result: BunCommandResult
-	) {
+	): Effect.fn.Return<void, PiOperationFailed> {
 		const current = yield* Ref.get(pending);
 		const response = current.get(requestId);
 		if (response === undefined) {
@@ -81,16 +92,17 @@ export const makePiShellBridge = Effect.fn('Flect.PiShellBridge.make')(function*
 		}
 	});
 
-	const releasePending = Effect.fn('Flect.PiShellBridge.releasePending')((message: string) =>
-		Ref.getAndSet(pending, new Map()).pipe(
-			Effect.flatMap((current) =>
-				Effect.forEach(
-					current.values(),
-					(response) => Deferred.succeed(response, shellFailureResult(message, 130)),
-					{ discard: true }
+	const releasePending = Effect.fn('PiShellBridge.releasePending')(
+		(message: string): Effect.Effect<void> =>
+			Ref.getAndSet(pending, new Map()).pipe(
+				Effect.flatMap((current) =>
+					Effect.forEach(
+						current.values(),
+						(response) => Deferred.succeed(response, shellFailureResult(message, 130)),
+						{ discard: true }
+					)
 				)
 			)
-		)
 	);
 
 	const cancel = releasePending('bash: operation cancelled');

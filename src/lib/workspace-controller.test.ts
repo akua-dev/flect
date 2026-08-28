@@ -1,9 +1,19 @@
 import { assert, describe, it, vi } from '@effect/vitest';
 import { Effect, Layer, Ref, Stream, SubscriptionRef } from 'effect';
+import { encodeCapsule, hashCapsuleArchive } from '../../packages/product/src/capsule';
+import { PortableExtensionPackage } from '../../packages/product/src/extensions';
+import {
+	ProductCapabilityAllowChoice,
+	ProductCapabilityProjection,
+	ProductCapabilityReservation,
+	ProductOperationExecution,
+	ProductOperationFailure,
+	ProductOperationInvocation,
+	ProductOperationSummary
+} from '../../packages/product/src/product-capability';
 import { ShareEmbeddedRepository, ShareUrlSource } from '../../packages/product/src/share';
 import { BrowserBuildArtifact } from '../../shared/browser-build';
 import { CanvasSelection } from '../../shared/canvas-selection';
-import { encodeCapsule, hashCapsuleArchive } from '../../shared/capsule';
 import {
 	ExternalPiExtensionSelection,
 	InterfaceEditRequested,
@@ -63,18 +73,8 @@ import {
 	UserCommandSource,
 	WorkbenchHandoff
 } from '../../shared/control';
-import { PortableExtensionPackage } from '../../shared/extensions';
 import { GitWorkspaceFailure } from '../../shared/git-workspace';
 import { defaultInterfaceDocument, InterfaceDocument } from '../../shared/interface-document';
-import {
-	ProductCapabilityAllowChoice,
-	ProductCapabilityProjection,
-	ProductCapabilityReservation,
-	ProductOperationExecution,
-	ProductOperationFailure,
-	ProductOperationInvocation,
-	ProductOperationSummary
-} from '../../shared/product-capability';
 import { RevisionId } from '../../shared/revisions';
 import { RoleContinuityRecord } from '../../shared/role-continuity';
 import { SandboxResult } from '../../shared/sandbox';

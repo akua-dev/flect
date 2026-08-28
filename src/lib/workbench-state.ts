@@ -49,7 +49,7 @@ export const initialWorkbenchState = (shaping: ShapingSnapshot): WorkbenchSnapsh
 		0
 	);
 
-export const selectWorkbenchTarget = Effect.fn('Flect.Workbench.selectTarget')(function* (
+export const selectWorkbenchTarget = Effect.fn('Workbench.selectTarget')(function* (
 	current: WorkbenchSnapshot,
 	target: WorkbenchTarget,
 	shaping: ShapingSnapshot,

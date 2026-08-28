@@ -3,6 +3,47 @@
 Flect is early. Changes should strengthen the small protected core and preserve
 the browser/native trust boundaries.
 
+## How a contribution ships
+
+Flect's canonical history lives in Akua's private `cnap` monorepo, at
+`apps/flect`. This public repository is a filtered, read-only projection of
+that subtree (via [josh](https://github.com/josh-project/josh)), kept in sync
+by fast-forward-only pushes from a dedicated sync identity - nobody, including
+maintainers, pushes to this repo's `main` by hand. In practice, for your PR:
+
+1. **Open your PR here, as usual.** The `Flect quality (advisory)` workflow
+   runs the full `bun run check` suite on GitHub-hosted runners and reports
+   real signal within minutes.
+2. **A maintainer imports accepted changes into cnap.** This step has no
+   dedicated tooling yet and is fully manual: nothing you do here runs on
+   Akua's infrastructure until a maintainer decides to import your PR, at
+   which point they reverse-apply your commits onto `apps/flect/` in cnap and
+   open a cnap pull request from them.
+3. **cnap's Bazel-driven CI is the authoritative gate.** That cnap PR runs the
+   monorepo's real lint/type-check/test/build targets. That result, not the
+   advisory workflow on this repo, decides whether your change ships.
+4. **The result comes back here.** Once the cnap PR merges, the outbound sync
+   fast-forwards this repo's `main` to include it. Because the imported commit
+   keeps your exact original SHA, GitHub recognizes it as your commit and
+   closes your PR as merged rather than closing it unmerged.
+
+Because only the sync identity can push here, and only by fast-forward, the
+advisory workflow's result can never block or approve a merge on this repo by
+itself - it exists purely to give you fast, real feedback before a maintainer
+spends time importing your change. A red run here is informative, not a
+rejection; a green run is not a promise the cnap gate will also pass.
+
+### Why commits here show "Unverified"
+
+Canonical Flect history is signed inside cnap. This repository's history is a
+projection, not an independent set of pushes: josh preserves each rewritten
+commit's original signature bytes rather than stripping them, because
+stripping would change the commit's content and break the SHA identity the
+whole sync (and the PR auto-close above) depends on. GitHub can't validate a
+signature against a commit it wasn't computed for, so it marks these commits
+"Unverified" here. History is projected from our monorepo; signatures verify
+in the canonical repository.
+
 ## Requirements
 
 - Bun 1.3.14 exactly
@@ -62,24 +103,25 @@ Effect source checkout is at the pinned commit without changing it.
 
 This runs:
 
-1. Biome;
+1. Oxlint and Oxfmt;
 2. TypeScript project checking;
 3. Vitest unit and integration tests;
 4. Playwright against a production Astro-on-Vite build in real Chromium;
 5. Rust formatting and host tests; and
 6. a release-mode macOS application bundle build.
 
-The pinned, least-privilege GitHub workflow runs these same commands for
-every pull request and every change to `main`, split into independent
-parallel jobs for faster feedback: `bun run check` on Linux, the Playwright
-suite on macOS, and the Rust checks plus the release-mode bundle build with
-its own clean production web build on macOS. A required `Flect quality gate`
-summary check always reports and fails unless every job succeeded;
-documentation-only pull requests (Markdown, `docs/`, `.agents/`) may skip the
-browser and desktop jobs while `bun run check` still runs. Live Pi, Apple
-signing, notarization, and other credentialed release proof remain separate
-authorized gates; the public workflow must never silently represent them as
-completed.
+The pinned, least-privilege `Flect quality (advisory)` GitHub workflow runs
+these same commands for every pull request and every change to `main`, split
+into independent parallel jobs for faster feedback: `bun run check` on Linux,
+the Playwright suite on macOS, and the Rust checks plus the release-mode
+bundle build with its own clean production web build on macOS. Its `Advisory
+quality gate` summary job always reports and fails unless every job
+succeeded; documentation-only pull requests (Markdown, `docs/`, `.agents/`)
+may skip the browser and desktop jobs while `bun run check` still runs. See
+["How a contribution ships"](#how-a-contribution-ships) above for why this
+workflow is advisory rather than authoritative. Live Pi, Apple signing,
+notarization, and other credentialed release proof remain separate authorized
+gates; the workflow must never silently represent them as completed.
 
 Playwright uses `FLECT_TEST_MODE=1`, a deterministic in-memory runtime, and no
 provider credentials. It covers streamed turns, schema-driven Shaper tool

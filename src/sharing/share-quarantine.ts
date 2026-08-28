@@ -52,7 +52,7 @@ export class ShareQuarantine extends Context.Service<ShareQuarantine, ShareQuara
 	'flect/ShareQuarantine'
 ) {}
 
-const sha256 = Effect.fn('Flect.ShareQuarantine.sha256')((contents: Uint8Array) =>
+const sha256 = Effect.fn('ShareQuarantine.sha256')((contents: Uint8Array) =>
 	Effect.tryPromise({
 		try: async () => {
 			const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(contents));
@@ -64,7 +64,7 @@ const sha256 = Effect.fn('Flect.ShareQuarantine.sha256')((contents: Uint8Array) 
 	})
 );
 
-const parseGitManifest = Effect.fn('Flect.ShareQuarantine.parseManifest')(function* (
+const parseGitManifest = Effect.fn('ShareQuarantine.parseManifest')(function* (
 	contents: Uint8Array
 ) {
 	const input = yield* Effect.try({
@@ -91,7 +91,7 @@ const runWorkspace = <A, E>(
 		)
 	);
 
-const verifyArtifacts = Effect.fn('Flect.ShareQuarantine.verifyArtifacts')(function* (
+const verifyArtifacts = Effect.fn('ShareQuarantine.verifyArtifacts')(function* (
 	manifest: ShareManifest,
 	files: ReadonlyArray<GitRefFile>,
 	artifacts: ReadonlyArray<{
@@ -127,7 +127,7 @@ const verifyArtifacts = Effect.fn('Flect.ShareQuarantine.verifyArtifacts')(funct
 	}
 });
 
-const embeddedManifest = Effect.fn('Flect.ShareQuarantine.embedManifest')(function* (
+const embeddedManifest = Effect.fn('ShareQuarantine.embedManifest')(function* (
 	manifest: ShareManifest,
 	repository: Uint8Array
 ) {
@@ -170,7 +170,7 @@ export const makeShareQuarantineLayer = (options?: {
 			})
 		);
 
-	const inspect = Effect.fn('Flect.ShareQuarantine.inspect')((sourceBytes: Uint8Array) =>
+	const inspect = Effect.fn('ShareQuarantine.inspect')((sourceBytes: Uint8Array) =>
 		withWorkspace((workspace) =>
 			Effect.gen(function* () {
 				const decoded = yield* decodeShareArchive(sourceBytes).pipe(
@@ -208,7 +208,7 @@ export const makeShareQuarantineLayer = (options?: {
 		)
 	);
 
-	const inspectGit = Effect.fn('Flect.ShareQuarantine.inspectGit')((url: string, commit: string) =>
+	const inspectGit = Effect.fn('ShareQuarantine.inspectGit')((url: string, commit: string) =>
 		withWorkspace((workspace) =>
 			Effect.gen(function* () {
 				const descriptor = yield* runWorkspace(

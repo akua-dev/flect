@@ -46,7 +46,7 @@ export interface DecodedShareArchive {
 	}>;
 }
 
-const sha256 = Effect.fn('Flect.ShareArchive.sha256')((contents: Uint8Array) =>
+const sha256 = Effect.fn('ShareArchive.sha256')((contents: Uint8Array) =>
 	Effect.tryPromise({
 		try: async () => {
 			const digest = await crypto.subtle.digest('SHA-256', Uint8Array.from(contents));
@@ -70,7 +70,7 @@ const declaredCapsules = (manifest: ShareManifest) =>
 		artifact.capsule === undefined ? [] : [artifact.capsule]
 	);
 
-const verifyArtifacts = Effect.fn('Flect.ShareArchive.verifyArtifacts')(function* (
+const verifyArtifacts = Effect.fn('ShareArchive.verifyArtifacts')(function* (
 	manifest: ShareManifest,
 	artifacts: ReadonlyArray<PortableTarEntry>
 ) {
@@ -98,7 +98,7 @@ const verifyArtifacts = Effect.fn('Flect.ShareArchive.verifyArtifacts')(function
 	}
 });
 
-export const encodeShareArchive = Effect.fn('Flect.ShareArchive.encode')(function* (
+export const encodeShareArchive = Effect.fn('ShareArchive.encode')(function* (
 	source: ShareArchiveSource
 ) {
 	const manifest = yield* validateShareManifest(source.manifest).pipe(
@@ -137,7 +137,7 @@ export const encodeShareArchive = Effect.fn('Flect.ShareArchive.encode')(functio
 	).pipe(Effect.mapError(() => invalid()));
 });
 
-export const decodeShareArchive = Effect.fn('Flect.ShareArchive.decode')(function* (
+export const decodeShareArchive = Effect.fn('ShareArchive.decode')(function* (
 	archive: Uint8Array
 ): Effect.fn.Return<DecodedShareArchive, ShareArchiveFailure> {
 	const entries = yield* decodePortableTar(archive, archiveLimits).pipe(

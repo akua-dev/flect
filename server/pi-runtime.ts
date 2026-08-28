@@ -1,4 +1,4 @@
-import { getSupportedThinkingLevels } from '@earendil-works/pi-ai';
+import { type Api, getSupportedThinkingLevels, type Model } from '@earendil-works/pi-ai';
 import {
 	createAgentSession,
 	DefaultResourceLoader,
@@ -47,7 +47,11 @@ import {
 	TurnError,
 	TurnStarted
 } from '../shared/contracts';
-import { type InterfaceDocument, validateInterfaceDocument } from '../shared/interface-document';
+import {
+	type InterfaceDocument,
+	type InvalidInterfaceDocument,
+	validateInterfaceDocument
+} from '../shared/interface-document';
 import { PiModelRuntime } from './pi-model-runtime';
 import { makePiShellBridge } from './pi-shell-bridge';
 import { makePiWorkbenchBridge } from './pi-workbench-bridge';
@@ -136,32 +140,30 @@ type PiAgentPolicies = {
 	readonly shaper: PiSessionPolicy;
 };
 
-export const acquireProtectedAgentSet = Effect.fn('Flect.PiSdk.acquireProtectedAgentSet')(
-	function* (
-		policies: PiAgentPolicies,
-		createProtectedSession: (policy: PiSessionPolicy) => Effect.Effect<PiSession, PiOperationFailed>
-	) {
-		const guardian = yield* createProtectedSession(policies.guardian);
-		const app = yield* createProtectedSession(policies.app).pipe(
-			Effect.tapError(() => guardian.dispose),
-			Effect.onInterrupt(() => guardian.dispose)
-		);
-		const disposeEarlierSessions = Effect.all([app.dispose, guardian.dispose], {
-			concurrency: 'unbounded',
-			discard: true
-		});
-		const shaper = yield* createProtectedSession(policies.shaper).pipe(
-			Effect.tapError(() => disposeEarlierSessions),
-			Effect.onInterrupt(() => disposeEarlierSessions)
-		);
+export const acquireProtectedAgentSet = Effect.fn('PiSdk.acquireProtectedAgentSet')(function* (
+	policies: PiAgentPolicies,
+	createProtectedSession: (policy: PiSessionPolicy) => Effect.Effect<PiSession, PiOperationFailed>
+): Effect.fn.Return<PiAgentSet, PiOperationFailed> {
+	const guardian = yield* createProtectedSession(policies.guardian);
+	const app = yield* createProtectedSession(policies.app).pipe(
+		Effect.tapError(() => guardian.dispose),
+		Effect.onInterrupt(() => guardian.dispose)
+	);
+	const disposeEarlierSessions = Effect.all([app.dispose, guardian.dispose], {
+		concurrency: 'unbounded',
+		discard: true
+	});
+	const shaper = yield* createProtectedSession(policies.shaper).pipe(
+		Effect.tapError(() => disposeEarlierSessions),
+		Effect.onInterrupt(() => disposeEarlierSessions)
+	);
 
-		return {
-			guardian,
-			app,
-			shaper
-		} satisfies PiAgentSet;
-	}
-);
+	return {
+		guardian,
+		app,
+		shaper
+	} satisfies PiAgentSet;
+});
 
 export interface PiSdkShape {
 	readonly listModels: Effect.Effect<ReadonlyArray<ModelSummary>, PiOperationFailed>;
@@ -314,11 +316,12 @@ export const PiSdkLive = Layer.effect(
 	Effect.gen(function* () {
 		const modelRuntime = yield* PiModelRuntime;
 
-		const availableModels = Effect.fn('Flect.PiSdk.availableModels')(() =>
-			Effect.tryPromise({
-				try: () => modelRuntime.getAvailable(),
-				catch: () => piFailure('list_models')
-			})
+		const availableModels = Effect.fn('PiSdk.availableModels')(
+			(): Effect.Effect<ReadonlyArray<Model<Api>>, PiOperationFailed> =>
+				Effect.tryPromise({
+					try: () => modelRuntime.getAvailable(),
+					catch: () => piFailure('list_models')
+				})
 		);
 
 		const listModels = availableModels().pipe(
@@ -335,7 +338,7 @@ export const PiSdkLive = Layer.effect(
 			)
 		);
 
-		const createAgentSet = Effect.fn('Flect.PiSdk.createAgentSet')(function* (
+		const createAgentSet = Effect.fn('PiSdk.createAgentSet')(function* (
 			model: ModelSummary,
 			reasoningLevel: ReasoningLevel | undefined,
 			policies: {
@@ -343,7 +346,7 @@ export const PiSdkLive = Layer.effect(
 				readonly app: PiSessionPolicy;
 				readonly shaper: PiSessionPolicy;
 			}
-		) {
+		): Effect.fn.Return<PiAgentSet, PiOperationFailed | NoModelAvailable> {
 			const models = yield* availableModels();
 			const selected = models.find(
 				(candidate) => candidate.provider === model.provider && candidate.id === model.id
@@ -357,9 +360,9 @@ export const PiSdkLive = Layer.effect(
 				);
 			}
 
-			const createProtectedSession = Effect.fn('Flect.PiSdk.createProtectedSession')(function* (
+			const createProtectedSession = Effect.fn('PiSdk.createProtectedSession')(function* (
 				policy: PiSessionPolicy
-			) {
+			): Effect.fn.Return<PiSession, PiOperationFailed> {
 				const configuredSettings =
 					policy.extensions === 'enabled'
 						? SettingsManager.create(process.cwd(), getAgentDir(), {
@@ -517,7 +520,9 @@ export const PiSdkLive = Layer.effect(
 								listeners.delete(listener);
 							};
 						}),
-					prompt: Effect.fn('Flect.PiSession.prompt')(function* (text: string) {
+					prompt: Effect.fn('PiSession.prompt')(function* (
+						text: string
+					): Effect.fn.Return<void, PiOperationFailed> {
 						observedTextDelta = false;
 						const previousMessageCount = result.session.messages.length;
 						yield* Effect.tryPromise({
@@ -544,11 +549,17 @@ export const PiSdkLive = Layer.effect(
 							}
 						}
 					}),
-					completeShellRequest: Effect.fn('Flect.PiSession.completeShellRequest')(
-						(requestId: string, shellResult: BunCommandResult) =>
+					completeShellRequest: Effect.fn('PiSession.completeShellRequest')(
+						(
+							requestId: string,
+							shellResult: BunCommandResult
+						): Effect.Effect<void, PiOperationFailed> =>
 							shellBridge.complete(requestId, shellResult)
 					),
-					abort: Effect.fn('Flect.PiSession.abort')(function* () {
+					abort: Effect.fn('PiSession.abort')(function* (): Effect.fn.Return<
+						void,
+						PiOperationFailed
+					> {
 						yield* shellBridge.cancel;
 						yield* Effect.try({
 							// AgentSession.abort() waits for idle. Flect's operation
@@ -615,17 +626,19 @@ type OperationController = {
 	readonly close: Effect.Effect<void>;
 };
 
-const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController')(function* (
+const makeOperationController = Effect.fn('Runtime.makeOperationController')(function* (
 	sessionId: string,
 	abort: () => Effect.Effect<void, PiOperationFailed>
-) {
+): Effect.fn.Return<OperationController> {
 	const state = yield* Ref.make<OperationState>({
 		closed: false,
 		active: undefined,
 		cancelling: undefined
 	});
 
-	const start = Effect.fn('Flect.Runtime.startOperation')(function* (operation: ActiveOperation) {
+	const start = Effect.fn('Runtime.startOperation')(function* (
+		operation: ActiveOperation
+	): Effect.fn.Return<void, SessionBusy | SessionNotFound> {
 		const result = yield* Ref.modify(state, (current) => {
 			const outcome = current.closed ? 'closed' : current.active === undefined ? 'started' : 'busy';
 			const next = outcome === 'started' ? { ...current, active: operation } : current;
@@ -650,7 +663,9 @@ const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController
 		}
 	});
 
-	const finish = Effect.fn('Flect.Runtime.finishOperation')(function* (operation: ActiveOperation) {
+	const finish = Effect.fn('Runtime.finishOperation')(function* (
+		operation: ActiveOperation
+	): Effect.fn.Return<void> {
 		yield* Ref.update(state, (current) =>
 			current.active === operation
 				? current.cancelling === operation
@@ -661,50 +676,51 @@ const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController
 		yield* Deferred.succeed(operation.done, undefined);
 	});
 
-	const cancelActive = Effect.fn('Flect.Runtime.cancelActiveOperation')(() =>
-		Effect.uninterruptibleMask((restore) =>
-			Effect.gen(function* () {
-				const operation = yield* Ref.modify(state, (current) => {
-					if (current.active === undefined || current.cancelling !== undefined) {
-						return [undefined, current] satisfies readonly [undefined, OperationState];
+	const cancelActive = Effect.fn('Runtime.cancelActiveOperation')(
+		(): Effect.Effect<void, PiOperationFailed> =>
+			Effect.uninterruptibleMask((restore) =>
+				Effect.gen(function* () {
+					const operation = yield* Ref.modify(state, (current) => {
+						if (current.active === undefined || current.cancelling !== undefined) {
+							return [undefined, current] satisfies readonly [undefined, OperationState];
+						}
+						return [current.active, { ...current, cancelling: current.active }] satisfies readonly [
+							ActiveOperation,
+							OperationState
+						];
+					});
+					if (operation === undefined) {
+						return;
 					}
-					return [current.active, { ...current, cancelling: current.active }] satisfies readonly [
-						ActiveOperation,
-						OperationState
-					];
-				});
-				if (operation === undefined) {
-					return;
-				}
 
-				const releaseClaim = Deferred.poll(operation.done).pipe(
-					Effect.flatMap((settled) =>
-						Ref.update(state, (current) =>
-							current.cancelling === operation
-								? {
-										...current,
-										active: Option.isSome(settled) ? undefined : current.active,
-										cancelling: undefined
-									}
-								: current
+					const releaseClaim = Deferred.poll(operation.done).pipe(
+						Effect.flatMap((settled) =>
+							Ref.update(state, (current) =>
+								current.cancelling === operation
+									? {
+											...current,
+											active: Option.isSome(settled) ? undefined : current.active,
+											cancelling: undefined
+										}
+									: current
+							)
 						)
-					)
-				);
+					);
 
-				const interruptResult = yield* restore(Effect.result(operation.interrupt));
-				if (interruptResult._tag === 'Failure') {
-					yield* releaseClaim;
-					return yield* Effect.fail(interruptResult.failure);
-				}
-				yield* Deferred.await(operation.done).pipe(
-					Effect.ensuring(releaseClaim),
-					Effect.forkDetach
-				);
-			})
-		)
+					const interruptResult = yield* restore(Effect.result(operation.interrupt));
+					if (interruptResult._tag === 'Failure') {
+						yield* releaseClaim;
+						return yield* Effect.fail(interruptResult.failure);
+					}
+					yield* Deferred.await(operation.done).pipe(
+						Effect.ensuring(releaseClaim),
+						Effect.forkDetach
+					);
+				})
+			)
 	);
 
-	const close = Effect.fn('Flect.Runtime.closeOperationController')(function* () {
+	const close = Effect.fn('Runtime.closeOperationController')(function* (): Effect.fn.Return<void> {
 		const active = yield* Ref.modify(
 			state,
 			(current) =>
@@ -722,12 +738,14 @@ const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController
 		}
 	});
 
-	const interruptActive = Effect.fn('Flect.Runtime.interruptActiveOperation')(function* () {
-		const active = yield* Ref.get(state);
-		if (active.active?.fiber !== undefined) {
-			yield* Fiber.interrupt(active.active.fiber).pipe(Effect.asVoid);
+	const interruptActive = Effect.fn('Runtime.interruptActiveOperation')(
+		function* (): Effect.fn.Return<void> {
+			const active = yield* Ref.get(state);
+			if (active.active?.fiber !== undefined) {
+				yield* Fiber.interrupt(active.active.fiber).pipe(Effect.asVoid);
+			}
 		}
-	});
+	);
 
 	return {
 		start,
@@ -825,6 +843,17 @@ CDNs, web fonts, analytics, storage APIs, or workers. Use system font stacks,
 inline SVG, CSS gradients, and \`#\`-anchor links only. Design it like a real
 product: a deliberate palette, a typographic scale, generous spacing, distinct
 sections, and a responsive layout.
+If the request needs real interactivity backed by structured state (a
+multi-step form, filters, a small dashboard) rather than a mostly-static
+page, you may author a package.json-based project (React, Vue, or Svelte)
+instead of a single static page; keep dependencies to what the build already
+supports. Prefer a deliberate state pattern over ad hoc component state: for
+React, prefer Effect's Atom reactivity (\`effect/unstable/reactivity\`,
+\`Atom\`/\`AtomRegistry\`) over scattering \`useState\`/Context; for Svelte,
+prefer Svelte's own stores; for a plain HTML page, keep state in a few small
+typed modules rather than global variables. This is a quality recommendation,
+not a new constraint - it never changes what network access or capabilities
+the authored app is allowed.
 Do not spend commands exploring the sandbox; go straight to writing files.
 Write every file in small appends. Start each file with one short
 \`mkdir -p /workspace/project && cat > /workspace/project/<file> <<'EOF' ... EOF\`
@@ -888,8 +917,8 @@ export const FlectRuntimeLive = Layer.effect(
 				Effect.catch(() => Effect.void)
 			);
 
-		const disposeSessionRecord = Effect.fn('Flect.Runtime.disposeSessionRecord')(
-			(record: SessionRecord) =>
+		const disposeSessionRecord = Effect.fn('Runtime.disposeSessionRecord')(
+			(record: SessionRecord): Effect.Effect<void> =>
 				Effect.uninterruptible(
 					Effect.all(
 						[
@@ -920,7 +949,9 @@ export const FlectRuntimeLive = Layer.effect(
 			)
 		);
 
-		const findSession = Effect.fn('Flect.Runtime.findSession')(function* (sessionId: string) {
+		const findSession = Effect.fn('Runtime.findSession')(function* (
+			sessionId: string
+		): Effect.fn.Return<SessionRecord, SessionNotFound> {
 			const current = yield* Ref.get(sessions);
 			const record = HashMap.get(current, sessionId);
 			if (Option.isNone(record)) {
@@ -934,9 +965,9 @@ export const FlectRuntimeLive = Layer.effect(
 			return record.value;
 		});
 
-		const createSession = Effect.fn('Flect.Runtime.createSession')(function* (
+		const createSession = Effect.fn('Runtime.createSession')(function* (
 			selection: SessionSelection
-		) {
+		): Effect.fn.Return<string, PiOperationFailed | NoModelAvailable> {
 			const models = yield* pi.listModels;
 			const model = selection.model
 				? models.find(
@@ -1029,7 +1060,9 @@ export const FlectRuntimeLive = Layer.effect(
 			);
 		});
 
-		const closeSession = Effect.fn('Flect.Runtime.closeSession')(function* (sessionId: string) {
+		const closeSession = Effect.fn('Runtime.closeSession')(function* (
+			sessionId: string
+		): Effect.fn.Return<void, SessionNotFound> {
 			yield* Effect.uninterruptible(
 				Effect.gen(function* () {
 					const removed = yield* Ref.modify(sessions, (current) => {
@@ -1049,10 +1082,10 @@ export const FlectRuntimeLive = Layer.effect(
 			);
 		});
 
-		const diagnoseRecovery = Effect.fn('Flect.Runtime.diagnoseRecovery')(function* (
+		const diagnoseRecovery = Effect.fn('Runtime.diagnoseRecovery')(function* (
 			sessionId: string,
 			reason: RecoveryReason
-		) {
+		): Effect.fn.Return<GuardianDiagnostic, SessionNotFound | PiOperationFailed | SessionBusy> {
 			const record = yield* findSession(sessionId);
 			const operation: ActiveOperation = {
 				kind: 'diagnose',
@@ -1201,31 +1234,34 @@ export const FlectRuntimeLive = Layer.effect(
 				)
 			);
 
-		const completeShellRequest = Effect.fn('Flect.Runtime.completeShellRequest')(function* (
+		const completeShellRequest = Effect.fn('Runtime.completeShellRequest')(function* (
 			sessionId: string,
 			role: InteractiveAgentRole,
 			requestId: string,
 			result: BunCommandResult
-		) {
+		): Effect.fn.Return<void, SessionNotFound | PiOperationFailed> {
 			const record = yield* findSession(sessionId);
 			const session = role === 'app' ? record.app : record.shaper;
 			yield* session.completeShellRequest(requestId, result);
 		});
 
-		const cancel = Effect.fn('Flect.Runtime.cancel')(function* (
+		const cancel = Effect.fn('Runtime.cancel')(function* (
 			sessionId: string,
 			role: InteractiveAgentRole
-		) {
+		): Effect.fn.Return<void, SessionNotFound | PiOperationFailed> {
 			const record = yield* findSession(sessionId);
 			const controller = role === 'app' ? record.appOperation : record.shaperOperation;
 			yield* controller.cancelActive();
 		});
 
-		const makeShape = Effect.fn('Flect.Runtime.makeShape')(function* (
+		const makeShape = Effect.fn('Runtime.makeShape')(function* (
 			sessionId: string,
 			instruction: string,
 			input: unknown
-		) {
+		): Effect.fn.Return<
+			Stream.Stream<ShapeEvent, FlectRuntimeError>,
+			InvalidInterfaceDocument | SessionNotFound
+		> {
 			const document = yield* validateInterfaceDocument(input);
 			const record = yield* findSession(sessionId);
 			return Stream.callback<ShapeEvent, FlectRuntimeError>((queue) =>
@@ -1240,9 +1276,9 @@ export const FlectRuntimeLive = Layer.effect(
 						record.shaperOperation,
 						operation,
 						Effect.gen(function* () {
-							const runAttempt = Effect.fn('Flect.Runtime.runShapeAttempt')(function* (
+							const runAttempt = Effect.fn('Runtime.runShapeAttempt')(function* (
 								promptText: string
-							) {
+							): Effect.fn.Return<void, PiOperationFailed> {
 								const response = makeBoundedResponse(
 									MAX_SHAPER_RESPONSE_BYTES,
 									record.shaper.abort

@@ -1,4 +1,5 @@
 import { assert, describe, it } from '@effect/vitest';
+import { Option } from 'effect';
 import { collectRestrictedCss, resolveRestrictedCssImport } from './restricted-css';
 
 const encoder = new TextEncoder();
@@ -8,20 +9,24 @@ describe('restricted CSS build adapter', () => {
 		const root = '/flect/build-test';
 		const files = new Set([`${root}/src/main.tsx`, `${root}/src/styles/theme.css`]);
 
-		assert.strictEqual(
+		assert.deepStrictEqual(
 			resolveRestrictedCssImport('./styles/theme.css', `${root}/src/main.tsx`, root, files),
-			`${root}/src/styles/theme.css`
+			Option.some(`${root}/src/styles/theme.css`)
 		);
-		assert.isUndefined(
-			resolveRestrictedCssImport(
-				'https://example.com/theme.css',
-				`${root}/src/main.tsx`,
-				root,
-				files
+		assert.isTrue(
+			Option.isNone(
+				resolveRestrictedCssImport(
+					'https://example.com/theme.css',
+					`${root}/src/main.tsx`,
+					root,
+					files
+				)
 			)
 		);
-		assert.isUndefined(
-			resolveRestrictedCssImport('../../../outside.css', `${root}/src/main.tsx`, root, files)
+		assert.isTrue(
+			Option.isNone(
+				resolveRestrictedCssImport('../../../outside.css', `${root}/src/main.tsx`, root, files)
+			)
 		);
 	});
 

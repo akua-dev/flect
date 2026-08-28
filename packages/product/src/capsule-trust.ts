@@ -72,9 +72,17 @@ const manifestWithoutFiles = (manifest: DecodedCapsule['manifest']) => {
 	return source;
 };
 
-const canonicalUnsigned = Effect.fn('Flect.CapsuleTrust.canonicalUnsigned')(function* (
+const canonicalUnsigned = Effect.fn('CapsuleTrust.canonicalUnsigned')(function* (
 	archive: Uint8Array
-) {
+): Effect.fn.Return<
+	{
+		capsule: DecodedCapsule;
+		manifest: Omit<DecodedCapsule['manifest'], 'files'>;
+		archive: Uint8Array;
+		contentSha256: string;
+	},
+	CapsuleTrustFailure
+> {
 	const capsule = yield* decodeCapsule(archive).pipe(
 		Effect.mapError(() => failure('invalid-capsule'))
 	);
@@ -92,8 +100,8 @@ const canonicalUnsigned = Effect.fn('Flect.CapsuleTrust.canonicalUnsigned')(func
 	};
 });
 
-export const hashCapsuleSignedContent = Effect.fn('Flect.CapsuleTrust.hashSignedContent')(
-	(archive: Uint8Array) =>
+export const hashCapsuleSignedContent = Effect.fn('CapsuleTrust.hashSignedContent')(
+	(archive: Uint8Array): Effect.Effect<string, CapsuleTrustFailure> =>
 		canonicalUnsigned(archive).pipe(Effect.map((value) => value.contentSha256))
 );
 
@@ -125,14 +133,14 @@ const validDate = (value: string) =>
  * capsule can request; hosts still evaluate every requested capability
  * independently at import time.
  */
-export const signCapsule = Effect.fn('Flect.CapsuleTrust.sign')(function* (
+export const signCapsule = Effect.fn('CapsuleTrust.sign')(function* (
 	archive: Uint8Array,
 	options: {
 		readonly keyId: string;
 		readonly privateKey: CryptoKey;
 		readonly signedAt: string;
 	}
-) {
+): Effect.fn.Return<Uint8Array, CapsuleTrustFailure> {
 	if (options.keyId.length === 0 || options.keyId.length > 200 || !validDate(options.signedAt)) {
 		return yield* Effect.fail(failure('invalid-key'));
 	}
@@ -200,10 +208,10 @@ const statusPriority = [
  * `authoritative: false` by construction: it reports provenance only and
  * never changes which capabilities a host may grant.
  */
-export const verifyCapsuleSignatures = Effect.fn('Flect.CapsuleTrust.verify')(function* (
+export const verifyCapsuleSignatures = Effect.fn('CapsuleTrust.verify')(function* (
 	archive: Uint8Array,
 	keys: ReadonlyArray<CapsulePublisherKey>
-) {
+): Effect.fn.Return<CapsuleSignatureAssessment, CapsuleTrustFailure> {
 	const canonical = yield* canonicalUnsigned(archive);
 	const signatures = canonical.capsule.manifest.signatures;
 	if (signatures.length === 0) {
@@ -271,13 +279,13 @@ export const verifyCapsuleSignatures = Effect.fn('Flect.CapsuleTrust.verify')(fu
  * deliberately removes upstream signatures rather than carrying them
  * forward onto changed content.
  */
-export const forkCapsule = Effect.fn('Flect.CapsuleTrust.fork')(function* (
+export const forkCapsule = Effect.fn('CapsuleTrust.fork')(function* (
 	archive: Uint8Array,
 	options: {
 		readonly revision: string;
 		readonly publisher?: string;
 	}
-) {
+): Effect.fn.Return<Uint8Array, CapsuleTrustFailure> {
 	const canonical = yield* canonicalUnsigned(archive);
 	const source = canonical.capsule.manifest.provenance;
 	return yield* encodeCapsule(

@@ -1,13 +1,13 @@
 import type { ProductOperationDefinition } from '@flect/product';
 import { Effect } from 'effect';
+import {
+	AuthorizedProductOperation,
+	ProductCapabilityManifest
+} from '../../packages/product/src/product-capability';
 import type {
 	NativeAccentColor,
 	NativePlatformCapabilityFailure
 } from '../../shared/native-platform';
-import {
-	AuthorizedProductOperation,
-	ProductCapabilityManifest
-} from '../../shared/product-capability';
 import { productOperationFailure } from './product-operation-failure';
 
 export const NativeAppearanceCapabilityManifest = ProductCapabilityManifest.make({

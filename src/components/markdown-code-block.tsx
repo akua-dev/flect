@@ -14,7 +14,7 @@ export interface MarkdownCodeBlockProps {
 
 type CopyState = 'idle' | 'copied' | 'failed';
 
-const copyCode = Effect.fn('Flect.Markdown.copyCode')(function* (code: string) {
+const copyCode = Effect.fn('Markdown.copyCode')(function* (code: string) {
 	const clipboard = yield* Clipboard;
 	yield* clipboard.writeText(code);
 });
@@ -100,6 +100,7 @@ export function MarkdownCodeBlock({
 						{copyState === 'copied' ? <CheckIcon /> : <CopyIcon />}
 					</button>
 				</span>
+				{/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here. */}
 				<span aria-live='polite' className='sr-only' role='status'>
 					{copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : ''}
 				</span>
@@ -112,7 +113,7 @@ export function MarkdownCodeBlock({
 				) : (
 					<div
 						className='markdown-code__highlight'
-						// biome-ignore lint/security/noDangerouslySetInnerHtml: Shiki is pinned, receives plain code, and is the only trusted HTML producer.
+						// oxlint-disable-next-line react/no-danger -- Shiki is pinned, receives plain code, and is the only trusted HTML producer.
 						dangerouslySetInnerHTML={{ __html: highlightedHtml }}
 					/>
 				)}

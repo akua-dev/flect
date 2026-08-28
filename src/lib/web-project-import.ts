@@ -1,6 +1,6 @@
 import { Effect, Schema } from 'effect';
 import packageMetadata from '../../package.json';
-import { encodeCapsule, MAX_CAPSULE_BYTES } from '../../shared/capsule';
+import { encodeCapsule, MAX_CAPSULE_BYTES } from '../../packages/product/src/capsule';
 import { PROJECT_IMPORT_REPORT_PATH, ProjectImportReport } from '../../shared/project-import';
 
 const MAX_PROJECT_FILES = 255;
@@ -222,7 +222,7 @@ const projectName = (value: string) =>
 		.replace(/^-|-$/g, '')
 		.slice(0, 60) || 'web-project';
 
-export const importWebProject = Effect.fn('Flect.WebProject.import')(function* (
+export const importWebProject = Effect.fn('WebProject.import')(function* (
 	input: ReadonlyArray<WebProjectFile>,
 	options: WebProjectImportOptions = {
 		source: 'directory',

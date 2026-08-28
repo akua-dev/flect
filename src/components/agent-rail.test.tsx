@@ -8,13 +8,13 @@ import {
 	PortableExtensionCatalogSnapshot,
 	PortableExtensionPackage,
 	PortableExtensionRoleState
-} from '../../shared/extensions';
-import { InterfaceDocument } from '../../shared/interface-document';
+} from '../../packages/product/src/extensions';
 import {
 	ProductCapabilityAllowChoice,
 	ProductCapabilityProjection,
 	ProductCapabilityRequestContext
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
+import { InterfaceDocument } from '../../shared/interface-document';
 import { ShellPreferencesValue } from '../../shared/shell-preferences';
 import type { AgentWorkspaceController } from '../hooks/use-agent-session';
 import type { CapsuleReview } from '../lib/workspace-controller';

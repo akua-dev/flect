@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { Effect, Schema, type SchemaAST } from 'effect';
+import { Effect, Option, Schema, type SchemaAST } from 'effect';
 import {
 	BrowserBuildArtifact,
 	BrowserBuildFailure,
@@ -143,8 +143,13 @@ const compile = (request: BrowserBuildWorkerRequest['request']) =>
 					{
 						name: 'flect-restricted-css',
 						resolveId(source, importer) {
-							const resolved = resolveRestrictedCssImport(source, importer, root, absoluteFiles);
-							return resolved === undefined ? null : `${cssPrefix}${resolved}`;
+							return Option.match(
+								resolveRestrictedCssImport(source, importer, root, absoluteFiles),
+								{
+									onNone: () => null,
+									onSome: (resolved) => `${cssPrefix}${resolved}`
+								}
+							);
 						},
 						load(id) {
 							if (id.startsWith(cssPrefix)) {

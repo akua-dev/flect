@@ -111,7 +111,7 @@ const unexpectedFailure = () =>
 	});
 
 export const makeBunCommandService = (operations: BunOperationsShape): BunCommandShape => ({
-	execute: Effect.fn('Flect.BunCommand.execute')((request) => {
+	execute: Effect.fn('BunCommand.execute')((request) => {
 		const routed = route(request);
 		if ('result' in routed) {
 			return Effect.succeed(routed.result);

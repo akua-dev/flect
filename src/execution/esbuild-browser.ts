@@ -8,7 +8,7 @@ export class BrowserEsbuildLoadError extends Data.TaggedError('BrowserEsbuildLoa
 let initialization: Promise<void> | undefined;
 let moduleLoad: Promise<typeof import('esbuild-wasm')> | undefined;
 
-const loadBrowserEsbuildEffect = Effect.fn('Flect.Execution.loadBrowserEsbuild')(function* () {
+const loadBrowserEsbuildEffect = Effect.fn('Execution.loadBrowserEsbuild')(function* () {
 	moduleLoad ??= import('esbuild-wasm');
 	const esbuild = yield* Effect.tryPromise({
 		try: () => moduleLoad ?? import('esbuild-wasm'),

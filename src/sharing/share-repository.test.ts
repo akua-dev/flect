@@ -22,7 +22,7 @@ const objectB = 'b'.repeat(40);
 const objectF = 'f'.repeat(40);
 const objectM = 'c'.repeat(40);
 
-const makeGit = Effect.fn('test.makeShareGit')(function* () {
+const makeGit = Effect.fn('ShareRepositoryTest.makeShareGit')(function* () {
 	const refs = yield* Ref.make(new Map<string, string>());
 	const commands = yield* Ref.make<ReadonlyArray<ReadonlyArray<string>>>([]);
 	const importGuards = yield* Ref.make<

@@ -1,115 +1,141 @@
-import { Effect } from 'effect';
-import { useCallback, useEffect, useState } from 'react';
-import { NativeUpdateProgress, NativeUpdateSnapshot } from '../../shared/native-update';
+import { Effect, Option, SubscriptionRef } from 'effect';
+import { AsyncResult, Atom } from 'effect/unstable/reactivity';
+import { useMemo } from 'react';
+import { NativeUpdateProgress, type NativeUpdateSnapshot } from '../../shared/native-update';
 import { type NativeUpdateRuntime, nativeUpdateRuntime } from '../lib/native-runtimes';
 import { NativeUpdate } from '../lib/native-update';
+import { layerFromManagedRuntime, useAtomRefresh, useAtomSet, useAtomValue } from './use-atom';
 
-export interface NativeUpdateClient {
-	readonly status: () => Promise<NativeUpdateSnapshot>;
-	readonly check: () => Promise<NativeUpdateSnapshot>;
-	readonly install: (token: string) => Promise<NativeUpdateSnapshot>;
-	readonly relaunch: () => Promise<void>;
+/**
+ * Native update state and command atoms, scoped to one `NativeUpdateRuntime`.
+ *
+ * `snapshotAtom` is the single state-read atom other atoms and the hook
+ * project from - it is seeded from `NativeUpdate.status` and then updated
+ * directly by successful commands, mirroring the single-source-of-truth
+ * snapshot the hand-rolled hook used to maintain by hand. `checkAtom`,
+ * `installAtom`, and `relaunchAtom` are command atoms (`AtomRuntime.fn`):
+ * writing to them runs the underlying Effect, and their own value reports
+ * that command's `AsyncResult` (pending/success/failure) independent of the
+ * shared snapshot.
+ */
+function makeNativeUpdateAtoms(runtime: NativeUpdateRuntime) {
+	const atomRuntime = Atom.runtime(layerFromManagedRuntime(runtime));
+
+	const snapshotAtom = atomRuntime.subscriptionRef(
+		Effect.fn('NativeUpdateAtoms.snapshot')(function* () {
+			const updates = yield* NativeUpdate;
+			const initial = yield* updates.status;
+			return yield* SubscriptionRef.make(initial);
+		})
+	);
+
+	const checkAtom = atomRuntime.fn(
+		Effect.fn('NativeUpdateAtoms.check')(function* (_: undefined, get: Atom.FnContext) {
+			const updates = yield* NativeUpdate;
+			const snapshot = yield* updates.check;
+			get.set(snapshotAtom, snapshot);
+			return snapshot;
+		})
+	);
+
+	const installAtom = atomRuntime.fn(
+		Effect.fn('NativeUpdateAtoms.install')(function* (token: string, get: Atom.FnContext) {
+			const current = get(snapshotAtom);
+			if (
+				AsyncResult.isSuccess(current) &&
+				current.value.state === 'available' &&
+				current.value.candidate.token === token
+			) {
+				const available = current.value;
+				const downloading: NativeUpdateSnapshot = {
+					version: 1,
+					state: 'downloading',
+					installedVersion: available.installedVersion,
+					candidate: available.candidate,
+					progress: NativeUpdateProgress.make({
+						downloadedBytes: 0,
+						...(available.candidate.contentLength === undefined
+							? {}
+							: { totalBytes: available.candidate.contentLength })
+					})
+				};
+				get.set(snapshotAtom, downloading);
+			}
+			const updates = yield* NativeUpdate;
+			const snapshot = yield* updates.install(token);
+			get.set(snapshotAtom, snapshot);
+			return snapshot;
+		})
+	);
+
+	const relaunchAtom = atomRuntime.fn(
+		Effect.fn('NativeUpdateAtoms.relaunch')(function* () {
+			const updates = yield* NativeUpdate;
+			yield* updates.relaunch;
+		})
+	);
+
+	return { snapshotAtom, checkAtom, installAtom, relaunchAtom };
 }
 
-const clientFromRuntime = (runtime: NativeUpdateRuntime): NativeUpdateClient => ({
-	status: () =>
-		runtime.runPromise(
-			Effect.gen(function* () {
-				const updates = yield* NativeUpdate;
-				return yield* updates.status;
-			})
-		),
-	check: () =>
-		runtime.runPromise(
-			Effect.gen(function* () {
-				const updates = yield* NativeUpdate;
-				return yield* updates.check;
-			})
-		),
-	install: (token) =>
-		runtime.runPromise(
-			Effect.gen(function* () {
-				const updates = yield* NativeUpdate;
-				return yield* updates.install(token);
-			})
-		),
-	relaunch: () =>
-		runtime.runPromise(
-			Effect.gen(function* () {
-				const updates = yield* NativeUpdate;
-				return yield* updates.relaunch;
-			})
-		)
-});
+export interface NativeUpdateController {
+	readonly snapshot: NativeUpdateSnapshot | undefined;
+	readonly loading: boolean;
+	readonly error: string | undefined;
+	readonly refresh: () => void;
+	readonly check: () => void;
+	readonly install: (token: string) => void;
+	readonly relaunch: () => void;
+}
 
-const defaultClient = clientFromRuntime(nativeUpdateRuntime);
+const refreshFailureMessage = 'Native update state could not be refreshed.';
+const commandFailureMessage = 'Flect could not complete the requested update action.';
 
-export function useNativeUpdate(client: NativeUpdateClient = defaultClient) {
-	const [snapshot, setSnapshot] = useState<NativeUpdateSnapshot | undefined>();
-	const [loading, setLoading] = useState(true);
-	const [error, setError] = useState<string | undefined>();
+export function useNativeUpdate(
+	runtime: NativeUpdateRuntime = nativeUpdateRuntime
+): NativeUpdateController {
+	const atoms = useMemo(() => makeNativeUpdateAtoms(runtime), [runtime]);
 
-	const refresh = useCallback(async () => {
-		setLoading(true);
-		setError(undefined);
-		try {
-			setSnapshot(await client.status());
-		} catch {
-			setError('Native update state could not be refreshed.');
-		} finally {
-			setLoading(false);
-		}
-	}, [client]);
+	const snapshotResult = useAtomValue(atoms.snapshotAtom);
+	const checkResult = useAtomValue(atoms.checkAtom);
+	const installResult = useAtomValue(atoms.installAtom);
+	const relaunchResult = useAtomValue(atoms.relaunchAtom);
 
-	useEffect(() => {
-		void refresh();
-	}, [refresh]);
+	const refresh = useAtomRefresh(atoms.snapshotAtom);
+	const runCheck = useAtomSet(atoms.checkAtom);
+	const runInstall = useAtomSet(atoms.installAtom);
+	const runRelaunch = useAtomSet(atoms.relaunchAtom);
 
-	const mutate = useCallback(async (operation: () => Promise<NativeUpdateSnapshot | undefined>) => {
-		setLoading(true);
-		setError(undefined);
-		try {
-			const next = await operation();
-			if (next !== undefined) {
-				setSnapshot(next);
-			}
-		} catch {
-			setError('Flect could not complete the requested update action.');
-		} finally {
-			setLoading(false);
-		}
-	}, []);
+	// `snapshotAtom` is backed by a live `SubscriptionRef` (see
+	// `makeNativeUpdateAtoms`), so its `AsyncResult` reports `waiting: true`
+	// for as long as it stays subscribed - that flag means "still live", not
+	// "still loading". Use `isInitial` for the one-time initial-load signal
+	// instead, and reserve `isWaiting` for the command atoms, whose `waiting`
+	// flag genuinely tracks an in-flight `check`/`install`/`relaunch` call.
+	const loading =
+		AsyncResult.isInitial(snapshotResult) ||
+		AsyncResult.isWaiting(checkResult) ||
+		AsyncResult.isWaiting(installResult) ||
+		AsyncResult.isWaiting(relaunchResult);
+
+	// A command failure is a more specific, more recent signal than a stale
+	// initial-load failure, so it takes priority once any command has run.
+	const error =
+		AsyncResult.isFailure(checkResult) ||
+		AsyncResult.isFailure(installResult) ||
+		AsyncResult.isFailure(relaunchResult)
+			? commandFailureMessage
+			: AsyncResult.isFailure(snapshotResult)
+				? refreshFailureMessage
+				: undefined;
 
 	return {
-		snapshot,
+		snapshot: Option.getOrUndefined(AsyncResult.value(snapshotResult)),
 		loading,
-		...(error === undefined ? {} : { error }),
+		error,
 		refresh,
-		check: () => mutate(client.check),
-		install: (token: string) =>
-			mutate(async () => {
-				setSnapshot((current) =>
-					current?.state === 'available' && current.candidate.token === token
-						? NativeUpdateSnapshot.make({
-								version: 1,
-								state: 'downloading',
-								installedVersion: current.installedVersion,
-								candidate: current.candidate,
-								progress: NativeUpdateProgress.make({
-									downloadedBytes: 0,
-									...(current.candidate.contentLength === undefined
-										? {}
-										: { totalBytes: current.candidate.contentLength })
-								})
-							})
-						: current
-				);
-				return await client.install(token);
-			}),
-		relaunch: () =>
-			mutate(async () => {
-				await client.relaunch();
-				return undefined;
-			})
+		check: () => runCheck(undefined),
+		install: (token: string) => runInstall(token),
+		relaunch: () => runRelaunch()
 	};
 }

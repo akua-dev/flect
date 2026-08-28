@@ -53,7 +53,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 		const reconcilePermit = yield* Semaphore.make(1);
 		const commandLaunchPermit = yield* Semaphore.make(1);
 
-		const interruptActiveCommands = Effect.fn('Flect.ControlBridge.interruptActiveCommands')(
+		const interruptActiveCommands = Effect.fn('ControlBridge.interruptActiveCommands')(
 			function* () {
 				const fibers = yield* Ref.get(activeCommandFibers);
 				yield* Fiber.interruptAll(fibers);
@@ -61,7 +61,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 			}
 		);
 
-		const confirmTransportRevocation = Effect.fn('Flect.ControlBridge.confirmTransportRevocation')(
+		const confirmTransportRevocation = Effect.fn('ControlBridge.confirmTransportRevocation')(
 			function* () {
 				yield* commandLaunchPermit.withPermits(1)(
 					Effect.gen(function* () {
@@ -88,7 +88,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 			}
 		);
 
-		const reconcileTransportFailure = Effect.fn('Flect.ControlBridge.reconcileTransportFailure')(
+		const reconcileTransportFailure = Effect.fn('ControlBridge.reconcileTransportFailure')(
 			function* () {
 				const status = yield* transport.status.pipe(Effect.result);
 				if (Result.isFailure(status) || status.success.enabled) {
@@ -102,7 +102,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 			}
 		);
 
-		const reconcile = Effect.fn('Flect.ControlBridge.reconcile')(() =>
+		const reconcile = Effect.fn('ControlBridge.reconcile')(() =>
 			reconcilePermit.withPermits(1)(
 				Effect.gen(function* () {
 					const snapshot = yield* controller.snapshot;
@@ -141,7 +141,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 				})
 			);
 
-		const runEnvelope = Effect.fn('Flect.ControlBridge.runEnvelope')(function* (
+		const runEnvelope = Effect.fn('ControlBridge.runEnvelope')(function* (
 			envelope: FlectCommandEnvelope
 		) {
 			if (envelope.source.kind !== 'control') {
@@ -185,7 +185,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 			);
 		});
 
-		const startTrackedEnvelope = Effect.fn('Flect.ControlBridge.startTrackedEnvelope')(function* (
+		const startTrackedEnvelope = Effect.fn('ControlBridge.startTrackedEnvelope')(function* (
 			envelope: FlectCommandEnvelope
 		) {
 			const start = yield* Deferred.make<undefined>();
@@ -211,7 +211,7 @@ export const WorkspaceControlBridgeLive = Layer.effect(
 			);
 		});
 
-		const runNext = Effect.fn('Flect.ControlBridge.runNext')(function* () {
+		const runNext = Effect.fn('ControlBridge.runNext')(function* () {
 			if (!(yield* Ref.get(enabled))) {
 				yield* Effect.sleep('100 millis');
 				return;

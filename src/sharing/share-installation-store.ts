@@ -32,7 +32,7 @@ const emptySnapshot = (warning?: ShareInstallationSnapshot['warning']) =>
 const sortEntries = (entries: ReadonlyArray<ShareInstallationRecord>) =>
 	[...entries].toSorted((left, right) => left.shareId.localeCompare(right.shareId));
 
-const decodeStored = Effect.fn('Flect.ShareInstallationStore.decode')(function* (raw: string) {
+const decodeStored = Effect.fn('ShareInstallationStore.decode')(function* (raw: string) {
 	const input = yield* Effect.try({
 		try: (): unknown => JSON.parse(raw),
 		catch: () =>
@@ -121,33 +121,32 @@ export const makeShareInstallationStoreLayer = () =>
 					)
 				);
 
-			const save = Effect.fn('Flect.ShareInstallationStore.save')(
-				(input: ShareInstallationRecord) =>
-					validateShareInstallationRecord(input).pipe(
-						Effect.flatMap((record) =>
-							mutate((current) => {
-								const entries = current.entries.filter((entry) => entry.shareId !== record.shareId);
-								entries.push(record);
-								if (entries.length > 256) {
-									return Effect.fail(
-										ShareInstallationFailure.make({
-											reason: 'persistence',
-											message: 'Shared installation state could not be saved.'
-										})
-									);
-								}
-								return Effect.succeed(
-									ShareInstallationSnapshot.make({
-										formatVersion: 1,
-										entries: sortEntries(entries)
+			const save = Effect.fn('ShareInstallationStore.save')((input: ShareInstallationRecord) =>
+				validateShareInstallationRecord(input).pipe(
+					Effect.flatMap((record) =>
+						mutate((current) => {
+							const entries = current.entries.filter((entry) => entry.shareId !== record.shareId);
+							entries.push(record);
+							if (entries.length > 256) {
+								return Effect.fail(
+									ShareInstallationFailure.make({
+										reason: 'persistence',
+										message: 'Shared installation state could not be saved.'
 									})
 								);
-							})
-						)
+							}
+							return Effect.succeed(
+								ShareInstallationSnapshot.make({
+									formatVersion: 1,
+									entries: sortEntries(entries)
+								})
+							);
+						})
 					)
+				)
 			);
 
-			const remove = Effect.fn('Flect.ShareInstallationStore.remove')((shareId: string) =>
+			const remove = Effect.fn('ShareInstallationStore.remove')((shareId: string) =>
 				mutate((current) =>
 					Effect.succeed(
 						ShareInstallationSnapshot.make({

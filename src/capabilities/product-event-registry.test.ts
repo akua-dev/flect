@@ -2,6 +2,10 @@ import { assert, describe, it, vi } from '@effect/vitest';
 import { Effect, Fiber, Layer, Result, Stream } from 'effect';
 import * as TestClock from 'effect/testing/TestClock';
 import {
+	makeProductEventsLayer,
+	type ProductEventConnector
+} from '../../packages/product/src/host/product-events';
+import {
 	AuthorizedProductOperation,
 	ProductCapabilityAllowChoice,
 	ProductCapabilityManifest,
@@ -9,19 +13,18 @@ import {
 	type ProductJson,
 	ProductOperationFailure,
 	ProductOperationInvocation
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import {
 	type ProductEventFailure,
 	ProductEventPolicy,
 	ProductEventRequest
-} from '../../shared/product-events';
+} from '../../packages/product/src/product-events';
 import {
 	makeProductCapabilityBrokerLayer,
 	ProductCapabilityBroker
 } from './product-capability-broker';
 import { ProductCapabilityDecisionStore } from './product-capability-decision-store';
 import { makeProductEventRegistryLayer, ProductEventRegistry } from './product-event-registry';
-import { makeProductEventsLayer, type ProductEventConnector } from './product-events';
 
 const capabilityId = 'product.projects.watch';
 const operationId = 'projects.watch';

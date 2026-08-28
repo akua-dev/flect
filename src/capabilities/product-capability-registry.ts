@@ -11,7 +11,7 @@ import {
 	type ProductOperationFailure,
 	type ProductOperationInvocation,
 	ProductOperationSummary
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
 import { ProductCapabilityBroker } from './product-capability-broker';
 import type { ProductCapabilityDecisionStoreFailure } from './product-capability-decision-store';
 import {
@@ -59,11 +59,11 @@ export const makeProductCapabilityRegistryLayer = (options: {
 			const broker = yield* ProductCapabilityBroker;
 			const operations = new Map(options.operations.map((operation) => [operation.id, operation]));
 
-			const permissions = Effect.fn('Flect.ProductCapabilityRegistry.permissions')(
+			const permissions = Effect.fn('ProductCapabilityRegistry.permissions')(
 				(context: ProductCapabilityRequestContext) => broker.catalog(context)
 			);
 
-			const catalog = Effect.fn('Flect.ProductCapabilityRegistry.catalog')(function* (
+			const catalog = Effect.fn('ProductCapabilityRegistry.catalog')(function* (
 				context: ProductCapabilityRequestContext
 			) {
 				const projections = yield* broker.catalog(context);
@@ -80,7 +80,7 @@ export const makeProductCapabilityRegistryLayer = (options: {
 				});
 			});
 
-			const decide = Effect.fn('Flect.ProductCapabilityRegistry.decide')(
+			const decide = Effect.fn('ProductCapabilityRegistry.decide')(
 				(
 					context: ProductCapabilityRequestContext,
 					capabilityId: string,
@@ -88,11 +88,11 @@ export const makeProductCapabilityRegistryLayer = (options: {
 				) => broker.decide(context, capabilityId, choice)
 			);
 
-			const revoke = Effect.fn('Flect.ProductCapabilityRegistry.revoke')((decisionId: string) =>
+			const revoke = Effect.fn('ProductCapabilityRegistry.revoke')((decisionId: string) =>
 				broker.revoke(decisionId)
 			);
 
-			const invokeDetailed = Effect.fn('Flect.ProductCapabilityRegistry.invokeDetailed')(function* (
+			const invokeDetailed = Effect.fn('ProductCapabilityRegistry.invokeDetailed')(function* (
 				context: ProductCapabilityRequestContext,
 				invocation: ProductOperationInvocation
 			) {
@@ -154,7 +154,7 @@ export const makeProductCapabilityRegistryLayer = (options: {
 				});
 			});
 
-			const invoke = Effect.fn('Flect.ProductCapabilityRegistry.invoke')(
+			const invoke = Effect.fn('ProductCapabilityRegistry.invoke')(
 				(context: ProductCapabilityRequestContext, invocation: ProductOperationInvocation) =>
 					invokeDetailed(context, invocation).pipe(Effect.map((execution) => execution.output))
 			);

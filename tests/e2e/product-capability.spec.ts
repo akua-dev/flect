@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { expect, type Page, test } from '@playwright/test';
 import { Effect, Option, Schema } from 'effect';
-import { encodeCapsule } from '../../shared/capsule';
+import { encodeCapsule } from '../../packages/product/src/capsule';
 
 const runFile = promisify(execFile);
 const controlStateDirectory = resolve('test-results/control-state');

@@ -1,11 +1,11 @@
 import { assert, describe, it, vi } from '@effect/vitest';
 import { Effect, Layer, Result } from 'effect';
-import { NativeAccentColor } from '../../shared/native-platform';
 import {
 	ProductCapabilityAllowChoice,
 	ProductCapabilityRequestContext,
 	ProductOperationInvocation
-} from '../../shared/product-capability';
+} from '../../packages/product/src/product-capability';
+import { NativeAccentColor } from '../../shared/native-platform';
 import {
 	makeNativeAppearanceOperation,
 	NativeAppearanceCapabilityManifest

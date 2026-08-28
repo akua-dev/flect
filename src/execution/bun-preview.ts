@@ -102,7 +102,7 @@ export const makeBunPreviewLayer = (options?: { readonly handlerDeadline?: Durat
 			const mutation = yield* Semaphore.make(1);
 
 			return {
-				register: Effect.fn('Flect.BunPreview.register')((registration) =>
+				register: Effect.fn('BunPreview.register')((registration) =>
 					mutation.withPermit(
 						Effect.gen(function* () {
 							const current = yield* Ref.get(registrations);
@@ -129,7 +129,7 @@ export const makeBunPreviewLayer = (options?: { readonly handlerDeadline?: Durat
 						})
 					)
 				),
-				request: Effect.fn('Flect.BunPreview.request')((input) =>
+				request: Effect.fn('BunPreview.request')((input) =>
 					Schema.decodeUnknownEffect(
 						BunPreviewRequest,
 						strict
@@ -177,7 +177,7 @@ export const makeBunPreviewLayer = (options?: { readonly handlerDeadline?: Durat
 						)
 					)
 				),
-				stop: Effect.fn('Flect.BunPreview.stop')((runId) =>
+				stop: Effect.fn('BunPreview.stop')((runId) =>
 					mutation.withPermit(
 						Effect.gen(function* () {
 							const current = yield* Ref.get(registrations);
