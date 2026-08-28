@@ -149,6 +149,12 @@ provider from the model chooser. Provider credentials remain in Pi and never
 enter React state, workspace snapshots, control APIs, browser storage, or
 shaped interfaces.
 
+`bun run dev` starts Astro as an explicit background dev server
+(`astro dev --background`) alongside the Pi runtime in the foreground, since
+Astro daemonizes itself outside an interactive terminal either way. Ctrl-C
+stops both cleanly; `bun run dev:stop` also stops a background dev server by
+hand if a session ever ends uncleanly.
+
 ## What the current slice proves
 
 - in-product Pi provider discovery, authentication, model selection, streamed
