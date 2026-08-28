@@ -95,8 +95,8 @@ describe('GitHub quality workflow', () => {
 		const { workflow } = await loadWorkflow();
 		const jobs = record(workflow.jobs, 'workflow jobs');
 		assert.deepStrictEqual(Object.keys(jobs).sort(), [
+			'bazel',
 			'changes',
-			'checks',
 			'desktop',
 			'e2e',
 			'gate'
@@ -152,22 +152,21 @@ describe('GitHub quality workflow', () => {
 	it('runs the full canonical gate commands across the parallel jobs', async () => {
 		const { workflow } = await loadWorkflow();
 
-		const checks = jobRecord(workflow, 'checks');
-		assert.strictEqual(checks['runs-on'], 'ubuntu-latest');
-		const checksCommands = runCommands(jobSteps(checks, 'checks'));
-		assert.include(checksCommands, 'bun install --frozen-lockfile');
-		assert.include(checksCommands, 'bun run check');
+		const bazel = jobRecord(workflow, 'bazel');
+		assert.strictEqual(bazel['runs-on'], 'ubuntu-latest');
+		const bazelCommands = runCommands(jobSteps(bazel, 'bazel'));
+		assert.include(bazelCommands, 'bazel test //... --keep_going --jobs=4');
 
 		const codeChangedCondition =
 			"github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'";
 
 		const e2e = jobRecord(workflow, 'e2e');
-		assert.strictEqual(e2e['runs-on'], 'macos-15');
+		assert.strictEqual(e2e['runs-on'], 'ubuntu-latest');
 		assert.strictEqual(e2e.needs, 'changes');
 		assert.strictEqual(e2e.if, codeChangedCondition);
 		const e2eCommands = runCommands(jobSteps(e2e, 'e2e'));
 		assert.include(e2eCommands, 'bun install --frozen-lockfile');
-		assert.include(e2eCommands, './node_modules/.bin/playwright install chromium');
+		assert.include(e2eCommands, './node_modules/.bin/playwright install --with-deps chromium');
 		assert.include(e2eCommands, 'bun run test:e2e');
 
 		const desktop = jobRecord(workflow, 'desktop');
@@ -243,7 +242,7 @@ describe('GitHub quality workflow', () => {
 		assert.strictEqual(gate.name, 'Flect quality gate');
 		assert.strictEqual(gate['runs-on'], 'ubuntu-latest');
 		assert.strictEqual(gate.if, 'always()');
-		assert.deepStrictEqual(gate.needs, ['changes', 'checks', 'e2e', 'desktop']);
+		assert.deepStrictEqual(gate.needs, ['changes', 'bazel', 'e2e', 'desktop']);
 
 		const steps = jobSteps(gate, 'gate');
 		const probe = steps.find((step) => String(step.run).includes('exit 1'));
@@ -257,7 +256,7 @@ describe('GitHub quality workflow', () => {
 		assert.isDefined(aggregate, 'the gate must aggregate every needed job');
 		const env = record(aggregate?.env, 'gate aggregation env');
 		assert.strictEqual(env.CHANGES_RESULT, '${{ needs.changes.result }}');
-		assert.strictEqual(env.CHECKS_RESULT, '${{ needs.checks.result }}');
+		assert.strictEqual(env.BAZEL_RESULT, '${{ needs.bazel.result }}');
 		assert.strictEqual(env.E2E_RESULT, '${{ needs.e2e.result }}');
 		assert.strictEqual(env.DESKTOP_RESULT, '${{ needs.desktop.result }}');
 		assert.strictEqual(
@@ -266,7 +265,7 @@ describe('GitHub quality workflow', () => {
 		);
 		const script = String(aggregate?.run);
 		assert.include(script, 'require changes "$CHANGES_RESULT" false');
-		assert.include(script, 'require checks "$CHECKS_RESULT" false');
+		assert.include(script, 'require bazel "$BAZEL_RESULT" false');
 		assert.include(script, 'require e2e "$E2E_RESULT" true');
 		assert.include(script, 'require desktop "$DESKTOP_RESULT" true');
 	});
