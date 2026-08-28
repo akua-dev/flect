@@ -53,23 +53,22 @@ const skipCloneReason = Effect.fn('PrepareEffect.skipCloneReason')(function* () 
 	return undefined;
 });
 
-const runGit = (args: ReadonlyArray<string>) =>
-	Effect.gen(function* () {
-		const cwd = yield* repository();
-		const fail = (cause: unknown) => new Error(`git ${args.join(' ')} could not run`, { cause });
-		const child = yield* Effect.sync(() =>
-			Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
-		);
-		const [exitCode, stdout, stderr] = yield* Effect.all(
-			[
-				Effect.tryPromise({ try: () => child.exited, catch: fail }),
-				Effect.tryPromise({ try: () => new Response(child.stdout).text(), catch: fail }),
-				Effect.tryPromise({ try: () => new Response(child.stderr).text(), catch: fail })
-			],
-			{ concurrency: 'unbounded' }
-		);
-		return { exitCode, stdout: stdout.trim(), stderr: stderr.trim() } satisfies CommandResult;
-	});
+const runGit = Effect.fn('PrepareEffect.runGit')(function* (args: ReadonlyArray<string>) {
+	const cwd = yield* repository();
+	const fail = (cause: unknown) => new Error(`git ${args.join(' ')} could not run`, { cause });
+	const child = yield* Effect.sync(() =>
+		Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
+	);
+	const [exitCode, stdout, stderr] = yield* Effect.all(
+		[
+			Effect.tryPromise({ try: () => child.exited, catch: fail }),
+			Effect.tryPromise({ try: () => new Response(child.stdout).text(), catch: fail }),
+			Effect.tryPromise({ try: () => new Response(child.stderr).text(), catch: fail })
+		],
+		{ concurrency: 'unbounded' }
+	);
+	return { exitCode, stdout: stdout.trim(), stderr: stderr.trim() } satisfies CommandResult;
+});
 
 const isGitCheckout = Effect.fn('PrepareEffect.isGitCheckout')(function* () {
 	const result = yield* runGit(['-C', repoDir, 'rev-parse', '--git-dir']);

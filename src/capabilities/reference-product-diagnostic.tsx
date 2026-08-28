@@ -33,22 +33,21 @@ const makeDiagnostic = () => {
 		credentialApplied: false
 	};
 	const connector: ProductEventConnector = {
-		open: ({ emit }) =>
-			Effect.gen(function* () {
-				yield* emit({
-					version: 1,
-					policyId: 'reference.projects.events.v1',
-					sequence: '1',
-					payload: { projectId: 'alpha', status: 'active' }
-				});
-				yield* emit({
-					version: 1,
-					policyId: 'reference.projects.events.v1',
-					sequence: '2',
-					payload: { projectId: 'alpha', status: 'archived' }
-				});
-				return yield* Effect.never;
-			})
+		open: Effect.fn('ReferenceProductDiagnostic.open')(function* ({ emit }) {
+			yield* emit({
+				version: 1,
+				policyId: 'reference.projects.events.v1',
+				sequence: '1',
+				payload: { projectId: 'alpha', status: 'active' }
+			});
+			yield* emit({
+				version: 1,
+				policyId: 'reference.projects.events.v1',
+				sequence: '2',
+				payload: { projectId: 'alpha', status: 'archived' }
+			});
+			return yield* Effect.never;
+		})
 	};
 	const reference = makeReferenceProductLayer({
 		inferenceOwner: 'user',

@@ -163,30 +163,27 @@ interface LoopbackServer {
  * loopback." The server and its request-serving fiber are scoped to the
  * broker layer, so both are torn down together when the layer is released.
  */
-const startLoopbackServer = (
+const startLoopbackServer = Effect.fn('ControlBroker.startLoopbackServer')(function* (
 	handler: (
 		request: HttpServerRequest.HttpServerRequest
 	) => Effect.Effect<HttpServerResponse.HttpServerResponse>
-): Effect.Effect<LoopbackServer, ControlBrokerError, Scope.Scope> =>
-	Effect.gen(function* () {
-		const server = yield* NodeHttpServer.make(() => createServer(), {
-			host: '127.0.0.1',
-			port: 0
-		}).pipe(Effect.mapError(() => brokerError('The loopback control listener could not start.')));
-		if (server.address._tag !== 'TcpAddress') {
-			return yield* Effect.fail(brokerError('The loopback control listener could not start.'));
-		}
-		const httpApp = Effect.gen(function* () {
-			const request = yield* HttpServerRequest.HttpServerRequest;
-			return yield* handler(request);
-		}).pipe(
-			Effect.catchDefect(() =>
-				controlJson({ version: 1, error: 'Invalid request' }, { status: 400 })
-			)
-		);
-		yield* server.serve(httpApp).pipe(Effect.forkScoped);
-		return { port: server.address.port };
-	});
+): Effect.fn.Return<LoopbackServer, ControlBrokerError, Scope.Scope> {
+	const server = yield* NodeHttpServer.make(() => createServer(), {
+		host: '127.0.0.1',
+		port: 0
+	}).pipe(Effect.mapError(() => brokerError('The loopback control listener could not start.')));
+	if (server.address._tag !== 'TcpAddress') {
+		return yield* Effect.fail(brokerError('The loopback control listener could not start.'));
+	}
+	const httpApp = Effect.gen(function* () {
+		const request = yield* HttpServerRequest.HttpServerRequest;
+		return yield* handler(request);
+	}).pipe(
+		Effect.catchDefect(() => controlJson({ version: 1, error: 'Invalid request' }, { status: 400 }))
+	);
+	yield* server.serve(httpApp).pipe(Effect.forkScoped);
+	return { port: server.address.port };
+});
 
 // oxlint-disable effecttsgo/missing-effect-context -- false positive: `tsc -b`
 // confirms this whole layer's R resolves to never (control-descriptor's

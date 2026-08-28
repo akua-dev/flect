@@ -415,31 +415,30 @@ const makeFixtureAdapter = Effect.fn('FixtureUpdate.makeAdapter')(function* (
 			})
 		),
 		check,
-		install: (claimedToken) =>
-			Effect.gen(function* () {
-				const manifest = yield* Ref.get(reviewed);
-				if (manifest === undefined || claimedToken !== token) {
-					return yield* Effect.fail(
-						NativeUpdateError.make({
-							reason: 'stale',
-							message: 'The fixture candidate is stale.'
-						})
-					);
-				}
-				yield* installFixture(root, installedApp, publicKey, manifest).pipe(
-					Effect.mapError(toNativeUpdateError)
-				);
-				return NativeUpdateSnapshot.make({
-					version: 1,
-					state: 'ready-to-relaunch',
-					installedVersion,
-					candidate: candidateFrom(manifest),
-					progress: NativeUpdateProgress.make({
-						downloadedBytes: manifest.contentLength,
-						totalBytes: manifest.contentLength
+		install: Effect.fn('NativeUpdateAdapter.install')(function* (claimedToken) {
+			const manifest = yield* Ref.get(reviewed);
+			if (manifest === undefined || claimedToken !== token) {
+				return yield* Effect.fail(
+					NativeUpdateError.make({
+						reason: 'stale',
+						message: 'The fixture candidate is stale.'
 					})
-				});
-			}),
+				);
+			}
+			yield* installFixture(root, installedApp, publicKey, manifest).pipe(
+				Effect.mapError(toNativeUpdateError)
+			);
+			return NativeUpdateSnapshot.make({
+				version: 1,
+				state: 'ready-to-relaunch',
+				installedVersion,
+				candidate: candidateFrom(manifest),
+				progress: NativeUpdateProgress.make({
+					downloadedBytes: manifest.contentLength,
+					totalBytes: manifest.contentLength
+				})
+			});
+		}),
 		relaunch: launchVersion(installedApp).pipe(
 			Effect.tap((launch) => Ref.set(relaunched, launch.version)),
 			Effect.asVoid,
