@@ -32,7 +32,7 @@ const makeArtifact = async () => {
 };
 
 describe('BrowserBuildStore', () => {
-	it('reopens the exact content-addressed last successful artifact', () =>
+	it.effect('reopens the exact content-addressed last successful artifact', () =>
 		Effect.gen(function* () {
 			const artifact = yield* Effect.promise(makeArtifact);
 			const vfs = new MemoryVfs();
@@ -49,9 +49,10 @@ describe('BrowserBuildStore', () => {
 				return yield* store.load;
 			}).pipe(Effect.provide(layer));
 			assert.deepStrictEqual(reopened, artifact);
-		}));
+		})
+	);
 
-	it('fails closed when a stored output no longer matches its digest', () =>
+	it.effect('fails closed when a stored output no longer matches its digest', () =>
 		Effect.gen(function* () {
 			const artifact = yield* Effect.promise(makeArtifact);
 			const vfs = new MemoryVfs();
@@ -73,5 +74,6 @@ describe('BrowserBuildStore', () => {
 				return yield* store.load;
 			}).pipe(Effect.provide(layer), Effect.flip);
 			assert.strictEqual(error.message, 'Browser build storage is unavailable.');
-		}));
+		})
+	);
 });
