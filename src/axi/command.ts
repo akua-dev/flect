@@ -361,7 +361,7 @@ const shareId = (value: string) =>
 const leafHelp = (args: ReadonlyArray<string>) =>
 	args.at(-1) === '--help' ? args.slice(0, -1) : undefined;
 
-const parseLogs = Effect.fn('Flect.Axi.parseLogs')(function* (args: ReadonlyArray<string>) {
+const parseLogs = Effect.fn('Axi.parseLogs')(function* (args: ReadonlyArray<string>) {
 	let limit = 20;
 	let role: 'app' | 'shaper' | undefined;
 	let operationId: string | undefined;
@@ -406,7 +406,7 @@ const parseLogs = Effect.fn('Flect.Axi.parseLogs')(function* (args: ReadonlyArra
 	} as const;
 });
 
-const parseCommand = Effect.fn('Flect.Axi.parseCommand')(function* (
+const parseCommand = Effect.fn('Axi.parseCommand')(function* (
 	args: ReadonlyArray<string>
 ): Effect.fn.Return<AxiReadCommand, AxiUsageError> {
 	const helpPath = leafHelp(args);
@@ -950,7 +950,7 @@ const parseCommand = Effect.fn('Flect.Axi.parseCommand')(function* (
 	}
 });
 
-export const parseAxiArguments = Effect.fn('Flect.Axi.parseArguments')(function* (
+export const parseAxiArguments = Effect.fn('Axi.parseArguments')(function* (
 	argv: ReadonlyArray<string>,
 	audience: AxiAudience
 ) {

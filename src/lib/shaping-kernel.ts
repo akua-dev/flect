@@ -234,7 +234,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 				return `revision-${idSequence}`;
 			});
 		const stateRef = yield* SubscriptionRef.make<KernelState>(reconciledState);
-		const persist = Effect.fn('Flect.ShapingKernel.persist')((state: KernelState) =>
+		const persist = Effect.fn('ShapingKernel.persist')((state: KernelState) =>
 			repository === undefined
 				? Effect.void
 				: repository
@@ -268,7 +268,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 				...fields
 			});
 
-		const propose = Effect.fn('Flect.ShapingKernel.propose')(function* (
+		const propose = Effect.fn('ShapingKernel.propose')(function* (
 			input: unknown,
 			source: Exclude<RevisionSource, 'built-in'>
 		) {
@@ -308,7 +308,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			);
 		});
 
-		const applyLocalRevision = Effect.fn('Flect.ShapingKernel.applyLocalRevision')(function* (
+		const applyLocalRevision = Effect.fn('ShapingKernel.applyLocalRevision')(function* (
 			input: unknown,
 			source: 'user' | 'shaper'
 		) {
@@ -351,7 +351,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			);
 		});
 
-		const applyExtensionIntents = Effect.fn('Flect.ShapingKernel.applyExtensionIntents')(function* (
+		const applyExtensionIntents = Effect.fn('ShapingKernel.applyExtensionIntents')(function* (
 			context: ExtensionIntentContext,
 			intents: ReadonlyArray<CapabilityIntent>
 		) {
@@ -432,7 +432,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			);
 		});
 
-		const preview = Effect.fn('Flect.ShapingKernel.preview')(function* (id: RevisionId) {
+		const preview = Effect.fn('ShapingKernel.preview')(function* (id: RevisionId) {
 			return yield* SubscriptionRef.modifyEffect(
 				stateRef,
 				(state): Effect.Effect<readonly [InterfaceRevision, KernelState], TransitionError> => {
@@ -461,7 +461,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			);
 		});
 
-		const supersede = Effect.fn('Flect.ShapingKernel.supersede')(function* (
+		const supersede = Effect.fn('ShapingKernel.supersede')(function* (
 			id: RevisionId,
 			input: unknown,
 			source: Exclude<RevisionSource, 'built-in'>
@@ -500,7 +500,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			);
 		});
 
-		const accept = Effect.fn('Flect.ShapingKernel.accept')(function* (id: RevisionId) {
+		const accept = Effect.fn('ShapingKernel.accept')(function* (id: RevisionId) {
 			return yield* SubscriptionRef.modifyEffect(
 				stateRef,
 				(state): Effect.Effect<readonly [InterfaceRevision, KernelState], TransitionError> => {
@@ -533,7 +533,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			);
 		});
 
-		const reject = Effect.fn('Flect.ShapingKernel.reject')(function* (id: RevisionId) {
+		const reject = Effect.fn('ShapingKernel.reject')(function* (id: RevisionId) {
 			return yield* SubscriptionRef.modifyEffect(
 				stateRef,
 				(state): Effect.Effect<readonly [InterfaceRevision, KernelState], TransitionError> => {
@@ -559,44 +559,42 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			);
 		});
 
-		const restoreLastKnownGood = Effect.fn('Flect.ShapingKernel.restoreLastKnownGood')(
-			function* () {
-				return yield* SubscriptionRef.modifyEffect(
-					stateRef,
-					(
-						state
-					): Effect.Effect<
-						readonly [InterfaceRevision, KernelState],
-						InvalidRevisionTransition | InterfaceStorageError
-					> => {
-						if (!state.safeMode) {
-							return Effect.fail(invalidTransition(state.active.id));
-						}
-						const recovered = InterfaceRevision.make({
-							...state.lastKnownGood,
-							source: 'recovery',
-							status: 'accepted'
-						});
-						const next: KernelState = {
-							...state,
-							active: recovered,
-							lastKnownGood: recovered,
-							proposal: undefined,
-							safeMode: false,
-							failureCounts: new Map(),
-							sequence: state.sequence + 1,
-							lastEvent: eventFor(state, 'revision-rolled-back', {
-								revisionId: recovered.id
-							})
-						};
-						const transition: readonly [InterfaceRevision, KernelState] = [recovered, next];
-						return persist(next).pipe(Effect.as(transition));
+		const restoreLastKnownGood = Effect.fn('ShapingKernel.restoreLastKnownGood')(function* () {
+			return yield* SubscriptionRef.modifyEffect(
+				stateRef,
+				(
+					state
+				): Effect.Effect<
+					readonly [InterfaceRevision, KernelState],
+					InvalidRevisionTransition | InterfaceStorageError
+				> => {
+					if (!state.safeMode) {
+						return Effect.fail(invalidTransition(state.active.id));
 					}
-				);
-			}
-		);
+					const recovered = InterfaceRevision.make({
+						...state.lastKnownGood,
+						source: 'recovery',
+						status: 'accepted'
+					});
+					const next: KernelState = {
+						...state,
+						active: recovered,
+						lastKnownGood: recovered,
+						proposal: undefined,
+						safeMode: false,
+						failureCounts: new Map(),
+						sequence: state.sequence + 1,
+						lastEvent: eventFor(state, 'revision-rolled-back', {
+							revisionId: recovered.id
+						})
+					};
+					const transition: readonly [InterfaceRevision, KernelState] = [recovered, next];
+					return persist(next).pipe(Effect.as(transition));
+				}
+			);
+		});
 
-		const rollback = Effect.fn('Flect.ShapingKernel.rollback')(function* () {
+		const rollback = Effect.fn('ShapingKernel.rollback')(function* () {
 			return yield* SubscriptionRef.modifyEffect(
 				stateRef,
 				(
@@ -631,7 +629,7 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			);
 		});
 
-		const enterSafeMode = Effect.fn('Flect.ShapingKernel.enterSafeMode')(function* () {
+		const enterSafeMode = Effect.fn('ShapingKernel.enterSafeMode')(function* () {
 			const marker = yield* markRecovery.pipe(Effect.result);
 			const persisted = yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
 				const next: KernelState = {
@@ -657,73 +655,73 @@ const makeShapingKernel = (options: ShapingKernelOptions, repository?: Interface
 			}
 		});
 
-		const recordExtensionFailure = Effect.fn('Flect.ShapingKernel.recordExtensionFailure')(
-			function* (extensionId: string) {
-				const recovery = yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
-					if (state.disabledExtensions.includes(extensionId)) {
-						return Effect.succeed([undefined, state] satisfies readonly [undefined, KernelState]);
-					}
+		const recordExtensionFailure = Effect.fn('ShapingKernel.recordExtensionFailure')(function* (
+			extensionId: string
+		) {
+			const recovery = yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
+				if (state.disabledExtensions.includes(extensionId)) {
+					return Effect.succeed([undefined, state] satisfies readonly [undefined, KernelState]);
+				}
 
-					const failureCounts = new Map(state.failureCounts);
-					const failures = (failureCounts.get(extensionId) ?? 0) + 1;
-					failureCounts.set(extensionId, failures);
-					const shouldRecover = failures >= 3;
-					const disabledExtensions =
-						shouldRecover && !state.disabledExtensions.includes(extensionId)
-							? [...state.disabledExtensions, extensionId]
-							: state.disabledExtensions;
+				const failureCounts = new Map(state.failureCounts);
+				const failures = (failureCounts.get(extensionId) ?? 0) + 1;
+				failureCounts.set(extensionId, failures);
+				const shouldRecover = failures >= 3;
+				const disabledExtensions =
+					shouldRecover && !state.disabledExtensions.includes(extensionId)
+						? [...state.disabledExtensions, extensionId]
+						: state.disabledExtensions;
 
-					const next: KernelState = {
-						...state,
-						active: shouldRecover ? initialRevision : state.active,
-						proposal: shouldRecover ? undefined : state.proposal,
-						safeMode: shouldRecover || state.safeMode,
-						disabledExtensions,
-						failureCounts,
-						sequence: state.sequence + 1,
-						lastEvent: eventFor(state, shouldRecover ? 'recovery-requested' : 'extension-failed', {
-							extensionId,
-							...(shouldRecover ? { revisionId: state.lastKnownGood.id } : {})
-						})
-					};
-					const transition: readonly [undefined, KernelState] = [undefined, next];
-					if (shouldRecover) {
-						return Effect.gen(function* () {
-							const marker = yield* markRecovery.pipe(Effect.result);
-							const persisted = yield* persist(next).pipe(Effect.result);
-							return [{ marker, persisted }, next] as const;
-						});
-					}
-					return persist(next).pipe(Effect.as(transition));
-				});
-				if (recovery !== undefined) {
-					if (recovery.marker._tag === 'Failure') {
-						return yield* Effect.fail(recovery.marker.failure);
-					}
-					if (recovery.persisted._tag === 'Failure') {
-						return yield* Effect.fail(recovery.persisted.failure);
-					}
+				const next: KernelState = {
+					...state,
+					active: shouldRecover ? initialRevision : state.active,
+					proposal: shouldRecover ? undefined : state.proposal,
+					safeMode: shouldRecover || state.safeMode,
+					disabledExtensions,
+					failureCounts,
+					sequence: state.sequence + 1,
+					lastEvent: eventFor(state, shouldRecover ? 'recovery-requested' : 'extension-failed', {
+						extensionId,
+						...(shouldRecover ? { revisionId: state.lastKnownGood.id } : {})
+					})
+				};
+				const transition: readonly [undefined, KernelState] = [undefined, next];
+				if (shouldRecover) {
+					return Effect.gen(function* () {
+						const marker = yield* markRecovery.pipe(Effect.result);
+						const persisted = yield* persist(next).pipe(Effect.result);
+						return [{ marker, persisted }, next] as const;
+					});
+				}
+				return persist(next).pipe(Effect.as(transition));
+			});
+			if (recovery !== undefined) {
+				if (recovery.marker._tag === 'Failure') {
+					return yield* Effect.fail(recovery.marker.failure);
+				}
+				if (recovery.persisted._tag === 'Failure') {
+					return yield* Effect.fail(recovery.persisted.failure);
 				}
 			}
-		);
+		});
 
-		const recordExtensionSuccess = Effect.fn('Flect.ShapingKernel.recordExtensionSuccess')(
-			function* (extensionId: string) {
-				yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
-					if (!state.failureCounts.has(extensionId)) {
-						return Effect.succeed([undefined, state] satisfies readonly [undefined, KernelState]);
-					}
-					const failureCounts = new Map(state.failureCounts);
-					failureCounts.delete(extensionId);
-					const next: KernelState = {
-						...state,
-						failureCounts
-					};
-					const transition: readonly [undefined, KernelState] = [undefined, next];
-					return persist(next).pipe(Effect.as(transition));
-				});
-			}
-		);
+		const recordExtensionSuccess = Effect.fn('ShapingKernel.recordExtensionSuccess')(function* (
+			extensionId: string
+		) {
+			yield* SubscriptionRef.modifyEffect(stateRef, (state) => {
+				if (!state.failureCounts.has(extensionId)) {
+					return Effect.succeed([undefined, state] satisfies readonly [undefined, KernelState]);
+				}
+				const failureCounts = new Map(state.failureCounts);
+				failureCounts.delete(extensionId);
+				const next: KernelState = {
+					...state,
+					failureCounts
+				};
+				const transition: readonly [undefined, KernelState] = [undefined, next];
+				return persist(next).pipe(Effect.as(transition));
+			});
+		});
 
 		return {
 			snapshot: SubscriptionRef.get(stateRef).pipe(Effect.map(snapshotFromState)),

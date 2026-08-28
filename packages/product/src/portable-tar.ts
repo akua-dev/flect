@@ -38,7 +38,7 @@ const isSafePath = (path: string) => {
 	);
 };
 
-export const encodePortableTar = Effect.fn('Flect.PortableTar.encode')(function* (
+export const encodePortableTar = Effect.fn('PortableTar.encode')(function* (
 	entries: ReadonlyArray<PortableTarEntry>,
 	limits: PortableTarLimits
 ) {
@@ -97,7 +97,7 @@ const readText = (header: Uint8Array, start: number, length: number) =>
 		catch: failure
 	});
 
-export const decodePortableTar = Effect.fn('Flect.PortableTar.decode')(function* (
+export const decodePortableTar = Effect.fn('PortableTar.decode')(function* (
 	archive: Uint8Array,
 	limits: PortableTarLimits
 ) {

@@ -136,7 +136,7 @@ const expectedRoot = (kind: ShareArtifactKind) =>
 					? 'workflows/'
 					: 'extensions/';
 
-export const validateShareManifest = Effect.fn('Flect.Share.validateManifest')(function* (
+export const validateShareManifest = Effect.fn('Share.validateManifest')(function* (
 	input: unknown
 ) {
 	const manifest = yield* Schema.decodeUnknownEffect(
@@ -196,7 +196,7 @@ const digestBytes = (contents: Uint8Array) =>
 		catch: contractFailure
 	});
 
-export const hashShareArtifactSource = Effect.fn('Flect.Share.hashArtifactSource')(function* (
+export const hashShareArtifactSource = Effect.fn('Share.hashArtifactSource')(function* (
 	sourceRoot: string,
 	files: ReadonlyArray<{
 		readonly path: string;

@@ -86,7 +86,7 @@ const ProviderLogoutRequest = Schema.Struct({
 	providerId: ProviderAuthSummary.fields.id
 });
 
-const publicError = Effect.fn('Flect.Http.publicError')((message: string, status: number) =>
+const publicError = Effect.fn('Http.publicError')((message: string, status: number) =>
 	publicErrorJson(new PublicErrorResponse({ version: 1, error: message }), {
 		status
 	}).pipe(Effect.orDie)

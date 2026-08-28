@@ -76,7 +76,7 @@ export interface GenerateFlectSkillOptions {
 	readonly commands?: ReadonlyArray<FlectCommandMetadata>;
 }
 
-export const generateFlectSkill = Effect.fn('Flect.Skill.generate')(function* (
+export const generateFlectSkill = Effect.fn('Skill.generate')(function* (
 	options: GenerateFlectSkillOptions
 ) {
 	const fs = yield* FileSystem.FileSystem;

@@ -545,8 +545,8 @@ const makeBunModuleExecutionLayer = Layer.effect(
 			);
 
 		return {
-			run: Effect.fn('Flect.BunModuleExecution.run')(run),
-			build: Effect.fn('Flect.BunModuleExecution.build')((operation) =>
+			run: Effect.fn('BunModuleExecution.run')(run),
+			build: Effect.fn('BunModuleExecution.build')((operation) =>
 				prepare(operation).pipe(
 					Effect.map((graph) => ({
 						result: result(
@@ -559,7 +559,7 @@ const makeBunModuleExecutionLayer = Layer.effect(
 					}))
 				)
 			),
-			stop: Effect.fn('Flect.BunModuleExecution.stop')(() =>
+			stop: Effect.fn('BunModuleExecution.stop')(() =>
 				Effect.gen(function* () {
 					const running = yield* Ref.get(active);
 					if (running === undefined) {
@@ -592,7 +592,7 @@ const RiftyBunModuleRuntimeLive = Layer.effect(
 		const runtime = yield* RiftyJavaScriptExecution;
 		const preview = yield* BunPreviewExecution;
 		return {
-			execute: Effect.fn('Flect.BunModuleRuntime.execute')((request) => {
+			execute: Effect.fn('BunModuleRuntime.execute')((request) => {
 				const runModule = (previewProbe?: string) =>
 					runtime
 						.runModule({

@@ -76,7 +76,7 @@ const redactTool = (tool: ToolActivity) =>
 		...(tool.previewUrl === undefined ? {} : { previewUrl: redact(tool.previewUrl) })
 	});
 
-const encodedSize = Effect.fn('Flect.OperationJournal.encodedSize')((record: OperationRecord) =>
+const encodedSize = Effect.fn('OperationJournal.encodedSize')((record: OperationRecord) =>
 	Schema.encodeEffect(OperationRecord)(record).pipe(
 		Effect.map((encoded) => new TextEncoder().encode(JSON.stringify(encoded)).byteLength),
 		Effect.orDie
@@ -114,9 +114,7 @@ export const OperationJournalLive = Layer.effect(
 			nextSequence: 1
 		});
 
-		const append = Effect.fn('Flect.OperationJournal.append')(function* (
-			input: OperationJournalInput
-		) {
+		const append = Effect.fn('OperationJournal.append')(function* (input: OperationJournalInput) {
 			const timestamp = yield* Clock.currentTimeMillis;
 			return yield* SubscriptionRef.modifyEffect(state, (current) =>
 				Effect.gen(function* () {
@@ -138,7 +136,7 @@ export const OperationJournalLive = Layer.effect(
 			);
 		});
 
-		const query = Effect.fn('Flect.OperationJournal.query')((filter: OperationQuery) =>
+		const query = Effect.fn('OperationJournal.query')((filter: OperationQuery) =>
 			SubscriptionRef.get(state).pipe(
 				Effect.map((current) =>
 					current.records.filter(

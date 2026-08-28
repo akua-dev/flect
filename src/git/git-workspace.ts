@@ -366,7 +366,7 @@ export const makeGitWorkspace = (options?: {
 		};
 		const invalidateWorker = (worker: GitWorkspaceWorker) =>
 			Effect.sync(() => invalidateWorkerSync(worker));
-		const request = Effect.fn('Flect.GitWorkspace.request')((operation: GitWorkspaceOperation) =>
+		const request = Effect.fn('GitWorkspace.request')((operation: GitWorkspaceOperation) =>
 			semaphore.withPermits(1)(
 				Effect.gen(function* () {
 					// Resolve the active worker only after entering the semaphore.
@@ -441,7 +441,7 @@ export const makeGitWorkspace = (options?: {
 		);
 
 		return {
-			open: Effect.fn('Flect.GitWorkspace.open')(({ workspaceId, reset }) => {
+			open: Effect.fn('GitWorkspace.open')(({ workspaceId, reset }) => {
 				const resolvedWorkspaceId =
 					workspaceId === 'default' ? (options?.defaultWorkspaceId ?? workspaceId) : workspaceId;
 				return request(
@@ -461,21 +461,21 @@ export const makeGitWorkspace = (options?: {
 					)
 				);
 			}),
-			write: Effect.fn('Flect.GitWorkspace.write')((path, contents) =>
+			write: Effect.fn('GitWorkspace.write')((path, contents) =>
 				request(GitWriteRequest.make({ type: 'write', path, contents })).pipe(
 					Effect.flatMap((result) =>
 						result.type === 'written' ? Effect.succeed(result) : unexpectedResult('write')
 					)
 				)
 			),
-			read: Effect.fn('Flect.GitWorkspace.read')((path) =>
+			read: Effect.fn('GitWorkspace.read')((path) =>
 				request(GitReadRequest.make({ type: 'read', path })).pipe(
 					Effect.flatMap((result) =>
 						result.type === 'read' ? Effect.succeed(result) : unexpectedResult('read')
 					)
 				)
 			),
-			run: Effect.fn('Flect.GitWorkspace.run')((args) =>
+			run: Effect.fn('GitWorkspace.run')((args) =>
 				request(GitRunRequest.make({ type: 'run', args: [...args] })).pipe(
 					Effect.flatMap((result) =>
 						result.type === 'command' ? Effect.succeed(result) : unexpectedResult('run')
@@ -487,7 +487,7 @@ export const makeGitWorkspace = (options?: {
 					result.type === 'exported' ? Effect.succeed(result) : unexpectedResult('export')
 				)
 			),
-			exportRef: Effect.fn('Flect.GitWorkspace.exportRef')((options) =>
+			exportRef: Effect.fn('GitWorkspace.exportRef')((options) =>
 				request(
 					GitExportRefRequest.make({
 						type: 'export-ref',
@@ -506,7 +506,7 @@ export const makeGitWorkspace = (options?: {
 					result.type === 'removed' ? Effect.succeed(result) : unexpectedResult('remove')
 				)
 			),
-			checkpoint: Effect.fn('Flect.GitWorkspace.checkpoint')((options) =>
+			checkpoint: Effect.fn('GitWorkspace.checkpoint')((options) =>
 				request(
 					GitCheckpointRequest.make({
 						type: 'checkpoint',
@@ -529,7 +529,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			readAtRef: Effect.fn('Flect.GitWorkspace.readAtRef')((options) =>
+			readAtRef: Effect.fn('GitWorkspace.readAtRef')((options) =>
 				request(
 					GitReadAtRefRequest.make({
 						type: 'read-at-ref',
@@ -544,7 +544,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			moveRef: Effect.fn('Flect.GitWorkspace.moveRef')((options) =>
+			moveRef: Effect.fn('GitWorkspace.moveRef')((options) =>
 				request(
 					GitMoveRefRequest.make({
 						type: 'move-ref',
@@ -561,7 +561,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			snapshotRef: Effect.fn('Flect.GitWorkspace.snapshotRef')((options) =>
+			snapshotRef: Effect.fn('GitWorkspace.snapshotRef')((options) =>
 				request(
 					GitSnapshotRefRequest.make({
 						type: 'snapshot-ref',
@@ -577,7 +577,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			status: Effect.fn('Flect.GitWorkspace.status')((options = {}) =>
+			status: Effect.fn('GitWorkspace.status')((options = {}) =>
 				request(
 					GitStatusRequest.make({
 						type: 'status',
@@ -591,7 +591,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			importRepository: Effect.fn('Flect.GitWorkspace.importRepository')((options) =>
+			importRepository: Effect.fn('GitWorkspace.importRepository')((options) =>
 				request(
 					GitImportRepositoryRequest.make({
 						type: 'import-repository',
@@ -606,7 +606,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			importObjects: Effect.fn('Flect.GitWorkspace.importObjects')((options) =>
+			importObjects: Effect.fn('GitWorkspace.importObjects')((options) =>
 				request(
 					GitImportObjectsRequest.make({
 						type: 'import-objects',
@@ -622,7 +622,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			deleteRef: Effect.fn('Flect.GitWorkspace.deleteRef')((options) =>
+			deleteRef: Effect.fn('GitWorkspace.deleteRef')((options) =>
 				request(
 					GitDeleteRefRequest.make({
 						type: 'delete-ref',
@@ -636,7 +636,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			inspectCommit: Effect.fn('Flect.GitWorkspace.inspectCommit')((commit) =>
+			inspectCommit: Effect.fn('GitWorkspace.inspectCommit')((commit) =>
 				request(GitInspectCommitRequest.make({ type: 'inspect-commit', commit })).pipe(
 					Effect.flatMap((result) =>
 						result.type === 'commit-inspected'
@@ -645,7 +645,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			mergeRef: Effect.fn('Flect.GitWorkspace.mergeRef')((options) =>
+			mergeRef: Effect.fn('GitWorkspace.mergeRef')((options) =>
 				request(
 					GitMergeRefRequest.make({
 						type: 'merge-ref',
@@ -668,7 +668,7 @@ export const makeGitWorkspace = (options?: {
 					)
 				)
 			),
-			inspectShare: Effect.fn('Flect.GitWorkspace.inspectShare')((options) =>
+			inspectShare: Effect.fn('GitWorkspace.inspectShare')((options) =>
 				request(
 					GitInspectShareRequest.make({
 						type: 'inspect-share',

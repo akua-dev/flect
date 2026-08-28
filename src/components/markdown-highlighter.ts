@@ -55,7 +55,7 @@ export class MarkdownHighlightError extends Schema.TaggedErrorClass<MarkdownHigh
 	}
 ) {}
 
-export const highlightMarkdownCode = Effect.fn('Flect.Markdown.highlightCode')(function* (
+export const highlightMarkdownCode = Effect.fn('Markdown.highlightCode')(function* (
 	code: string,
 	language: string
 ) {

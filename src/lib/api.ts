@@ -196,17 +196,16 @@ export const makeFlectClientLayer = (baseUrl = '/api') =>
 					Stream.mapError(unavailable)
 				);
 
-			const replyProviderAuth = Effect.fn('Flect.Client.replyProviderAuth')(
-				(reply: AuthSelectionReply) =>
-					HttpClientRequest.post('/auth/reply').pipe(
-						HttpClientRequest.schemaBodyJson(AuthSelectionReply)(reply),
-						Effect.flatMap(transport.execute),
-						Effect.asVoid,
-						Effect.mapError(unavailable)
-					)
+			const replyProviderAuth = Effect.fn('Client.replyProviderAuth')((reply: AuthSelectionReply) =>
+				HttpClientRequest.post('/auth/reply').pipe(
+					HttpClientRequest.schemaBodyJson(AuthSelectionReply)(reply),
+					Effect.flatMap(transport.execute),
+					Effect.asVoid,
+					Effect.mapError(unavailable)
+				)
 			);
 
-			const cancelProviderAuth = Effect.fn('Flect.Client.cancelProviderAuth')(
+			const cancelProviderAuth = Effect.fn('Client.cancelProviderAuth')(
 				(reference: AuthLoginReference) =>
 					HttpClientRequest.post('/auth/cancel').pipe(
 						HttpClientRequest.schemaBodyJson(AuthLoginReference)(reference),
@@ -223,7 +222,7 @@ export const makeFlectClientLayer = (baseUrl = '/api') =>
 				Effect.mapError(unavailable)
 			);
 
-			const logoutProvider = Effect.fn('Flect.Client.logoutProvider')((providerId: string) =>
+			const logoutProvider = Effect.fn('Client.logoutProvider')((providerId: string) =>
 				HttpClientRequest.post('/auth/logout').pipe(
 					HttpClientRequest.schemaBodyJson(ProviderLogoutRequest)({
 						providerId
@@ -235,7 +234,7 @@ export const makeFlectClientLayer = (baseUrl = '/api') =>
 				)
 			);
 
-			const createSession = Effect.fn('Flect.Client.createSession')((selection: SessionSelection) =>
+			const createSession = Effect.fn('Client.createSession')((selection: SessionSelection) =>
 				HttpClientRequest.post('/sessions').pipe(
 					HttpClientRequest.schemaBodyJson(SessionSelection)(selection),
 					Effect.flatMap(transport.execute),
@@ -270,7 +269,7 @@ export const makeFlectClientLayer = (baseUrl = '/api') =>
 				);
 			};
 
-			const closeSession = Effect.fn('Flect.Client.closeSession')((sessionId: string) =>
+			const closeSession = Effect.fn('Client.closeSession')((sessionId: string) =>
 				HttpClientRequest.delete(`/sessions/${encodeURIComponent(sessionId)}`).pipe(
 					transport.execute,
 					Effect.flatMap(HttpClientResponse.schemaBodyJson(CloseSessionResponse, strictOptions)),
@@ -279,18 +278,17 @@ export const makeFlectClientLayer = (baseUrl = '/api') =>
 				)
 			);
 
-			const cancel = Effect.fn('Flect.Client.cancel')(
-				(sessionId: string, role: InteractiveAgentRole) =>
-					HttpClientRequest.post(`/sessions/${encodeURIComponent(sessionId)}/cancel`).pipe(
-						HttpClientRequest.schemaBodyJson(CancelRequest)(CancelRequest.make({ role })),
-						Effect.flatMap(transport.execute),
-						Effect.flatMap(HttpClientResponse.schemaBodyJson(CancelResponse, strictOptions)),
-						Effect.asVoid,
-						Effect.mapError(unavailable)
-					)
+			const cancel = Effect.fn('Client.cancel')((sessionId: string, role: InteractiveAgentRole) =>
+				HttpClientRequest.post(`/sessions/${encodeURIComponent(sessionId)}/cancel`).pipe(
+					HttpClientRequest.schemaBodyJson(CancelRequest)(CancelRequest.make({ role })),
+					Effect.flatMap(transport.execute),
+					Effect.flatMap(HttpClientResponse.schemaBodyJson(CancelResponse, strictOptions)),
+					Effect.asVoid,
+					Effect.mapError(unavailable)
+				)
 			);
 
-			const completeShellRequest = Effect.fn('Flect.Client.completeShellRequest')(
+			const completeShellRequest = Effect.fn('Client.completeShellRequest')(
 				(
 					sessionId: string,
 					role: InteractiveAgentRole,
@@ -354,7 +352,7 @@ export const makeFlectClientLayer = (baseUrl = '/api') =>
 					)
 				);
 
-			const diagnoseRecovery = Effect.fn('Flect.Client.diagnoseRecovery')(
+			const diagnoseRecovery = Effect.fn('Client.diagnoseRecovery')(
 				(sessionId: string, reason: RecoveryReason) =>
 					HttpClientRequest.post(`/sessions/${encodeURIComponent(sessionId)}/guardian`).pipe(
 						HttpClientRequest.schemaBodyJson(RecoveryRequest)(new RecoveryRequest({ reason })),

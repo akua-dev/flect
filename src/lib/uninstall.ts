@@ -108,7 +108,7 @@ export const makeUninstall = (options: UninstallOptions) =>
 		const shell = yield* ShellLink;
 		const integrations = yield* AgentIntegration;
 
-		const inspect = Effect.fn('Flect.Uninstall.inspect')(function* () {
+		const inspect = Effect.fn('Uninstall.inspect')(function* () {
 			if (!validApplicationPath(options.applicationPath)) {
 				return yield* Effect.fail(invalidApplication());
 			}
@@ -127,7 +127,7 @@ export const makeUninstall = (options: UninstallOptions) =>
 			});
 		});
 
-		const removeAgent = Effect.fn('Flect.Uninstall.removeAgent')(function* (
+		const removeAgent = Effect.fn('Uninstall.removeAgent')(function* (
 			item: UninstallOwnedItem,
 			host: AgentIntegrationHost
 		) {
@@ -138,7 +138,7 @@ export const makeUninstall = (options: UninstallOptions) =>
 			});
 		});
 
-		const prepare = Effect.fn('Flect.Uninstall.prepare')(function* () {
+		const prepare = Effect.fn('Uninstall.prepare')(function* () {
 			const plan = yield* inspect();
 			const ownedIntegrations = yield* Effect.forEach(
 				plan.ownedIntegrations,

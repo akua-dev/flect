@@ -98,7 +98,9 @@ const runDiagnostic = (workspaceId: string) => {
 					],
 					message: 'Initialize canonical workspace'
 				});
-				const verifyAccepted = Effect.fn('diagnostic.verifyAccepted')(function* (stage: string) {
+				const verifyAccepted = Effect.fn('GitShareLifecycleDiagnostic.verifyAccepted')(function* (
+					stage: string
+				) {
 					const result = yield* git.run(['rev-parse', 'flect/accepted']);
 					if (result.stdout.trim() !== local.commit)
 						return yield* Effect.fail(new Error(`Accepted ref changed ${stage}.`));

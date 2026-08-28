@@ -90,7 +90,7 @@ const actions = (lineage: ShareReview['lineage']): ShareReview['actions'] =>
 				? ['keep-replacement', 'reject']
 				: ['continue-fork', 'shape-conflict', 'reject'];
 
-export const buildShareReview = Effect.fn('Flect.ShareReview.build')(function* (
+export const buildShareReview = Effect.fn('ShareReview.build')(function* (
 	input: BuildShareReviewInput
 ) {
 	const current = new Map<string, string>();

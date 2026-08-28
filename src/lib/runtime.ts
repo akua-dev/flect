@@ -316,7 +316,7 @@ const CapabilityAdapterLive = Layer.effect(
 	Effect.gen(function* () {
 		const kernel = yield* ShapingKernel;
 		return {
-			apply: Effect.fn('Flect.CapabilityAdapter.apply')(function* (
+			apply: Effect.fn('CapabilityAdapter.apply')(function* (
 				context: ExtensionIntentContext,
 				intents: ReadonlyArray<CapabilityIntent>
 			) {

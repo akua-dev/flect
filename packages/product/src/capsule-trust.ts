@@ -72,7 +72,7 @@ const manifestWithoutFiles = (manifest: DecodedCapsule['manifest']) => {
 	return source;
 };
 
-const canonicalUnsigned = Effect.fn('Flect.CapsuleTrust.canonicalUnsigned')(function* (
+const canonicalUnsigned = Effect.fn('CapsuleTrust.canonicalUnsigned')(function* (
 	archive: Uint8Array
 ) {
 	const capsule = yield* decodeCapsule(archive).pipe(
@@ -92,7 +92,7 @@ const canonicalUnsigned = Effect.fn('Flect.CapsuleTrust.canonicalUnsigned')(func
 	};
 });
 
-export const hashCapsuleSignedContent = Effect.fn('Flect.CapsuleTrust.hashSignedContent')(
+export const hashCapsuleSignedContent = Effect.fn('CapsuleTrust.hashSignedContent')(
 	(archive: Uint8Array) =>
 		canonicalUnsigned(archive).pipe(Effect.map((value) => value.contentSha256))
 );
@@ -118,7 +118,7 @@ const validDate = (value: string) =>
 	/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) &&
 	Number.isFinite(Date.parse(value));
 
-export const signCapsule = Effect.fn('Flect.CapsuleTrust.sign')(function* (
+export const signCapsule = Effect.fn('CapsuleTrust.sign')(function* (
 	archive: Uint8Array,
 	options: {
 		readonly keyId: string;
@@ -185,7 +185,7 @@ const statusPriority = [
 	'verified'
 ] as const;
 
-export const verifyCapsuleSignatures = Effect.fn('Flect.CapsuleTrust.verify')(function* (
+export const verifyCapsuleSignatures = Effect.fn('CapsuleTrust.verify')(function* (
 	archive: Uint8Array,
 	keys: ReadonlyArray<CapsulePublisherKey>
 ) {
@@ -249,7 +249,7 @@ export const verifyCapsuleSignatures = Effect.fn('Flect.CapsuleTrust.verify')(fu
 	});
 });
 
-export const forkCapsule = Effect.fn('Flect.CapsuleTrust.fork')(function* (
+export const forkCapsule = Effect.fn('CapsuleTrust.fork')(function* (
 	archive: Uint8Array,
 	options: {
 		readonly revision: string;
