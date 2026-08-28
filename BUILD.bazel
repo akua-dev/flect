@@ -103,17 +103,29 @@ WHOLE_TREE = glob(
 
 # ---------------------------------------------------------------------------
 # (a) oxlint lint (type-aware: jsx-a11y, react, and the Effect-specific
-# `effecttsgo` type-aware rule set from `@effect/tsgo`'s oxlint preset --
-# see the `prepare` script for the one-time native-binding patch that wires
-# the `effecttsgo` plugin into the installed oxlint/oxlint-tsgolint
-# binaries; unpatched, oxlint rejects .oxlintrc.json's `extends` with
-# "Unknown plugin: 'effecttsgo'."). --config/--tsconfig are passed
-# explicitly for the same reason //:lint_oxfmt below does: oxc-family
-# config auto-discovery walks the real cwd's directory ancestry, not the
-# source tree inside a Bazel sandbox -- lint_oxfmt already hit this
-# failure mode on a real run ("No config found, using defaults"), so this
-# target does not rely on oxlint's own auto-discovery either. .oxlintrc.json's
-# `overrides` block that turns off `jsx-a11y/click-events-have-key-events`/
+# `effecttsgo` type-aware rule set from `@effect/tsgo`'s oxlint preset).
+# The `lint` script's own leading `effect-tsgo patch --no-typescript
+# --oxlint` -- not the `prepare` script -- does the one-time native-binding
+# patch that wires the `effecttsgo` plugin into the installed
+# oxlint/oxlint-tsgolint binaries; unpatched, oxlint rejects
+# .oxlintrc.json's `extends` with "Unknown plugin: 'effecttsgo'." It is
+# deliberately NOT in `prepare`: this action installs with
+# --ignore-scripts like every other check here (see tools/bun/defs.bzl),
+# and `prepare` also runs `scripts/prepare-effect.ts`, which hits bun's own
+# wildcard-exports resolution bug for `@effect/platform-bun`'s subpath
+# exports (oven-sh/bun#40785, the same upstream gap //:check_effect and
+# friends already route around by going through Vitest below) when
+# executed as a bare `bun <file>.ts` inside this sandbox -- confirmed on a
+# real run. The patch command itself has no such import and is idempotent
+# ("skipped because its hash matches the replacement" on a warm run), so
+# running it as a plain lint-script prefix sidesteps both problems.
+# --config/--tsconfig are passed explicitly for the same reason
+# //:lint_oxfmt below does: oxc-family config auto-discovery walks the
+# real cwd's directory ancestry, not the source tree inside a Bazel
+# sandbox -- lint_oxfmt already hit this failure mode on a real run ("No
+# config found, using defaults"), so this target does not rely on
+# oxlint's own auto-discovery either. .oxlintrc.json's `overrides` block
+# that turns off `jsx-a11y/click-events-have-key-events`/
 # `jsx-a11y/prefer-tag-over-role` for `src/components/ui/**` (shadcn-vendored
 # primitives; see the `role='list'` fix on ItemGroup below for why -- a real,
 # deliberate a11y decision, not a suppression) is proven to fire outside
@@ -122,7 +134,7 @@ WHOLE_TREE = glob(
 # ---------------------------------------------------------------------------
 bun_run(
     name = "lint_oxlint",
-    args = "run oxlint --type-aware --tsconfig=tsconfig.json -c .oxlintrc.json .",
+    args = "run lint:oxlint",
     srcs = WHOLE_TREE,
 )
 
