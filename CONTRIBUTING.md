@@ -62,7 +62,7 @@ Effect source checkout is at the pinned commit without changing it.
 
 This runs:
 
-1. Biome;
+1. Oxlint and Oxfmt;
 2. TypeScript project checking;
 3. Vitest unit and integration tests;
 4. Playwright against a production Astro-on-Vite build in real Chromium;
