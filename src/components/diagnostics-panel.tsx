@@ -448,7 +448,7 @@ export function DiagnosticsPanel({
 			onToggle={(event) => setOpen(event.currentTarget.open)}
 			open={open}
 		>
-			{/* biome-ignore lint/a11y/useSemanticElements: summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
+			{/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- summary is the native disclosure control; the explicit role keeps it exposed consistently across WebKit and JSDOM. */}
 			<summary aria-label='Diagnostics' role='button'>
 				<span>Diagnostics</span>
 				<small aria-hidden='true'>

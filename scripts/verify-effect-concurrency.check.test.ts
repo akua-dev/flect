@@ -15,4 +15,7 @@ import { verifyEffectConcurrency } from './verify-effect-concurrency';
 // (point //:check_effect_concurrency back at
 // `bun_check(script = "check:effect-concurrency")`) once that's fixed
 // and confirmed on a real ubuntu-latest run.
-it.effect('flect source uses Effect concurrency, not ad hoc promises', () => verifyEffectConcurrency);
+it.effect(
+	'flect source uses Effect concurrency, not ad hoc promises',
+	() => verifyEffectConcurrency
+);
