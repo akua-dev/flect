@@ -71,6 +71,25 @@ def _bun_action_impl(ctx):
         inputs = ctx.files.srcs + lockfile_srcs,
         tools = [bun],
         arguments = [bun.path, out.path],
+        # Bazel's default action invocation strips the environment down to a
+        # handful of vars (confirmed on a real run: `exec env - TMPDIR=/tmp
+        # <process-wrapper> ... bash -c '...'`, i.e. PATH is entirely unset).
+        # That silently breaks anything this script pipeline shells out to
+        # via bare command-name lookup that isn't under node_modules/.bin
+        # (which bun's own `bun run` does still prepend to PATH) -- notably
+        # `tar` (system binary, several scripts/tests) and, non-obviously,
+        # `astro build` itself: `node_modules/.bin/astro` is a `#!/usr/bin/env
+        # node` script, and ubuntu-latest's Node lives in a versioned
+        # toolcache path (not /usr/bin), so there is no fixed absolute path
+        # to hardcode here even for that one case. `use_default_shell_env`
+        # is Bazel's documented escape hatch for exactly this: it restores
+        # the PATH (and a small allowlist of other vars) from the shell that
+        # invoked `bazel test`/`bazel build`, matching what a human running
+        # the same command locally would have. This action already runs
+        # non-hermetically by design (network access, non-pinned system
+        # tools) -- see the module docstring -- so this doesn't give up any
+        # hermeticity this rule was actually providing.
+        use_default_shell_env = True,
         command = """
 set -euo pipefail
 BUN="$1"
@@ -133,6 +152,9 @@ BUNFIG
 # point, so this logs the same facts on the real failing runner to
 # confirm/refute whether cwd-visibility is actually the trigger there.
 echo "=== bun action diagnostics: $(pwd) ==="
+echo "PATH=$PATH" >&2
+which node >&2 2>&1 || echo "node NOT ON PATH" >&2
+which tar >&2 2>&1 || echo "tar NOT ON PATH" >&2
 ls -la node_modules >&2 2>&1 | head -5 || echo "node_modules NOT VISIBLE" >&2
 ls node_modules/@effect >&2 2>&1 || echo "node_modules/@effect NOT VISIBLE" >&2
 "$BUN" -e "console.log(require.resolve('@effect/platform-bun'))" >&2 2>&1 || echo "require.resolve('@effect/platform-bun') FAILED" >&2

@@ -146,7 +146,24 @@ bun_check(
 # ---------------------------------------------------------------------------
 bun_run(
     name = "test_src",
-    args = "run vitest run src",
+    # --no-file-parallelism: with TESTS correctly declared (see below), most
+    # of src/'s ~124 test files still intermittently failed with "Cannot
+    # find module '/@fs/.../tests/vitest.setup.ts'" or, further down the
+    # same failure cluster, "Cannot find package 'esbuild-wasm/....wasm?url'"
+    # -- both genuinely-present files/packages that resolve fine locally and
+    # in every other vitest-based target here. src/ is the one target large
+    # enough to make Vitest spin up multiple concurrent worker forks (the
+    # other three vitest targets stay under vitest's default single-worker
+    # threshold); each fork independently resolves absolute paths (Vite's
+    # `/@fs/...` scheme, and its own dependency pre-bundle cache) against
+    # its OWN view of this Bazel action's cwd, and something about that
+    # cross-fork sharing produces wrong/stale absolute paths inside this
+    # sandbox specifically -- not reproducible outside Bazel, where a single
+    # `bun run vitest run src` process only ever needs the one worker Vitest
+    # already defaults to for a run this size on a dev machine. Forcing a
+    # single worker here removes the cross-fork path sharing entirely rather
+    # than chasing the exact Vite/Vitest internal that mishandles it.
+    args = "run vitest run src --no-file-parallelism",
     # TESTS (tests/vitest.setup.ts) is required by every shard, not just
     # the ones whose own directory happens to be under tests/ -- confirmed
     # on a real run: omitting it produced a crisp "Cannot find module
