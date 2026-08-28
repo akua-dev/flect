@@ -621,13 +621,13 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 				trust
 			);
 		});
-		const reviewWithProductPermissions = (
-			archive: Uint8Array
-		): Effect.Effect<CapsuleReview | undefined> =>
-			Effect.gen(function* () {
+		const reviewWithProductPermissions = Effect.fn('Workspace.reviewWithProductPermissions')(
+			function* (archive: Uint8Array) {
 				const capsule = yield* decodeCapsule(archive);
 				return yield* reviewDecodedCapsule(capsule, archive);
-			}).pipe(Effect.catch(() => Effect.succeed(undefined)));
+			},
+			(effect) => effect.pipe(Effect.catch(() => Effect.succeed(undefined)))
+		);
 		const shapingSnapshot = yield* kernel.snapshot;
 		const continuityLoad = yield* continuityRepository.load;
 		if (continuityLoad.status === 'ready' && !shapingSnapshot.safeMode) {
@@ -1750,81 +1750,82 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 			const finalizedShareMetadata = yield* Ref.make<FinalizedShareActivation | undefined>(
 				undefined
 			);
-			const restoreAcceptance = (finalizedShare: FinalizedShareActivation | undefined) =>
-				Effect.gen(function* () {
-					const compensations: Array<Effect.Effect<void, FlectCommandError>> = [
-						restoreCapsulePresentation(beforeCapsulePresentation)
-					];
-					if (extensionCatalog !== undefined && beforeExtensions !== undefined) {
+			const restoreAcceptance = Effect.fn('Workspace.restoreAcceptance')(function* (
+				finalizedShare: FinalizedShareActivation | undefined
+			) {
+				const compensations: Array<Effect.Effect<void, FlectCommandError>> = [
+					restoreCapsulePresentation(beforeCapsulePresentation)
+				];
+				if (extensionCatalog !== undefined && beforeExtensions !== undefined) {
+					compensations.push(
+						extensionCatalog
+							.restore(beforeExtensions)
+							.pipe(
+								Effect.mapError(() =>
+									commandRejected('The accepted extension state could not be restored.')
+								)
+							)
+					);
+				}
+				if (finalizedShare !== undefined) {
+					if (finalizedShare.beforeRefs !== undefined) {
+						if (shareRepository === undefined) {
+							compensations.push(
+								Effect.fail(commandRejected('The shared candidate state could not be restored.'))
+							);
+						} else {
+							compensations.push(
+								shareRepository
+									.restoreCandidate({
+										shareId: finalizedShare.before.shareId,
+										before: finalizedShare.beforeRefs,
+										after: finalizedShare.afterRefs
+									})
+									.pipe(
+										Effect.mapError(() =>
+											commandRejected('The shared candidate state could not be restored.')
+										)
+									)
+							);
+						}
+					}
+					if (shareInstallationStore !== undefined) {
 						compensations.push(
-							extensionCatalog
-								.restore(beforeExtensions)
+							shareInstallationStore
+								.save(finalizedShare.before)
 								.pipe(
 									Effect.mapError(() =>
-										commandRejected('The accepted extension state could not be restored.')
+										commandRejected('The shared installation state could not be restored.')
 									)
 								)
 						);
 					}
-					if (finalizedShare !== undefined) {
-						if (finalizedShare.beforeRefs !== undefined) {
-							if (shareRepository === undefined) {
-								compensations.push(
-									Effect.fail(commandRejected('The shared candidate state could not be restored.'))
-								);
-							} else {
-								compensations.push(
-									shareRepository
-										.restoreCandidate({
-											shareId: finalizedShare.before.shareId,
-											before: finalizedShare.beforeRefs,
-											after: finalizedShare.afterRefs
-										})
-										.pipe(
-											Effect.mapError(() =>
-												commandRejected('The shared candidate state could not be restored.')
-											)
-										)
-								);
-							}
-						}
-						if (shareInstallationStore !== undefined) {
-							compensations.push(
-								shareInstallationStore
-									.save(finalizedShare.before)
-									.pipe(
-										Effect.mapError(() =>
-											commandRejected('The shared installation state could not be restored.')
-										)
+					if (shareCandidateStore !== undefined) {
+						compensations.push(
+							shareCandidateStore
+								.save(finalizedShare.candidateArchive)
+								.pipe(
+									Effect.mapError(() =>
+										commandRejected('The shared candidate archive could not be restored.')
 									)
-							);
-						}
-						if (shareCandidateStore !== undefined) {
-							compensations.push(
-								shareCandidateStore
-									.save(finalizedShare.candidateArchive)
-									.pipe(
-										Effect.mapError(() =>
-											commandRejected('The shared candidate archive could not be restored.')
-										)
-									)
-							);
-						}
+								)
+						);
 					}
-					const compensationFailed = yield* runCompensations(compensations);
-					yield* Effect.all(
-						[
-							SubscriptionRef.set(capsulePresentation, beforeCapsulePresentation),
-							Ref.set(shareCandidate, beforeCandidate),
-							Ref.set(shareActivation, beforeActivation),
-							SubscriptionRef.set(state, beforeWorkspace)
-						],
-						{ discard: true }
-					);
-					if (compensationFailed) {
-						return yield* enterDegradedRecovery();
-					}
-				});
+				}
+				const compensationFailed = yield* runCompensations(compensations);
+				yield* Effect.all(
+					[
+						SubscriptionRef.set(capsulePresentation, beforeCapsulePresentation),
+						Ref.set(shareCandidate, beforeCandidate),
+						Ref.set(shareActivation, beforeActivation),
+						SubscriptionRef.set(state, beforeWorkspace)
+					],
+					{ discard: true }
+				);
+				if (compensationFailed) {
+					return yield* enterDegradedRecovery();
+				}
+			});
 			let finalizedShare: FinalizedShareActivation | undefined;
 			const acceptedResult = yield* Effect.gen(function* () {
 				if (extensionCatalog !== undefined) {
@@ -1885,74 +1886,75 @@ export const FlectWorkspaceControllerLive = Layer.effect(
 			const discardedShareMetadata = yield* Ref.make<DiscardedShareActivation | undefined>(
 				undefined
 			);
-			const restoreRejection = (discarded: DiscardedShareActivation | undefined) =>
-				Effect.gen(function* () {
-					const compensations: Array<Effect.Effect<void, FlectCommandError>> = [
-						restoreCapsulePresentation(beforeCapsulePresentation)
-					];
-					if (extensionCatalog !== undefined && beforeExtensions !== undefined) {
-						compensations.push(
-							extensionCatalog
-								.restore(beforeExtensions)
-								.pipe(
-									Effect.mapError(() =>
-										commandRejected('The rejected extension state could not be restored.')
-									)
+			const restoreRejection = Effect.fn('Workspace.restoreRejection')(function* (
+				discarded: DiscardedShareActivation | undefined
+			) {
+				const compensations: Array<Effect.Effect<void, FlectCommandError>> = [
+					restoreCapsulePresentation(beforeCapsulePresentation)
+				];
+				if (extensionCatalog !== undefined && beforeExtensions !== undefined) {
+					compensations.push(
+						extensionCatalog
+							.restore(beforeExtensions)
+							.pipe(
+								Effect.mapError(() =>
+									commandRejected('The rejected extension state could not be restored.')
 								)
-						);
-					}
-					if (discarded !== undefined) {
-						if (discarded.before.refs.candidate !== undefined) {
-							if (shareRepository === undefined) {
-								compensations.push(
-									Effect.fail(commandRejected('The shared candidate state could not be restored.'))
-								);
-							} else {
-								compensations.push(
-									shareRepository
-										.restoreCandidateRef({
-											shareId: discarded.before.shareId,
-											candidate: discarded.before.refs.candidate,
-											refs: {
-												base: discarded.after.refs.base,
-												upstream: discarded.after.refs.upstream,
-												fork: discarded.after.refs.fork
-											}
-										})
-										.pipe(
-											Effect.mapError(() =>
-												commandRejected('The shared candidate state could not be restored.')
-											)
-										)
-								);
-							}
-						}
-						if (shareInstallationStore !== undefined) {
+							)
+					);
+				}
+				if (discarded !== undefined) {
+					if (discarded.before.refs.candidate !== undefined) {
+						if (shareRepository === undefined) {
 							compensations.push(
-								shareInstallationStore
-									.save(discarded.before)
+								Effect.fail(commandRejected('The shared candidate state could not be restored.'))
+							);
+						} else {
+							compensations.push(
+								shareRepository
+									.restoreCandidateRef({
+										shareId: discarded.before.shareId,
+										candidate: discarded.before.refs.candidate,
+										refs: {
+											base: discarded.after.refs.base,
+											upstream: discarded.after.refs.upstream,
+											fork: discarded.after.refs.fork
+										}
+									})
 									.pipe(
 										Effect.mapError(() =>
-											commandRejected('The shared installation state could not be restored.')
+											commandRejected('The shared candidate state could not be restored.')
 										)
 									)
 							);
 						}
 					}
-					const compensationFailed = yield* runCompensations(compensations);
-					yield* Effect.all(
-						[
-							SubscriptionRef.set(capsulePresentation, beforeCapsulePresentation),
-							Ref.set(shareCandidate, beforeCandidate),
-							Ref.set(shareActivation, beforeActivation),
-							SubscriptionRef.set(state, beforeWorkspace)
-						],
-						{ discard: true }
-					);
-					if (compensationFailed) {
-						return yield* enterDegradedRecovery();
+					if (shareInstallationStore !== undefined) {
+						compensations.push(
+							shareInstallationStore
+								.save(discarded.before)
+								.pipe(
+									Effect.mapError(() =>
+										commandRejected('The shared installation state could not be restored.')
+									)
+								)
+						);
 					}
-				});
+				}
+				const compensationFailed = yield* runCompensations(compensations);
+				yield* Effect.all(
+					[
+						SubscriptionRef.set(capsulePresentation, beforeCapsulePresentation),
+						Ref.set(shareCandidate, beforeCandidate),
+						Ref.set(shareActivation, beforeActivation),
+						SubscriptionRef.set(state, beforeWorkspace)
+					],
+					{ discard: true }
+				);
+				if (compensationFailed) {
+					return yield* enterDegradedRecovery();
+				}
+			});
 			let discarded: DiscardedShareActivation | undefined;
 			const rejectedResult = yield* Effect.gen(function* () {
 				if (extensionCatalog !== undefined) {
