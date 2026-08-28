@@ -216,6 +216,12 @@ export class ProductAdoptionDiagnostic extends Schema.Class<ProductAdoptionDiagn
 	)
 ) {}
 
+/**
+ * The result of {@link evaluateProductAdoption}: one of `ready`, `review`,
+ * `blocked`, `offline`, or `detached`, plus the ordered diagnostics that
+ * justify it. Deterministic and model-free - the same integration, host
+ * facts, and prior connection always evaluate to the same snapshot.
+ */
 export class ProductAdoptionSnapshot extends Schema.Class<ProductAdoptionSnapshot>(
 	'ProductAdoptionSnapshot'
 )({
@@ -276,6 +282,13 @@ const invalidIntegration = () =>
 		recovery: 'Review the product integration and keep the current experience.'
 	});
 
+/**
+ * Snapshot a validated integration's identity and content digests into a
+ * {@link ProductConnectionRecord} for host persistence. Persist this
+ * separately from {@link ProductUserState}: on next discovery or reconnect,
+ * pass the persisted record back into {@link evaluateProductAdoption} to
+ * detect a product update, capability/extension change, or migration.
+ */
 export const createProductConnectionRecord = (
 	integration: ProductIntegration
 ): ProductConnectionRecord => {
@@ -301,6 +314,17 @@ export interface EvaluateProductAdoptionInput {
 	readonly detached: boolean;
 }
 
+/**
+ * Compare a validated integration against current host facts, the prior
+ * persisted connection (if any), and user state, returning a
+ * {@link ProductAdoptionSnapshot} with ordered diagnostics covering ready,
+ * offline, update, capability/extension review, compatibility,
+ * authentication, migration, and detach states. Purely deterministic: no
+ * model call, network request, or side effect. Fails with
+ * `ProductIntegrationFailure` only if `input.integration` was not produced
+ * by `defineProductIntegration` or its product ID does not match
+ * `userState`/`connection`.
+ */
 export const evaluateProductAdoption = Effect.fn('Flect.ProductAdoption.evaluate')(function* (
 	input: EvaluateProductAdoptionInput
 ) {
@@ -419,6 +443,13 @@ export const evaluateProductAdoption = Effect.fn('Flect.ProductAdoption.evaluate
 	});
 });
 
+/**
+ * Evaluate adoption with the product connection cleared. Returns a
+ * `detached` snapshot and removes only the product connection record - it
+ * never deletes a workspace, Git ref, capsule, or export, and the user's
+ * personal fork and export references remain available for the host to
+ * offer continuation or export.
+ */
 export const detachProduct = Effect.fn('Flect.ProductAdoption.detach')(
 	(input: Omit<EvaluateProductAdoptionInput, 'detached'>) =>
 		evaluateProductAdoption({

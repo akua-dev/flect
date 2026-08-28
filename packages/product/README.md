@@ -182,9 +182,13 @@ deletes a workspace, Git ref, capsule, or export.
 ## Export paths
 
 - `@flect/product` — complete supported surface;
-- `@flect/product/contracts` — schemas, public errors, and integration/adoption
-  contracts; and
-- `@flect/product/host` — HTTP, GraphQL, and event services/Layers;
+- `@flect/product/contracts` — schemas, public errors, and integration/
+  adoption/sharing contracts (`ProductIntegrationMetadata`,
+  `evaluateProductAdoption`'s input/output types, `ShareManifest`,
+  `SharePrivateSource`, and related `Share*` types); and
+- `@flect/product/host` — HTTP, GraphQL, event, and private-share-source
+  services/Layers (`makeProductHttpLayer`, `makeProductGraphqlLayer`,
+  `makeProductEventsLayer`, `makePrivateShareSourcesLayer`);
 - `@flect/product/capsule` — deterministic capsule codec and manifest
   contracts; and
 - `@flect/product/capsule-trust` — canonical Ed25519 signing, verification,

@@ -106,6 +106,11 @@ export class CapsuleManifest extends Schema.Class<CapsuleManifest>('CapsuleManif
 	).check(Schema.isMaxLength(16))
 }) {}
 
+/**
+ * Input to {@link encodeCapsule}: a manifest without its `files` field (the
+ * codec computes paths, sizes, and SHA-256 hashes from `files` itself) plus
+ * the raw payload bytes to embed.
+ */
 export interface CapsuleSource {
 	readonly manifest: Omit<CapsuleManifest, 'files'>;
 	readonly files: ReadonlyArray<{
@@ -114,6 +119,11 @@ export interface CapsuleSource {
 	}>;
 }
 
+/**
+ * Output of {@link decodeCapsule}: a strictly validated manifest and its
+ * payload files, each already verified against the manifest's declared byte
+ * count and SHA-256 hash.
+ */
 export interface DecodedCapsule {
 	readonly manifest: CapsuleManifest;
 	readonly files: ReadonlyArray<{
@@ -122,6 +132,11 @@ export interface DecodedCapsule {
 	}>;
 }
 
+/**
+ * The capsule failed strict decoding, integrity verification, or size/shape
+ * limits. This is the only failure {@link encodeCapsule} and
+ * {@link decodeCapsule} can raise; `message` is safe to show to a user.
+ */
 export class InvalidCapsule extends Schema.TaggedErrorClass<InvalidCapsule>()('InvalidCapsule', {
 	message: Schema.String
 }) {}
@@ -137,6 +152,12 @@ const sha256 = (contents: Uint8Array) =>
 		catch: () => invalid('SHA-256 is unavailable.')
 	});
 
+/**
+ * Compute the SHA-256 of a complete `.flect` archive's bytes. Use this to
+ * fill `ProductExperienceDescriptor.archiveSha256` before calling
+ * `defineProductIntegration`, which re-derives the same digest from
+ * `loadRecommendedExperience` and rejects a mismatch.
+ */
 export const hashCapsuleArchive = Effect.fn('Flect.Capsule.hashArchive')((archive: Uint8Array) =>
 	sha256(archive)
 );
@@ -177,6 +198,14 @@ const verifyExtensionPayloads = (
 		: Effect.fail(invalid('A portable extension payload is missing or invalid.'));
 };
 
+/**
+ * Build a deterministic `.flect` archive from a manifest and its payload
+ * files: identical input always produces byte-identical output. Rejects
+ * duplicate or reserved (`flect.json`) paths, missing entrypoint files,
+ * mismatched portable-extension payloads, and archives over
+ * {@link MAX_CAPSULE_BYTES}. Pair with {@link hashCapsuleArchive} to compute
+ * the digest a `ProductIntegration` declares for this same archive.
+ */
 export const encodeCapsule = Effect.fn('Flect.Capsule.encode')(function* (source: CapsuleSource) {
 	const paths = new Set<string>();
 	let total = 0;
@@ -197,7 +226,18 @@ export const encodeCapsule = Effect.fn('Flect.Capsule.encode')(function* (source
 	if (sorted.length === 0 || sorted.length > MAX_FILES || total > MAX_CAPSULE_BYTES)
 		return yield* Effect.fail(invalid());
 	const manifest = yield* decodeManifest({ ...source.manifest, files }).pipe(
-		Effect.mapError(() => invalid())
+		// Unlike decodeCapsule (which decodes untrusted archive bytes and stays
+		// deliberately generic), the caller here supplies its own manifest
+		// object directly, so surfacing the underlying Schema issue - which
+		// field, which path, what was expected - is safe and is the difference
+		// between a one-line fix and a guessing game while authoring a capsule.
+		Effect.mapError((error) =>
+			invalid(
+				Schema.isSchemaError(error)
+					? `The .flect capsule manifest is invalid: ${error.message}`
+					: undefined
+			)
+		)
 	);
 	if (manifest.entrypoints.some((entry) => !paths.has(entry.path)))
 		return yield* Effect.fail(invalid('A capsule entrypoint is missing.'));
@@ -217,6 +257,13 @@ export const encodeCapsule = Effect.fn('Flect.Capsule.encode')(function* (source
 	).pipe(Effect.mapError(() => invalid('The .flect capsule is too large.')));
 });
 
+/**
+ * Strictly decode and integrity-verify a `.flect` archive's bytes: rejects
+ * unknown manifest fields, unsupported format versions, and any payload
+ * whose size or SHA-256 does not match its manifest entry. Decoding never
+ * executes code, grants a capability, or activates an interface; it is a
+ * pure data transform. This is the inverse of {@link encodeCapsule}.
+ */
 export const decodeCapsule = Effect.fn('Flect.Capsule.decode')(function* (
 	archive: Uint8Array
 ): Effect.fn.Return<DecodedCapsule, InvalidCapsule> {
