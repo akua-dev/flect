@@ -103,13 +103,21 @@ done
 # then runs it -- see the module docstring above for why that is load-
 # bearing, not just simplicity.
 "$BUN" install --frozen-lockfile --ignore-scripts
-# Defensive belt-and-suspenders for the confirmed real gap in this exact
-# dependency graph (@effect/platform-node-shared@4.0.0-beta.102's published
-# dist imports "@effect/platform/Effectify", and @effect/platform never
-# appears in bun.lock -- verified by grep). Installing it explicitly costs
-# one small extra fetch and removes one known way this can fail even where
-# the same-session fallback (this module's main fix) is not itself enough.
-"$BUN" add "@effect/platform@^0.97" --no-save --ignore-scripts || true
+# Confirmed on a real ubuntu-latest run (flect-projection-staging run
+# 33166404614): some effect-v4 runtime path dynamically imports
+# "@effect/platform-node-shared" by bare specifier, which our installed
+# @effect/platform-node-shared@4.0.0-beta.102 never satisfies -- bun's
+# resolver does not appear to consult node_modules for this particular
+# dynamic import at all, only its own per-process "auto-install a missing
+# bare import" fallback, which always lands on the npm "latest" dist-tag
+# (@effect/platform-node-shared@0.61.1, an old effect-v3-era release) and
+# fetches it standalone outside any node_modules tree -- so it can't
+# resolve 0.61.1's OWN peerDependency on @effect/platform@^0.97.1 either,
+# which is the "Cannot find module '@effect/platform/...'" error this
+# produces. Installing 0.61.1 explicitly (matching the exact fallback
+# target) gives it a real, properly-linked peer dependency graph via bun's
+# normal installer instead of the broken ad hoc fetch.
+"$BUN" add "@effect/platform-node-shared@0.61.1" --no-save --ignore-scripts || true
 "$BUN" {invocation}
 touch "$OUT"
 """.format(invocation = ctx.attr.invocation),
