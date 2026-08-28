@@ -2,7 +2,7 @@
 
 > The interface that takes your shape.
 
-[![Flect quality](https://github.com/akua-dev/flect/actions/workflows/quality.yml/badge.svg)](https://github.com/akua-dev/flect/actions/workflows/quality.yml)
+[![Flect quality (advisory)](https://github.com/akua-dev/flect/actions/workflows/quality.yml/badge.svg)](https://github.com/akua-dev/flect/actions/workflows/quality.yml)
 
 ![Flect adapting across product interfaces](assets/flect-hero.png)
 
@@ -321,15 +321,14 @@ Rust formatting and tests, and the native application build. The architecture
 gate rejects native promise fan-out everywhere and ad hoc Promise constructors
 or native Promise serialization tails outside tests. Concurrency, callback
 lifetimes, cancellation, and failure composition therefore stay explicit in
-Effect. The credential-free GitHub quality workflow runs these same checks in
-parallel jobs on every pull request and every change to `main`; branch
-protection requires its exact `Flect quality gate` summary context on a
-current revision, including for administrators. The workflow uploads only
-bounded Playwright failure evidence.
-`bun run
-test:pi-smoke` is separate
-because it makes one real private turn with the developer's existing Pi
-provider login.
+Effect. The credential-free `Flect quality (advisory)` GitHub workflow runs
+these same checks in parallel jobs on every pull request and every change to
+`main`, uploading only bounded Playwright failure evidence. This repository's
+history is a projection synced from Akua's private monorepo, so this workflow
+is advisory rather than a required branch-protection check; see
+["How a contribution ships"](CONTRIBUTING.md#how-a-contribution-ships) for
+what actually gates a change. `bun run test:pi-smoke` is separate because it
+makes one real private turn with the developer's existing Pi provider login.
 
 Release maintainers can reproduce the screenshots, demo, and hero with
 `bun run media:release`, then produce the DMG, checksum, MP4, and a

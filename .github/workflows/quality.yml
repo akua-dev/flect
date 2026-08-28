@@ -1,13 +1,17 @@
-name: Flect quality
+name: Flect quality (advisory)
 
-# Advisory only. This workflow runs on the public GitHub-hosted repository
-# and gives outside contributors fast, real signal on their pull requests --
-# it is NOT the authoritative gate. The authoritative gate is the monorepo's
-# Bazel-driven CI, which runs after a maintainer imports a contribution (see
-# CONTRIBUTING.md and cnap#866 "Workflow placement" / "CI security
-# addendum"). `permissions: contents: read`, no secrets, no self-hosted
-# runners -- this workflow can never reach anything beyond a public
-# checkout and the public bun/npm/Bazel registries.
+# Advisory only -- this workflow's result can never gate a merge on this repo.
+# It runs on the public GitHub-hosted repository and gives outside
+# contributors fast, real signal on their pull requests, but it is NOT the
+# authoritative gate: this repo's `main` accepts pushes only from the sync
+# identity that fast-forwards it from the monorepo (branch protection has no
+# required status check here by design), so nobody can act on this workflow's
+# result by merging here even if they wanted to. The authoritative gate is
+# the monorepo's Bazel-driven CI, which runs after a maintainer imports a
+# contribution (see CONTRIBUTING.md and cnap#866 "Workflow placement" / "CI
+# security addendum"). `permissions: contents: read`, no secrets, no
+# self-hosted runners -- this workflow can never reach anything beyond a
+# public checkout and the public bun/npm/Bazel registries.
 
 on:
   pull_request:
@@ -218,7 +222,7 @@ jobs:
           --config '{"bundle":{"macOS":{"signingIdentity":"-"}}}'
 
   gate:
-    name: Flect quality gate
+    name: Advisory quality gate
     runs-on: ubuntu-latest
     timeout-minutes: 5
     needs:
