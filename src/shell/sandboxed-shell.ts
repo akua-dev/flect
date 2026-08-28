@@ -460,28 +460,25 @@ export const makeLiveSandboxedShellLayer = (options: {
 
 type LiveRoleWorkspaceOptions = Omit<Parameters<typeof makeLiveSandboxedShellLayer>[0], 'role'>;
 
-const makeLiveWorkspace = (
+const makeLiveWorkspace = Effect.fn('SandboxedShell.makeLiveWorkspace')(function* (
 	role: FlectAgentRole,
 	workspace: SandboxedShellWorkspace,
 	options: LiveRoleWorkspaceOptions,
 	fs: IFileSystem
-) =>
-	Effect.gen(function* () {
-		const commandLayer = makeShellBunCommandLiveLayer({
-			fs,
-			...(options.packageFetch === undefined ? {} : { packageFetch: options.packageFetch }),
-			...(options.registryBaseUrl === undefined
-				? {}
-				: { registryBaseUrl: options.registryBaseUrl }),
-			...(options.moduleLayer === undefined ? {} : { moduleLayer: options.moduleLayer })
-		});
-		return yield* makeSandboxedShellWorkspace({
-			role,
-			workspace,
-			files: {},
-			fs
-		}).pipe(Effect.provide(commandLayer));
+) {
+	const commandLayer = makeShellBunCommandLiveLayer({
+		fs,
+		...(options.packageFetch === undefined ? {} : { packageFetch: options.packageFetch }),
+		...(options.registryBaseUrl === undefined ? {} : { registryBaseUrl: options.registryBaseUrl }),
+		...(options.moduleLayer === undefined ? {} : { moduleLayer: options.moduleLayer })
 	});
+	return yield* makeSandboxedShellWorkspace({
+		role,
+		workspace,
+		files: {},
+		fs
+	}).pipe(Effect.provide(commandLayer));
+});
 
 export const makeLiveRoleSandboxedShellLayer = (options: {
 	readonly workspaceId?: string;
