@@ -843,6 +843,17 @@ CDNs, web fonts, analytics, storage APIs, or workers. Use system font stacks,
 inline SVG, CSS gradients, and \`#\`-anchor links only. Design it like a real
 product: a deliberate palette, a typographic scale, generous spacing, distinct
 sections, and a responsive layout.
+If the request needs real interactivity backed by structured state (a
+multi-step form, filters, a small dashboard) rather than a mostly-static
+page, you may author a package.json-based project (React, Vue, or Svelte)
+instead of a single static page; keep dependencies to what the build already
+supports. Prefer a deliberate state pattern over ad hoc component state: for
+React, prefer Effect's Atom reactivity (\`effect/unstable/reactivity\`,
+\`Atom\`/\`AtomRegistry\`) over scattering \`useState\`/Context; for Svelte,
+prefer Svelte's own stores; for a plain HTML page, keep state in a few small
+typed modules rather than global variables. This is a quality recommendation,
+not a new constraint - it never changes what network access or capabilities
+the authored app is allowed.
 Do not spend commands exploring the sandbox; go straight to writing files.
 Write every file in small appends. Start each file with one short
 \`mkdir -p /workspace/project && cat > /workspace/project/<file> <<'EOF' ... EOF\`
