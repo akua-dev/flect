@@ -31,7 +31,18 @@ const SidecarLive = RpcServer.layer(FlectRpcs).pipe(
 	Layer.provide(BunCompiledStdioLive)
 );
 
-const runSidecar = Effect.fn('Sidecar.run')(function* (argv: ReadonlyArray<string>) {
+// `E` is genuinely `unknown` here, not a shortcut: the 'mcp' branch's
+// `serveFlectMcp()` widens through `FlectMcpOptions.gatewayLayer`, which
+// `mcp-adapter.ts` types as `Layer.Layer<FlectCommandGateway, unknown, never>`
+// (an override escape hatch for tests). `runSidecar` always calls
+// `serveFlectMcp()` with the default gateway, so the reachable failures are
+// really `ControlBrokerError | PiOperationFailed` (from the 'rpc' branch) plus
+// whatever the native gateway layer can fail with, but the static type of
+// `serveFlectMcp` can't be narrowed below `unknown` from this call site. See
+// the Wave 4 report's "surprising error unions" section.
+const runSidecar = Effect.fn('Sidecar.run')(function* (
+	argv: ReadonlyArray<string>
+): Effect.fn.Return<undefined, unknown> {
 	const selected = yield* selectSidecarMode(argv);
 	switch (selected.mode) {
 		case 'rpc':

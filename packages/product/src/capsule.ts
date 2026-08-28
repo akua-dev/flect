@@ -137,13 +137,15 @@ const sha256 = (contents: Uint8Array) =>
 		catch: () => invalid('SHA-256 is unavailable.')
 	});
 
-export const hashCapsuleArchive = Effect.fn('Capsule.hashArchive')((archive: Uint8Array) =>
-	sha256(archive)
+export const hashCapsuleArchive = Effect.fn('Capsule.hashArchive')(
+	(archive: Uint8Array): Effect.Effect<string, InvalidCapsule> => sha256(archive)
 );
 
 const decodeManifestSchema = Schema.decodeUnknownEffect(CapsuleManifest, strict);
 
-const decodeManifest = Effect.fn('Capsule.decodeManifest')(function* (input: unknown) {
+const decodeManifest = Effect.fn('Capsule.decodeManifest')(function* (
+	input: unknown
+): Effect.fn.Return<CapsuleManifest, Schema.SchemaError | InvalidCapsule> {
 	const manifest = yield* decodeManifestSchema(input);
 	const extensions = manifest.extensions ?? [];
 	if (new Set(extensions.map((extension) => extension.id)).size !== extensions.length)
@@ -177,7 +179,9 @@ const verifyExtensionPayloads = (
 		: Effect.fail(invalid('A portable extension payload is missing or invalid.'));
 };
 
-export const encodeCapsule = Effect.fn('Capsule.encode')(function* (source: CapsuleSource) {
+export const encodeCapsule = Effect.fn('Capsule.encode')(function* (
+	source: CapsuleSource
+): Effect.fn.Return<Uint8Array, InvalidCapsule> {
 	const paths = new Set<string>();
 	let total = 0;
 	const sorted = [...source.files].toSorted((a, b) =>

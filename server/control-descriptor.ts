@@ -21,7 +21,7 @@ const descriptorError = () =>
 
 export const defaultControlStateDirectory = Effect.fn(
 	'ControlDescriptor.defaultControlStateDirectory'
-)(function* () {
+)(function* (): Effect.fn.Return<string, never, Path.Path> {
 	const path = yield* Path.Path;
 	const explicit = flectServerConfig.controlStateDir;
 	if (explicit !== undefined && explicit.length > 0) {
@@ -45,7 +45,7 @@ const resolveStateDirectory = (stateDirectory: string | undefined) =>
 
 export const controlDescriptorPath = Effect.fn('ControlDescriptor.path')(function* (
 	stateDirectory?: string
-) {
+): Effect.fn.Return<string, never, Path.Path> {
 	const path = yield* Path.Path;
 	return path.join(yield* resolveStateDirectory(stateDirectory), 'control.json');
 });
@@ -59,7 +59,7 @@ export const makeControlToken = () => {
 export const writeControlDescriptor = Effect.fn('ControlDescriptor.write')(function* (
 	descriptor: ControlDescriptor,
 	stateDirectory?: string
-) {
+): Effect.fn.Return<void, ControlDescriptorError, FileSystem.FileSystem | Path.Path> {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;
 	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
@@ -81,7 +81,7 @@ export const writeControlDescriptor = Effect.fn('ControlDescriptor.write')(funct
 
 export const removeControlDescriptor = Effect.fn('ControlDescriptor.remove')(function* (
 	stateDirectory?: string
-) {
+): Effect.fn.Return<void, never, FileSystem.FileSystem | Path.Path> {
 	const fs = yield* FileSystem.FileSystem;
 	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
 	const target = yield* controlDescriptorPath(resolvedStateDirectory);
@@ -103,7 +103,7 @@ const processExists = (pid: number) => {
 export const readControlDescriptor = Effect.fn('ControlDescriptor.read')(function* (
 	stateDirectory?: string,
 	verifyProcess = true
-) {
+): Effect.fn.Return<ControlDescriptor, ControlDescriptorError, FileSystem.FileSystem | Path.Path> {
 	const fs = yield* FileSystem.FileSystem;
 	const resolvedStateDirectory = yield* resolveStateDirectory(stateDirectory);
 	const target = yield* controlDescriptorPath(resolvedStateDirectory);
