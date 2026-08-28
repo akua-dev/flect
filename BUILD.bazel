@@ -111,11 +111,16 @@ bun_run(
 )
 
 # ---------------------------------------------------------------------------
-# (b) oxfmt format check
+# (b) oxfmt format check. --config/--ignore-path are passed explicitly
+# rather than relying on oxfmt's own auto-discovery: auto-discovery walks
+# the real cwd's directory ancestry looking for .oxfmtrc.json, which
+# inside a Bazel sandbox is not this source tree -- confirmed on a real
+# run ("No config found, using defaults") even with both files present
+# as declared action inputs.
 # ---------------------------------------------------------------------------
 bun_run(
     name = "lint_oxfmt",
-    args = "run oxfmt --check --ignore-path .oxfmtignore .",
+    args = "run oxfmt --check --config .oxfmtrc.json --ignore-path .oxfmtignore .",
     srcs = WHOLE_TREE,
 )
 

@@ -146,7 +146,7 @@ def bun_check(name, script, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
     _bun_action(
         name = run_name,
         bun = bun,
-        invocation = "run " + script,
+        invocation = "run --no-install " + script,
         srcs = srcs + extra_srcs,
     )
     build_test(
@@ -157,12 +157,19 @@ def bun_check(name, script, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
 def bun_run(name, args, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
     """Like bun_check, but runs an arbitrary `bun <args...>` invocation
     (e.g. `run vitest run src`) instead of a bare package.json script name.
+
+    `args` must start with "run " -- --no-install is inserted right after
+    it (see bun_check's docstring in this module and the module-level
+    comment on --no-install for why this is permanent, not a one-off
+    debugging flag).
     """
+    if not args.startswith("run "):
+        fail("bun_run: args must start with \"run \", got: " + args)
     run_name = name + "_run"
     _bun_action(
         name = run_name,
         bun = bun,
-        invocation = args,
+        invocation = "run --no-install " + args[len("run "):],
         srcs = srcs + extra_srcs,
     )
     build_test(
