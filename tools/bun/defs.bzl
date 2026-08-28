@@ -77,6 +77,19 @@ BUN="$1"
 OUT="$2"
 export HOME="$(mktemp -d)"
 export CI=1
+# 13 check targets each running their own `bun install` in parallel (see
+# the module docstring above for why they don't share one node_modules
+# artifact) means 13 concurrent full downloads+extracts of the same ~2000
+# packages if each install's cache is private to its own throwaway $HOME --
+# confirmed on a real runner: ubuntu-latest's disk filled and every action
+# past the first few failed with ENOSPC. bun's download+extract cache is
+# keyed by package name+version+integrity, so it is safe (and a lot
+# cheaper) to share across these concurrent installs even though each
+# action's $HOME is otherwise private; point it at a fixed, non-sandboxed
+# path so every action's install populates and reuses the same cache
+# instead of redoing the same network+extraction work from scratch.
+export BUN_INSTALL_CACHE_DIR="/tmp/.flect-bazel-bun-cache"
+mkdir -p "$BUN_INSTALL_CACHE_DIR"
 # package.json/bun.lock arrive as symlinks into the real source tree; bun's
 # frozen-lockfile check spuriously reports "lockfile had changes" against a
 # symlinked package.json/bun.lock, so materialize real copies first.

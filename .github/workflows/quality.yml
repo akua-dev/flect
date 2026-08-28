@@ -89,8 +89,13 @@ jobs:
           repository-cache: true
           cache-save: ${{ github.event_name != 'pull_request' }}
 
+      # --jobs bounds how many check targets install+run concurrently. Each
+      # target does its own `bun install` (see tools/bun/defs.bzl for why),
+      # so unbounded parallelism on a cold cache tried to hold ~13 node_modules
+      # trees on disk at once and exhausted ubuntu-latest's disk -- measured
+      # directly on this test bed, see the PR body's timing table.
       - name: Run the Bazel-cached quality gate
-        run: bazel test //... --keep_going
+        run: bazel test //... --keep_going --jobs=4
 
   e2e:
     name: Browser end-to-end tests
