@@ -1,20 +1,61 @@
 import { afterEach, describe, expect, it, vi } from '@effect/vitest';
-import { Client, InMemoryTransport } from '@modelcontextprotocol/client';
-import { Effect, Layer, Stream } from 'effect';
+import { Client, type JSONRPCMessage, type Transport } from '@modelcontextprotocol/client';
+import { Effect, Fiber, Layer, Queue, Stdio, Stream } from 'effect';
+import { forEach as sinkForEach } from 'effect/Sink';
 import { ControlUnauthorized, FlectCommandReceipt } from '../shared/control';
 import { ControlBrokerStatus, ControlLogsResponse } from '../shared/control-channel';
 import { FlectCommandGateway, type FlectCommandGatewayShape } from '../src/axi/gateway';
-import { createFlectMcpServer } from './mcp-adapter';
+import { makeFlectMcpServerLayer } from './mcp-adapter';
+
+/**
+ * Bridges @modelcontextprotocol/client's Transport interface (used only as a
+ * devDependency, for this test) to the newline-delimited JSON-RPC framing
+ * effect/unstable/ai's McpServer.layerStdio speaks over its `Stdio` service -
+ * there is no Effect-native MCP client counterpart, and no Effect Stdio
+ * implementation feeds bytes to/from an in-process test double either, so
+ * this is the minimal glue between the two.
+ */
+class StdioBridgeTransport implements Transport {
+	onclose?: () => void;
+	onerror?: (error: Error) => void;
+	onmessage?: (message: JSONRPCMessage) => void;
+	private buffer = '';
+
+	constructor(private readonly write: (bytes: Uint8Array) => void) {}
+
+	async start() {}
+
+	async send(message: JSONRPCMessage) {
+		this.write(new TextEncoder().encode(`${JSON.stringify(message)}\n`));
+	}
+
+	async close() {
+		this.onclose?.();
+	}
+
+	feed(chunk: string | Uint8Array) {
+		this.buffer += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk);
+		let newlineIndex = this.buffer.indexOf('\n');
+		while (newlineIndex >= 0) {
+			const line = this.buffer.slice(0, newlineIndex);
+			this.buffer = this.buffer.slice(newlineIndex + 1);
+			if (line.trim().length > 0) {
+				this.onmessage?.(JSON.parse(line));
+			}
+			newlineIndex = this.buffer.indexOf('\n');
+		}
+	}
+}
 
 const active: Array<{
 	readonly client: Client;
-	readonly server: ReturnType<typeof createFlectMcpServer>;
+	readonly fiber: Fiber.Fiber<never, unknown>;
 }> = [];
 
 afterEach(async () => {
 	for (const connection of active.splice(0)) {
 		await connection.client.close();
-		await connection.server.close();
+		await Effect.runPromise(Fiber.interrupt(connection.fiber));
 	}
 });
 
@@ -56,15 +97,28 @@ const makeConnection = async () => {
 		events: () => Stream.empty,
 		command
 	});
-	const server = createFlectMcpServer({ gatewayLayer });
+
+	const toServer = Effect.runSync(Queue.make<Uint8Array>());
+	const transport = new StdioBridgeTransport((bytes) => {
+		Queue.offerUnsafe(toServer, bytes);
+	});
+	const serverLayer = makeFlectMcpServerLayer({ gatewayLayer }).pipe(
+		Layer.provide(
+			Stdio.layerTest({
+				stdin: Stream.fromQueue(toServer),
+				stdout: () =>
+					sinkForEach((chunk: string | Uint8Array) => Effect.sync(() => transport.feed(chunk)))
+			})
+		)
+	);
+	const fiber = Effect.runFork(Layer.launch(serverLayer));
+
 	const client = new Client(
 		{ name: 'flect-stdio-test', version: '1.0.0' },
 		{ versionNegotiation: { mode: 'auto' } }
 	);
-	const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-	await server.connect(serverTransport);
-	await client.connect(clientTransport);
-	active.push({ client, server });
+	await client.connect(transport);
+	active.push({ client, fiber });
 	return { client, command };
 };
 
