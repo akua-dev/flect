@@ -1,7 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/server';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { Effect, type Layer, Option, Schema, Stream } from 'effect';
-import * as z from 'zod/v4';
 import { makeNativeFlectGatewayLayer } from '../cli/flect';
 import { FlectCommand, type FlectCommand as FlectCommandType } from '../shared/control';
 import { FlectCommandGateway } from '../src/axi/gateway';
@@ -11,6 +10,32 @@ const commandInput = Schema.toStandardJSONSchemaV1(
 		Schema.Struct({
 			command: FlectCommand,
 			expectedSequence: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)))
+		})
+	)
+);
+
+const waitInput = Schema.toStandardJSONSchemaV1(
+	Schema.toStandardSchemaV1(
+		Schema.Struct({
+			afterSequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+			timeoutMs: Schema.Int.check(
+				Schema.isGreaterThanOrEqualTo(100),
+				Schema.isLessThanOrEqualTo(120_000)
+			).pipe(Schema.withDecodingDefaultKey(Effect.succeed(30_000)))
+		})
+	)
+);
+
+const logsInput = Schema.toStandardJSONSchemaV1(
+	Schema.toStandardSchemaV1(
+		Schema.Struct({
+			afterSequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).pipe(
+				Schema.withDecodingDefaultKey(Effect.succeed(0))
+			),
+			limit: Schema.Int.check(
+				Schema.isGreaterThanOrEqualTo(1),
+				Schema.isLessThanOrEqualTo(500)
+			).pipe(Schema.withDecodingDefaultKey(Effect.succeed(100)))
 		})
 	)
 );
@@ -112,13 +137,16 @@ export function createFlectMcpServer(options: FlectMcpOptions = {}): McpServer {
 		{
 			title: 'Wait for Flect',
 			description: 'Wait until the live workspace sequence advances beyond a known sequence.',
-			inputSchema: z.object({
-				afterSequence: z.number().int().min(0),
-				timeoutMs: z.number().int().min(100).max(120_000).default(30_000)
-			}),
+			inputSchema: waitInput,
 			annotations: { readOnlyHint: true, destructiveHint: false }
 		},
-		async ({ afterSequence, timeoutMs }) => {
+		async ({
+			afterSequence,
+			timeoutMs
+		}: {
+			readonly afterSequence: number;
+			readonly timeoutMs: number;
+		}) => {
 			try {
 				const waited = await run(
 					Effect.gen(function* () {
@@ -147,13 +175,16 @@ export function createFlectMcpServer(options: FlectMcpOptions = {}): McpServer {
 		{
 			title: 'Read Flect diagnostics',
 			description: 'Read bounded, redacted operation evidence from the live Flect workspace.',
-			inputSchema: z.object({
-				afterSequence: z.number().int().min(0).default(0),
-				limit: z.number().int().min(1).max(500).default(100)
-			}),
+			inputSchema: logsInput,
 			annotations: { readOnlyHint: true, destructiveHint: false }
 		},
-		async ({ afterSequence, limit }) => {
+		async ({
+			afterSequence,
+			limit
+		}: {
+			readonly afterSequence: number;
+			readonly limit: number;
+		}) => {
 			try {
 				const logs = await run(Effect.flatMap(FlectCommandGateway, (gateway) => gateway.logs));
 				return result({
