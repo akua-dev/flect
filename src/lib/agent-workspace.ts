@@ -386,54 +386,55 @@ export const AgentWorkspaceLive = Layer.effect(
 				return next;
 			});
 
-		const proposeShaperInterface = Effect.fn('Flect.AgentWorkspace.proposeShaperInterface')(
-			function* (source: AgentCommandSource, document: InterfaceDocument) {
-				if (source.role !== 'shaper') {
-					return yield* Effect.fail(
-						CommandRejected.make({
-							message: 'Only Shaper can propose an interface.'
-						})
-					);
-				}
-				const current = yield* Ref.get(shaperProposals);
-				const latch = current.get(source.parentOperationId);
-				if (latch === undefined) {
-					return yield* Effect.fail(
-						CommandRejected.make({
-							message: 'No Shaper proposal turn is active.'
-						})
-					);
-				}
-				if (latch.app !== undefined) {
-					return yield* Effect.fail(
-						CommandRejected.make({
-							message: 'This Shaper turn already proposed an authored app.'
-						})
-					);
-				}
-				if (latch.document !== undefined) {
-					if (Equal.equals(latch.document, document)) {
-						return { status: 'duplicate', document } as const;
-					}
-					return yield* Effect.fail(
-						CommandRejected.make({
-							message: 'This Shaper turn already proposed another interface.'
-						})
-					);
-				}
-				yield* Ref.update(shaperProposals, (proposals) => {
-					const next = new Map(proposals);
-					next.set(source.parentOperationId, {
-						requestId: source.requestId,
-						document
-					});
-					return next;
-				});
-				return { status: 'proposed', document } as const;
+		const proposeShaperInterface = Effect.fn('AgentWorkspace.proposeShaperInterface')(function* (
+			source: AgentCommandSource,
+			document: InterfaceDocument
+		) {
+			if (source.role !== 'shaper') {
+				return yield* Effect.fail(
+					CommandRejected.make({
+						message: 'Only Shaper can propose an interface.'
+					})
+				);
 			}
-		);
+			const current = yield* Ref.get(shaperProposals);
+			const latch = current.get(source.parentOperationId);
+			if (latch === undefined) {
+				return yield* Effect.fail(
+					CommandRejected.make({
+						message: 'No Shaper proposal turn is active.'
+					})
+				);
+			}
+			if (latch.app !== undefined) {
+				return yield* Effect.fail(
+					CommandRejected.make({
+						message: 'This Shaper turn already proposed an authored app.'
+					})
+				);
+			}
+			if (latch.document !== undefined) {
+				if (Equal.equals(latch.document, document)) {
+					return { status: 'duplicate', document } as const;
+				}
+				return yield* Effect.fail(
+					CommandRejected.make({
+						message: 'This Shaper turn already proposed another interface.'
+					})
+				);
+			}
+			yield* Ref.update(shaperProposals, (proposals) => {
+				const next = new Map(proposals);
+				next.set(source.parentOperationId, {
+					requestId: source.requestId,
+					document
+				});
+				return next;
+			});
+			return { status: 'proposed', document } as const;
+		});
 
-		const proposeShaperApp = Effect.fn('Flect.AgentWorkspace.proposeShaperApp')(function* (
+		const proposeShaperApp = Effect.fn('AgentWorkspace.proposeShaperApp')(function* (
 			source: AgentCommandSource,
 			archive: Uint8Array,
 			name: string
@@ -530,7 +531,7 @@ export const AgentWorkspaceLive = Layer.effect(
 				)
 				.pipe(Effect.asVoid);
 
-		const interruptFibers = Effect.fn('Flect.AgentWorkspace.interruptFibers')(function* () {
+		const interruptFibers = Effect.fn('AgentWorkspace.interruptFibers')(function* () {
 			const active = yield* Ref.getAndSet(fibers, {});
 			yield* Effect.forEach(
 				[active.app, active.previewApp, active.shaper].filter(
@@ -541,21 +542,19 @@ export const AgentWorkspaceLive = Layer.effect(
 			);
 		});
 
-		const releaseSession = Effect.fn('Flect.AgentWorkspace.releaseSession')(function* () {
+		const releaseSession = Effect.fn('AgentWorkspace.releaseSession')(function* () {
 			const current = yield* Ref.getAndSet(session, undefined);
 			if (current !== undefined) {
 				yield* client.closeSession(current.id).pipe(Effect.catch(() => Effect.void));
 			}
 		});
 
-		const releasePreviewSession = Effect.fn('Flect.AgentWorkspace.releasePreviewSession')(
-			function* () {
-				const current = yield* Ref.getAndSet(previewSession, undefined);
-				if (current !== undefined) {
-					yield* client.closeSession(current.id).pipe(Effect.catch(() => Effect.void));
-				}
+		const releasePreviewSession = Effect.fn('AgentWorkspace.releasePreviewSession')(function* () {
+			const current = yield* Ref.getAndSet(previewSession, undefined);
+			if (current !== undefined) {
+				yield* client.closeSession(current.id).pipe(Effect.catch(() => Effect.void));
 			}
-		);
+		});
 
 		const resetSession = interruptFibers().pipe(
 			Effect.andThen(
@@ -566,7 +565,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			)
 		);
 
-		const ensureSession = Effect.fn('Flect.AgentWorkspace.ensureSession')(() =>
+		const ensureSession = Effect.fn('AgentWorkspace.ensureSession')(() =>
 			sessionPermit.withPermits(1)(
 				Effect.gen(function* () {
 					const snapshot = yield* SubscriptionRef.get(state);
@@ -595,7 +594,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			)
 		);
 
-		const ensurePreviewSession = Effect.fn('Flect.AgentWorkspace.ensurePreviewSession')(() =>
+		const ensurePreviewSession = Effect.fn('AgentWorkspace.ensurePreviewSession')(() =>
 			sessionPermit.withPermits(1)(
 				Effect.gen(function* () {
 					const snapshot = yield* SubscriptionRef.get(state);
@@ -650,7 +649,7 @@ export const AgentWorkspaceLive = Layer.effect(
 				})
 			);
 
-		const finishCancelledActivities = Effect.fn('Flect.AgentWorkspace.finishCancelledActivities')(
+		const finishCancelledActivities = Effect.fn('AgentWorkspace.finishCancelledActivities')(
 			function* (role: InteractiveAgentRole) {
 				const completedAt = yield* Clock.currentTimeMillis;
 				yield* updateRole(role, (current) =>
@@ -681,7 +680,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			}
 		);
 
-		const upsertToolActivity = (
+		const upsertToolActivity = Effect.fn('AgentWorkspace.upsertToolActivity')(function* (
 			operation: OperationContext,
 			event: Extract<
 				FlectEvent | ShapeEvent,
@@ -694,122 +693,119 @@ export const AgentWorkspaceLive = Layer.effect(
 			>,
 			slot: ConversationSlot = event.role,
 			revisionId?: RevisionId
-		) =>
-			Effect.gen(function* () {
-				const role = runtimeRoleFor(slot);
-				const current = yield* SubscriptionRef.get(state);
-				const conversation = conversationFor(current, slot);
-				const existing = conversation.activities.find(
-					(activity) => activity.callId === event.callId
-				);
-				let activity: ToolActivity;
-				switch (event.type) {
-					case 'tool_execution_started':
-						activity = ToolActivity.make({
-							version: 1,
-							id: existing?.id ?? `activity-${crypto.randomUUID()}`,
-							callId: event.callId,
-							operationId: operation.operationId,
-							turnId: operation.operationId,
-							role,
-							toolName: event.toolName,
-							phase: 'running',
-							startedAt: event.startedAt,
-							updatedAt: event.startedAt,
-							...(event.inputSummary === undefined ? {} : { resultSummary: event.inputSummary })
-						});
-						break;
-					case 'tool_execution_updated':
-						activity = ToolActivity.make({
-							...(existing ??
-								ToolActivity.make({
-									version: 1,
-									id: `activity-${crypto.randomUUID()}`,
-									callId: event.callId,
-									operationId: operation.operationId,
-									turnId: operation.operationId,
-									role,
-									toolName: event.toolName,
-									phase: 'running',
-									startedAt: event.updatedAt,
-									updatedAt: event.updatedAt
-								})),
-							updatedAt: event.updatedAt,
-							...(event.output === undefined ? {} : { output: event.output })
-						});
-						break;
-					case 'tool_execution_completed': {
-						const failedShellExit =
-							existing?.toolName === 'bash' &&
-							existing.exitCode !== undefined &&
-							existing.exitCode !== 0;
-						activity = ToolActivity.make({
-							...(existing ??
-								ToolActivity.make({
-									version: 1,
-									id: `activity-${crypto.randomUUID()}`,
-									callId: event.callId,
-									operationId: operation.operationId,
-									turnId: operation.operationId,
-									role,
-									toolName: event.toolName,
-									phase: 'running',
-									startedAt: Math.max(0, event.completedAt - event.durationMs),
-									updatedAt: event.completedAt
-								})),
-							phase: event.status === 'succeeded' && !failedShellExit ? 'succeeded' : 'failed',
-							updatedAt: event.completedAt,
-							completedAt: event.completedAt,
-							durationMs: event.durationMs,
-							...(failedShellExit
+		) {
+			const role = runtimeRoleFor(slot);
+			const current = yield* SubscriptionRef.get(state);
+			const conversation = conversationFor(current, slot);
+			const existing = conversation.activities.find((activity) => activity.callId === event.callId);
+			let activity: ToolActivity;
+			switch (event.type) {
+				case 'tool_execution_started':
+					activity = ToolActivity.make({
+						version: 1,
+						id: existing?.id ?? `activity-${crypto.randomUUID()}`,
+						callId: event.callId,
+						operationId: operation.operationId,
+						turnId: operation.operationId,
+						role,
+						toolName: event.toolName,
+						phase: 'running',
+						startedAt: event.startedAt,
+						updatedAt: event.startedAt,
+						...(event.inputSummary === undefined ? {} : { resultSummary: event.inputSummary })
+					});
+					break;
+				case 'tool_execution_updated':
+					activity = ToolActivity.make({
+						...(existing ??
+							ToolActivity.make({
+								version: 1,
+								id: `activity-${crypto.randomUUID()}`,
+								callId: event.callId,
+								operationId: operation.operationId,
+								turnId: operation.operationId,
+								role,
+								toolName: event.toolName,
+								phase: 'running',
+								startedAt: event.updatedAt,
+								updatedAt: event.updatedAt
+							})),
+						updatedAt: event.updatedAt,
+						...(event.output === undefined ? {} : { output: event.output })
+					});
+					break;
+				case 'tool_execution_completed': {
+					const failedShellExit =
+						existing?.toolName === 'bash' &&
+						existing.exitCode !== undefined &&
+						existing.exitCode !== 0;
+					activity = ToolActivity.make({
+						...(existing ??
+							ToolActivity.make({
+								version: 1,
+								id: `activity-${crypto.randomUUID()}`,
+								callId: event.callId,
+								operationId: operation.operationId,
+								turnId: operation.operationId,
+								role,
+								toolName: event.toolName,
+								phase: 'running',
+								startedAt: Math.max(0, event.completedAt - event.durationMs),
+								updatedAt: event.completedAt
+							})),
+						phase: event.status === 'succeeded' && !failedShellExit ? 'succeeded' : 'failed',
+						updatedAt: event.completedAt,
+						completedAt: event.completedAt,
+						durationMs: event.durationMs,
+						...(failedShellExit
+							? {}
+							: event.resultSummary === undefined
 								? {}
-								: event.resultSummary === undefined
-									? {}
-									: { resultSummary: event.resultSummary }),
-							...(event.output === undefined ? {} : { output: event.output }),
-							...(event.exitCode === undefined ? {} : { exitCode: event.exitCode }),
-							...(event.previewUrl === undefined ? {} : { previewUrl: event.previewUrl })
-						});
-						break;
-					}
+								: { resultSummary: event.resultSummary }),
+						...(event.output === undefined ? {} : { output: event.output }),
+						...(event.exitCode === undefined ? {} : { exitCode: event.exitCode }),
+						...(event.previewUrl === undefined ? {} : { previewUrl: event.previewUrl })
+					});
+					break;
 				}
+			}
 
-				yield* updateConversation(slot, (roleState) =>
-					RoleConversationSnapshot.make({
-						...roleState,
-						activities:
-							existing === undefined
-								? boundedActivities(roleState.activities, activity)
-								: roleState.activities.map((candidate) =>
-										candidate.callId === event.callId ? activity : candidate
-									)
-					})
-				);
-				yield* appendJournal(operation, {
-					category: 'tool',
-					phase:
-						event.type === 'tool_execution_started'
-							? 'started'
-							: event.type === 'tool_execution_updated'
-								? 'updated'
-								: activity.phase === 'failed'
-									? 'failed'
-									: 'succeeded',
-					summary:
-						event.type === 'tool_execution_started'
-							? `${event.toolName} started`
-							: event.type === 'tool_execution_updated'
-								? `${event.toolName} updated`
-								: `${event.toolName} ${activity.phase}`,
-					role,
-					...(revisionId === undefined ? {} : { revisionId }),
-					toolCallId: event.callId,
-					tool: activity
-				});
+			yield* updateConversation(slot, (roleState) =>
+				RoleConversationSnapshot.make({
+					...roleState,
+					activities:
+						existing === undefined
+							? boundedActivities(roleState.activities, activity)
+							: roleState.activities.map((candidate) =>
+									candidate.callId === event.callId ? activity : candidate
+								)
+				})
+			);
+			yield* appendJournal(operation, {
+				category: 'tool',
+				phase:
+					event.type === 'tool_execution_started'
+						? 'started'
+						: event.type === 'tool_execution_updated'
+							? 'updated'
+							: activity.phase === 'failed'
+								? 'failed'
+								: 'succeeded',
+				summary:
+					event.type === 'tool_execution_started'
+						? `${event.toolName} started`
+						: event.type === 'tool_execution_updated'
+							? `${event.toolName} updated`
+							: `${event.toolName} ${activity.phase}`,
+				role,
+				...(revisionId === undefined ? {} : { revisionId }),
+				toolCallId: event.callId,
+				tool: activity
 			});
+		});
 
 		const recordExternalExtensionFailure = Effect.fn(
-			'Flect.AgentWorkspace.recordExternalExtensionFailure'
+			'AgentWorkspace.recordExternalExtensionFailure'
 		)(function* (
 			operation: OperationContext,
 			event: Extract<FlectEvent | ShapeEvent, { readonly type: 'external_extension_failed' }>,
@@ -851,7 +847,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			});
 		});
 
-		const executeShellRequest = Effect.fn('Flect.AgentWorkspace.executeShellRequest')(function* (
+		const executeShellRequest = Effect.fn('AgentWorkspace.executeShellRequest')(function* (
 			operation: OperationContext,
 			sessionId: string,
 			slot: ConversationSlot,
@@ -952,47 +948,45 @@ export const AgentWorkspaceLive = Layer.effect(
 			yield* client.completeShellRequest(sessionId, role, event.requestId, result);
 		});
 
-		const addValidationActivity = Effect.fn('Flect.AgentWorkspace.addValidationActivity')(
-			function* (
-				operation: OperationContext,
-				event: Extract<ShapeEvent, { readonly type: 'proposal_validation_failed' }>
-			) {
-				const now = yield* Clock.currentTimeMillis;
-				const activity = ToolActivity.make({
-					version: 1,
-					id: `activity-${crypto.randomUUID()}`,
-					callId: `proposal-validation-${event.attempt}-${crypto.randomUUID()}`,
-					operationId: operation.operationId,
-					turnId: operation.operationId,
-					role: 'shaper',
-					toolName: 'flect',
-					phase: 'failed',
-					startedAt: now,
-					updatedAt: now,
-					completedAt: now,
-					durationMs: 0,
-					resultSummary: `Proposal validation failed on attempt ${event.attempt}`,
-					validationIssues: event.issues
-				});
-				yield* updateRole('shaper', (current) =>
-					RoleConversationSnapshot.make({
-						...current,
-						activities: boundedActivities(current.activities, activity)
-					})
-				);
-				yield* appendJournal(operation, {
-					category: 'validation',
-					phase: 'failed',
-					summary: `Proposal validation failed on attempt ${event.attempt}`,
-					role: 'shaper',
-					toolCallId: activity.callId,
-					validationIssues: event.issues,
-					tool: activity
-				});
-			}
-		);
+		const addValidationActivity = Effect.fn('AgentWorkspace.addValidationActivity')(function* (
+			operation: OperationContext,
+			event: Extract<ShapeEvent, { readonly type: 'proposal_validation_failed' }>
+		) {
+			const now = yield* Clock.currentTimeMillis;
+			const activity = ToolActivity.make({
+				version: 1,
+				id: `activity-${crypto.randomUUID()}`,
+				callId: `proposal-validation-${event.attempt}-${crypto.randomUUID()}`,
+				operationId: operation.operationId,
+				turnId: operation.operationId,
+				role: 'shaper',
+				toolName: 'flect',
+				phase: 'failed',
+				startedAt: now,
+				updatedAt: now,
+				completedAt: now,
+				durationMs: 0,
+				resultSummary: `Proposal validation failed on attempt ${event.attempt}`,
+				validationIssues: event.issues
+			});
+			yield* updateRole('shaper', (current) =>
+				RoleConversationSnapshot.make({
+					...current,
+					activities: boundedActivities(current.activities, activity)
+				})
+			);
+			yield* appendJournal(operation, {
+				category: 'validation',
+				phase: 'failed',
+				summary: `Proposal validation failed on attempt ${event.attempt}`,
+				role: 'shaper',
+				toolCallId: activity.callId,
+				validationIssues: event.issues,
+				tool: activity
+			});
+		});
 
-		const refresh = Effect.fn('Flect.AgentWorkspace.refresh')(function* () {
+		const refresh = Effect.fn('AgentWorkspace.refresh')(function* () {
 			yield* resetSession;
 			yield* SubscriptionRef.update(state, (current) =>
 				AgentWorkspaceSnapshot.make({
@@ -1096,7 +1090,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			);
 		});
 
-		const selectModel = Effect.fn('Flect.AgentWorkspace.selectModel')(function* (
+		const selectModel = Effect.fn('AgentWorkspace.selectModel')(function* (
 			selection: ModelSelection | undefined
 		) {
 			yield* resetSession;
@@ -1144,7 +1138,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			});
 		});
 
-		const selectReasoning = Effect.fn('Flect.AgentWorkspace.selectReasoning')(function* (
+		const selectReasoning = Effect.fn('AgentWorkspace.selectReasoning')(function* (
 			reasoningLevel: ReasoningLevel | undefined
 		) {
 			const current = yield* SubscriptionRef.get(state);
@@ -1173,7 +1167,7 @@ export const AgentWorkspaceLive = Layer.effect(
 				providers
 			}));
 
-		const loginProvider = Effect.fn('Flect.AgentWorkspace.loginProvider')(function* (
+		const loginProvider = Effect.fn('AgentWorkspace.loginProvider')(function* (
 			request: AuthLoginRequest
 		) {
 			yield* client.loginProvider(request).pipe(
@@ -1200,7 +1194,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			yield* updateProviders(providers);
 		});
 
-		const logoutProvider = Effect.fn('Flect.AgentWorkspace.logoutProvider')(function* (
+		const logoutProvider = Effect.fn('AgentWorkspace.logoutProvider')(function* (
 			providerId: string
 		) {
 			yield* resetSession;
@@ -1209,7 +1203,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			yield* refresh();
 		});
 
-		const setModelFavorite = Effect.fn('Flect.AgentWorkspace.setModelFavorite')(function* (
+		const setModelFavorite = Effect.fn('AgentWorkspace.setModelFavorite')(function* (
 			selection: ModelSelection,
 			favorite: boolean
 		) {
@@ -1233,49 +1227,50 @@ export const AgentWorkspaceLive = Layer.effect(
 			});
 		});
 
-		const setExternalExtensions = Effect.fn('Flect.AgentWorkspace.setExternalExtensions')(
-			function* (role: InteractiveAgentRole, enabled: boolean) {
-				const current = yield* SubscriptionRef.get(state);
-				if (current.externalExtensions[role] === enabled) {
-					return;
-				}
-				yield* resetSession;
-				yield* SubscriptionRef.update(state, (snapshot) =>
-					AgentWorkspaceSnapshot.make({
-						...snapshot,
-						externalExtensions: ExternalPiExtensionSelection.make({
-							...snapshot.externalExtensions,
-							[role]: enabled
-						}),
-						app: RoleConversationSnapshot.make({
-							...requiredRoleFields(snapshot.app),
-							status:
-								snapshot.app.status === 'setup-required' || snapshot.app.status === 'unavailable'
-									? snapshot.app.status
-									: 'ready'
-						}),
-						previewApp: RoleConversationSnapshot.make({
-							...requiredRoleFields(snapshot.previewApp),
-							status:
-								snapshot.previewApp.status === 'setup-required' ||
-								snapshot.previewApp.status === 'unavailable'
-									? snapshot.previewApp.status
-									: 'ready'
-						}),
-						shaper: RoleConversationSnapshot.make({
-							...requiredRoleFields(snapshot.shaper),
-							status:
-								snapshot.shaper.status === 'setup-required' ||
-								snapshot.shaper.status === 'unavailable'
-									? snapshot.shaper.status
-									: 'ready'
-						})
-					})
-				);
+		const setExternalExtensions = Effect.fn('AgentWorkspace.setExternalExtensions')(function* (
+			role: InteractiveAgentRole,
+			enabled: boolean
+		) {
+			const current = yield* SubscriptionRef.get(state);
+			if (current.externalExtensions[role] === enabled) {
+				return;
 			}
-		);
+			yield* resetSession;
+			yield* SubscriptionRef.update(state, (snapshot) =>
+				AgentWorkspaceSnapshot.make({
+					...snapshot,
+					externalExtensions: ExternalPiExtensionSelection.make({
+						...snapshot.externalExtensions,
+						[role]: enabled
+					}),
+					app: RoleConversationSnapshot.make({
+						...requiredRoleFields(snapshot.app),
+						status:
+							snapshot.app.status === 'setup-required' || snapshot.app.status === 'unavailable'
+								? snapshot.app.status
+								: 'ready'
+					}),
+					previewApp: RoleConversationSnapshot.make({
+						...requiredRoleFields(snapshot.previewApp),
+						status:
+							snapshot.previewApp.status === 'setup-required' ||
+							snapshot.previewApp.status === 'unavailable'
+								? snapshot.previewApp.status
+								: 'ready'
+					}),
+					shaper: RoleConversationSnapshot.make({
+						...requiredRoleFields(snapshot.shaper),
+						status:
+							snapshot.shaper.status === 'setup-required' ||
+							snapshot.shaper.status === 'unavailable'
+								? snapshot.shaper.status
+								: 'ready'
+					})
+				})
+			);
+		});
 
-		const claimRole = Effect.fn('Flect.AgentWorkspace.claimRole')(function* (
+		const claimRole = Effect.fn('AgentWorkspace.claimRole')(function* (
 			slot: ConversationSlot,
 			prompt: string,
 			source: FlectCommandSource,
@@ -1327,7 +1322,7 @@ export const AgentWorkspaceLive = Layer.effect(
 				[role]: fiber
 			}));
 
-		const awaitRoleFiber = Effect.fn('Flect.AgentWorkspace.awaitRoleFiber')(function* <A, E>(
+		const awaitRoleFiber = Effect.fn('AgentWorkspace.awaitRoleFiber')(function* <A, E>(
 			role: ConversationSlot,
 			fiber: Fiber.Fiber<A, E>
 		) {
@@ -1341,7 +1336,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			});
 		});
 
-		const submitAppPrompt = Effect.fn('Flect.AgentWorkspace.submitAppPrompt')(function* (
+		const submitAppPrompt = Effect.fn('AgentWorkspace.submitAppPrompt')(function* (
 			operation: OperationContext,
 			text: string
 		) {
@@ -1443,7 +1438,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			);
 		});
 
-		const submitPreviewPrompt = Effect.fn('Flect.AgentWorkspace.submitPreviewPrompt')(function* (
+		const submitPreviewPrompt = Effect.fn('AgentWorkspace.submitPreviewPrompt')(function* (
 			operation: OperationContext,
 			text: string,
 			document: InterfaceDocument,
@@ -1550,138 +1545,136 @@ export const AgentWorkspaceLive = Layer.effect(
 			);
 		});
 
-		const submitShaperInstruction = Effect.fn('Flect.AgentWorkspace.submitShaperInstruction')(
-			function* (
-				operation: OperationContext,
-				instruction: string,
-				document: InterfaceDocument,
-				visibleInstruction?: string
-			) {
-				const prompt = instruction.trim();
-				if (prompt.length === 0) {
-					return yield* Effect.fail(unavailable());
+		const submitShaperInstruction = Effect.fn('AgentWorkspace.submitShaperInstruction')(function* (
+			operation: OperationContext,
+			instruction: string,
+			document: InterfaceDocument,
+			visibleInstruction?: string
+		) {
+			const prompt = instruction.trim();
+			if (prompt.length === 0) {
+				return yield* Effect.fail(unavailable());
+			}
+			yield* claimRole(
+				'shaper',
+				visibleInstruction?.trim() || prompt,
+				operation.source,
+				false,
+				operation.operationId
+			);
+			yield* appendJournal(operation, {
+				category: 'turn',
+				phase: 'started',
+				summary: 'Shaper turn started',
+				role: 'shaper'
+			});
+			yield* beginShaperProposal(operation.operationId);
+
+			const request = Effect.gen(function* () {
+				const sessionId = yield* ensureSession();
+				const runShapeAttempt = (instruction: string) =>
+					client.shape(sessionId, instruction, document).pipe(
+						Stream.tap((event) => {
+							switch (event.type) {
+								case 'shell_request':
+									return executeShellRequest(operation, sessionId, 'shaper', event);
+								case 'external_extension_failed':
+									return recordExternalExtensionFailure(operation, event);
+								case 'tool_execution_started':
+								case 'tool_execution_updated':
+								case 'tool_execution_completed':
+									return upsertToolActivity(operation, event);
+								case 'proposal_validation_failed':
+									return addValidationActivity(operation, event);
+								case 'shape_completed':
+								case 'shape_busy':
+								case 'shape_error':
+									return Effect.void;
+							}
+						}),
+						Stream.runDrain,
+						Effect.tapError((error) =>
+							error._tag === 'SessionBusy' ? Effect.void : releaseSession()
+						)
+					);
+				const latchedOutcome = () =>
+					Ref.get(shaperProposals).pipe(
+						Effect.map((proposals): ShaperTurnOutcome | undefined => {
+							const latch = proposals.get(operation.operationId);
+							if (latch?.app !== undefined) {
+								return { kind: 'app', ...latch.app };
+							}
+							if (latch?.document !== undefined) {
+								return { kind: 'document', document: latch.document };
+							}
+							return undefined;
+						})
+					);
+				yield* runShapeAttempt(prompt);
+				let latched = yield* latchedOutcome();
+				if (latched === undefined) {
+					yield* runShapeAttempt(
+						'No valid proposal reached Flect. Inspect the prior Bash output. For a schema interface, correct /workspace/interface.json, validate it, then run flect interface propose /workspace/interface.json as your final action. For an authored web app, correct the source under /workspace/project, then run flect app propose /workspace/project as your final action.'
+					);
+					latched = yield* latchedOutcome();
 				}
-				yield* claimRole(
-					'shaper',
-					visibleInstruction?.trim() || prompt,
-					operation.source,
-					false,
-					operation.operationId
-				);
+				const candidate = latched ?? (yield* Effect.fail(unavailable()));
+				if (candidate.kind === 'document') {
+					const now = yield* Clock.currentTimeMillis;
+					yield* updateRole('shaper', (current) =>
+						RoleConversationSnapshot.make({
+							...requiredRoleFields(current),
+							status: 'ready',
+							messages: boundedMessages(current.messages, [
+								message(
+									'assistant',
+									`Change complete: ${candidate.document.name}`,
+									operation.source,
+									now,
+									operation.operationId
+								)
+							])
+						})
+					);
+				} else {
+					// An authored app is accepted by the controller after this turn
+					// returns. The controller confirms success or failure through
+					// concludeShaperTurn, so the conversation never claims completion
+					// before the canvas actually changed.
+					yield* setOperationalStatus('shaper', 'ready');
+				}
 				yield* appendJournal(operation, {
 					category: 'turn',
-					phase: 'started',
-					summary: 'Shaper turn started',
-					role: 'shaper'
+					phase: 'succeeded',
+					summary: 'Shaper turn completed',
+					role: 'shaper',
+					sessionId
 				});
-				yield* beginShaperProposal(operation.operationId);
-
-				const request = Effect.gen(function* () {
-					const sessionId = yield* ensureSession();
-					const runShapeAttempt = (instruction: string) =>
-						client.shape(sessionId, instruction, document).pipe(
-							Stream.tap((event) => {
-								switch (event.type) {
-									case 'shell_request':
-										return executeShellRequest(operation, sessionId, 'shaper', event);
-									case 'external_extension_failed':
-										return recordExternalExtensionFailure(operation, event);
-									case 'tool_execution_started':
-									case 'tool_execution_updated':
-									case 'tool_execution_completed':
-										return upsertToolActivity(operation, event);
-									case 'proposal_validation_failed':
-										return addValidationActivity(operation, event);
-									case 'shape_completed':
-									case 'shape_busy':
-									case 'shape_error':
-										return Effect.void;
-								}
-							}),
-							Stream.runDrain,
-							Effect.tapError((error) =>
-								error._tag === 'SessionBusy' ? Effect.void : releaseSession()
-							)
-						);
-					const latchedOutcome = () =>
-						Ref.get(shaperProposals).pipe(
-							Effect.map((proposals): ShaperTurnOutcome | undefined => {
-								const latch = proposals.get(operation.operationId);
-								if (latch?.app !== undefined) {
-									return { kind: 'app', ...latch.app };
-								}
-								if (latch?.document !== undefined) {
-									return { kind: 'document', document: latch.document };
-								}
-								return undefined;
+				return candidate;
+			}).pipe(
+				Effect.ensuring(clearShaperProposal(operation.operationId)),
+				Effect.tapError((error) =>
+					setOperationalStatus('shaper', 'error', error.message).pipe(
+						Effect.andThen(
+							appendJournal(operation, {
+								category: 'turn',
+								phase: 'failed',
+								summary: 'Shaper turn failed',
+								role: 'shaper'
 							})
-						);
-					yield* runShapeAttempt(prompt);
-					let latched = yield* latchedOutcome();
-					if (latched === undefined) {
-						yield* runShapeAttempt(
-							'No valid proposal reached Flect. Inspect the prior Bash output. For a schema interface, correct /workspace/interface.json, validate it, then run flect interface propose /workspace/interface.json as your final action. For an authored web app, correct the source under /workspace/project, then run flect app propose /workspace/project as your final action.'
-						);
-						latched = yield* latchedOutcome();
-					}
-					const candidate = latched ?? (yield* Effect.fail(unavailable()));
-					if (candidate.kind === 'document') {
-						const now = yield* Clock.currentTimeMillis;
-						yield* updateRole('shaper', (current) =>
-							RoleConversationSnapshot.make({
-								...requiredRoleFields(current),
-								status: 'ready',
-								messages: boundedMessages(current.messages, [
-									message(
-										'assistant',
-										`Change complete: ${candidate.document.name}`,
-										operation.source,
-										now,
-										operation.operationId
-									)
-								])
-							})
-						);
-					} else {
-						// An authored app is accepted by the controller after this turn
-						// returns. The controller confirms success or failure through
-						// concludeShaperTurn, so the conversation never claims completion
-						// before the canvas actually changed.
-						yield* setOperationalStatus('shaper', 'ready');
-					}
-					yield* appendJournal(operation, {
-						category: 'turn',
-						phase: 'succeeded',
-						summary: 'Shaper turn completed',
-						role: 'shaper',
-						sessionId
-					});
-					return candidate;
-				}).pipe(
-					Effect.ensuring(clearShaperProposal(operation.operationId)),
-					Effect.tapError((error) =>
-						setOperationalStatus('shaper', 'error', error.message).pipe(
-							Effect.andThen(
-								appendJournal(operation, {
-									category: 'turn',
-									phase: 'failed',
-									summary: 'Shaper turn failed',
-									role: 'shaper'
-								})
-							)
 						)
 					)
-				);
+				)
+			);
 
-				const fiber = yield* request.pipe(Effect.forkChild({ startImmediately: true }));
-				yield* setRoleFiber('shaper', fiber);
-				return yield* awaitRoleFiber('shaper', fiber).pipe(
-					Effect.ensuring(setRoleFiber('shaper', undefined))
-				);
-			}
-		);
+			const fiber = yield* request.pipe(Effect.forkChild({ startImmediately: true }));
+			yield* setRoleFiber('shaper', fiber);
+			return yield* awaitRoleFiber('shaper', fiber).pipe(
+				Effect.ensuring(setRoleFiber('shaper', undefined))
+			);
+		});
 
-		const concludeShaperTurn = Effect.fn('Flect.AgentWorkspace.concludeShaperTurn')(function* (
+		const concludeShaperTurn = Effect.fn('AgentWorkspace.concludeShaperTurn')(function* (
 			operation: OperationContext,
 			conclusion: ShaperTurnConclusion
 		) {
@@ -1724,7 +1717,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			);
 		});
 
-		const cancel = Effect.fn('Flect.AgentWorkspace.cancel')(function* (role: InteractiveAgentRole) {
+		const cancel = Effect.fn('AgentWorkspace.cancel')(function* (role: InteractiveAgentRole) {
 			yield* setOperationalStatus(role, 'cancelling');
 			const currentSession = yield* Ref.get(session);
 			const active = yield* Ref.get(fibers);
@@ -1746,7 +1739,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			);
 		});
 
-		const cancelPreview = Effect.fn('Flect.AgentWorkspace.cancelPreview')(function* () {
+		const cancelPreview = Effect.fn('AgentWorkspace.cancelPreview')(function* () {
 			yield* setConversationStatus('previewApp', 'cancelling');
 			const currentSession = yield* Ref.get(previewSession);
 			const active = yield* Ref.get(fibers);
@@ -1769,7 +1762,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			);
 		});
 
-		const releasePreview = Effect.fn('Flect.AgentWorkspace.releasePreview')(function* () {
+		const releasePreview = Effect.fn('AgentWorkspace.releasePreview')(function* () {
 			const active = yield* Ref.get(fibers);
 			if (active.previewApp !== undefined) {
 				yield* Fiber.interrupt(active.previewApp);
@@ -1786,7 +1779,7 @@ export const AgentWorkspaceLive = Layer.effect(
 			);
 		});
 
-		const diagnoseRecovery = Effect.fn('Flect.AgentWorkspace.diagnoseRecovery')(function* (
+		const diagnoseRecovery = Effect.fn('AgentWorkspace.diagnoseRecovery')(function* (
 			reason: RecoveryReason
 		) {
 			const sessionId = yield* ensureSession();

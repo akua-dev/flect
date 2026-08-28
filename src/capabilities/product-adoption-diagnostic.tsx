@@ -54,7 +54,7 @@ const userStateFor = (
 		selectedInferenceOwner
 	});
 
-const scenario = Effect.fn('Flect.ProductAdoptionDiagnostic.scenario')(
+const scenario = Effect.fn('ProductAdoptionDiagnostic.scenario')(
 	(
 		id: string,
 		name: string,
@@ -247,6 +247,7 @@ function ProductCard({ product }: { readonly product: ProductAdoptionProductMode
 					</p>
 					<h2 id={headingId}>{product.name}</h2>
 				</div>
+				{/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here. */}
 				<span className={`product-adoption-card__state is-${snapshot.state}`} role='status'>
 					{stateLabel(snapshot.state)}
 				</span>

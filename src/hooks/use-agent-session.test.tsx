@@ -543,7 +543,8 @@ describe('useAgentSession', () => {
 			await result.current.submit('Keep this prompt');
 		});
 
-		expect(result.current.status).toBe('error');
+		// Same snapshot-propagation race as the busy-conflict test below.
+		await waitFor(() => expect(result.current.status).toBe('error'));
 		expect(result.current.lastPrompt).toBe('Keep this prompt');
 		expect(client.closeSession).toHaveBeenCalledWith('session-hook-test');
 		unmount();
@@ -567,7 +568,9 @@ describe('useAgentSession', () => {
 			await result.current.submit('Keep the active shape');
 		});
 
-		expect(result.current.status).toBe('error');
+		// status is a projection of async controller snapshots; submit() can
+		// resolve before the error snapshot propagates, so wait for it.
+		await waitFor(() => expect(result.current.status).toBe('error'));
 		expect(result.current.error).toBe('The session is busy.');
 		expect(client.closeSession).not.toHaveBeenCalled();
 		unmount();

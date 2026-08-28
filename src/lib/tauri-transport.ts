@@ -95,7 +95,7 @@ export class TauriBridge extends Context.Service<TauriBridge, TauriBridgeShape>(
 ) {}
 
 export const TauriNativeHostLive = Layer.succeed(TauriNativeHost)({
-	invoke: Effect.fn('Flect.TauriNativeHost.invoke')((command, args) =>
+	invoke: Effect.fn('TauriNativeHost.invoke')((command, args) =>
 		Effect.tryPromise({
 			try: () => invoke<unknown>(command, args),
 			catch: unavailable
@@ -104,7 +104,7 @@ export const TauriNativeHostLive = Layer.succeed(TauriNativeHost)({
 });
 
 export const TauriBridgeLive = Layer.succeed(TauriBridge)({
-	listen: Effect.fn('Flect.TauriBridge.listen')((handler) =>
+	listen: Effect.fn('TauriBridge.listen')((handler) =>
 		Effect.tryPromise({
 			try: () =>
 				listen<unknown>('flect://rpc', (event) => {
@@ -120,7 +120,7 @@ export const TauriBridgeLive = Layer.succeed(TauriBridge)({
 			)
 		)
 	),
-	send: Effect.fn('Flect.TauriBridge.send')((request) =>
+	send: Effect.fn('TauriBridge.send')((request) =>
 		Effect.tryPromise({
 			try: () => invoke<undefined>('rpc_send', { request }),
 			catch: unavailable

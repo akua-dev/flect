@@ -350,12 +350,12 @@ export function ModelMenu({
 							role='radiogroup'
 						>
 							{!normalizedQuery && (
-								// biome-ignore lint/a11y/useSemanticElements: the styled radio is an action row with focus restoration, not a standalone form field
 								<button
 									aria-checked={selectedValue === 'auto'}
 									aria-label='Auto via Pi'
 									className='composer-popover__item model-menu__option'
 									onClick={() => select(undefined)}
+									// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- the styled radio is an action row with focus restoration, not a standalone form field
 									role='radio'
 									type='button'
 								>
@@ -381,12 +381,12 @@ export function ModelMenu({
 										const favorite = favorites.has(value);
 										return (
 											<div className='model-menu__row' key={value}>
-												{/* biome-ignore lint/a11y/useSemanticElements: the styled radio is an action row with a sibling favorite control */}
 												<button
 													aria-checked={selectedValue === value}
 													aria-label={`${model.name} by ${model.provider}`}
 													className='composer-popover__item model-menu__option'
 													onClick={() => select(model)}
+													// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- the styled radio is an action row with a sibling favorite control
 													role='radio'
 													type='button'
 												>
@@ -422,21 +422,21 @@ export function ModelMenu({
 									<small>{reasoningModel.name}</small>
 								</div>
 								<div role='radiogroup' aria-label='Reasoning effort'>
-									{/* biome-ignore lint/a11y/useSemanticElements: compact popover actions preserve focus and announce checked state */}
 									<button
 										aria-checked={reasoningLevel === undefined}
 										onClick={() => onSelectReasoning(undefined)}
+										// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- compact popover actions preserve focus and announce checked state
 										role='radio'
 										type='button'
 									>
 										Auto
 									</button>
 									{reasoningModel.reasoningLevels.map((level) => (
-										// biome-ignore lint/a11y/useSemanticElements: compact popover actions preserve focus and announce checked state
 										<button
 											aria-checked={reasoningLevel === level}
 											key={level}
 											onClick={() => onSelectReasoning(level)}
+											// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- compact popover actions preserve focus and announce checked state
 											role='radio'
 											type='button'
 										>
@@ -450,6 +450,7 @@ export function ModelMenu({
 							(authProviders.length > 0 || models.length === 0 || authEvent) && (
 								<Suspense
 									fallback={
+										// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 										<span className='sr-only' role='status'>
 											Opening provider controls
 										</span>

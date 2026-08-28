@@ -11,11 +11,11 @@ import {
 	useState
 } from 'react';
 import type { PrivateShareSourceSummary } from '../../packages/product/src/host/share-source';
+import type { ProductCapabilityDecisionChoice } from '../../packages/product/src/product-capability';
 import type { CanvasSelection } from '../../shared/canvas-selection';
 import type { CapsuleIntent, CapsuleIntentOutcome } from '../../shared/capsule-protocol';
 import type { InterfaceActionProjection } from '../../shared/interface-actions';
 import type { InterfaceDocument } from '../../shared/interface-document';
-import type { ProductCapabilityDecisionChoice } from '../../shared/product-capability';
 import type { ShareInstallationRecord } from '../../shared/share-installation';
 import type { ShareReview as ShareReviewContract } from '../../shared/share-review';
 import type { AgentWorkspaceController } from '../hooks/use-agent-session';
@@ -60,6 +60,7 @@ const DiagnosticsPanel = lazy(() =>
 );
 
 const ShareSurfaceFallback = () => (
+	// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 	<span className='sr-only' role='status'>
 		Opening sharing controls
 	</span>
@@ -605,6 +606,7 @@ export function RoleAwareShell({
 			ref={shellRef}
 			style={shellStyle}
 		>
+			{/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here. */}
 			<div aria-atomic='true' aria-label='Workbench status' className='sr-only' role='status'>
 				{workbenchStatus}
 			</div>

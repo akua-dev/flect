@@ -39,8 +39,8 @@ const invalidManifest = () =>
 		message: 'The extension manifest is invalid.'
 	});
 
-export const validateExtensionManifest = Effect.fn('Flect.ExtensionManifest.validate')(
-	(input: unknown) =>
+export const validateExtensionManifest = Effect.fn('ExtensionManifest.validate')(
+	(input: unknown): Effect.Effect<ExtensionManifest, InvalidExtensionManifest> =>
 		Schema.decodeUnknownEffect(
 			ExtensionManifest,
 			strictOptions
@@ -241,24 +241,24 @@ export class PortableExtensionDescriptor extends Schema.Class<PortableExtensionD
 
 const hasDuplicates = (values: ReadonlyArray<string>) => new Set(values).size !== values.length;
 
-export const validatePortableExtensionPackage = Effect.fn(
-	'Flect.PortableExtensionPackage.validate'
-)(function* (input: unknown) {
-	const decoded = yield* Schema.decodeUnknownEffect(
-		PortableExtensionPackage,
-		strictOptions
-	)(input).pipe(Effect.mapError(invalidManifest));
-	if (
-		hasDuplicates(decoded.roles) ||
-		hasDuplicates(decoded.capabilities.map((capability) => capability.id)) ||
-		hasDuplicates(decoded.commands.map((command) => command.id)) ||
-		hasDuplicates(decoded.tools.map((tool) => tool.id)) ||
-		(decoded.sourceMap === undefined) !== (decoded.provenance.sourceMapSha256 === undefined)
-	) {
-		return yield* Effect.fail(invalidManifest());
+export const validatePortableExtensionPackage = Effect.fn('PortableExtensionPackage.validate')(
+	function* (input: unknown): Effect.fn.Return<PortableExtensionPackage, InvalidExtensionManifest> {
+		const decoded = yield* Schema.decodeUnknownEffect(
+			PortableExtensionPackage,
+			strictOptions
+		)(input).pipe(Effect.mapError(invalidManifest));
+		if (
+			hasDuplicates(decoded.roles) ||
+			hasDuplicates(decoded.capabilities.map((capability) => capability.id)) ||
+			hasDuplicates(decoded.commands.map((command) => command.id)) ||
+			hasDuplicates(decoded.tools.map((tool) => tool.id)) ||
+			(decoded.sourceMap === undefined) !== (decoded.provenance.sourceMapSha256 === undefined)
+		) {
+			return yield* Effect.fail(invalidManifest());
+		}
+		return decoded;
 	}
-	return decoded;
-});
+);
 
 interface PortableExtensionGrantPackage {
 	readonly roles: ReadonlyArray<string>;

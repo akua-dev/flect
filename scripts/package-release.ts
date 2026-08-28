@@ -103,58 +103,52 @@ export class ReleasePackagingError extends Schema.TaggedErrorClass<ReleasePackag
 
 const packagingError = (message: string) => ReleasePackagingError.make({ message });
 
-export const validateReleaseTrustEvidence = Effect.fn('Flect.Release.validateTrustEvidence')(
-	function* (evidence: ReleaseTrustEvidence) {
-		if (
-			evidence.architectures.publicExecutable !== 'arm64' ||
-			evidence.architectures.privateRuntime !== 'arm64'
-		) {
-			return yield* Effect.fail(
-				packagingError('Every shipped Flect executable must be arm64 only.')
-			);
-		}
-		if (!evidence.signing.hardenedRuntime) {
-			return yield* Effect.fail(
-				packagingError('Every Flect macOS artifact requires hardened runtime.')
-			);
-		}
-		if (evidence.mode === 'development') {
-			return;
-		}
-		if (!evidence.reproducibilityVerified) {
-			return yield* Effect.fail(
-				packagingError(
-					'A public Flect release requires independently verified reproducible content.'
-				)
-			);
-		}
-		if (evidence.source.dirty || evidence.source.tag !== 'v0.2.0') {
-			return yield* Effect.fail(
-				packagingError('A public Flect release requires a clean worktree at tag v0.2.0.')
-			);
-		}
-		if (evidence.signing.kind !== 'developer-id') {
-			return yield* Effect.fail(
-				packagingError('A public Flect release requires Developer ID Application signing.')
-			);
-		}
-		if (evidence.signing.teamIdentifier === undefined) {
-			return yield* Effect.fail(
-				packagingError('A public Flect release requires a signing Team ID.')
-			);
-		}
-		if (!evidence.signing.gatekeeperAccepted) {
-			return yield* Effect.fail(packagingError('Gatekeeper must accept a public Flect release.'));
-		}
-		if (!evidence.signing.stapled) {
-			return yield* Effect.fail(
-				packagingError('A public Flect release requires a stapled notarization ticket.')
-			);
-		}
+export const validateReleaseTrustEvidence = Effect.fn('Release.validateTrustEvidence')(function* (
+	evidence: ReleaseTrustEvidence
+) {
+	if (
+		evidence.architectures.publicExecutable !== 'arm64' ||
+		evidence.architectures.privateRuntime !== 'arm64'
+	) {
+		return yield* Effect.fail(packagingError('Every shipped Flect executable must be arm64 only.'));
 	}
-);
+	if (!evidence.signing.hardenedRuntime) {
+		return yield* Effect.fail(
+			packagingError('Every Flect macOS artifact requires hardened runtime.')
+		);
+	}
+	if (evidence.mode === 'development') {
+		return;
+	}
+	if (!evidence.reproducibilityVerified) {
+		return yield* Effect.fail(
+			packagingError('A public Flect release requires independently verified reproducible content.')
+		);
+	}
+	if (evidence.source.dirty || evidence.source.tag !== 'v0.2.0') {
+		return yield* Effect.fail(
+			packagingError('A public Flect release requires a clean worktree at tag v0.2.0.')
+		);
+	}
+	if (evidence.signing.kind !== 'developer-id') {
+		return yield* Effect.fail(
+			packagingError('A public Flect release requires Developer ID Application signing.')
+		);
+	}
+	if (evidence.signing.teamIdentifier === undefined) {
+		return yield* Effect.fail(packagingError('A public Flect release requires a signing Team ID.'));
+	}
+	if (!evidence.signing.gatekeeperAccepted) {
+		return yield* Effect.fail(packagingError('Gatekeeper must accept a public Flect release.'));
+	}
+	if (!evidence.signing.stapled) {
+		return yield* Effect.fail(
+			packagingError('A public Flect release requires a stapled notarization ticket.')
+		);
+	}
+});
 
-export const validateVersionManifest = Effect.fn('Flect.Release.validateVersions')(function* (
+export const validateVersionManifest = Effect.fn('Release.validateVersions')(function* (
 	manifest: VersionManifest
 ) {
 	if (
@@ -166,7 +160,7 @@ export const validateVersionManifest = Effect.fn('Flect.Release.validateVersions
 	}
 });
 
-const requireEntry = Effect.fn('Flect.Release.requireEntry')(
+const requireEntry = Effect.fn('Release.requireEntry')(
 	(path: string, kind: 'file' | 'directory', message: string) =>
 		Effect.tryPromise({
 			try: () => stat(path),
@@ -179,7 +173,7 @@ const requireEntry = Effect.fn('Flect.Release.requireEntry')(
 		)
 );
 
-const forbidEntry = Effect.fn('Flect.Release.forbidEntry')((path: string, message: string) =>
+const forbidEntry = Effect.fn('Release.forbidEntry')((path: string, message: string) =>
 	Effect.tryPromise({
 		try: () => stat(path),
 		catch: () => packagingError(message)
@@ -194,7 +188,7 @@ const forbidEntry = Effect.fn('Flect.Release.forbidEntry')((path: string, messag
 	)
 );
 
-export const validateReleaseLayout = Effect.fn('Flect.Release.validateLayout')(function* (
+export const validateReleaseLayout = Effect.fn('Release.validateLayout')(function* (
 	layout: ReleaseLayout
 ) {
 	yield* requireEntry(layout.sidecar, 'file', 'The compiled Flect sidecar is missing.');
@@ -218,28 +212,28 @@ export const validateReleaseLayout = Effect.fn('Flect.Release.validateLayout')(f
 	yield* requireEntry(layout.dmg, 'file', 'The Flect DMG is missing.');
 });
 
-const readText = Effect.fn('Flect.Release.readText')((path: string) =>
+const readText = Effect.fn('Release.readText')((path: string) =>
 	Effect.tryPromise({
 		try: () => readFile(path, 'utf8'),
 		catch: () => packagingError('A public version manifest could not be read.')
 	})
 );
 
-const parseJson = Effect.fn('Flect.Release.parseJson')((source: string) =>
+const parseJson = Effect.fn('Release.parseJson')((source: string) =>
 	Effect.try({
 		try: (): unknown => JSON.parse(source),
 		catch: () => packagingError('A public version manifest is invalid.')
 	})
 );
 
-const decodeVersion = Effect.fn('Flect.Release.decodeVersion')((input: unknown) =>
+const decodeVersion = Effect.fn('Release.decodeVersion')((input: unknown) =>
 	Schema.decodeUnknownEffect(VersionDocument)(input).pipe(
 		Effect.map((document) => document.version),
 		Effect.mapError(() => packagingError('A public version manifest is invalid.'))
 	)
 );
 
-const readVersionManifest = Effect.fn('Flect.Release.readVersions')(function* () {
+const readVersionManifest = Effect.fn('Release.readVersions')(function* () {
 	const packageVersion = yield* readText(paths.packageJson).pipe(
 		Effect.flatMap(parseJson),
 		Effect.flatMap(decodeVersion)
@@ -297,7 +291,7 @@ const captureCommand = async (command: ReadonlyArray<string>): Promise<CommandRe
 	return { exitCode, stderr, stdout };
 };
 
-const capture = Effect.fn('Flect.Release.capture')((command: ReadonlyArray<string>) =>
+const capture = Effect.fn('Release.capture')((command: ReadonlyArray<string>) =>
 	Effect.tryPromise({
 		try: async () => {
 			const result = await captureCommand(command);
@@ -310,14 +304,14 @@ const capture = Effect.fn('Flect.Release.capture')((command: ReadonlyArray<strin
 	})
 );
 
-const observe = Effect.fn('Flect.Release.observe')((command: ReadonlyArray<string>) =>
+const observe = Effect.fn('Release.observe')((command: ReadonlyArray<string>) =>
 	Effect.tryPromise({
 		try: () => captureCommand(command),
 		catch: () => packagingError(`Release command failed: ${commandText(command)}`)
 	})
 );
 
-const run = Effect.fn('Flect.Release.run')((command: ReadonlyArray<string>) =>
+const run = Effect.fn('Release.run')((command: ReadonlyArray<string>) =>
 	Effect.tryPromise({
 		try: async () => {
 			console.log(`$ ${commandText(command)}`);
@@ -335,7 +329,7 @@ const run = Effect.fn('Flect.Release.run')((command: ReadonlyArray<string>) =>
 	})
 );
 
-const prepareOutput = Effect.fn('Flect.Release.prepareOutput')(function* () {
+const prepareOutput = Effect.fn('Release.prepareOutput')(function* () {
 	if (dirname(distRelease) !== root || basename(distRelease) !== 'dist-release') {
 		return yield* Effect.fail(
 			packagingError('The release output directory is not repository-local.')
@@ -351,27 +345,29 @@ const prepareOutput = Effect.fn('Flect.Release.prepareOutput')(function* () {
 	});
 });
 
-const validatePublicUpdaterConfiguration = Effect.fn(
-	'Flect.Release.validatePublicUpdaterConfiguration'
-)(function* (mode: ReleaseTrustMode) {
-	if (mode === 'development') return;
-	if (
-		typeof process.env.FLECT_UPDATE_PUBLIC_KEY !== 'string' ||
-		process.env.FLECT_UPDATE_PUBLIC_KEY.trim().length === 0
-	) {
-		return yield* Effect.fail(packagingError('A public release requires FLECT_UPDATE_PUBLIC_KEY.'));
+const validatePublicUpdaterConfiguration = Effect.fn('Release.validatePublicUpdaterConfiguration')(
+	function* (mode: ReleaseTrustMode) {
+		if (mode === 'development') return;
+		if (
+			typeof process.env.FLECT_UPDATE_PUBLIC_KEY !== 'string' ||
+			process.env.FLECT_UPDATE_PUBLIC_KEY.trim().length === 0
+		) {
+			return yield* Effect.fail(
+				packagingError('A public release requires FLECT_UPDATE_PUBLIC_KEY.')
+			);
+		}
+		if (
+			typeof process.env.TAURI_SIGNING_PRIVATE_KEY !== 'string' ||
+			process.env.TAURI_SIGNING_PRIVATE_KEY.length === 0
+		) {
+			return yield* Effect.fail(
+				packagingError('A public release requires TAURI_SIGNING_PRIVATE_KEY.')
+			);
+		}
 	}
-	if (
-		typeof process.env.TAURI_SIGNING_PRIVATE_KEY !== 'string' ||
-		process.env.TAURI_SIGNING_PRIVATE_KEY.length === 0
-	) {
-		return yield* Effect.fail(
-			packagingError('A public release requires TAURI_SIGNING_PRIVATE_KEY.')
-		);
-	}
-});
+);
 
-const copyReleaseAssets = Effect.fn('Flect.Release.copyAssets')(function* (mode: ReleaseTrustMode) {
+const copyReleaseAssets = Effect.fn('Release.copyAssets')(function* (mode: ReleaseTrustMode) {
 	yield* Effect.tryPromise({
 		try: () => copyFile(paths.builtDmg, paths.releaseDmg),
 		catch: () => packagingError('The Flect DMG could not be staged.')
@@ -421,7 +417,7 @@ const copyReleaseAssets = Effect.fn('Flect.Release.copyAssets')(function* (mode:
 	}
 });
 
-const stageUpdaterEvidence = Effect.fn('Flect.Release.stageUpdaterEvidence')(
+const stageUpdaterEvidence = Effect.fn('Release.stageUpdaterEvidence')(
 	function* (mode: ReleaseTrustMode) {
 		if (mode === 'development') {
 			return yield* validateUpdaterEvidence({
@@ -487,7 +483,7 @@ const treeDigest = async (directory: string): Promise<string> => {
 	return createHash('sha256').update(lines.join('\n')).digest('hex');
 };
 
-const unsignedApplicationDigest = Effect.fn('Flect.Release.unsignedApplicationDigest')(() =>
+const unsignedApplicationDigest = Effect.fn('Release.unsignedApplicationDigest')(() =>
 	Effect.acquireUseRelease(
 		Effect.tryPromise({
 			try: () => mkdtemp(join(tmpdir(), 'flect-unsigned-content-')),
@@ -532,7 +528,7 @@ const parseSigningKind = (details: string): ReleaseTrustEvidence['signing']['kin
 				? 'adhoc'
 				: 'unknown';
 
-const observeReproducibility = Effect.fn('Flect.Release.observeReproducibility')(function* () {
+const observeReproducibility = Effect.fn('Release.observeReproducibility')(function* () {
 	const reference = process.env.FLECT_REPRODUCIBILITY_REFERENCE_APP;
 	if (
 		reference === undefined ||
@@ -546,7 +542,7 @@ const observeReproducibility = Effect.fn('Flect.Release.observeReproducibility')
 	);
 });
 
-const writeReleaseEvidence = Effect.fn('Flect.Release.writeEvidence')(function* (
+const writeReleaseEvidence = Effect.fn('Release.writeEvidence')(function* (
 	updater: UpdaterEvidence
 ) {
 	const publicExecutable = join(paths.app, 'Contents', 'MacOS', 'flect');
@@ -730,7 +726,7 @@ const writeReleaseEvidence = Effect.fn('Flect.Release.writeEvidence')(function* 
 	});
 });
 
-const verifyMountedDmg = Effect.fn('Flect.Release.verifyMountedDmg')(function* () {
+const verifyMountedDmg = Effect.fn('Release.verifyMountedDmg')(function* () {
 	yield* run(['hdiutil', 'verify', paths.releaseDmg]);
 	yield* Effect.acquireUseRelease(
 		Effect.gen(function* () {

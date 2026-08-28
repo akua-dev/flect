@@ -94,160 +94,159 @@ export const makeBrowserPackageResolverLayer = (options?: { readonly registryOri
 			const registryOrigin = options?.registryOrigin ?? 'https://registry.npmjs.org';
 
 			return {
-				resolve: Effect.fn('Flect.BrowserPackageResolver.resolve')(
-					(request: BrowserPackageRequest) =>
-						Effect.gen(function* () {
-							const inputEntries = [
-								{ path: 'package.json', contents: request.packageJson },
-								...(request.packageLock === undefined
-									? []
-									: [
-											{
-												path: 'package-lock.json',
-												contents: request.packageLock
-											}
-										])
-							];
-							const inputDigest = yield* Effect.promise(() => digestBuildEntries(inputEntries));
-							if (
-								request.packageJson.byteLength === 0 ||
-								request.packageJson.byteLength > MAX_MANIFEST_BYTES ||
-								(request.packageLock?.byteLength ?? 0) > MAX_LOCK_BYTES
-							) {
-								return yield* Effect.fail(
-									failure(
-										inputDigest,
-										'invalid-input',
-										'The browser package request exceeds its manifest or lock limits.'
-									)
-								);
-							}
-							const cached = yield* cache
-								.load(inputDigest)
-								.pipe(
-									Effect.mapError(() =>
-										failure(
-											inputDigest,
-											'storage',
-											'The browser package cache could not be read safely.'
-										)
-									)
-								);
-							if (cached !== undefined) {
-								return cached;
-							}
-
-							const output = yield* packages
-								.install({
-									cwd: '/workspace',
-									workspace: {
-										files: {
-											'/workspace/package.json': request.packageJson,
-											...(request.packageLock === undefined
-												? {}
-												: {
-														'/workspace/package-lock.json': request.packageLock
-													})
+				resolve: Effect.fn('BrowserPackageResolver.resolve')((request: BrowserPackageRequest) =>
+					Effect.gen(function* () {
+						const inputEntries = [
+							{ path: 'package.json', contents: request.packageJson },
+							...(request.packageLock === undefined
+								? []
+								: [
+										{
+											path: 'package-lock.json',
+											contents: request.packageLock
 										}
-									}
-								})
-								.pipe(
-									Effect.mapError(() =>
-										failure(inputDigest, 'resolution', 'Browser package resolution failed safely.')
+									])
+						];
+						const inputDigest = yield* Effect.promise(() => digestBuildEntries(inputEntries));
+						if (
+							request.packageJson.byteLength === 0 ||
+							request.packageJson.byteLength > MAX_MANIFEST_BYTES ||
+							(request.packageLock?.byteLength ?? 0) > MAX_LOCK_BYTES
+						) {
+							return yield* Effect.fail(
+								failure(
+									inputDigest,
+									'invalid-input',
+									'The browser package request exceeds its manifest or lock limits.'
+								)
+							);
+						}
+						const cached = yield* cache
+							.load(inputDigest)
+							.pipe(
+								Effect.mapError(() =>
+									failure(
+										inputDigest,
+										'storage',
+										'The browser package cache could not be read safely.'
 									)
-								);
+								)
+							);
+						if (cached !== undefined) {
+							return cached;
+						}
 
-							let lockfile = request.packageLock;
-							const files: Array<BrowserPackageFile> = [];
-							let totalBytes = 0;
-							for (const change of output.delta.files) {
-								if (change.operation !== 'write') {
-									return yield* Effect.fail(
-										failure(
-											inputDigest,
-											'resolution',
-											'Browser package resolution returned an unsupported removal.'
-										)
-									);
+						const output = yield* packages
+							.install({
+								cwd: '/workspace',
+								workspace: {
+									files: {
+										'/workspace/package.json': request.packageJson,
+										...(request.packageLock === undefined
+											? {}
+											: {
+													'/workspace/package-lock.json': request.packageLock
+												})
+									}
 								}
-								if (change.path === '/workspace/package-lock.json') {
-									lockfile = change.content;
-									continue;
-								}
-								if (!change.path.startsWith('/workspace/node_modules/')) {
-									continue;
-								}
-								const path = change.path.slice('/workspace/'.length);
-								totalBytes += change.content.byteLength;
-								files.push(BrowserPackageFile.make({ path, contents: change.content }));
-							}
-							if (
-								lockfile === undefined ||
-								lockfile.byteLength > MAX_LOCK_BYTES ||
-								files.length > MAX_FILES ||
-								totalBytes + lockfile.byteLength > MAX_GRAPH_BYTES
-							) {
+							})
+							.pipe(
+								Effect.mapError(() =>
+									failure(inputDigest, 'resolution', 'Browser package resolution failed safely.')
+								)
+							);
+
+						let lockfile = request.packageLock;
+						const files: Array<BrowserPackageFile> = [];
+						let totalBytes = 0;
+						for (const change of output.delta.files) {
+							if (change.operation !== 'write') {
 								return yield* Effect.fail(
 									failure(
 										inputDigest,
-										'oversized',
-										'The resolved browser package graph exceeds its limits.'
+										'resolution',
+										'Browser package resolution returned an unsupported removal.'
 									)
 								);
 							}
-							const lockedPackageCount = yield* Effect.try({
-								try: () => validateLockfile(lockfile, registryOrigin, inputDigest),
-								catch: (error) =>
-									Schema.is(BrowserPackageFailure)(error)
-										? error
-										: failure(
-												inputDigest,
-												'invalid-lock',
-												'The resolved browser package lock is invalid.'
-											)
-							});
-							if (lockedPackageCount !== output.packageCount) {
-								return yield* Effect.fail(
+							if (change.path === '/workspace/package-lock.json') {
+								lockfile = change.content;
+								continue;
+							}
+							if (!change.path.startsWith('/workspace/node_modules/')) {
+								continue;
+							}
+							const path = change.path.slice('/workspace/'.length);
+							totalBytes += change.content.byteLength;
+							files.push(BrowserPackageFile.make({ path, contents: change.content }));
+						}
+						if (
+							lockfile === undefined ||
+							lockfile.byteLength > MAX_LOCK_BYTES ||
+							files.length > MAX_FILES ||
+							totalBytes + lockfile.byteLength > MAX_GRAPH_BYTES
+						) {
+							return yield* Effect.fail(
+								failure(
+									inputDigest,
+									'oversized',
+									'The resolved browser package graph exceeds its limits.'
+								)
+							);
+						}
+						const lockedPackageCount = yield* Effect.try({
+							try: () => validateLockfile(lockfile, registryOrigin, inputDigest),
+							catch: (error) =>
+								Schema.is(BrowserPackageFailure)(error)
+									? error
+									: failure(
+											inputDigest,
+											'invalid-lock',
+											'The resolved browser package lock is invalid.'
+										)
+						});
+						if (lockedPackageCount !== output.packageCount) {
+							return yield* Effect.fail(
+								failure(
+									inputDigest,
+									'invalid-lock',
+									'The resolved browser package count does not match its lock.'
+								)
+							);
+						}
+						const sortedFiles = files.toSorted((left, right) =>
+							left.path.localeCompare(right.path)
+						);
+						const lockDigest = yield* Effect.promise(() => digestBuildBytes(lockfile));
+						const graphDigest = yield* Effect.promise(() =>
+							digestBuildEntries([
+								{ path: 'package-lock.json', contents: lockfile },
+								...sortedFiles
+							])
+						);
+						const resolution = BrowserPackageResolution.make({
+							version: 1,
+							inputDigest,
+							lockDigest,
+							graphDigest,
+							packageCount: output.packageCount,
+							lockfile,
+							files: sortedFiles,
+							cacheHit: false
+						});
+						yield* cache
+							.save(resolution)
+							.pipe(
+								Effect.mapError(() =>
 									failure(
 										inputDigest,
-										'invalid-lock',
-										'The resolved browser package count does not match its lock.'
+										'storage',
+										'The resolved browser package graph could not be cached safely.'
 									)
-								);
-							}
-							const sortedFiles = files.toSorted((left, right) =>
-								left.path.localeCompare(right.path)
+								)
 							);
-							const lockDigest = yield* Effect.promise(() => digestBuildBytes(lockfile));
-							const graphDigest = yield* Effect.promise(() =>
-								digestBuildEntries([
-									{ path: 'package-lock.json', contents: lockfile },
-									...sortedFiles
-								])
-							);
-							const resolution = BrowserPackageResolution.make({
-								version: 1,
-								inputDigest,
-								lockDigest,
-								graphDigest,
-								packageCount: output.packageCount,
-								lockfile,
-								files: sortedFiles,
-								cacheHit: false
-							});
-							yield* cache
-								.save(resolution)
-								.pipe(
-									Effect.mapError(() =>
-										failure(
-											inputDigest,
-											'storage',
-											'The resolved browser package graph could not be cached safely.'
-										)
-									)
-								);
-							return resolution;
-						})
+						return resolution;
+					})
 				)
 			} satisfies BrowserPackageResolverShape;
 		})

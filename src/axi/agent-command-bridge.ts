@@ -21,12 +21,12 @@ export const AgentCommandBridgeLive = Layer.effect(
 		const controller = yield* FlectWorkspaceController;
 		const agent = yield* AgentWorkspace;
 
-		const complete = Effect.fn('Flect.AgentCommandBridge.complete')(
+		const complete = Effect.fn('AgentCommandBridge.complete')(
 			(request: AgentCommandRequest, result: AgentGatewayResult) =>
 				Deferred.succeed(request.response, result).pipe(Effect.asVoid)
 		);
 
-		const runRequest = Effect.fn('Flect.AgentCommandBridge.runRequest')(function* (
+		const runRequest = Effect.fn('AgentCommandBridge.runRequest')(function* (
 			request: AgentCommandRequest
 		) {
 			switch (request.operation.type) {
@@ -117,7 +117,7 @@ export const AgentCommandBridgeLive = Layer.effect(
 			}
 		});
 
-		const runNext = Effect.fn('Flect.AgentCommandBridge.runNext')(function* () {
+		const runNext = Effect.fn('AgentCommandBridge.runNext')(function* () {
 			yield* runRequest(yield* bus.take);
 		});
 

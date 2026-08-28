@@ -1,6 +1,7 @@
+import { Option } from 'effect';
 import type { BuildEntry } from './browser-build-digest';
 
-const normalizeAbsolutePath = (path: string) => {
+const normalizeAbsolutePath = (path: string): Option.Option<string> => {
 	const parts: Array<string> = [];
 	for (const part of path.split('/')) {
 		if (part.length === 0 || part === '.') {
@@ -8,32 +9,39 @@ const normalizeAbsolutePath = (path: string) => {
 		}
 		if (part === '..') {
 			if (parts.length === 0) {
-				return undefined;
+				return Option.none();
 			}
 			parts.pop();
 			continue;
 		}
 		parts.push(part);
 	}
-	return `/${parts.join('/')}`;
+	return Option.some(`/${parts.join('/')}`);
 };
 
+/**
+ * Resolves a CSS import in the rolldown `resolveId` hook (see
+ * `browser-build-worker.ts`) to its mirrored absolute path when the request
+ * is a local, in-bundle stylesheet — `Option.none()` otherwise, so the
+ * bundler falls through to its default resolution.
+ */
 export const resolveRestrictedCssImport = (
 	source: string,
 	importer: string | undefined,
 	root: string,
 	files: ReadonlySet<string>
-) => {
+): Option.Option<string> => {
 	if (
 		importer === undefined ||
 		!source.endsWith('.css') ||
 		(!source.startsWith('./') && !source.startsWith('../'))
 	) {
-		return undefined;
+		return Option.none();
 	}
 	const slash = importer.lastIndexOf('/');
-	const resolved = normalizeAbsolutePath(`${importer.slice(0, Math.max(0, slash))}/${source}`);
-	return resolved?.startsWith(`${root}/`) && files.has(resolved) ? resolved : undefined;
+	return normalizeAbsolutePath(`${importer.slice(0, Math.max(0, slash))}/${source}`).pipe(
+		Option.filter((resolved) => resolved.startsWith(`${root}/`) && files.has(resolved))
+	);
 };
 
 export const collectRestrictedCss = (files: ReadonlyArray<BuildEntry>) => {

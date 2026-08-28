@@ -1,5 +1,15 @@
 import { Effect, Schema } from 'effect';
 import { type FormEvent, lazy, Suspense, useEffect, useRef, useState } from 'react';
+import type {
+	ExtensionCapability,
+	PortableExtensionCatalogSnapshot
+} from '../../packages/product/src/extensions';
+import {
+	ProductCapabilityAllowChoice,
+	type ProductCapabilityConfirmationPolicy,
+	type ProductCapabilityDecisionChoice,
+	ProductCapabilityDenyChoice
+} from '../../packages/product/src/product-capability';
 import type { CanvasSelection } from '../../shared/canvas-selection';
 import type {
 	ControlStateSnapshot,
@@ -9,17 +19,7 @@ import type {
 	WorkspacePersistenceSnapshot
 } from '../../shared/control';
 import { OperationFailed as OperationFailedSchema } from '../../shared/control';
-import type {
-	ExtensionCapability,
-	PortableExtensionCatalogSnapshot
-} from '../../shared/extensions';
 import type { InterfaceDocument } from '../../shared/interface-document';
-import {
-	ProductCapabilityAllowChoice,
-	type ProductCapabilityConfirmationPolicy,
-	type ProductCapabilityDecisionChoice,
-	ProductCapabilityDenyChoice
-} from '../../shared/product-capability';
 import type { RevisionId } from '../../shared/revisions';
 import type { AgentWorkspaceController } from '../hooks/use-agent-session';
 import { isAgentSessionActive } from '../hooks/use-agent-session';
@@ -50,6 +50,7 @@ const ConversationTimeline = lazy(() =>
 );
 
 const SurfaceFallback = ({ label }: { readonly label: string }) => (
+	// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 	<span className='sr-only' role='status'>
 		{label}
 	</span>
@@ -172,6 +173,7 @@ const capsuleTrustLabel = (review: CapsuleReview) => {
 function RuntimeState({ status }: { readonly status: AgentWorkspaceController['app']['status'] }) {
 	const ready = status !== 'booting' && status !== 'unavailable' && status !== 'setup-required';
 	return (
+		// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 		<span aria-live='polite' className='runtime-state' role='status'>
 			<span className={`runtime-state__dot${ready ? ' runtime-state__dot--ready' : ''}`} />
 			{status === 'booting'
@@ -827,11 +829,13 @@ export function AgentRail({
 					</div>
 				)}
 				{capsuleNotice !== undefined && (
+					// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 					<p className='capsule-notice' role='status'>
 						{capsuleNotice}
 					</p>
 				)}
 				{mode === 'safe' && (
+					// oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here.
 					<section className='recovery-banner' role='status'>
 						<div>
 							<strong>Your interface is protected.</strong>

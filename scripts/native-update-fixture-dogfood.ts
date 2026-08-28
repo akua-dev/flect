@@ -94,7 +94,7 @@ const temporaryRoot = Effect.acquireRelease(
 		}).pipe(Effect.ignore)
 );
 
-const writeFixtureFile = Effect.fn('Flect.FixtureUpdate.writeFile')(
+const writeFixtureFile = Effect.fn('FixtureUpdate.writeFile')(
 	(path: string, contents: string | Uint8Array) =>
 		Effect.tryPromise({
 			try: async () => {
@@ -108,7 +108,7 @@ const writeFixtureFile = Effect.fn('Flect.FixtureUpdate.writeFile')(
 const executableSource = (version: string) =>
 	`#!/usr/bin/env bun\nprocess.stdout.write(JSON.stringify({ version: ${JSON.stringify(version)} }));\n`;
 
-const writeFixtureApp = Effect.fn('Flect.FixtureUpdate.writeApp')(function* (
+const writeFixtureApp = Effect.fn('FixtureUpdate.writeApp')(function* (
 	parent: string,
 	version: string
 ) {
@@ -133,7 +133,7 @@ const writeFixtureApp = Effect.fn('Flect.FixtureUpdate.writeApp')(function* (
 	);
 });
 
-const runCommand = Effect.fn('Flect.FixtureUpdate.runCommand')(
+const runCommand = Effect.fn('FixtureUpdate.runCommand')(
 	(command: ReadonlyArray<string>, reason: NativeUpdateFixtureError['reason']) =>
 		Effect.tryPromise({
 			try: async () => {
@@ -150,7 +150,7 @@ const runCommand = Effect.fn('Flect.FixtureUpdate.runCommand')(
 		})
 );
 
-const createArchive = Effect.fn('Flect.FixtureUpdate.createArchive')(function* (
+const createArchive = Effect.fn('FixtureUpdate.createArchive')(function* (
 	sourceRoot: string,
 	archivePath: string
 ) {
@@ -161,7 +161,7 @@ const createArchive = Effect.fn('Flect.FixtureUpdate.createArchive')(function* (
 	});
 });
 
-const signArchive = Effect.fn('Flect.FixtureUpdate.signArchive')(function* (archive: Uint8Array) {
+const signArchive = Effect.fn('FixtureUpdate.signArchive')(function* (archive: Uint8Array) {
 	return yield* Effect.try({
 		try: () => {
 			const { privateKey, publicKey } = generateKeyPairSync('ed25519');
@@ -192,9 +192,7 @@ const signArchive = Effect.fn('Flect.FixtureUpdate.signArchive')(function* (arch
 	});
 });
 
-const corruptSignature = Effect.fn('Flect.FixtureUpdate.corruptSignature')(function* (
-	signature: string
-) {
+const corruptSignature = Effect.fn('FixtureUpdate.corruptSignature')(function* (signature: string) {
 	return yield* Effect.try({
 		try: () => {
 			const source = Buffer.from(signature, 'base64').toString('utf8');
@@ -256,7 +254,7 @@ const serveFixture = (version: string, archive: Uint8Array, signature: string) =
 			})
 	);
 
-const serverBaseUrl = Effect.fn('Flect.FixtureUpdate.serverBaseUrl')(function* (server: Server) {
+const serverBaseUrl = Effect.fn('FixtureUpdate.serverBaseUrl')(function* (server: Server) {
 	const address = server.address();
 	if (address === null || typeof address === 'string') {
 		return yield* Effect.fail(fixtureError('transport', 'The loopback fixture has no address.'));
@@ -264,7 +262,7 @@ const serverBaseUrl = Effect.fn('Flect.FixtureUpdate.serverBaseUrl')(function* (
 	return `http://127.0.0.1:${address.port}`;
 });
 
-const manifestFrom = Effect.fn('Flect.FixtureUpdate.fetchManifest')(function* (baseUrl: string) {
+const manifestFrom = Effect.fn('FixtureUpdate.fetchManifest')(function* (baseUrl: string) {
 	const source = yield* Effect.tryPromise({
 		try: async () => {
 			const response = await fetch(new URL('/latest.json', baseUrl));
@@ -291,7 +289,7 @@ const manifestFrom = Effect.fn('Flect.FixtureUpdate.fetchManifest')(function* (b
 	return manifest;
 });
 
-const fetchArchive = Effect.fn('Flect.FixtureUpdate.fetchArchive')((url: string) =>
+const fetchArchive = Effect.fn('FixtureUpdate.fetchArchive')((url: string) =>
 	Effect.tryPromise({
 		try: async () => {
 			const response = await fetch(url);
@@ -302,21 +300,21 @@ const fetchArchive = Effect.fn('Flect.FixtureUpdate.fetchArchive')((url: string)
 	})
 );
 
-const move = Effect.fn('Flect.FixtureUpdate.move')((from: string, to: string) =>
+const move = Effect.fn('FixtureUpdate.move')((from: string, to: string) =>
 	Effect.tryPromise({
 		try: () => rename(from, to),
 		catch: () => fixtureError('install', 'The fixture application could not be moved.')
 	})
 );
 
-const remove = Effect.fn('Flect.FixtureUpdate.remove')((path: string) =>
+const remove = Effect.fn('FixtureUpdate.remove')((path: string) =>
 	Effect.tryPromise({
 		try: () => rm(path, { recursive: true, force: true }),
 		catch: () => fixtureError('filesystem', 'A fixture path could not be removed.')
 	})
 );
 
-const installFixture = Effect.fn('Flect.FixtureUpdate.install')(function* (
+const installFixture = Effect.fn('FixtureUpdate.install')(function* (
 	root: string,
 	installedApp: string,
 	publicKey: string,
@@ -367,7 +365,7 @@ const toNativeUpdateError = (error: NativeUpdateFixtureError) =>
 				: 'The fixture update could not be installed.'
 	});
 
-const launchVersion = Effect.fn('Flect.FixtureUpdate.relaunch')(function* (installedApp: string) {
+const launchVersion = Effect.fn('FixtureUpdate.relaunch')(function* (installedApp: string) {
 	const source = yield* runCommand([join(installedApp, 'Contents', 'MacOS', 'flect')], 'relaunch');
 	return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(FixtureLaunch), {
 		errors: 'all',
@@ -377,7 +375,7 @@ const launchVersion = Effect.fn('Flect.FixtureUpdate.relaunch')(function* (insta
 	);
 });
 
-const makeFixtureAdapter = Effect.fn('Flect.FixtureUpdate.makeAdapter')(function* (
+const makeFixtureAdapter = Effect.fn('FixtureUpdate.makeAdapter')(function* (
 	root: string,
 	baseUrl: string,
 	installedApp: string,
@@ -417,31 +415,30 @@ const makeFixtureAdapter = Effect.fn('Flect.FixtureUpdate.makeAdapter')(function
 			})
 		),
 		check,
-		install: (claimedToken) =>
-			Effect.gen(function* () {
-				const manifest = yield* Ref.get(reviewed);
-				if (manifest === undefined || claimedToken !== token) {
-					return yield* Effect.fail(
-						NativeUpdateError.make({
-							reason: 'stale',
-							message: 'The fixture candidate is stale.'
-						})
-					);
-				}
-				yield* installFixture(root, installedApp, publicKey, manifest).pipe(
-					Effect.mapError(toNativeUpdateError)
-				);
-				return NativeUpdateSnapshot.make({
-					version: 1,
-					state: 'ready-to-relaunch',
-					installedVersion,
-					candidate: candidateFrom(manifest),
-					progress: NativeUpdateProgress.make({
-						downloadedBytes: manifest.contentLength,
-						totalBytes: manifest.contentLength
+		install: Effect.fn('NativeUpdateAdapter.install')(function* (claimedToken) {
+			const manifest = yield* Ref.get(reviewed);
+			if (manifest === undefined || claimedToken !== token) {
+				return yield* Effect.fail(
+					NativeUpdateError.make({
+						reason: 'stale',
+						message: 'The fixture candidate is stale.'
 					})
-				});
-			}),
+				);
+			}
+			yield* installFixture(root, installedApp, publicKey, manifest).pipe(
+				Effect.mapError(toNativeUpdateError)
+			);
+			return NativeUpdateSnapshot.make({
+				version: 1,
+				state: 'ready-to-relaunch',
+				installedVersion,
+				candidate: candidateFrom(manifest),
+				progress: NativeUpdateProgress.make({
+					downloadedBytes: manifest.contentLength,
+					totalBytes: manifest.contentLength
+				})
+			});
+		}),
 		relaunch: launchVersion(installedApp).pipe(
 			Effect.tap((launch) => Ref.set(relaunched, launch.version)),
 			Effect.asVoid,
@@ -451,7 +448,7 @@ const makeFixtureAdapter = Effect.fn('Flect.FixtureUpdate.makeAdapter')(function
 	return { adapter, relaunched };
 });
 
-const executeFixtureUpdate = Effect.fn('Flect.FixtureUpdate.execute')(function* (
+const executeFixtureUpdate = Effect.fn('FixtureUpdate.execute')(function* (
 	root: string,
 	baseUrl: string,
 	installedApp: string,
@@ -486,7 +483,7 @@ const executeFixtureUpdate = Effect.fn('Flect.FixtureUpdate.execute')(function* 
 	};
 });
 
-const fileDigest = Effect.fn('Flect.FixtureUpdate.fileDigest')((path: string) =>
+const fileDigest = Effect.fn('FixtureUpdate.fileDigest')((path: string) =>
 	Effect.tryPromise({
 		try: async () =>
 			createHash('sha256')
@@ -496,7 +493,7 @@ const fileDigest = Effect.fn('Flect.FixtureUpdate.fileDigest')((path: string) =>
 	})
 );
 
-const treeDigest = Effect.fn('Flect.FixtureUpdate.treeDigest')(function* (root: string) {
+const treeDigest = Effect.fn('FixtureUpdate.treeDigest')(function* (root: string) {
 	return yield* Effect.tryPromise({
 		try: async () => {
 			const hash = createHash('sha256');
@@ -527,7 +524,7 @@ const treeDigest = Effect.fn('Flect.FixtureUpdate.treeDigest')(function* (root: 
 
 const canaryNames = ['workspace', 'settings', 'grants', 'extensions'];
 
-const canaryDigests = Effect.fn('Flect.FixtureUpdate.canaryDigests')(function* (
+const canaryDigests = Effect.fn('FixtureUpdate.canaryDigests')(function* (
 	paths: ReadonlyMap<string, string>
 ) {
 	const digests = new Map<string, string>();
@@ -537,7 +534,7 @@ const canaryDigests = Effect.fn('Flect.FixtureUpdate.canaryDigests')(function* (
 	return digests;
 });
 
-const requireMatchingDigests = Effect.fn('Flect.FixtureUpdate.requireMatchingDigests')(function* (
+const requireMatchingDigests = Effect.fn('FixtureUpdate.requireMatchingDigests')(function* (
 	before: ReadonlyMap<string, string>,
 	after: ReadonlyMap<string, string>
 ) {
@@ -548,104 +545,99 @@ const requireMatchingDigests = Effect.fn('Flect.FixtureUpdate.requireMatchingDig
 	}
 });
 
-export const runNativeUpdateFixtureDogfood = Effect.fn('Flect.FixtureUpdate.runDogfood')(
-	function* () {
-		return yield* Effect.scoped(
-			Effect.gen(function* () {
-				const root = yield* temporaryRoot;
-				const applications = join(root, 'Applications');
-				const installedApp = join(applications, 'Flect.app');
-				yield* writeFixtureApp(applications, '0.1.0');
+export const runNativeUpdateFixtureDogfood = Effect.fn('FixtureUpdate.runDogfood')(function* () {
+	return yield* Effect.scoped(
+		Effect.gen(function* () {
+			const root = yield* temporaryRoot;
+			const applications = join(root, 'Applications');
+			const installedApp = join(applications, 'Flect.app');
+			yield* writeFixtureApp(applications, '0.1.0');
 
-				const durableRoot = join(root, 'durable');
-				const canaries = new Map<string, string>([
-					['workspace', join(durableRoot, 'workspace', 'current.json')],
-					['settings', join(durableRoot, 'settings.json')],
-					['grants', join(durableRoot, 'grants.json')],
-					['extensions', join(durableRoot, 'extensions', 'active.json')]
-				]);
-				for (const [name, path] of canaries) {
-					yield* writeFixtureFile(path, `${name}:durable\n`);
-				}
-				const originalCanaries = yield* canaryDigests(canaries);
+			const durableRoot = join(root, 'durable');
+			const canaries = new Map<string, string>([
+				['workspace', join(durableRoot, 'workspace', 'current.json')],
+				['settings', join(durableRoot, 'settings.json')],
+				['grants', join(durableRoot, 'grants.json')],
+				['extensions', join(durableRoot, 'extensions', 'active.json')]
+			]);
+			for (const [name, path] of canaries) {
+				yield* writeFixtureFile(path, `${name}:durable\n`);
+			}
+			const originalCanaries = yield* canaryDigests(canaries);
 
-				const validSource = join(root, 'valid-source');
-				const validArchivePath = join(root, 'valid', 'Flect.app.tar.gz');
-				yield* writeFixtureApp(validSource, '0.2.0');
-				yield* Effect.tryPromise({
-					try: () => mkdir(join(root, 'valid'), { recursive: true }),
-					catch: () => fixtureError('filesystem', 'The fixture archive root failed.')
-				});
-				const validArchive = yield* createArchive(validSource, validArchivePath);
-				const validSignature = yield* signArchive(validArchive);
-				const validServer = yield* serveFixture('0.2.0', validArchive, validSignature.signature);
-				const validBaseUrl = yield* serverBaseUrl(validServer);
-				const valid = yield* executeFixtureUpdate(
-					root,
-					validBaseUrl,
-					installedApp,
-					'0.1.0',
-					validSignature.publicKey
+			const validSource = join(root, 'valid-source');
+			const validArchivePath = join(root, 'valid', 'Flect.app.tar.gz');
+			yield* writeFixtureApp(validSource, '0.2.0');
+			yield* Effect.tryPromise({
+				try: () => mkdir(join(root, 'valid'), { recursive: true }),
+				catch: () => fixtureError('filesystem', 'The fixture archive root failed.')
+			});
+			const validArchive = yield* createArchive(validSource, validArchivePath);
+			const validSignature = yield* signArchive(validArchive);
+			const validServer = yield* serveFixture('0.2.0', validArchive, validSignature.signature);
+			const validBaseUrl = yield* serverBaseUrl(validServer);
+			const valid = yield* executeFixtureUpdate(
+				root,
+				validBaseUrl,
+				installedApp,
+				'0.1.0',
+				validSignature.publicKey
+			);
+			yield* requireMatchingDigests(originalCanaries, yield* canaryDigests(canaries));
+
+			const bundleBeforeRejection = yield* treeDigest(installedApp);
+			const canariesBeforeRejection = yield* canaryDigests(canaries);
+			const corruptSource = join(root, 'corrupt-source');
+			const corruptArchivePath = join(root, 'corrupt', 'Flect.app.tar.gz');
+			yield* writeFixtureApp(corruptSource, '0.3.0');
+			yield* Effect.tryPromise({
+				try: () => mkdir(join(root, 'corrupt'), { recursive: true }),
+				catch: () => fixtureError('filesystem', 'The corrupt archive root failed.')
+			});
+			const corruptArchive = yield* createArchive(corruptSource, corruptArchivePath);
+			const corruptSigned = yield* signArchive(corruptArchive);
+			const corruptServer = yield* serveFixture(
+				'0.3.0',
+				corruptArchive,
+				yield* corruptSignature(corruptSigned.signature)
+			);
+			const corruptBaseUrl = yield* serverBaseUrl(corruptServer);
+			const corruptResult = yield* Effect.result(
+				executeFixtureUpdate(root, corruptBaseUrl, installedApp, '0.2.0', corruptSigned.publicKey)
+			);
+			if (Result.isSuccess(corruptResult) || corruptResult.failure.reason !== 'invalid-signature') {
+				return yield* Effect.fail(
+					fixtureError('signature', 'The corrupt fixture signature did not fail closed.')
 				);
-				yield* requireMatchingDigests(originalCanaries, yield* canaryDigests(canaries));
-
-				const bundleBeforeRejection = yield* treeDigest(installedApp);
-				const canariesBeforeRejection = yield* canaryDigests(canaries);
-				const corruptSource = join(root, 'corrupt-source');
-				const corruptArchivePath = join(root, 'corrupt', 'Flect.app.tar.gz');
-				yield* writeFixtureApp(corruptSource, '0.3.0');
-				yield* Effect.tryPromise({
-					try: () => mkdir(join(root, 'corrupt'), { recursive: true }),
-					catch: () => fixtureError('filesystem', 'The corrupt archive root failed.')
-				});
-				const corruptArchive = yield* createArchive(corruptSource, corruptArchivePath);
-				const corruptSigned = yield* signArchive(corruptArchive);
-				const corruptServer = yield* serveFixture(
-					'0.3.0',
-					corruptArchive,
-					yield* corruptSignature(corruptSigned.signature)
+			}
+			const bundleAfterRejection = yield* treeDigest(installedApp);
+			if (bundleAfterRejection !== bundleBeforeRejection) {
+				return yield* Effect.fail(
+					fixtureError('install', 'The installed fixture changed after signature rejection.')
 				);
-				const corruptBaseUrl = yield* serverBaseUrl(corruptServer);
-				const corruptResult = yield* Effect.result(
-					executeFixtureUpdate(root, corruptBaseUrl, installedApp, '0.2.0', corruptSigned.publicKey)
-				);
-				if (
-					Result.isSuccess(corruptResult) ||
-					corruptResult.failure.reason !== 'invalid-signature'
-				) {
-					return yield* Effect.fail(
-						fixtureError('signature', 'The corrupt fixture signature did not fail closed.')
-					);
-				}
-				const bundleAfterRejection = yield* treeDigest(installedApp);
-				if (bundleAfterRejection !== bundleBeforeRejection) {
-					return yield* Effect.fail(
-						fixtureError('install', 'The installed fixture changed after signature rejection.')
-					);
-				}
-				yield* requireMatchingDigests(canariesBeforeRejection, yield* canaryDigests(canaries));
+			}
+			yield* requireMatchingDigests(canariesBeforeRejection, yield* canaryDigests(canaries));
 
-				if (valid.installedVersion !== '0.2.0' || valid.relaunchedVersion !== '0.2.0') {
-					return yield* Effect.fail(
-						fixtureError('relaunch', 'The signed fixture was not relaunched.')
-					);
-				}
-				const preserved: Array<'workspace' | 'settings' | 'grants' | 'extensions'> = [
-					'workspace',
-					'settings',
-					'grants',
-					'extensions'
-				];
-				return NativeUpdateFixtureDogfoodReport.make({
-					transport: 'loopback',
-					installedVersion: '0.2.0',
-					relaunchedVersion: '0.2.0',
-					preserved,
-					corruptSignature: 'rejected',
-					bundleAfterRejection: 'unchanged',
-					stateAfterRejection: 'unchanged'
-				});
-			})
-		);
-	}
-);
+			if (valid.installedVersion !== '0.2.0' || valid.relaunchedVersion !== '0.2.0') {
+				return yield* Effect.fail(
+					fixtureError('relaunch', 'The signed fixture was not relaunched.')
+				);
+			}
+			const preserved: Array<'workspace' | 'settings' | 'grants' | 'extensions'> = [
+				'workspace',
+				'settings',
+				'grants',
+				'extensions'
+			];
+			return NativeUpdateFixtureDogfoodReport.make({
+				transport: 'loopback',
+				installedVersion: '0.2.0',
+				relaunchedVersion: '0.2.0',
+				preserved,
+				corruptSignature: 'rejected',
+				bundleAfterRejection: 'unchanged',
+				stateAfterRejection: 'unchanged'
+			});
+		})
+	);
+});

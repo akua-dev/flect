@@ -88,7 +88,7 @@ const toMessages = (
 
 const modelKey = (model: Pick<ModelSummary, 'provider' | 'id'>) => `${model.provider}/${model.id}`;
 
-const clearSafeModeRoute = Effect.fn('Flect.App.clearSafeModeRoute')(() =>
+const clearSafeModeRoute = Effect.fn('App.clearSafeModeRoute')(() =>
 	Effect.try({
 		try: () => {
 			const url = new URL(globalThis.location.href);
@@ -353,6 +353,7 @@ export function App({ runtime = flectRuntime, initialPrompt }: AppProps = {}) {
 			<div className='role-shell role-shell--loading'>
 				<WindowDragRegion />
 				<main aria-busy='true' className='workspace-canvas'>
+					{/* oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- role='status' is the WAI-ARIA live-region announcer pattern (implicit aria-live=polite); <output> is for calculated form results, not live-region text, so it is not the right semantic swap here. */}
 					<p className='shell-loading-status' role='status'>
 						Opening workspace
 					</p>

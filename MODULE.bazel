@@ -1,0 +1,90 @@
+# Bazel module for the flect subtree.
+#
+# Boundary rule (cnap#866 "Bazel boundary rule for the published subtree"):
+# files under apps/flect/ may reference only in-subtree targets, Bazel
+# Central Registry (BCR) modules, and sha256-pinned direct downloads --
+# never a cnap label. This module is therefore fully self-contained: it
+# builds and tests standalone in the public projection with no dependency
+# on anything outside this directory.
+#
+# Executor: flect is a bun-native project (see package.json
+# "packageManager"), not pnpm, so aspect_rules_js (pnpm-only, see
+# cnap#866 red-team review Front 2 / dukdog/rules_bun being hobby-grade)
+# is deliberately not used. Instead this module downloads the pinned bun
+# binary itself (sha256-pinned per platform below) and every check target
+# is a thin, honest wrapper around the same "bun run <script>" commands a
+# human would run locally -- see tools/bun/defs.bzl.
+module(
+    name = "flect",
+    version = "0.2.0",
+)
+
+bazel_dep(name = "platforms", version = "1.1.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.0")
+
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+# Pinned bun 1.3.14 (see package.json "packageManager": "bun@1.3.14" and
+# quality.yml's oven-sh/setup-bun "bun-version" -- all three pins are kept
+# in lockstep deliberately, to avoid exactly the version-skew this
+# boundary rule otherwise invites).
+#
+# Tried bumping this pin to 1.4.0 as the cheapest possible fix for a real
+# bug: check_effect/check_rifty/etc. hit "Cannot find module
+# '@effect/platform-bun/<Subpath>'" resolving a package's wildcard
+# `exports` entry (`"./*": "./dist/*.js"`) under bun's native `bun run
+# <file>.ts` execution -- Linux only, not the same bare-specifier
+# `require.resolve` that succeeds moments earlier in the same sandbox.
+# Settled result: identical failure on 1.4.0 on a real ubuntu-latest run,
+# so the bump changed nothing and was reverted here. Root-caused further
+# and filed upstream: https://github.com/oven-sh/bun/issues/40785. Worked
+# around (not fixed -- this remains an open upstream bug on both 1.3.14
+# and 1.4.0) by routing the five affected check targets through Vitest
+# instead of bun's native `.ts` execution -- see tools/bun/defs.bzl and
+# BUILD.bazel's check_effect/check_effect_concurrency/check_rifty/
+# check_flect_skill/check_quality targets for the mechanism and revert
+# instructions once the upstream issue is fixed.
+#
+# sha256 values verified directly against the GitHub release asset bytes
+# (not just SHASUMS256.txt):
+#   curl -sL <url> | shasum -a 256
+BUN_VERSION = "1.3.14"
+
+http_archive(
+    name = "bun_linux_x64",
+    build_file_content = """\
+filegroup(
+    name = "bun_bin",
+    srcs = ["bun-linux-x64/bun"],
+    visibility = ["//visibility:public"],
+)
+""",
+    sha256 = "951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f",
+    url = "https://github.com/oven-sh/bun/releases/download/bun-v{v}/bun-linux-x64.zip".format(v = BUN_VERSION),
+)
+
+http_archive(
+    name = "bun_linux_arm64",
+    build_file_content = """\
+filegroup(
+    name = "bun_bin",
+    srcs = ["bun-linux-aarch64/bun"],
+    visibility = ["//visibility:public"],
+)
+""",
+    sha256 = "a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b",
+    url = "https://github.com/oven-sh/bun/releases/download/bun-v{v}/bun-linux-aarch64.zip".format(v = BUN_VERSION),
+)
+
+http_archive(
+    name = "bun_darwin_arm64",
+    build_file_content = """\
+filegroup(
+    name = "bun_bin",
+    srcs = ["bun-darwin-aarch64/bun"],
+    visibility = ["//visibility:public"],
+)
+""",
+    sha256 = "d8b96221828ad6f97ac7ac0ab7e95872341af763001e8803e8267652c2652620",
+    url = "https://github.com/oven-sh/bun/releases/download/bun-v{v}/bun-darwin-aarch64.zip".format(v = BUN_VERSION),
+)

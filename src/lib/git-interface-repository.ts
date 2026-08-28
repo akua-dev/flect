@@ -130,7 +130,7 @@ export const makeGitInterfaceRepositoryLayer = ({
 			const openedRef = yield* Ref.make(false);
 			const existedRef = yield* Ref.make(false);
 
-			const ensureOpen = Effect.fn('Flect.GitInterfaceRepository.open')(function* () {
+			const ensureOpen = Effect.fn('GitInterfaceRepository.open')(function* () {
 				if (yield* Ref.get(openedRef)) {
 					return yield* Ref.get(existedRef);
 				}
@@ -140,99 +140,95 @@ export const makeGitInterfaceRepositoryLayer = ({
 				return opened.existed;
 			});
 
-			const persistReceipt = Effect.fn('Flect.GitInterfaceRepository.persistReceipt')(function* (
+			const persistReceipt = Effect.fn('GitInterfaceRepository.persistReceipt')(function* (
 				receipt: GitActivationReceipt
 			) {
 				yield* storage.write(ACTIVATION_RECEIPT_KEY, JSON.stringify(receipt));
 				yield* Ref.set(receiptRef, receipt);
 			});
 
-			const checkpointSnapshot = Effect.fn('Flect.GitInterfaceRepository.checkpointSnapshot')(
-				function* (
-					snapshot: ShapingSnapshot,
-					options: {
-						readonly branch: string;
-						readonly expectedCommit?: string;
-						readonly baseCommit?: string;
-						readonly guards?: ReadonlyArray<{
-							readonly branch: string;
-							readonly commit: string;
-						}>;
-						readonly source?: {
-							readonly files: ReadonlyArray<{
-								readonly path: string;
-								readonly contents: Uint8Array;
-							}>;
-							readonly removals: ReadonlyArray<string>;
-						};
-					}
-				) {
-					const document = snapshot.proposal?.document ?? snapshot.active.document;
-					const snapshotBytes = new TextEncoder().encode(`${JSON.stringify(snapshot, null, 2)}\n`);
-					const interfaceBytes = new TextEncoder().encode(`${JSON.stringify(document, null, 2)}\n`);
-					const result = yield* git
-						.checkpoint({
-							...options,
-							files: [
-								...(options.source?.files ?? []),
-								{ path: SNAPSHOT_PATH, contents: snapshotBytes },
-								{ path: INTERFACE_PATH, contents: interfaceBytes }
-							],
-							removals: options.source?.removals ?? [],
-							message: commitMessage(snapshot)
-						})
-						.pipe(Effect.mapError(storageFailure));
-					return result.commit;
-				}
-			);
-
-			const sourceDelta = Effect.fn('Flect.GitInterfaceRepository.sourceDelta')(
-				function* (options: {
-					readonly base: { readonly branch: string; readonly commit: string };
-					readonly source: { readonly branch: string; readonly commit: string };
+			const checkpointSnapshot = Effect.fn('GitInterfaceRepository.checkpointSnapshot')(function* (
+				snapshot: ShapingSnapshot,
+				options: {
+					readonly branch: string;
+					readonly expectedCommit?: string;
+					readonly baseCommit?: string;
 					readonly guards?: ReadonlyArray<{
 						readonly branch: string;
 						readonly commit: string;
 					}>;
-				}) {
-					const guards = options.guards ?? [];
-					const [base, source] = yield* Effect.all([
-						git.snapshotRef({
-							branch: options.base.branch,
-							expectedCommit: options.base.commit,
-							guards: [options.source, ...guards]
-						}),
-						git.snapshotRef({
-							branch: options.source.branch,
-							expectedCommit: options.source.commit,
-							guards: [options.base, ...guards]
-						})
-					]).pipe(Effect.mapError(storageFailure));
-					const before = new Map(
-						base.files
-							.filter((file) => sourcePath(file.path))
-							.map((file) => [file.path, file.contents] as const)
-					);
-					const after = new Map(
-						source.files
-							.filter((file) => sourcePath(file.path))
-							.map((file) => [file.path, file.contents] as const)
-					);
-					return {
-						files: [...after].flatMap(([path, contents]) => {
-							const previous = before.get(path);
-							return previous !== undefined &&
-								previous.byteLength === contents.byteLength &&
-								previous.every((value, index) => value === contents[index])
-								? []
-								: [{ path, contents }];
-						}),
-						removals: [...before.keys()].filter((path) => !after.has(path))
+					readonly source?: {
+						readonly files: ReadonlyArray<{
+							readonly path: string;
+							readonly contents: Uint8Array;
+						}>;
+						readonly removals: ReadonlyArray<string>;
 					};
 				}
-			);
+			) {
+				const document = snapshot.proposal?.document ?? snapshot.active.document;
+				const snapshotBytes = new TextEncoder().encode(`${JSON.stringify(snapshot, null, 2)}\n`);
+				const interfaceBytes = new TextEncoder().encode(`${JSON.stringify(document, null, 2)}\n`);
+				const result = yield* git
+					.checkpoint({
+						...options,
+						files: [
+							...(options.source?.files ?? []),
+							{ path: SNAPSHOT_PATH, contents: snapshotBytes },
+							{ path: INTERFACE_PATH, contents: interfaceBytes }
+						],
+						removals: options.source?.removals ?? [],
+						message: commitMessage(snapshot)
+					})
+					.pipe(Effect.mapError(storageFailure));
+				return result.commit;
+			});
 
-			const initialize = Effect.fn('Flect.GitInterfaceRepository.initialize')(function* (
+			const sourceDelta = Effect.fn('GitInterfaceRepository.sourceDelta')(function* (options: {
+				readonly base: { readonly branch: string; readonly commit: string };
+				readonly source: { readonly branch: string; readonly commit: string };
+				readonly guards?: ReadonlyArray<{
+					readonly branch: string;
+					readonly commit: string;
+				}>;
+			}) {
+				const guards = options.guards ?? [];
+				const [base, source] = yield* Effect.all([
+					git.snapshotRef({
+						branch: options.base.branch,
+						expectedCommit: options.base.commit,
+						guards: [options.source, ...guards]
+					}),
+					git.snapshotRef({
+						branch: options.source.branch,
+						expectedCommit: options.source.commit,
+						guards: [options.base, ...guards]
+					})
+				]).pipe(Effect.mapError(storageFailure));
+				const before = new Map(
+					base.files
+						.filter((file) => sourcePath(file.path))
+						.map((file) => [file.path, file.contents] as const)
+				);
+				const after = new Map(
+					source.files
+						.filter((file) => sourcePath(file.path))
+						.map((file) => [file.path, file.contents] as const)
+				);
+				return {
+					files: [...after].flatMap(([path, contents]) => {
+						const previous = before.get(path);
+						return previous !== undefined &&
+							previous.byteLength === contents.byteLength &&
+							previous.every((value, index) => value === contents[index])
+							? []
+							: [{ path, contents }];
+					}),
+					removals: [...before.keys()].filter((path) => !after.has(path))
+				};
+			});
+
+			const initialize = Effect.fn('GitInterfaceRepository.initialize')(function* (
 				snapshot: ShapingSnapshot
 			) {
 				const commit = yield* checkpointSnapshot(snapshot, {
@@ -255,7 +251,7 @@ export const makeGitInterfaceRepositoryLayer = ({
 				return receipt;
 			});
 
-			const readSnapshot = Effect.fn('Flect.GitInterfaceRepository.readSnapshot')(function* (
+			const readSnapshot = Effect.fn('GitInterfaceRepository.readSnapshot')(function* (
 				branch: string,
 				expectedCommit: string,
 				guards: ReadonlyArray<{
@@ -280,7 +276,7 @@ export const makeGitInterfaceRepositoryLayer = ({
 				return yield* validateShapingSnapshot(input).pipe(Effect.mapError(storageFailure));
 			});
 
-			const loadReceipt = Effect.fn('Flect.GitInterfaceRepository.loadReceipt')(function* () {
+			const loadReceipt = Effect.fn('GitInterfaceRepository.loadReceipt')(function* () {
 				const raw = yield* storage.read(ACTIVATION_RECEIPT_KEY);
 				if (raw === null) {
 					return undefined;
@@ -289,7 +285,7 @@ export const makeGitInterfaceRepositoryLayer = ({
 				return yield* decodeReceipt(input).pipe(Effect.mapError(storageFailure));
 			});
 
-			const loadRecoveryMarker = Effect.fn('Flect.GitInterfaceRepository.loadRecoveryMarker')(
+			const loadRecoveryMarker = Effect.fn('GitInterfaceRepository.loadRecoveryMarker')(
 				function* () {
 					const status = yield* git
 						.status({ proposalBranch: RECOVERY_BRANCH })
@@ -314,7 +310,7 @@ export const makeGitInterfaceRepositoryLayer = ({
 				}
 			);
 
-			const markRecovery = Effect.fn('Flect.GitInterfaceRepository.markRecovery')(function* () {
+			const markRecovery = Effect.fn('GitInterfaceRepository.markRecovery')(function* () {
 				const status = yield* git
 					.status({ proposalBranch: RECOVERY_BRANCH })
 					.pipe(Effect.mapError(storageFailure));
@@ -340,7 +336,7 @@ export const makeGitInterfaceRepositoryLayer = ({
 					.pipe(Effect.mapError(storageFailure));
 			});
 
-			const clearRecovery = Effect.fn('Flect.GitInterfaceRepository.clearRecovery')(function* () {
+			const clearRecovery = Effect.fn('GitInterfaceRepository.clearRecovery')(function* () {
 				const status = yield* git
 					.status({ proposalBranch: RECOVERY_BRANCH })
 					.pipe(Effect.mapError(storageFailure));
@@ -365,31 +361,29 @@ export const makeGitInterfaceRepositoryLayer = ({
 					.pipe(Effect.mapError(storageFailure));
 			});
 
-			const recoverActivation = Effect.fn('Flect.GitInterfaceRepository.recoverActivation')(
-				function* () {
-					const status = yield* git.status().pipe(Effect.mapError(storageFailure));
-					if (status.acceptedCommit === undefined || status.lastKnownGoodCommit === undefined) {
-						return yield* Effect.fail(storageFailure());
-					}
-					const snapshot = yield* readSnapshot(LAST_KNOWN_GOOD_BRANCH, status.lastKnownGoodCommit, [
-						{
-							branch: ACCEPTED_BRANCH,
-							commit: status.acceptedCommit
-						}
-					]);
-					yield* persistReceipt(
-						GitActivationReceipt.make({
-							version: 1,
-							acceptedBranch: ACCEPTED_BRANCH,
-							acceptedCommit: status.acceptedCommit,
-							lastKnownGoodCommit: status.lastKnownGoodCommit
-						})
-					);
-					return safeRecoverySnapshot(snapshot);
+			const recoverActivation = Effect.fn('GitInterfaceRepository.recoverActivation')(function* () {
+				const status = yield* git.status().pipe(Effect.mapError(storageFailure));
+				if (status.acceptedCommit === undefined || status.lastKnownGoodCommit === undefined) {
+					return yield* Effect.fail(storageFailure());
 				}
-			);
+				const snapshot = yield* readSnapshot(LAST_KNOWN_GOOD_BRANCH, status.lastKnownGoodCommit, [
+					{
+						branch: ACCEPTED_BRANCH,
+						commit: status.acceptedCommit
+					}
+				]);
+				yield* persistReceipt(
+					GitActivationReceipt.make({
+						version: 1,
+						acceptedBranch: ACCEPTED_BRANCH,
+						acceptedCommit: status.acceptedCommit,
+						lastKnownGoodCommit: status.lastKnownGoodCommit
+					})
+				);
+				return safeRecoverySnapshot(snapshot);
+			});
 
-			const repairExisting = Effect.fn('Flect.GitInterfaceRepository.repairExisting')(function* (
+			const repairExisting = Effect.fn('GitInterfaceRepository.repairExisting')(function* (
 				snapshot: ShapingSnapshot
 			) {
 				const status = yield* git.status().pipe(Effect.mapError(storageFailure));
@@ -446,7 +440,7 @@ export const makeGitInterfaceRepositoryLayer = ({
 				return true;
 			});
 
-			const load = Effect.fn('Flect.GitInterfaceRepository.load')(function* () {
+			const load = Effect.fn('GitInterfaceRepository.load')(function* () {
 				const existed = yield* ensureOpen();
 				const recovery = yield* loadRecoveryMarker().pipe(Effect.orElseSucceed(() => true));
 				const withRecovery = (load: InterfaceRepositoryLoad) =>
@@ -586,9 +580,7 @@ export const makeGitInterfaceRepositoryLayer = ({
 				);
 			});
 
-			const save = Effect.fn('Flect.GitInterfaceRepository.save')(function* (
-				snapshot: ShapingSnapshot
-			) {
+			const save = Effect.fn('GitInterfaceRepository.save')(function* (snapshot: ShapingSnapshot) {
 				const existed = yield* ensureOpen();
 				let receipt = yield* Ref.get(receiptRef);
 				if (receipt === undefined) {

@@ -158,13 +158,15 @@ const sha256 = (contents: Uint8Array) =>
  * `defineProductIntegration`, which re-derives the same digest from
  * `loadRecommendedExperience` and rejects a mismatch.
  */
-export const hashCapsuleArchive = Effect.fn('Flect.Capsule.hashArchive')((archive: Uint8Array) =>
-	sha256(archive)
+export const hashCapsuleArchive = Effect.fn('Capsule.hashArchive')(
+	(archive: Uint8Array): Effect.Effect<string, InvalidCapsule> => sha256(archive)
 );
 
 const decodeManifestSchema = Schema.decodeUnknownEffect(CapsuleManifest, strict);
 
-const decodeManifest = Effect.fn('Flect.Capsule.decodeManifest')(function* (input: unknown) {
+const decodeManifest = Effect.fn('Capsule.decodeManifest')(function* (
+	input: unknown
+): Effect.fn.Return<CapsuleManifest, Schema.SchemaError | InvalidCapsule> {
 	const manifest = yield* decodeManifestSchema(input);
 	const extensions = manifest.extensions ?? [];
 	if (new Set(extensions.map((extension) => extension.id)).size !== extensions.length)
@@ -206,7 +208,9 @@ const verifyExtensionPayloads = (
  * {@link MAX_CAPSULE_BYTES}. Pair with {@link hashCapsuleArchive} to compute
  * the digest a `ProductIntegration` declares for this same archive.
  */
-export const encodeCapsule = Effect.fn('Flect.Capsule.encode')(function* (source: CapsuleSource) {
+export const encodeCapsule = Effect.fn('Capsule.encode')(function* (
+	source: CapsuleSource
+): Effect.fn.Return<Uint8Array, InvalidCapsule> {
 	const paths = new Set<string>();
 	let total = 0;
 	const sorted = [...source.files].toSorted((a, b) =>
@@ -264,7 +268,7 @@ export const encodeCapsule = Effect.fn('Flect.Capsule.encode')(function* (source
  * executes code, grants a capability, or activates an interface; it is a
  * pure data transform. This is the inverse of {@link encodeCapsule}.
  */
-export const decodeCapsule = Effect.fn('Flect.Capsule.decode')(function* (
+export const decodeCapsule = Effect.fn('Capsule.decode')(function* (
 	archive: Uint8Array
 ): Effect.fn.Return<DecodedCapsule, InvalidCapsule> {
 	const entries = yield* decodePortableTar(archive, {

@@ -383,13 +383,13 @@ export const makeBunPackageMutationLayer = (options: {
 	readonly registryBaseUrl?: string;
 }) =>
 	Layer.succeed(BunPackageMutation)({
-		install: Effect.fn('Flect.BunPackageMutation.install')((operation) =>
+		install: Effect.fn('BunPackageMutation.install')((operation) =>
 			mutate(operation, 'install', options.fetch, options.registryBaseUrl ?? REGISTRY_BASE_URL)
 		),
-		add: Effect.fn('Flect.BunPackageMutation.add')((operation) =>
+		add: Effect.fn('BunPackageMutation.add')((operation) =>
 			mutate(operation, 'add', options.fetch, options.registryBaseUrl ?? REGISTRY_BASE_URL)
 		),
-		remove: Effect.fn('Flect.BunPackageMutation.remove')((operation) =>
+		remove: Effect.fn('BunPackageMutation.remove')((operation) =>
 			mutate(operation, 'remove', options.fetch, options.registryBaseUrl ?? REGISTRY_BASE_URL)
 		)
 	});

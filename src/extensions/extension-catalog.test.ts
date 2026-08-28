@@ -1,6 +1,6 @@
 import { assert, describe, it } from '@effect/vitest';
 import { Context, Effect, Fiber, Layer, Option, Ref, Stream } from 'effect';
-import { PortableExtensionPackage } from '../../shared/extensions';
+import { PortableExtensionPackage } from '../../packages/product/src/extensions';
 import { InterfaceStorage } from '../lib/interface-store';
 import { ExtensionCatalog, makeExtensionCatalogLayer } from './extension-catalog';
 

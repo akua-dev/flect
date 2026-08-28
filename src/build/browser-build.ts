@@ -147,7 +147,7 @@ export const makeBrowserBuildLayer = (options?: {
 			const isCrossOriginIsolated =
 				options?.crossOriginIsolated ?? (() => globalThis.crossOriginIsolated === true);
 
-			const compile = Effect.fn('Flect.BrowserBuild.compile')((request: BrowserBuildRequest) =>
+			const compile = Effect.fn('BrowserBuild.compile')((request: BrowserBuildRequest) =>
 				!isCrossOriginIsolated()
 					? Effect.fail(
 							failure(

@@ -291,8 +291,8 @@ export const FlectTestRuntimeLive = Layer.effect(
 			),
 			logoutProvider: () =>
 				Ref.set(providerConnected, false).pipe(Effect.as([testProvider(false)])),
-			createSession: (selection) =>
-				Effect.gen(function* () {
+			createSession: Effect.fn('FlectTestRuntime.createSession')(
+				function* (selection): Effect.fn.Return<string> {
 					const sequence = yield* Ref.updateAndGet(sessionSequence, (current) => current + 1);
 					const sessionId = `session-browser-test-${sequence}`;
 					yield* Ref.update(sessionSelections, (current) => {
@@ -301,7 +301,8 @@ export const FlectTestRuntimeLive = Layer.effect(
 						return next;
 					});
 					return sessionId;
-				}),
+				}
+			),
 			closeSession: (sessionId) =>
 				Ref.update(sessionSelections, (current) => {
 					const next = new Map(current);

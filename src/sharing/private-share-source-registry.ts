@@ -40,7 +40,7 @@ export const makePrivateShareSourceRegistryLayer = (options: {
 		Effect.gen(function* () {
 			const definitions = yield* Ref.make(new Map<string, PrivateShareSourceDefinition>());
 
-			const register = Effect.fn('Flect.PrivateShareRegistry.register')(function* (
+			const register = Effect.fn('PrivateShareRegistry.register')(function* (
 				definition: PrivateShareSourceDefinition
 			) {
 				const summary = yield* Schema.decodeUnknownEffect(PrivateShareSourceSummary, {
@@ -76,9 +76,7 @@ export const makePrivateShareSourceRegistryLayer = (options: {
 				)
 			);
 
-			const open = Effect.fn('Flect.PrivateShareRegistry.open')(function* (
-				source: SharePrivateSource
-			) {
+			const open = Effect.fn('PrivateShareRegistry.open')(function* (source: SharePrivateSource) {
 				const definition = (yield* Ref.get(definitions)).get(source.adapterId);
 				if (definition === undefined) {
 					return yield* Effect.fail(failure('missing-adapter'));

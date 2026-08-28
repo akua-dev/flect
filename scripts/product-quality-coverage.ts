@@ -41,7 +41,7 @@ const classificationRows = (source: string) =>
 		return id === undefined || evidence === undefined ? [] : [{ id, evidence }];
 	});
 
-export const validateProductQualityCoverage = Effect.fn('Flect.ProductQuality.validateCoverage')(
+export const validateProductQualityCoverage = Effect.fn('ProductQuality.validateCoverage')(
 	function* (contract: string, baseline: string) {
 		const contractIds = matchedIds(contract, contractPattern);
 		const classifications = classificationRows(baseline);
@@ -76,7 +76,7 @@ export const validateProductQualityCoverage = Effect.fn('Flect.ProductQuality.va
 );
 
 export const validateCheckedInProductQualityCoverage = Effect.fn(
-	'Flect.ProductQuality.validateCheckedInCoverage'
+	'ProductQuality.validateCheckedInCoverage'
 )(function* () {
 	const fs = yield* FileSystem.FileSystem;
 	const path = yield* Path.Path;

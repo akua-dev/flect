@@ -6,7 +6,7 @@ import { promisify } from 'node:util';
 import { expect, type Page, test } from '@playwright/test';
 import { Effect, Schema } from 'effect';
 import { zipSync } from 'fflate';
-import { decodeCapsule, encodeCapsule } from '../../shared/capsule';
+import { decodeCapsule, encodeCapsule } from '../../packages/product/src/capsule';
 import { defaultInterfaceDocument } from '../../shared/interface-document';
 import { resetBrowserWorkspace } from './reset-browser-workspace';
 
@@ -1091,6 +1091,10 @@ test('keeps one draft and one conversation while Flect routes product and edit w
 	await expect(page.getByText(/fail-on-agent-start\.ts/)).toHaveCount(0);
 	const fix = page.getByRole('button', { name: 'Fix with Flect' }).last();
 	await expect(fix).toBeVisible();
+	// The fix flow supersedes the failed prompt's still-settling /prompts
+	// request; the client aborts it by design (net::ERR_ABORTED), same as the
+	// other prompt-superseding tests exempt via completedPromptPages.
+	completedPromptPages.add(page);
 	await fix.click();
 	await page.getByRole('button', { name: 'Actions' }).click();
 	const disableExtensions = page.getByRole('menuitem', {
