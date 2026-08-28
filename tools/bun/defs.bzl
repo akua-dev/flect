@@ -105,20 +105,20 @@ OUT="$2"
 # PATH) bun's own script-runner apparently prepended its own directory by
 # default and this worked.
 export PATH="$(dirname "$BUN"):$PATH"
-# Candidate fix for //:build ("Cannot find module '@astrojs/preact'",
-# a real, installed, bare-specifier dependency) and the Vite-powered
-# vitest/astro targets' shared symptom (Vite/Astro's own config-loading or
-# dev-server failing to resolve genuinely-present files/packages under this
-# sandbox, e.g. test_misc's vite-development-smoke.test.ts: "Failed to load
-# url /src/app.tsx ... Does the file exist?"): use_default_shell_env (above)
-# restores not just PATH but a small allowlist of other vars from the
-# invoking shell, which may include PWD -- a shell convention some tools
-# (Vite/Rollup among them) prefer over the real process cwd for root
-# detection specifically because it survives symlink traversal the way
-# getcwd() doesn't. If PWD still pointed at the original (non-Bazel)
-# checkout directory here, that would explain every one of these symptoms
-# at once: the packages/files in question are only actually installed/
-# built inside this sandboxed cwd, not at the plain checkout path.
+# PWD was tested and ruled out as the cause of //:build/:test_src/
+# :test_misc's shared Vite-under-Bazel symptom (Vite/Astro's own config-
+# loading or dev-server failing to resolve genuinely-present files/
+# packages under this sandbox): the theory was that use_default_shell_env
+# (above) restores not just PATH but a small allowlist of other vars from
+# the invoking shell, possibly including PWD -- a shell convention some
+# tools (Vite/Rollup among them) prefer over the real process cwd for root
+# detection. Diagnostic logging on a real run showed PWD already matched
+# the real sandboxed cwd on every action, both before and after this line
+# forced it explicitly, so that is not the mechanism. Kept anyway as
+# harmless belt-and-suspenders (PWD SHOULD always match the real cwd; this
+# just guarantees it rather than trusting whatever use_default_shell_env
+# happens to restore), not as an open theory -- see //:known_issues in
+# BUILD.bazel for where this investigation actually stands.
 export PWD="$(pwd)"
 export HOME="$(mktemp -d)"
 export CI=1
@@ -167,41 +167,32 @@ BUNFIG
 # then runs it -- see the module docstring above for why that is load-
 # bearing, not just simplicity.
 "$BUN" install --frozen-lockfile --ignore-scripts
-# Diagnostic instrumentation (cnap#866 follow-up): a real ubuntu-latest run
-# hit the auto-install fallback above immediately after a successful
-# `bun install` in this very same action/process -- bun's own --help says
-# "auto" mode (the default the fallback still uses once --no-install fails
-# to gate it) triggers "when no node_modules" is visible from cwd. Every
-# local reproduction of this exact install-then-run sequence (darwin,
-# raw filesystem AND real Bazel sandbox, single-process and 12-way
-# concurrent) found node_modules fully populated and resolvable at this
-# point, so this logs the same facts on the real failing runner to
-# confirm/refute whether cwd-visibility is actually the trigger there.
-echo "=== bun action diagnostics: $(pwd) ==="
-echo "PATH=$PATH" >&2
-echo "PWD env var (pre-fixup)=$PWD vs real cwd=$(pwd)" >&2
-which node >&2 2>&1 || echo "node NOT ON PATH" >&2
-which tar >&2 2>&1 || echo "tar NOT ON PATH" >&2
-ls -la node_modules >&2 2>&1 | head -5 || echo "node_modules NOT VISIBLE" >&2
-ls node_modules/@effect >&2 2>&1 || echo "node_modules/@effect NOT VISIBLE" >&2
-"$BUN" -e "console.log(require.resolve('@effect/platform-bun'))" >&2 2>&1 || echo "require.resolve('@effect/platform-bun') FAILED" >&2
-# Round 4 rung 2 follow-up: a minimal Bazel-sandboxed repro (file: dependency
-# with a wildcard `exports` entry, akua-dev/bun-wildcard-exports-repro-bazel)
-# reproduced "Cannot find module" under this exact processwrapper-sandbox
-# shape, and the installed node_modules/<pkg>/ in that repro was missing its
-# own package.json (only dist/ was present) -- meaning the exports map bun
-# needed to resolve the subpath from was never even on disk. Check directly
-# whether the REAL @effect/platform-bun@4.0.0-beta.102 registry-installed
-# store entry (a totally different bun install code path -- .bun store +
-# symlink, not a raw file: copy) is missing the same thing here, and whether
-# the subpath resolve failure reproduces via `bun -e` (not just native
-# `bun run *.ts` execution).
-PBUN_STORE="$(find node_modules/.bun -maxdepth 1 -iname '*platform-bun*beta.102*' 2>/dev/null | head -1)"
-echo "=== platform-bun store entry: ${{PBUN_STORE:-NOT FOUND}} ===" >&2
-if [ -n "$PBUN_STORE" ]; then
-  find "$PBUN_STORE" -maxdepth 4 >&2 2>&1
+# Diagnostic instrumentation (cnap#866 follow-up), guarded behind an env
+# var: this answered the questions it was written for (auto-install
+# fallback cwd-visibility, PATH/PWD restoration, the platform-bun store's
+# on-disk contents) across several real-run iterations of this
+# investigation, and runs on every single action otherwise -- real but
+# pure overhead once the questions are answered. Left in place rather than
+# deleted so whoever picks up //:known_issues can re-enable it without
+# reconstructing it: set FLECT_BUN_ACTION_DIAGNOSTICS=1 (e.g.
+# `bazel test --action_env=FLECT_BUN_ACTION_DIAGNOSTICS=1 ...`) to print it
+# again.
+if [ -n "${{FLECT_BUN_ACTION_DIAGNOSTICS:-}}" ]; then
+  echo "=== bun action diagnostics: $(pwd) ==="
+  echo "PATH=$PATH" >&2
+  echo "PWD env var (pre-fixup)=$PWD vs real cwd=$(pwd)" >&2
+  which node >&2 2>&1 || echo "node NOT ON PATH" >&2
+  which tar >&2 2>&1 || echo "tar NOT ON PATH" >&2
+  ls -la node_modules >&2 2>&1 | head -5 || echo "node_modules NOT VISIBLE" >&2
+  ls node_modules/@effect >&2 2>&1 || echo "node_modules/@effect NOT VISIBLE" >&2
+  "$BUN" -e "console.log(require.resolve('@effect/platform-bun'))" >&2 2>&1 || echo "require.resolve('@effect/platform-bun') FAILED" >&2
+  PBUN_STORE="$(find node_modules/.bun -maxdepth 1 -iname '*platform-bun*beta.102*' 2>/dev/null | head -1)"
+  echo "=== platform-bun store entry: ${{PBUN_STORE:-NOT FOUND}} ===" >&2
+  if [ -n "$PBUN_STORE" ]; then
+    find "$PBUN_STORE" -maxdepth 4 >&2 2>&1
+  fi
+  "$BUN" -e "console.log(require.resolve('@effect/platform-bun/BunFileSystem'))" >&2 2>&1 || echo "require.resolve('@effect/platform-bun/BunFileSystem') FAILED via -e eval" >&2
 fi
-"$BUN" -e "console.log(require.resolve('@effect/platform-bun/BunFileSystem'))" >&2 2>&1 || echo "require.resolve('@effect/platform-bun/BunFileSystem') FAILED via -e eval" >&2
 "$BUN" {invocation}
 touch "$OUT"
 """.format(invocation = ctx.attr.invocation),
@@ -229,7 +220,7 @@ _bun_action = rule(
     },
 )
 
-def bun_check(name, script, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
+def bun_check(name, script, srcs, extra_srcs = [], bun = "//tools/bun:bun", tags = []):
     """Defines a cacheable Bazel test that runs `bun run <script>`.
 
     Args:
@@ -240,6 +231,9 @@ def bun_check(name, script, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
         extra_srcs: additional labels (e.g. other targets' outputs) to
             depend on.
         bun: label of the bun executable.
+        tags: forwarded to the build_test target, e.g. ["manual"] to
+            exclude a known-broken target from `bazel test //...` while
+            keeping it runnable by its explicit label.
     """
     run_name = name + "_run"
     _bun_action(
@@ -247,13 +241,15 @@ def bun_check(name, script, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
         bun = bun,
         invocation = "run --no-install " + script,
         srcs = srcs + extra_srcs,
+        tags = tags,
     )
     build_test(
         name = name,
         targets = [":" + run_name],
+        tags = tags,
     )
 
-def bun_run(name, args, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
+def bun_run(name, args, srcs, extra_srcs = [], bun = "//tools/bun:bun", tags = []):
     """Like bun_check, but runs an arbitrary `bun <args...>` invocation
     (e.g. `run vitest run src`) instead of a bare package.json script name.
 
@@ -261,6 +257,10 @@ def bun_run(name, args, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
     it (see bun_check's docstring in this module and the module-level
     comment on --no-install for why this is permanent, not a one-off
     debugging flag).
+
+    tags: forwarded to the build_test target, e.g. ["manual"] to exclude a
+        known-broken target from `bazel test //...` while keeping it
+        runnable by its explicit label.
     """
     if not args.startswith("run "):
         fail("bun_run: args must start with \"run \", got: " + args)
@@ -270,8 +270,10 @@ def bun_run(name, args, srcs, extra_srcs = [], bun = "//tools/bun:bun"):
         bun = bun,
         invocation = "run --no-install " + args[len("run "):],
         srcs = srcs + extra_srcs,
+        tags = tags,
     )
     build_test(
         name = name,
         targets = [":" + run_name],
+        tags = tags,
     )

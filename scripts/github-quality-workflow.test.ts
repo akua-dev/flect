@@ -156,6 +156,13 @@ describe('GitHub quality workflow', () => {
 		assert.strictEqual(bazel['runs-on'], 'ubuntu-latest');
 		const bazelCommands = runCommands(jobSteps(bazel, 'bazel'));
 		assert.include(bazelCommands, 'bazel test //... --keep_going --jobs=4');
+		// Native (non-Bazel) complement for //:build/:test_src/:test_misc,
+		// tags = ["manual"] in BUILD.bazel because all three hit the same
+		// not-yet-root-caused Vite-under-Bazel bug -- see //:known_issues
+		// and each target's own KNOWN ISSUE comment.
+		assert.include(bazelCommands, 'bun install --frozen-lockfile');
+		assert.include(bazelCommands, 'bun run vitest run src cli examples scripts tests');
+		assert.include(bazelCommands, 'bun run build');
 
 		const codeChangedCondition =
 			"github.event_name != 'pull_request' || needs.changes.outputs.code == 'true'";

@@ -94,8 +94,38 @@ jobs:
       # so unbounded parallelism on a cold cache tried to hold ~13 node_modules
       # trees on disk at once and exhausted ubuntu-latest's disk -- measured
       # directly on this test bed, see the PR body's timing table.
+      #
+      # `//:build`/`//:test_src`/`//:test_misc` are tags = ["manual"] (see
+      # BUILD.bazel and //:known_issues) -- all three hit the same
+      # not-yet-root-caused Vite-under-Bazel bug (astro build / Vitest
+      # dev-server / Vitest module graph all fail to resolve genuinely-
+      # present files/packages specifically inside a Bazel sandbox; see
+      # each target's own KNOWN ISSUE comment for what's been ruled out).
+      # `bazel test //...` below therefore does not cover them.
       - name: Run the Bazel-cached quality gate
         run: bazel test //... --keep_going --jobs=4
+
+      # Temporary complement to the manual-tagged Bazel targets above: this
+      # is exactly what //:build/:test_src/:test_misc would have covered,
+      # run the plain way (no Bazel sandbox) since that's proven green here
+      # -- the bug those three targets hit is specific to running under
+      # Bazel's sandbox, not to flect's own code. Remove this step (and the
+      # `manual` tags + //:known_issues in BUILD.bazel) once the
+      # Vite-under-Bazel class is root-caused and those targets are green
+      # under Bazel too.
+      - name: Install the pinned Bun runtime
+        uses: oven-sh/setup-bun@b7a1c7ccf290d58743029c4f6903da283811b979
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install locked dependencies (native complement)
+        run: bun install --frozen-lockfile
+
+      - name: Run src/cli/examples/scripts/tests unit suites (native complement for //:test_src, //:test_misc)
+        run: bun run vitest run src cli examples scripts tests
+
+      - name: Run the production build (native complement for //:build, includes check:bundle)
+        run: bun run build
 
   e2e:
     name: Browser end-to-end tests

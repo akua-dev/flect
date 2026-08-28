@@ -156,6 +156,13 @@ bun_check(
 # ---------------------------------------------------------------------------
 bun_run(
     name = "test_src",
+    # tags = ["manual"]: excludes this from `bazel test //...` (the
+    # workflow's required gate) while keeping it runnable by explicit label
+    # (`bazel test //:test_src`) for whoever picks up the KNOWN ISSUE below
+    # -- see //:known_issues at the bottom of this file, and the "native
+    # complement" step in .github/workflows/quality.yml's `bazel` job that
+    # covers what this target would have covered, until it's root-caused.
+    tags = ["manual"],
     # KNOWN ISSUE, timeboxed (not root-caused): ~39/125 of src/'s test files
     # intermittently fail with "Cannot find module '/@fs/.../tests/
     # vitest.setup.ts'" or "Cannot find package 'esbuild-wasm/....wasm?url'"
@@ -210,6 +217,9 @@ bun_run(
 
 bun_run(
     name = "test_misc",
+    # tags = ["manual"]: see //:test_src's comment above -- same reasoning,
+    # same native-complement step covering this in quality.yml.
+    tags = ["manual"],
     args = "run vitest run cli examples scripts tests",
     # scripts/github-quality-workflow.test.ts reads
     # .github/workflows/quality.yml directly (it validates that file's own
@@ -304,6 +314,9 @@ bun_run(
 bun_check(
     name = "build",
     script = "build",
+    # tags = ["manual"]: see //:test_src's comment above -- same reasoning,
+    # same native-complement step covering this in quality.yml.
+    tags = ["manual"],
     # build's own "tsc -b" step needs the same full project-reference
     # closure //:typecheck does (confirmed on a real run: without
     # EXAMPLES/SERVER/CLI this produced real TS2307 "Cannot find module"
@@ -336,8 +349,13 @@ bun_check(
 )
 
 # ---------------------------------------------------------------------------
-# Everything above, as one test_suite convenience target. `bazel test //...`
-# already reaches every build_test in this file; this just names the group.
+# Everything green, as one test_suite convenience target. `bazel test //...`
+# already reaches every non-manual build_test in this file; this just names
+# the group. Deliberately excludes :build/:test_src/:test_misc (tags =
+# ["manual"] above) -- see //:known_issues below for those, and
+# .github/workflows/quality.yml's `bazel` job for the native (non-Bazel)
+# step that covers what they would have covered, until the shared
+# Vite-under-Bazel bug they hit is root-caused.
 # (g) Playwright e2e is deliberately NOT a Bazel target -- see the PR body
 # and README for the evidence: it needs network for the browser download,
 # gains nothing from Bazel's action cache (it is not meaningfully
@@ -350,7 +368,6 @@ bun_check(
 test_suite(
     name = "all",
     tests = [
-        ":build",
         ":check_effect",
         ":check_effect_concurrency",
         ":check_flect_skill",
@@ -358,10 +375,33 @@ test_suite(
         ":check_rifty",
         ":lint_biome",
         ":lint_oxfmt",
-        ":test_misc",
         ":test_product",
         ":test_server_shared",
-        ":test_src",
         ":typecheck",
+    ],
+)
+
+# ---------------------------------------------------------------------------
+# The manual-tagged known-issue targets, named and grouped for visibility
+# (they don't show up in `bazel test //...`/`:all` above) and so whoever
+# picks up the Vite-under-Bazel bug can run just these three:
+# `bazel test //:known_issues`. Each target's own KNOWN ISSUE comment has
+# the full diagnosis and what's already been ruled out.
+#
+# This suite is ALSO tagged "manual": a test_suite's own `tests` list is
+# not itself subject to member-level manual filtering (confirmed on a real
+# local run -- `bazel test //...` still executed :build/:test_misc/
+# :test_src via this suite even with each of them individually tagged
+# manual, until this suite was tagged manual too), so without this tag
+# `//...` would still reach them transitively through this suite despite
+# the tags above.
+# ---------------------------------------------------------------------------
+test_suite(
+    name = "known_issues",
+    tags = ["manual"],
+    tests = [
+        ":build",
+        ":test_misc",
+        ":test_src",
     ],
 )
