@@ -433,7 +433,17 @@ test('prepares and activates an exact fast-forward update from real Git history'
 		buffer: Buffer.from(fixtures.compatibleUpdate.archive)
 	});
 	review = page.getByRole('region', { name: 'Weather workspace' });
-	await expect(review).toBeVisible();
+	// Playwright's expect() default (5s) was tuned on macos-15; parsing the
+	// uploaded archive and computing the real fast-forward diff genuinely
+	// takes longer on ubuntu-latest's shared, lower-per-core-throughput
+	// runners (akua-dev/flect#61). Confirmed on real runs
+	// (flect-projection-staging, 2026-08-28, runs 33191981841 /
+	// 33195457513): this exact assertion missed the 5s window twice out of
+	// three real runs even though nothing was actually stuck (the same
+	// element always did appear once given more time). 15s is real
+	// headroom, not a weaker condition -- same element, same visibility
+	// check.
+	await expect(review).toBeVisible({ timeout: 15_000 });
 	await expect(review.getByText(/1\.1\.0 · update/)).toBeVisible();
 	await expect(review.getByText('1 reviewed changes')).toBeVisible();
 	await review.getByRole('button', { name: 'Prepare update' }).click();

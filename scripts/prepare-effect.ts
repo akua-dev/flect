@@ -141,7 +141,7 @@ const prepareEffect = Effect.gen(function* () {
 	yield* verifyCheckout();
 });
 
-const checkEffect = Effect.gen(function* () {
+export const checkEffect = Effect.gen(function* () {
 	const exists = yield* checkoutDirectoryExists();
 	if (exists) {
 		yield* verifyCheckout();
