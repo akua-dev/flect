@@ -58,6 +58,13 @@ Repository-wide constraints:
   Tauri, Rust, Swift, extensions, and product integrations may request UI
   changes only through the same Effect UI-shaping capabilities; none may write
   interface state directly.
+- New Effect-to-React state wiring in flect's own UI uses the Atom bridge
+  (`effect/unstable/reactivity`'s `Atom`/`AtomRegistry`, via
+  `src/hooks/use-atom.ts`), not a hand-rolled `SubscriptionRef` + `useState` +
+  `Stream.runForEach` subscription. See
+  `.agents/skills/flect-ui-state/SKILL.md` for the pattern, the pinned v4 API
+  surface, and the pilot migration; the pre-Atom pattern is legacy-only on the
+  surfaces that already use it, not a template for new code.
 - Use `@effect/vitest` for Effect behavior and test Layers for dependencies.
   Prefer Effect platform modules for HTTP, Bun, browser, configuration,
   resources, cancellation, and observability when the capability exists.
