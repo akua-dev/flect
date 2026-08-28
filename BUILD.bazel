@@ -147,19 +147,23 @@ bun_check(
 bun_run(
     name = "test_src",
     args = "run vitest run src",
-    srcs = CONFIG + SRC + SHARED + PRODUCT,
+    # TESTS (tests/vitest.setup.ts) is required by every shard, not just
+    # the ones whose own directory happens to be under tests/ -- confirmed
+    # on a real run: omitting it produced a crisp "Cannot find module
+    # '.../tests/vitest.setup.ts'" (vitest.config.ts's global setupFiles).
+    srcs = CONFIG + SRC + SHARED + PRODUCT + TESTS,
 )
 
 bun_run(
     name = "test_server_shared",
     args = "run vitest run server shared",
-    srcs = CONFIG + SERVER + SHARED,
+    srcs = CONFIG + SERVER + SHARED + TESTS,
 )
 
 bun_run(
     name = "test_product",
     args = "run vitest run packages",
-    srcs = CONFIG + PRODUCT + SHARED,
+    srcs = CONFIG + PRODUCT + SHARED + TESTS,
 )
 
 bun_run(
@@ -213,7 +217,12 @@ bun_check(
 bun_check(
     name = "build",
     script = "build",
-    srcs = CONFIG + SRC + SHARED + PRODUCT + ASSETS,
+    # build's own "tsc -b" step needs the same full project-reference
+    # closure //:typecheck does (confirmed on a real run: without
+    # EXAMPLES/SERVER/CLI this produced real TS2307 "Cannot find module"
+    # errors for src/ files that relative-import from those directories),
+    # plus ASSETS for the astro build step.
+    srcs = CONFIG + SRC + SHARED + PRODUCT + EXAMPLES + SERVER + CLI + ASSETS,
 )
 
 # ---------------------------------------------------------------------------
