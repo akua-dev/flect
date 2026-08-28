@@ -96,6 +96,16 @@ export class PortableExtensionResources extends Schema.Class<PortableExtensionRe
 	maxIntents: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20 }))
 }) {}
 
+/**
+ * A capsule-embedded App Agent or Shaper extension declaration: identity,
+ * target role(s), Flect/extension-API compatibility, requested capabilities,
+ * public instructions, and a bounded resource ceiling. Declaring a package
+ * is a request and inert metadata only - decoding a capsule never activates
+ * it; the host enables each role independently and runs one bounded worker
+ * test before activation. Its `bundle` must name a declared capsule payload
+ * whose SHA-256 matches `provenance.bundleSha256` and whose size does not
+ * exceed {@link MAX_PORTABLE_EXTENSION_SOURCE_BYTES}.
+ */
 export class PortableExtensionPackage extends Schema.Class<PortableExtensionPackage>(
 	'PortableExtensionPackage'
 )({

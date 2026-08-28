@@ -125,6 +125,24 @@ describe('portable .flect capsules', () => {
 		).rejects.toMatchObject({ _tag: 'InvalidCapsule' });
 	});
 
+	it('names the specific missing or invalid manifest field to a capsule author', async () => {
+		const value = source();
+		await expect(
+			Effect.runPromise(
+				encodeCapsule({
+					...value,
+					manifest: {
+						...value.manifest,
+						version: 'not-a-semver'
+					} as unknown as CapsuleSource['manifest']
+				})
+			)
+		).rejects.toMatchObject({
+			_tag: 'InvalidCapsule',
+			message: expect.stringContaining('version')
+		});
+	});
+
 	it('rejects tampered payload hashes', async () => {
 		const archive = await Effect.runPromise(encodeCapsule(source()));
 		const tampered = archive.slice();

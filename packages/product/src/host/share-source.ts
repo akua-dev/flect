@@ -30,6 +30,14 @@ export class ShareSourceFailure extends Schema.TaggedErrorClass<ShareSourceFailu
 	}
 ) {}
 
+/**
+ * A named private source adapter. `open` receives only the opaque
+ * `reference` from a `SharePrivateSource` descriptor; keep the actual
+ * credential inside this closure - it must never appear in the public
+ * descriptor, metadata, prompts, or logs. The returned bytes still pass
+ * through Flect's ordinary capsule quarantine and inactive review before
+ * any retain or activation decision.
+ */
 export interface PrivateShareSourceDefinition {
 	readonly id: string;
 	readonly name: string;
@@ -59,6 +67,13 @@ const failure = (reason: ShareSourceFailure['reason']) =>
 						: 'The private share source could not be opened.'
 	});
 
+/**
+ * Compose a {@link PrivateShareSources} Layer from named source adapters.
+ * Rejects duplicate or invalid adapter IDs at Layer construction; at
+ * runtime, `open` dispatches by `SharePrivateSource.adapterId`, sanitizes
+ * adapter defects, and enforces `MAX_SHARE_ARCHIVE_BYTES` before returning
+ * bytes to the caller.
+ */
 export const makePrivateShareSourcesLayer = (options: {
 	readonly sources: ReadonlyArray<PrivateShareSourceDefinition>;
 }) =>

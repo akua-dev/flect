@@ -9,6 +9,116 @@ This document owns the adopter mechanics. The authority model lives in
 [`docs/trust-model.md`](trust-model.md), and the implemented topology lives in
 [`ARCHITECTURE.md`](../ARCHITECTURE.md).
 
+## Quickstart: adopt Flect end-to-end
+
+Every command below has been run against this repository. Substitute your own
+clone URL; everything else is copy-pasteable.
+
+**1. Install and build the public SDK.**
+
+```bash
+git clone https://github.com/akua-dev/flect.git
+cd flect
+bun install --frozen-lockfile
+bun run build:product
+```
+
+`build:product` runs `tsc -p packages/product/tsconfig.json` and emits
+declarations plus ESM into `packages/product/dist`. If you are vendoring
+Flect as a subdirectory of your own bun/npm workspace rather than cloning it
+standalone, give it its own install boundary (a nested `.git`, or excluding
+it from your outer workspace's glob patterns). Otherwise your package
+manager's workspace-root detection can walk past Flect's own `package.json`
+into your outer workspace and resolve a dependency version your outer
+workspace happens to need instead of the version Flect's `bun.lock` pins for
+the same package name — a real, reproducible failure mode, not a hypothetical
+one, when two sibling packages need different major versions of a
+same-named transitive dependency.
+
+**2. Read and run the four reference integrations.**
+
+[`examples/product-sdk/`](../examples/product-sdk/) contains four independent,
+minimal `@flect/product` integrations — offline, browser-direct GraphQL,
+authenticated-brokered, and private-sharing — described in
+[`examples/product-sdk/README.md`](../examples/product-sdk/README.md) and in
+the [package README's "Reference products" section](../packages/product/README.md#reference-products).
+Prove them out:
+
+```bash
+./node_modules/.bin/vitest run examples/product-sdk/reference-products.test.ts
+```
+
+This exercises operation behavior, recommended capsule/extension decoding,
+protected grants, denial precedence, ordered cancellation, inference
+invariance, private-source closure boundaries, secret absence, personal
+fork/export preservation, and detach — five tests, all against the public SDK
+surface only. `examples/product-adapter/` is a separate, older exercise that
+composes Flect's private `src/capabilities/*` internals directly; treat it as
+"how Flect itself wires the broker," not as adopter-facing sample code.
+
+**3. Package the SDK as a standalone artifact.**
+
+```bash
+bun run product:package
+```
+
+This single command builds declarations, creates an allowlisted tarball,
+installs it into a clean temporary consumer project, typechecks that
+consumer against only the published `.d.ts` files, and runs its smallest
+offline product end to end. A successful run is real evidence the published
+package boundary works outside this repository, not just inside it — it does
+not publish to a registry.
+
+**4. Define your product's integration.**
+
+Start from the ["Smallest integration"](../packages/product/README.md#smallest-integration)
+example in the package README: one `ProductCapabilityManifest`, one operation
+with an `authorize`/`execute` pair, and a recommended capsule built with
+`encodeCapsule`/`hashCapsuleArchive`. Pick a connection model from the
+[table in that README](../packages/product/README.md#choose-a-connection-model) —
+`offline`, `browser-direct`, or `brokered` — matching how your product's data
+is reachable.
+
+**5. Author, package, and import a `.flect` capsule for real.**
+
+[`examples/product-sdk/reference-support.ts`](../examples/product-sdk/reference-support.ts)'s
+`makeReferenceExperience` is a complete, runnable example of capsule
+authoring: it builds a manifest, an `ui/index.html` entrypoint, and an
+optional portable App Agent/Shaper extension bundle, then calls
+`encodeCapsule` to produce real `.flect` bytes and `hashCapsuleArchive` to
+digest them. To see the resulting capsule reviewed and imported by the actual
+running app rather than only decoded in a unit test, run (with ports `3210`
+and `5173` free):
+
+```bash
+./node_modules/.bin/playwright test tests/e2e/flect.spec.ts \
+  -g "round-trips an accepted app through a verified .flect capsule|reviews imported provenance and blocks unavailable required capabilities"
+```
+
+`playwright.config.ts`'s `webServer` entries start the `FLECT_TEST_MODE=1`
+API server on `127.0.0.1:3210` and a built-and-previewed browser host on
+`127.0.0.1:5173` for you, and tear them down after the run. The first spec
+exports the running app as
+`interface.flect` through the Actions menu, then re-imports that exact file
+and confirms "Imported app ready" and an enabled Activate control. The second
+builds a capsule declaring an unavailable required capability and confirms
+protected review shows publisher, version, signature status, and capability
+scope, with Activate disabled until the request is satisfiable — proving
+[FQ-09.3](product-quality.md) (inspectable before activation) against the
+live UI, not just against the decoder.
+
+**6. Gate before you ship.**
+
+```bash
+bun run check          # effect/lint/typecheck/unit tests
+bun run product:package # standalone consumer round-trip
+```
+
+Add `bun run test:e2e -- tests/e2e/product-adapter.spec.ts tests/e2e/product-adoption.spec.ts tests/e2e/product-capability.spec.ts`
+if you changed anything under `packages/product/`, `examples/product-sdk/`,
+or `examples/product-adapter/`; those specs require ports `3210` and `5173`
+to be free.
+
 ## Effect services
 
 An adopter composes the transport services it needs at the trusted runtime
