@@ -96,7 +96,7 @@ export const makeProductHttpLayer = (options: {
 	const credentials = options.credentialHeaders ?? (() => Effect.succeed([]));
 
 	return Layer.succeed(ProductHttp)({
-		invoke: Effect.fn('Flect.ProductHttp.invoke')((request) =>
+		invoke: Effect.fn('ProductHttp.invoke')((request) =>
 			Effect.gen(function* () {
 				const policy = policies.get(request.policyId);
 				if (policy === undefined || !validPolicy(policy)) {

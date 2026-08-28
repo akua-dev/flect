@@ -53,7 +53,7 @@ const strictOptions: SchemaAST.ParseOptions = {
 const decodeResponse = Schema.decodeUnknownEffect(WasiWorkerResponse, strictOptions);
 
 export const makeRiftyWasiWorkerHandle = (worker: WasiWorker): RiftyWasiWorkerHandle => ({
-	run: Effect.fn('Flect.RiftyWasiWorker.run')((request) =>
+	run: Effect.fn('RiftyWasiWorker.run')((request) =>
 		Effect.callback<WasiExecutionResult, BrowserExecutionFailed>((resume) => {
 			const id = `request-${crypto.randomUUID().replaceAll('-', '')}`;
 			let completed = false;
@@ -134,7 +134,7 @@ const makeRiftyWasiExecutionLayer = Layer.effect(
 	Effect.gen(function* () {
 		const factory = yield* RiftyWasiWorkerFactory;
 		return {
-			run: Effect.fn('Flect.RiftyWasi.run')((request) => {
+			run: Effect.fn('RiftyWasi.run')((request) => {
 				if (request.module.byteLength === 0 || request.module.byteLength > MAX_MODULE_BYTES) {
 					return Effect.fail(
 						wasiFailure('invalid-input', 'The browser WASI module size is invalid.')

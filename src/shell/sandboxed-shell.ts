@@ -154,7 +154,7 @@ export interface SandboxedShellWorkspaceShape {
 	readonly stop: Effect.Effect<void, BunCommandFailed>;
 }
 
-const makeSandboxedShellWorkspace = Effect.fn('Flect.SandboxedShell.makeWorkspace')(function* (
+const makeSandboxedShellWorkspace = Effect.fn('SandboxedShell.makeWorkspace')(function* (
 	options: SandboxedShellWorkspaceOptions
 ) {
 	const command = yield* BunCommand;
@@ -265,7 +265,7 @@ const makeSandboxedShellWorkspace = Effect.fn('Flect.SandboxedShell.makeWorkspac
 	bash.registerTransformPlugin(reservedPlugin);
 
 	return {
-		replaceTree: Effect.fn('Flect.SandboxedShell.replaceTree')((root, files) =>
+		replaceTree: Effect.fn('SandboxedShell.replaceTree')((root, files) =>
 			executionPermit.withPermit(
 				Effect.tryPromise({
 					try: async () => {
@@ -305,7 +305,7 @@ const makeSandboxedShellWorkspace = Effect.fn('Flect.SandboxedShell.makeWorkspac
 				})
 			)
 		),
-		execute: Effect.fn('Flect.SandboxedShell.execute')((line, executeOptions) =>
+		execute: Effect.fn('SandboxedShell.execute')((line, executeOptions) =>
 			executionPermit.withPermit(
 				Effect.sync(() => {
 					previewUrl = undefined;
@@ -371,15 +371,15 @@ const missingRoleWorkspace = () =>
 const makeSandboxedShellService = (
 	workspaces: Partial<Readonly<Record<SandboxedShellWorkspace, SandboxedShellWorkspaceShape>>>
 ): SandboxedShellShape => ({
-	replaceTree: Effect.fn('Flect.SandboxedShell.replaceTreeForRole')(
+	replaceTree: Effect.fn('SandboxedShell.replaceTreeForRole')(
 		(workspace, root, files) =>
 			workspaces[workspace]?.replaceTree(root, files) ?? missingRoleWorkspace()
 	),
-	execute: Effect.fn('Flect.SandboxedShell.executeForRole')(
+	execute: Effect.fn('SandboxedShell.executeForRole')(
 		(workspace: SandboxedShellWorkspace, line: string, options?: SandboxedShellExecuteOptions) =>
 			workspaces[workspace]?.execute(line, options) ?? missingRoleWorkspace()
 	),
-	stop: Effect.fn('Flect.SandboxedShell.stopRole')(
+	stop: Effect.fn('SandboxedShell.stopRole')(
 		(workspace: SandboxedShellWorkspace) => workspaces[workspace]?.stop ?? missingRoleWorkspace()
 	)
 });
@@ -460,28 +460,25 @@ export const makeLiveSandboxedShellLayer = (options: {
 
 type LiveRoleWorkspaceOptions = Omit<Parameters<typeof makeLiveSandboxedShellLayer>[0], 'role'>;
 
-const makeLiveWorkspace = (
+const makeLiveWorkspace = Effect.fn('SandboxedShell.makeLiveWorkspace')(function* (
 	role: FlectAgentRole,
 	workspace: SandboxedShellWorkspace,
 	options: LiveRoleWorkspaceOptions,
 	fs: IFileSystem
-) =>
-	Effect.gen(function* () {
-		const commandLayer = makeShellBunCommandLiveLayer({
-			fs,
-			...(options.packageFetch === undefined ? {} : { packageFetch: options.packageFetch }),
-			...(options.registryBaseUrl === undefined
-				? {}
-				: { registryBaseUrl: options.registryBaseUrl }),
-			...(options.moduleLayer === undefined ? {} : { moduleLayer: options.moduleLayer })
-		});
-		return yield* makeSandboxedShellWorkspace({
-			role,
-			workspace,
-			files: {},
-			fs
-		}).pipe(Effect.provide(commandLayer));
+) {
+	const commandLayer = makeShellBunCommandLiveLayer({
+		fs,
+		...(options.packageFetch === undefined ? {} : { packageFetch: options.packageFetch }),
+		...(options.registryBaseUrl === undefined ? {} : { registryBaseUrl: options.registryBaseUrl }),
+		...(options.moduleLayer === undefined ? {} : { moduleLayer: options.moduleLayer })
 	});
+	return yield* makeSandboxedShellWorkspace({
+		role,
+		workspace,
+		files: {},
+		fs
+	}).pipe(Effect.provide(commandLayer));
+});
 
 export const makeLiveRoleSandboxedShellLayer = (options: {
 	readonly workspaceId?: string;

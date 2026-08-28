@@ -38,7 +38,7 @@ const streamPrefixed = (prefix: string, stream: Stream.Stream<Uint8Array, unknow
 		Stream.runForEach((line) => Effect.sync(() => console.log(`[${prefix}] ${line}`)))
 	);
 
-const runToCompletion = Effect.fn('Flect.Dev.runToCompletion')(function* (
+const runToCompletion = Effect.fn('Dev.runToCompletion')(function* (
 	label: string,
 	command: ChildProcess.Command
 ) {
@@ -50,7 +50,7 @@ const runToCompletion = Effect.fn('Flect.Dev.runToCompletion')(function* (
 	return exitCode;
 });
 
-const runToSuccess = Effect.fn('Flect.Dev.runToSuccess')(function* (
+const runToSuccess = Effect.fn('Dev.runToSuccess')(function* (
 	label: string,
 	command: ChildProcess.Command
 ) {
@@ -60,7 +60,7 @@ const runToSuccess = Effect.fn('Flect.Dev.runToSuccess')(function* (
 	}
 });
 
-const startAstroBackground = Effect.fn('Flect.Dev.startAstro')(function* () {
+const startAstroBackground = Effect.fn('Dev.startAstro')(function* () {
 	yield* runToSuccess(
 		'astro',
 		ChildProcess.make('astro', ['dev', '--background', '--host', '127.0.0.1'], astroEnv)
@@ -79,7 +79,7 @@ const stopAstroBackground = Effect.ignore(
 // That is a clean stop, not a crash - only other nonzero codes are failures.
 const terminationSignalExitCodes: ReadonlySet<number> = new Set([130, 143]);
 
-const runRuntimeForeground = Effect.fn('Flect.Dev.runRuntime')(function* () {
+const runRuntimeForeground = Effect.fn('Dev.runRuntime')(function* () {
 	const exitCode = yield* Effect.scoped(
 		runToCompletion('runtime', ChildProcess.make('bun', ['--watch', 'server/index.ts']))
 	);

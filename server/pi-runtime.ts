@@ -136,32 +136,30 @@ type PiAgentPolicies = {
 	readonly shaper: PiSessionPolicy;
 };
 
-export const acquireProtectedAgentSet = Effect.fn('Flect.PiSdk.acquireProtectedAgentSet')(
-	function* (
-		policies: PiAgentPolicies,
-		createProtectedSession: (policy: PiSessionPolicy) => Effect.Effect<PiSession, PiOperationFailed>
-	) {
-		const guardian = yield* createProtectedSession(policies.guardian);
-		const app = yield* createProtectedSession(policies.app).pipe(
-			Effect.tapError(() => guardian.dispose),
-			Effect.onInterrupt(() => guardian.dispose)
-		);
-		const disposeEarlierSessions = Effect.all([app.dispose, guardian.dispose], {
-			concurrency: 'unbounded',
-			discard: true
-		});
-		const shaper = yield* createProtectedSession(policies.shaper).pipe(
-			Effect.tapError(() => disposeEarlierSessions),
-			Effect.onInterrupt(() => disposeEarlierSessions)
-		);
+export const acquireProtectedAgentSet = Effect.fn('PiSdk.acquireProtectedAgentSet')(function* (
+	policies: PiAgentPolicies,
+	createProtectedSession: (policy: PiSessionPolicy) => Effect.Effect<PiSession, PiOperationFailed>
+) {
+	const guardian = yield* createProtectedSession(policies.guardian);
+	const app = yield* createProtectedSession(policies.app).pipe(
+		Effect.tapError(() => guardian.dispose),
+		Effect.onInterrupt(() => guardian.dispose)
+	);
+	const disposeEarlierSessions = Effect.all([app.dispose, guardian.dispose], {
+		concurrency: 'unbounded',
+		discard: true
+	});
+	const shaper = yield* createProtectedSession(policies.shaper).pipe(
+		Effect.tapError(() => disposeEarlierSessions),
+		Effect.onInterrupt(() => disposeEarlierSessions)
+	);
 
-		return {
-			guardian,
-			app,
-			shaper
-		} satisfies PiAgentSet;
-	}
-);
+	return {
+		guardian,
+		app,
+		shaper
+	} satisfies PiAgentSet;
+});
 
 export interface PiSdkShape {
 	readonly listModels: Effect.Effect<ReadonlyArray<ModelSummary>, PiOperationFailed>;
@@ -314,7 +312,7 @@ export const PiSdkLive = Layer.effect(
 	Effect.gen(function* () {
 		const modelRuntime = yield* PiModelRuntime;
 
-		const availableModels = Effect.fn('Flect.PiSdk.availableModels')(() =>
+		const availableModels = Effect.fn('PiSdk.availableModels')(() =>
 			Effect.tryPromise({
 				try: () => modelRuntime.getAvailable(),
 				catch: () => piFailure('list_models')
@@ -335,7 +333,7 @@ export const PiSdkLive = Layer.effect(
 			)
 		);
 
-		const createAgentSet = Effect.fn('Flect.PiSdk.createAgentSet')(function* (
+		const createAgentSet = Effect.fn('PiSdk.createAgentSet')(function* (
 			model: ModelSummary,
 			reasoningLevel: ReasoningLevel | undefined,
 			policies: {
@@ -357,7 +355,7 @@ export const PiSdkLive = Layer.effect(
 				);
 			}
 
-			const createProtectedSession = Effect.fn('Flect.PiSdk.createProtectedSession')(function* (
+			const createProtectedSession = Effect.fn('PiSdk.createProtectedSession')(function* (
 				policy: PiSessionPolicy
 			) {
 				const configuredSettings =
@@ -517,7 +515,7 @@ export const PiSdkLive = Layer.effect(
 								listeners.delete(listener);
 							};
 						}),
-					prompt: Effect.fn('Flect.PiSession.prompt')(function* (text: string) {
+					prompt: Effect.fn('PiSession.prompt')(function* (text: string) {
 						observedTextDelta = false;
 						const previousMessageCount = result.session.messages.length;
 						yield* Effect.tryPromise({
@@ -544,11 +542,11 @@ export const PiSdkLive = Layer.effect(
 							}
 						}
 					}),
-					completeShellRequest: Effect.fn('Flect.PiSession.completeShellRequest')(
+					completeShellRequest: Effect.fn('PiSession.completeShellRequest')(
 						(requestId: string, shellResult: BunCommandResult) =>
 							shellBridge.complete(requestId, shellResult)
 					),
-					abort: Effect.fn('Flect.PiSession.abort')(function* () {
+					abort: Effect.fn('PiSession.abort')(function* () {
 						yield* shellBridge.cancel;
 						yield* Effect.try({
 							// AgentSession.abort() waits for idle. Flect's operation
@@ -615,7 +613,7 @@ type OperationController = {
 	readonly close: Effect.Effect<void>;
 };
 
-const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController')(function* (
+const makeOperationController = Effect.fn('Runtime.makeOperationController')(function* (
 	sessionId: string,
 	abort: () => Effect.Effect<void, PiOperationFailed>
 ) {
@@ -625,7 +623,7 @@ const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController
 		cancelling: undefined
 	});
 
-	const start = Effect.fn('Flect.Runtime.startOperation')(function* (operation: ActiveOperation) {
+	const start = Effect.fn('Runtime.startOperation')(function* (operation: ActiveOperation) {
 		const result = yield* Ref.modify(state, (current) => {
 			const outcome = current.closed ? 'closed' : current.active === undefined ? 'started' : 'busy';
 			const next = outcome === 'started' ? { ...current, active: operation } : current;
@@ -650,7 +648,7 @@ const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController
 		}
 	});
 
-	const finish = Effect.fn('Flect.Runtime.finishOperation')(function* (operation: ActiveOperation) {
+	const finish = Effect.fn('Runtime.finishOperation')(function* (operation: ActiveOperation) {
 		yield* Ref.update(state, (current) =>
 			current.active === operation
 				? current.cancelling === operation
@@ -661,7 +659,7 @@ const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController
 		yield* Deferred.succeed(operation.done, undefined);
 	});
 
-	const cancelActive = Effect.fn('Flect.Runtime.cancelActiveOperation')(() =>
+	const cancelActive = Effect.fn('Runtime.cancelActiveOperation')(() =>
 		Effect.uninterruptibleMask((restore) =>
 			Effect.gen(function* () {
 				const operation = yield* Ref.modify(state, (current) => {
@@ -704,7 +702,7 @@ const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController
 		)
 	);
 
-	const close = Effect.fn('Flect.Runtime.closeOperationController')(function* () {
+	const close = Effect.fn('Runtime.closeOperationController')(function* () {
 		const active = yield* Ref.modify(
 			state,
 			(current) =>
@@ -722,7 +720,7 @@ const makeOperationController = Effect.fn('Flect.Runtime.makeOperationController
 		}
 	});
 
-	const interruptActive = Effect.fn('Flect.Runtime.interruptActiveOperation')(function* () {
+	const interruptActive = Effect.fn('Runtime.interruptActiveOperation')(function* () {
 		const active = yield* Ref.get(state);
 		if (active.active?.fiber !== undefined) {
 			yield* Fiber.interrupt(active.active.fiber).pipe(Effect.asVoid);
@@ -888,7 +886,7 @@ export const FlectRuntimeLive = Layer.effect(
 				Effect.catch(() => Effect.void)
 			);
 
-		const disposeSessionRecord = Effect.fn('Flect.Runtime.disposeSessionRecord')(
+		const disposeSessionRecord = Effect.fn('Runtime.disposeSessionRecord')(
 			(record: SessionRecord) =>
 				Effect.uninterruptible(
 					Effect.all(
@@ -920,7 +918,7 @@ export const FlectRuntimeLive = Layer.effect(
 			)
 		);
 
-		const findSession = Effect.fn('Flect.Runtime.findSession')(function* (sessionId: string) {
+		const findSession = Effect.fn('Runtime.findSession')(function* (sessionId: string) {
 			const current = yield* Ref.get(sessions);
 			const record = HashMap.get(current, sessionId);
 			if (Option.isNone(record)) {
@@ -934,7 +932,7 @@ export const FlectRuntimeLive = Layer.effect(
 			return record.value;
 		});
 
-		const createSession = Effect.fn('Flect.Runtime.createSession')(function* (
+		const createSession = Effect.fn('Runtime.createSession')(function* (
 			selection: SessionSelection
 		) {
 			const models = yield* pi.listModels;
@@ -1029,7 +1027,7 @@ export const FlectRuntimeLive = Layer.effect(
 			);
 		});
 
-		const closeSession = Effect.fn('Flect.Runtime.closeSession')(function* (sessionId: string) {
+		const closeSession = Effect.fn('Runtime.closeSession')(function* (sessionId: string) {
 			yield* Effect.uninterruptible(
 				Effect.gen(function* () {
 					const removed = yield* Ref.modify(sessions, (current) => {
@@ -1049,7 +1047,7 @@ export const FlectRuntimeLive = Layer.effect(
 			);
 		});
 
-		const diagnoseRecovery = Effect.fn('Flect.Runtime.diagnoseRecovery')(function* (
+		const diagnoseRecovery = Effect.fn('Runtime.diagnoseRecovery')(function* (
 			sessionId: string,
 			reason: RecoveryReason
 		) {
@@ -1201,7 +1199,7 @@ export const FlectRuntimeLive = Layer.effect(
 				)
 			);
 
-		const completeShellRequest = Effect.fn('Flect.Runtime.completeShellRequest')(function* (
+		const completeShellRequest = Effect.fn('Runtime.completeShellRequest')(function* (
 			sessionId: string,
 			role: InteractiveAgentRole,
 			requestId: string,
@@ -1212,7 +1210,7 @@ export const FlectRuntimeLive = Layer.effect(
 			yield* session.completeShellRequest(requestId, result);
 		});
 
-		const cancel = Effect.fn('Flect.Runtime.cancel')(function* (
+		const cancel = Effect.fn('Runtime.cancel')(function* (
 			sessionId: string,
 			role: InteractiveAgentRole
 		) {
@@ -1221,7 +1219,7 @@ export const FlectRuntimeLive = Layer.effect(
 			yield* controller.cancelActive();
 		});
 
-		const makeShape = Effect.fn('Flect.Runtime.makeShape')(function* (
+		const makeShape = Effect.fn('Runtime.makeShape')(function* (
 			sessionId: string,
 			instruction: string,
 			input: unknown
@@ -1240,7 +1238,7 @@ export const FlectRuntimeLive = Layer.effect(
 						record.shaperOperation,
 						operation,
 						Effect.gen(function* () {
-							const runAttempt = Effect.fn('Flect.Runtime.runShapeAttempt')(function* (
+							const runAttempt = Effect.fn('Runtime.runShapeAttempt')(function* (
 								promptText: string
 							) {
 								const response = makeBoundedResponse(

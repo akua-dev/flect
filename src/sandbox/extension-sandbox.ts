@@ -50,7 +50,7 @@ const strictOptions: SchemaAST.ParseOptions = {
 const decodeResponse = Schema.decodeUnknownEffect(SandboxWorkerResponse, strictOptions);
 
 export const makeSandboxWorkerHandle = (worker: SandboxWorker): SandboxWorkerHandle => ({
-	run: Effect.fn('Flect.SandboxWorker.run')((request) =>
+	run: Effect.fn('SandboxWorker.run')((request) =>
 		Effect.callback<SandboxResult, SandboxExecutionFailed>((resume) => {
 			const id = `request-${crypto.randomUUID().replaceAll('-', '')}`;
 			let completed = false;
@@ -126,7 +126,7 @@ export const ExtensionSandboxLive = Layer.effect(
 	Effect.gen(function* () {
 		const factory = yield* SandboxWorkerFactory;
 		return {
-			execute: Effect.fn('Flect.ExtensionSandbox.execute')((request) =>
+			execute: Effect.fn('ExtensionSandbox.execute')((request) =>
 				Effect.scoped(
 					factory.acquire.pipe(
 						Effect.flatMap((worker) => worker.run(request)),
@@ -162,7 +162,7 @@ export const makeExtensionSandboxTestLayer = (options: {
 			Effect.gen(function* () {
 				const factory = yield* SandboxWorkerFactory;
 				return {
-					execute: Effect.fn('Flect.ExtensionSandbox.execute')((request) =>
+					execute: Effect.fn('ExtensionSandbox.execute')((request) =>
 						Effect.scoped(
 							factory.acquire.pipe(
 								Effect.flatMap((worker) => worker.run(request)),

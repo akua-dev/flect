@@ -155,7 +155,7 @@ const mergeThreeWayFiles = (
 		});
 };
 
-export const deriveShareRefs = Effect.fn('Flect.ShareRepository.refs')(function* (shareId: string) {
+export const deriveShareRefs = Effect.fn('ShareRepository.refs')(function* (shareId: string) {
 	yield* Schema.decodeUnknownEffect(ShareId)(shareId).pipe(
 		Effect.mapError(() => failure('invalid-input'))
 	);
@@ -285,7 +285,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				git.deleteRef(input).pipe(Effect.mapError(mapGitFailure), Effect.asVoid);
 			const run = (args: ReadonlyArray<string>) =>
 				git.run(args).pipe(Effect.mapError(mapGitFailure));
-			const requireCommand = Effect.fn('Flect.ShareRepository.command')(function* (
+			const requireCommand = Effect.fn('ShareRepository.command')(function* (
 				args: ReadonlyArray<string>
 			) {
 				const result = yield* run(args);
@@ -295,7 +295,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				return result;
 			});
 
-			const retain = Effect.fn('Flect.ShareRepository.retain')(function* (input: {
+			const retain = Effect.fn('ShareRepository.retain')(function* (input: {
 				readonly shareId: string;
 				readonly archive: Uint8Array;
 				readonly commit: string;
@@ -336,7 +336,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				};
 			});
 
-			const rejectCandidate = Effect.fn('Flect.ShareRepository.reject')(function* (input: {
+			const rejectCandidate = Effect.fn('ShareRepository.reject')(function* (input: {
 				readonly shareId: string;
 				readonly candidate: string;
 				readonly refs: Omit<ShareInstallationRefs, 'candidate'>;
@@ -354,7 +354,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				});
 			});
 
-			const restoreCandidateRef = Effect.fn('Flect.ShareRepository.restoreCandidateRef')(
+			const restoreCandidateRef = Effect.fn('ShareRepository.restoreCandidateRef')(
 				function* (input: {
 					readonly shareId: string;
 					readonly candidate: string;
@@ -374,7 +374,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				}
 			);
 
-			const restoreCandidate = Effect.fn('Flect.ShareRepository.restore')(function* (input: {
+			const restoreCandidate = Effect.fn('ShareRepository.restore')(function* (input: {
 				readonly shareId: string;
 				readonly before: ShareInstallationRefs & {
 					readonly candidate: string;
@@ -459,7 +459,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				);
 			});
 
-			const acceptCandidate = Effect.fn('Flect.ShareRepository.accept')(function* (input: {
+			const acceptCandidate = Effect.fn('ShareRepository.accept')(function* (input: {
 				readonly shareId: string;
 				readonly refs: ShareInstallationRefs & {
 					readonly candidate: string;
@@ -562,7 +562,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				);
 			});
 
-			const checkpointFork = Effect.fn('Flect.ShareRepository.checkpointFork')(function* (input: {
+			const checkpointFork = Effect.fn('ShareRepository.checkpointFork')(function* (input: {
 				readonly shareId: string;
 				readonly expectedForkCommit: string;
 				readonly refs: ShareInstallationRefs;
@@ -602,7 +602,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				return { fork: checkpoint.commit };
 			});
 
-			const restoreFork = Effect.fn('Flect.ShareRepository.restoreFork')(function* (input: {
+			const restoreFork = Effect.fn('ShareRepository.restoreFork')(function* (input: {
 				readonly shareId: string;
 				readonly expectedForkCommit: string;
 				readonly targetForkCommit: string;
@@ -621,7 +621,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				});
 			});
 
-			const prepareUpdate = Effect.fn('Flect.ShareRepository.prepareUpdate')(function* (input: {
+			const prepareUpdate = Effect.fn('ShareRepository.prepareUpdate')(function* (input: {
 				readonly shareId: string;
 				readonly archive: Uint8Array;
 				readonly commit: string;
@@ -769,7 +769,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				return yield* merge;
 			});
 
-			const resolveConflict = Effect.fn('Flect.ShareRepository.resolveConflict')(function* (input: {
+			const resolveConflict = Effect.fn('ShareRepository.resolveConflict')(function* (input: {
 				readonly shareId: string;
 				readonly refs: Omit<ShareInstallationRefs, 'candidate'>;
 				readonly conflictPaths: ReadonlyArray<string>;
@@ -879,7 +879,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				});
 			});
 
-			const removeInstallation = Effect.fn('Flect.ShareRepository.remove')(function* (input: {
+			const removeInstallation = Effect.fn('ShareRepository.remove')(function* (input: {
 				readonly shareId: string;
 				readonly refs: ShareInstallationRefs;
 			}) {
@@ -911,7 +911,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				});
 			});
 
-			const exportFork = Effect.fn('Flect.ShareRepository.exportFork')(function* (input: {
+			const exportFork = Effect.fn('ShareRepository.exportFork')(function* (input: {
 				readonly shareId: string;
 				readonly forkCommit: string;
 			}) {
@@ -930,7 +930,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				return exported.archive.slice();
 			});
 
-			const exportCandidate = Effect.fn('Flect.ShareRepository.exportCandidate')(function* (input: {
+			const exportCandidate = Effect.fn('ShareRepository.exportCandidate')(function* (input: {
 				readonly shareId: string;
 				readonly candidateCommit: string;
 				readonly refs: Pick<ShareInstallationRefs, 'base' | 'upstream' | 'fork'>;
@@ -954,7 +954,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				return exported.archive.slice();
 			});
 
-			const deleteLocalData = Effect.fn('Flect.ShareRepository.delete')(function* (input: {
+			const deleteLocalData = Effect.fn('ShareRepository.delete')(function* (input: {
 				readonly shareId: string;
 				readonly forkCommit: string;
 				readonly installed: boolean;
@@ -969,7 +969,7 @@ export const makeShareRepositoryLayer = (options?: { readonly workspaceId?: stri
 				});
 			});
 
-			const snapshotArtifact = Effect.fn('Flect.ShareRepository.snapshot')(function* (input: {
+			const snapshotArtifact = Effect.fn('ShareRepository.snapshot')(function* (input: {
 				readonly shareId: string;
 				readonly role: 'base' | 'upstream' | 'fork' | 'candidate';
 				readonly expectedCommit: string;

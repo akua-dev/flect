@@ -14,7 +14,7 @@ export interface MarkdownCodeBlockProps {
 
 type CopyState = 'idle' | 'copied' | 'failed';
 
-const copyCode = Effect.fn('Flect.Markdown.copyCode')(function* (code: string) {
+const copyCode = Effect.fn('Markdown.copyCode')(function* (code: string) {
 	const clipboard = yield* Clipboard;
 	yield* clipboard.writeText(code);
 });

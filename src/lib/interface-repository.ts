@@ -45,7 +45,7 @@ export const makeInterfaceRepositoryLayer = ({ safeMode }: { readonly safeMode: 
 		Effect.gen(function* () {
 			const storage = yield* InterfaceStorage;
 
-			const load = Effect.fn('Flect.InterfaceRepository.load')(function* () {
+			const load = Effect.fn('InterfaceRepository.load')(function* () {
 				if (safeMode) {
 					return InterfaceRepositoryLoad.make({
 						recovered: true
@@ -108,7 +108,7 @@ export const makeInterfaceRepositoryLayer = ({ safeMode }: { readonly safeMode: 
 
 			return {
 				load: load(),
-				save: Effect.fn('Flect.InterfaceRepository.save')((snapshot: ShapingSnapshot) =>
+				save: Effect.fn('InterfaceRepository.save')((snapshot: ShapingSnapshot) =>
 					safeMode ? Effect.void : storage.write(REVISION_JOURNAL_KEY, JSON.stringify(snapshot))
 				),
 				markRecovery: storage.write(

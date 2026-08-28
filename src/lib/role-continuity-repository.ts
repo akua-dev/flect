@@ -90,7 +90,7 @@ export const makeRoleContinuityRepositoryLayer = Layer.effect(
 		const storage = yield* InterfaceStorage;
 		const lock = yield* ContinuityLock;
 
-		const load = Effect.fn('Flect.RoleContinuityRepository.load')(() =>
+		const load = Effect.fn('RoleContinuityRepository.load')(() =>
 			storage.read(ROLE_CONTINUITY_KEY).pipe(
 				Effect.flatMap((raw): Effect.Effect<RoleContinuityLoad> => {
 					if (raw === null) {
@@ -115,7 +115,7 @@ export const makeRoleContinuityRepositoryLayer = Layer.effect(
 			)
 		);
 
-		const save = Effect.fn('Flect.RoleContinuityRepository.save')(
+		const save = Effect.fn('RoleContinuityRepository.save')(
 			(expectedGeneration: number, proposed: RoleContinuityRecord) =>
 				lock.exclusive(
 					Effect.gen(function* () {

@@ -14,7 +14,7 @@ const failure = (message: string) => PortablePackageManifestFailure.make({ messa
 const record = (value: unknown): value is Readonly<Record<string, unknown>> =>
 	typeof value === 'object' && value !== null && !Array.isArray(value);
 
-export const portablePackageManifest = Effect.fn('Flect.PortablePackageManifest.decode')(function* (
+export const portablePackageManifest = Effect.fn('PortablePackageManifest.decode')(function* (
 	source: Uint8Array
 ) {
 	const parsed = yield* Effect.try({

@@ -137,45 +137,45 @@ const failure = (reason: ShareInstallationFailure['reason'] = 'invalid-record') 
 				: 'The shared installation record is invalid.'
 	});
 
-export const validateShareInstallationRecord = Effect.fn('Flect.ShareInstallation.validate')(
-	function* (input: unknown) {
-		const record = yield* Schema.decodeUnknownEffect(
-			ShareInstallationRecord,
-			strict
-		)(input).pipe(Effect.mapError(() => failure()));
-		const artifactIds = record.artifacts.map((artifact) => artifact.id);
-		const installedIds = record.installedArtifactIds;
-		const manifestArtifacts = record.manifest?.artifacts;
-		if (
-			new Set(artifactIds).size !== artifactIds.length ||
-			new Set(installedIds).size !== installedIds.length ||
-			installedIds.some((id) => !artifactIds.includes(id)) ||
-			record.updatedAt < record.createdAt ||
-			record.refs.candidate === record.refs.fork ||
-			(record.refs.candidate !== undefined && record.pending === undefined) ||
-			(record.pending !== undefined && record.pending.retainedAt > record.updatedAt) ||
-			(record.pending !== undefined &&
-				!['new', 'conflict'].includes(record.pending.lineage) &&
-				record.refs.candidate === undefined) ||
-			(record.manifest !== undefined &&
-				(record.manifest.id !== record.shareId ||
-					record.manifest.version !== record.version ||
-					manifestArtifacts?.length !== record.artifacts.length ||
-					record.artifacts.some((artifact, index) => {
-						const declared = manifestArtifacts?.[index];
-						return (
-							declared === undefined ||
-							declared.id !== artifact.id ||
-							declared.kind !== artifact.kind ||
-							declared.version !== artifact.version ||
-							declared.contentSha256 !== artifact.contentSha256
-						);
-					})))
-		) {
-			return yield* Effect.fail(failure());
-		}
-		return record;
+export const validateShareInstallationRecord = Effect.fn('ShareInstallation.validate')(function* (
+	input: unknown
+) {
+	const record = yield* Schema.decodeUnknownEffect(
+		ShareInstallationRecord,
+		strict
+	)(input).pipe(Effect.mapError(() => failure()));
+	const artifactIds = record.artifacts.map((artifact) => artifact.id);
+	const installedIds = record.installedArtifactIds;
+	const manifestArtifacts = record.manifest?.artifacts;
+	if (
+		new Set(artifactIds).size !== artifactIds.length ||
+		new Set(installedIds).size !== installedIds.length ||
+		installedIds.some((id) => !artifactIds.includes(id)) ||
+		record.updatedAt < record.createdAt ||
+		record.refs.candidate === record.refs.fork ||
+		(record.refs.candidate !== undefined && record.pending === undefined) ||
+		(record.pending !== undefined && record.pending.retainedAt > record.updatedAt) ||
+		(record.pending !== undefined &&
+			!['new', 'conflict'].includes(record.pending.lineage) &&
+			record.refs.candidate === undefined) ||
+		(record.manifest !== undefined &&
+			(record.manifest.id !== record.shareId ||
+				record.manifest.version !== record.version ||
+				manifestArtifacts?.length !== record.artifacts.length ||
+				record.artifacts.some((artifact, index) => {
+					const declared = manifestArtifacts?.[index];
+					return (
+						declared === undefined ||
+						declared.id !== artifact.id ||
+						declared.kind !== artifact.kind ||
+						declared.version !== artifact.version ||
+						declared.contentSha256 !== artifact.contentSha256
+					);
+				})))
+	) {
+		return yield* Effect.fail(failure());
 	}
-);
+	return record;
+});
 
 export const shareInstallationPersistenceFailure = () => failure('persistence');

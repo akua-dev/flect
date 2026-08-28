@@ -45,7 +45,7 @@ export const makeShellLinkLayer = (options: ShellLinkOptions) =>
 				);
 			};
 
-			const status = Effect.fn('Flect.ShellLink.status')(function* () {
+			const status = Effect.fn('ShellLink.status')(function* () {
 				const target = yield* Effect.result(fs.readLink(link));
 				let state: ShellLinkStateType;
 				if (Result.isSuccess(target)) {
@@ -64,7 +64,7 @@ export const makeShellLinkLayer = (options: ShellLinkOptions) =>
 				return ShellLinkStatus.make({ state, path: link, changed: false });
 			});
 
-			const install = Effect.fn('Flect.ShellLink.install')(function* () {
+			const install = Effect.fn('ShellLink.install')(function* () {
 				const before = yield* status();
 				if (before.state === 'installed') {
 					return before;
@@ -88,7 +88,7 @@ export const makeShellLinkLayer = (options: ShellLinkOptions) =>
 				});
 			});
 
-			const remove = Effect.fn('Flect.ShellLink.remove')(function* () {
+			const remove = Effect.fn('ShellLink.remove')(function* () {
 				const before = yield* status();
 				if (before.state === 'absent') {
 					return before;

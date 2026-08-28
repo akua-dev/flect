@@ -15,9 +15,7 @@ export class SidecarBuildError extends Data.TaggedError('SidecarBuildError')<{
 	readonly logs: ReadonlyArray<unknown>;
 }> {}
 
-const buildSidecar = Effect.fn('Flect.BuildSidecar.build')(function* (
-	binary: (typeof binaries)[number]
-) {
+const buildSidecar = Effect.fn('BuildSidecar.build')(function* (binary: (typeof binaries)[number]) {
 	yield* Effect.promise(() => mkdir(dirname(binary.output), { recursive: true }));
 	const result = yield* Effect.promise(() =>
 		Bun.build({

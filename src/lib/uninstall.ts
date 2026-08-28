@@ -103,68 +103,67 @@ const retained = [
 	})
 ] as const;
 
-export const makeUninstall = (options: UninstallOptions) =>
-	Effect.gen(function* () {
-		const shell = yield* ShellLink;
-		const integrations = yield* AgentIntegration;
+export const makeUninstall = Effect.fn('Uninstall.make')(function* (options: UninstallOptions) {
+	const shell = yield* ShellLink;
+	const integrations = yield* AgentIntegration;
 
-		const inspect = Effect.fn('Flect.Uninstall.inspect')(function* () {
-			if (!validApplicationPath(options.applicationPath)) {
-				return yield* Effect.fail(invalidApplication());
-			}
-			const [shellStatus, agentStatuses] = yield* Effect.all([
-				shell.status,
-				integrations.statusAll
-			]).pipe(Effect.mapError(inspectFailed));
-			return UninstallPlan.make({
-				version: 1,
-				application: UninstallApplication.make({
-					path: options.applicationPath,
-					action: 'move-to-trash'
-				}),
-				ownedIntegrations: [shellItem(shellStatus), ...agentStatuses.map(agentItem)],
-				retained
-			});
+	const inspect = Effect.fn('Uninstall.inspect')(function* () {
+		if (!validApplicationPath(options.applicationPath)) {
+			return yield* Effect.fail(invalidApplication());
+		}
+		const [shellStatus, agentStatuses] = yield* Effect.all([
+			shell.status,
+			integrations.statusAll
+		]).pipe(Effect.mapError(inspectFailed));
+		return UninstallPlan.make({
+			version: 1,
+			application: UninstallApplication.make({
+				path: options.applicationPath,
+				action: 'move-to-trash'
+			}),
+			ownedIntegrations: [shellItem(shellStatus), ...agentStatuses.map(agentItem)],
+			retained
 		});
-
-		const removeAgent = Effect.fn('Flect.Uninstall.removeAgent')(function* (
-			item: UninstallOwnedItem,
-			host: AgentIntegrationHost
-		) {
-			const result = yield* Effect.result(integrations.remove(host));
-			return UninstallOwnedItem.make({
-				...item,
-				result: result._tag === 'Success' ? 'removed' : 'failed'
-			});
-		});
-
-		const prepare = Effect.fn('Flect.Uninstall.prepare')(function* () {
-			const plan = yield* inspect();
-			const ownedIntegrations = yield* Effect.forEach(
-				plan.ownedIntegrations,
-				(item) => {
-					if (item.result !== 'pending') return Effect.succeed(item);
-					if (item.kind === 'shell-link') {
-						return Effect.result(shell.remove).pipe(
-							Effect.map((result) =>
-								UninstallOwnedItem.make({
-									...item,
-									result: result._tag === 'Success' ? 'removed' : 'failed'
-								})
-							)
-						);
-					}
-					return item.host === undefined
-						? Effect.succeed(UninstallOwnedItem.make({ ...item, result: 'failed' }))
-						: removeAgent(item, item.host);
-				},
-				{ concurrency: 1 }
-			);
-			return UninstallPlan.make({ ...plan, ownedIntegrations });
-		});
-
-		return { inspect: inspect(), prepare: prepare() } satisfies UninstallShape;
 	});
+
+	const removeAgent = Effect.fn('Uninstall.removeAgent')(function* (
+		item: UninstallOwnedItem,
+		host: AgentIntegrationHost
+	) {
+		const result = yield* Effect.result(integrations.remove(host));
+		return UninstallOwnedItem.make({
+			...item,
+			result: result._tag === 'Success' ? 'removed' : 'failed'
+		});
+	});
+
+	const prepare = Effect.fn('Uninstall.prepare')(function* () {
+		const plan = yield* inspect();
+		const ownedIntegrations = yield* Effect.forEach(
+			plan.ownedIntegrations,
+			(item) => {
+				if (item.result !== 'pending') return Effect.succeed(item);
+				if (item.kind === 'shell-link') {
+					return Effect.result(shell.remove).pipe(
+						Effect.map((result) =>
+							UninstallOwnedItem.make({
+								...item,
+								result: result._tag === 'Success' ? 'removed' : 'failed'
+							})
+						)
+					);
+				}
+				return item.host === undefined
+					? Effect.succeed(UninstallOwnedItem.make({ ...item, result: 'failed' }))
+					: removeAgent(item, item.host);
+			},
+			{ concurrency: 1 }
+		);
+		return UninstallPlan.make({ ...plan, ownedIntegrations });
+	});
+
+	return { inspect: inspect(), prepare: prepare() } satisfies UninstallShape;
+});
 
 export const makeUninstallLayer = (options: UninstallOptions) =>
 	Layer.effect(Uninstall, makeUninstall(options));

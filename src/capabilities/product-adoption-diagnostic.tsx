@@ -54,7 +54,7 @@ const userStateFor = (
 		selectedInferenceOwner
 	});
 
-const scenario = Effect.fn('Flect.ProductAdoptionDiagnostic.scenario')(
+const scenario = Effect.fn('ProductAdoptionDiagnostic.scenario')(
 	(
 		id: string,
 		name: string,

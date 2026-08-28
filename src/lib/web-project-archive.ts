@@ -95,7 +95,7 @@ const zipFiles = (archive: Uint8Array): ReadonlyArray<WebProjectFile> => {
 		.map(([path, contents]) => ({ path, contents }));
 };
 
-export const importWebProjectArchive = Effect.fn('Flect.WebProject.importArchive')(function* (
+export const importWebProjectArchive = Effect.fn('WebProject.importArchive')(function* (
 	fileName: string,
 	archive: Uint8Array
 ): Effect.fn.Return<WebProjectImportResult, WebProjectImportFailure> {

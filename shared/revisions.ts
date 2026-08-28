@@ -91,7 +91,7 @@ const invalidRevision = () =>
 const readProperty = (input: unknown, key: string) =>
 	typeof input === 'object' && input !== null ? Reflect.get(input, key) : undefined;
 
-const validateRawRevisionDocument = Effect.fn('Flect.InterfaceRevision.preflightDocument')(
+const validateRawRevisionDocument = Effect.fn('InterfaceRevision.preflightDocument')(
 	(input: unknown) =>
 		validateInterfaceDocument(readProperty(input, 'document')).pipe(
 			Effect.mapError(invalidRevision),
@@ -99,7 +99,7 @@ const validateRawRevisionDocument = Effect.fn('Flect.InterfaceRevision.preflight
 		)
 );
 
-export const validateInterfaceRevision = Effect.fn('Flect.InterfaceRevision.validate')(function* (
+export const validateInterfaceRevision = Effect.fn('InterfaceRevision.validate')(function* (
 	input: unknown
 ) {
 	yield* validateRawRevisionDocument(input);
@@ -109,7 +109,7 @@ export const validateInterfaceRevision = Effect.fn('Flect.InterfaceRevision.vali
 	)(input).pipe(Effect.mapError(invalidRevision));
 });
 
-const validateRevisionDocument = Effect.fn('Flect.ShapingSnapshot.validateRevisionDocument')(
+const validateRevisionDocument = Effect.fn('ShapingSnapshot.validateRevisionDocument')(
 	(revision: InterfaceRevision) =>
 		validateInterfaceDocument(revision.document).pipe(
 			Effect.mapError(() => invalidRevision()),
@@ -129,7 +129,7 @@ const isInitialRevision = (revision: InterfaceRevision) =>
 	revision.createdAt === 0 &&
 	Equal.equals(revision.document, defaultInterfaceDocument);
 
-export const validateShapingSnapshot = Effect.fn('Flect.ShapingSnapshot.validate')(function* (
+export const validateShapingSnapshot = Effect.fn('ShapingSnapshot.validate')(function* (
 	input: unknown
 ): Effect.fn.Return<ShapingSnapshot, InvalidRevision, never> {
 	yield* validateRawRevisionDocument(readProperty(input, 'active'));

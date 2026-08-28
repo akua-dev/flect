@@ -58,54 +58,51 @@ export const makeShareCandidateStore = (
 	persistence: ShareCandidateStoreShape['persistence']
 ): ShareCandidateStoreShape => ({
 	persistence,
-	save: (archive) =>
-		Effect.gen(function* () {
-			if (archive.byteLength === 0 || archive.byteLength > MAX_SHARE_ARCHIVE_BYTES) {
-				return yield* Effect.fail(failure('quota'));
-			}
-			const contents = archive.slice();
-			const digest = yield* hash(contents);
-			yield* Effect.tryPromise({
-				try: async () => {
-					await vfs.mkdir(OBJECTS, { recursive: true });
-					const path = `${OBJECTS}/${digest}.flect-share`;
-					if (!(await vfs.exists(path))) await vfs.writeFile(path, contents);
-				},
-				catch: () => failure('unavailable')
-			});
-			return digest;
-		}),
-	load: (input) =>
-		Effect.gen(function* () {
-			const digest = yield* decodeDigest(input);
-			const contents = yield* Effect.tryPromise({
-				try: async () => {
-					const path = `${OBJECTS}/${digest}.flect-share`;
-					return (await vfs.exists(path)) ? await vfs.readFile(path) : undefined;
-				},
-				catch: () => failure('unavailable')
-			});
-			if (contents === undefined) return undefined;
-			if (
-				contents.byteLength === 0 ||
-				contents.byteLength > MAX_SHARE_ARCHIVE_BYTES ||
-				(yield* hash(contents)) !== digest
-			) {
-				return yield* Effect.fail(failure('integrity'));
-			}
-			return contents.slice();
-		}),
-	remove: (input) =>
-		Effect.gen(function* () {
-			const digest = yield* decodeDigest(input);
-			yield* Effect.tryPromise({
-				try: () =>
-					vfs.rm(`${OBJECTS}/${digest}.flect-share`, {
-						force: true
-					}),
-				catch: () => failure('unavailable')
-			});
-		})
+	save: Effect.fn('ShareCandidateStore.save')(function* (archive) {
+		if (archive.byteLength === 0 || archive.byteLength > MAX_SHARE_ARCHIVE_BYTES) {
+			return yield* Effect.fail(failure('quota'));
+		}
+		const contents = archive.slice();
+		const digest = yield* hash(contents);
+		yield* Effect.tryPromise({
+			try: async () => {
+				await vfs.mkdir(OBJECTS, { recursive: true });
+				const path = `${OBJECTS}/${digest}.flect-share`;
+				if (!(await vfs.exists(path))) await vfs.writeFile(path, contents);
+			},
+			catch: () => failure('unavailable')
+		});
+		return digest;
+	}),
+	load: Effect.fn('ShareCandidateStore.load')(function* (input) {
+		const digest = yield* decodeDigest(input);
+		const contents = yield* Effect.tryPromise({
+			try: async () => {
+				const path = `${OBJECTS}/${digest}.flect-share`;
+				return (await vfs.exists(path)) ? await vfs.readFile(path) : undefined;
+			},
+			catch: () => failure('unavailable')
+		});
+		if (contents === undefined) return undefined;
+		if (
+			contents.byteLength === 0 ||
+			contents.byteLength > MAX_SHARE_ARCHIVE_BYTES ||
+			(yield* hash(contents)) !== digest
+		) {
+			return yield* Effect.fail(failure('integrity'));
+		}
+		return contents.slice();
+	}),
+	remove: Effect.fn('ShareCandidateStore.remove')(function* (input) {
+		const digest = yield* decodeDigest(input);
+		yield* Effect.tryPromise({
+			try: () =>
+				vfs.rm(`${OBJECTS}/${digest}.flect-share`, {
+					force: true
+				}),
+			catch: () => failure('unavailable')
+		});
+	})
 });
 
 export const makeShareCandidateStoreLayer = (

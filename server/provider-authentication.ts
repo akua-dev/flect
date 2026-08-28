@@ -279,7 +279,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 		const context = yield* Effect.context<never>();
 		const runPromise = Effect.runPromiseWith(context);
 
-		const providers = Effect.fn('Flect.Auth.providers')(function* () {
+		const providers = Effect.fn('Auth.providers')(function* () {
 			const [descriptors, credentials] = yield* Effect.all([
 				adapter.providers,
 				adapter.credentials
@@ -334,7 +334,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 				return next;
 			});
 
-		const emitTerminal = Effect.fn('Flect.Auth.emitTerminal')(function* (
+		const emitTerminal = Effect.fn('Auth.emitTerminal')(function* (
 			entry: ActiveLogin,
 			event: AuthLoginEvent
 		) {
@@ -346,7 +346,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 			}
 		});
 
-		const cancelEntry = Effect.fn('Flect.Auth.cancelEntry')(function* (entry: ActiveLogin) {
+		const cancelEntry = Effect.fn('Auth.cancelEntry')(function* (entry: ActiveLogin) {
 			entry.controller.abort();
 			const pending = yield* Ref.getAndSet(entry.pending, undefined);
 			if (pending !== undefined) {
@@ -363,10 +363,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 			yield* removeActive(entry);
 		});
 
-		const safeNotify = Effect.fn('Flect.Auth.notify')(function* (
-			entry: ActiveLogin,
-			event: PiAuthEvent
-		) {
+		const safeNotify = Effect.fn('Auth.notify')(function* (entry: ActiveLogin, event: PiAuthEvent) {
 			switch (event.type) {
 				case 'auth_url':
 					if (!isPublicUrl(event.url)) {
@@ -447,10 +444,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 			}
 		});
 
-		const prompt = Effect.fn('Flect.Auth.prompt')(function* (
-			entry: ActiveLogin,
-			input: PiAuthPrompt
-		) {
+		const prompt = Effect.fn('Auth.prompt')(function* (entry: ActiveLogin, input: PiAuthPrompt) {
 			const promptId = `prompt-${crypto.randomUUID()}`;
 			if (input.type === 'select') {
 				const response = yield* Deferred.make<string, ProviderAuthPromptUnavailable>();
@@ -671,7 +665,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 				})
 			);
 
-		const reply = Effect.fn('Flect.Auth.reply')(function* (input: AuthSelectionReply) {
+		const reply = Effect.fn('Auth.reply')(function* (input: AuthSelectionReply) {
 			const entries = yield* Ref.get(active);
 			const entry = [...entries.values()].find((candidate) => candidate.loginId === input.loginId);
 			const pending = entry === undefined ? undefined : yield* Ref.get(entry.pending);
@@ -686,7 +680,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 			yield* Deferred.succeed(pending.response, selectedOption);
 		});
 
-		const cancel = Effect.fn('Flect.Auth.cancel')(function* (reference: AuthLoginReference) {
+		const cancel = Effect.fn('Auth.cancel')(function* (reference: AuthLoginReference) {
 			const entries = yield* Ref.get(active);
 			const entry = [...entries.values()].find(
 				(candidate) => candidate.loginId === reference.loginId
@@ -699,7 +693,7 @@ export const ProviderAuthenticationLive = Layer.effect(
 
 		const refresh = adapter.refresh.pipe(Effect.flatMap(() => providers()));
 
-		const logout = Effect.fn('Flect.Auth.logout')(function* (providerId: string) {
+		const logout = Effect.fn('Auth.logout')(function* (providerId: string) {
 			const descriptors = yield* adapter.providers;
 			if (!descriptors.some((provider) => provider.id === providerId)) {
 				return yield* Effect.fail(

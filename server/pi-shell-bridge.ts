@@ -28,14 +28,14 @@ const formatShellResult = (result: BunCommandResult) =>
 		.filter((part) => part.length > 0)
 		.join('\n');
 
-export const makePiShellBridge = Effect.fn('Flect.PiShellBridge.make')(function* (
+export const makePiShellBridge = Effect.fn('PiShellBridge.make')(function* (
 	emit: (event: AgentShellRequest) => void
 ) {
 	const pending = yield* Ref.make<ReadonlyMap<string, Deferred.Deferred<BunCommandResult>>>(
 		new Map()
 	);
 
-	const request = Effect.fn('Flect.PiShellBridge.request')(function* (command: string) {
+	const request = Effect.fn('PiShellBridge.request')(function* (command: string) {
 		const requestId = `shell-${crypto.randomUUID()}`;
 		const response = yield* Deferred.make<BunCommandResult>();
 		yield* Ref.update(pending, (current) => {
@@ -66,7 +66,7 @@ export const makePiShellBridge = Effect.fn('Flect.PiShellBridge.make')(function*
 		);
 	});
 
-	const complete = Effect.fn('Flect.PiShellBridge.complete')(function* (
+	const complete = Effect.fn('PiShellBridge.complete')(function* (
 		requestId: string,
 		result: BunCommandResult
 	) {
@@ -81,7 +81,7 @@ export const makePiShellBridge = Effect.fn('Flect.PiShellBridge.make')(function*
 		}
 	});
 
-	const releasePending = Effect.fn('Flect.PiShellBridge.releasePending')((message: string) =>
+	const releasePending = Effect.fn('PiShellBridge.releasePending')((message: string) =>
 		Ref.getAndSet(pending, new Map()).pipe(
 			Effect.flatMap((current) =>
 				Effect.forEach(

@@ -301,7 +301,7 @@ export interface EvaluateProductAdoptionInput {
 	readonly detached: boolean;
 }
 
-export const evaluateProductAdoption = Effect.fn('Flect.ProductAdoption.evaluate')(function* (
+export const evaluateProductAdoption = Effect.fn('ProductAdoption.evaluate')(function* (
 	input: EvaluateProductAdoptionInput
 ) {
 	if (!isProductIntegration(input.integration)) {
@@ -419,7 +419,7 @@ export const evaluateProductAdoption = Effect.fn('Flect.ProductAdoption.evaluate
 	});
 });
 
-export const detachProduct = Effect.fn('Flect.ProductAdoption.detach')(
+export const detachProduct = Effect.fn('ProductAdoption.detach')(
 	(input: Omit<EvaluateProductAdoptionInput, 'detached'>) =>
 		evaluateProductAdoption({
 			...input,
