@@ -23,7 +23,10 @@ import {
  */
 export const runTrustedExtensionFailureProbe = Effect.fn(
 	'PiExtensionIsolation.runTrustedExtensionFailureProbe'
-)(function* (extensionPath: string, role: InteractiveAgentRole) {
+)(function* (
+	extensionPath: string,
+	role: InteractiveAgentRole
+): Effect.fn.Return<ExternalPiExtensionFailed, PiOperationFailed> {
 	return yield* Effect.tryPromise({
 		try: async () => {
 			const provider = fauxProvider({

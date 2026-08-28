@@ -303,7 +303,7 @@ export interface EvaluateProductAdoptionInput {
 
 export const evaluateProductAdoption = Effect.fn('ProductAdoption.evaluate')(function* (
 	input: EvaluateProductAdoptionInput
-) {
+): Effect.fn.Return<ProductAdoptionSnapshot, ProductIntegrationFailure> {
 	if (!isProductIntegration(input.integration)) {
 		return yield* Effect.fail(invalidIntegration());
 	}
@@ -420,7 +420,9 @@ export const evaluateProductAdoption = Effect.fn('ProductAdoption.evaluate')(fun
 });
 
 export const detachProduct = Effect.fn('ProductAdoption.detach')(
-	(input: Omit<EvaluateProductAdoptionInput, 'detached'>) =>
+	(
+		input: Omit<EvaluateProductAdoptionInput, 'detached'>
+	): Effect.Effect<ProductAdoptionSnapshot, ProductIntegrationFailure> =>
 		evaluateProductAdoption({
 			...input,
 			connection: undefined,

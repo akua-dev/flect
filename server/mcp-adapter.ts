@@ -5,7 +5,7 @@ import { McpServer, Tool, Toolkit } from 'effect/unstable/ai';
 import { makeNativeFlectGatewayLayer } from '../cli/flect';
 import { FlectCommand, FlectCommandReceipt, FlectWorkspaceSnapshot } from '../shared/control';
 import { ControlLogsResponse } from '../shared/control-channel';
-import { FlectCommandGateway } from '../src/axi/gateway';
+import { FlectCommandGateway, type FlectGatewayError } from '../src/axi/gateway';
 
 const FAILURE_MESSAGE = 'Flect could not complete the local control request.';
 
@@ -111,7 +111,10 @@ const makeHandlersLayer = (options: FlectMcpOptions) => {
 				gateway.command(command, expectedSequence)
 			).pipe(Effect.mapError(toFailure)),
 		flect_wait: Effect.fn('FlectMcp.wait')(
-			function* ({ afterSequence, timeoutMs }) {
+			function* ({
+				afterSequence,
+				timeoutMs
+			}): Effect.fn.Return<typeof WaitResult.Type, FlectGatewayError, FlectCommandGateway> {
 				const gateway = yield* FlectCommandGateway;
 				const event = yield* Effect.race(
 					gateway.events(afterSequence).pipe(Stream.runHead, Effect.map(Option.getOrUndefined)),

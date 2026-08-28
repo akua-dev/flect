@@ -39,11 +39,12 @@ const invalidManifest = () =>
 		message: 'The extension manifest is invalid.'
 	});
 
-export const validateExtensionManifest = Effect.fn('ExtensionManifest.validate')((input: unknown) =>
-	Schema.decodeUnknownEffect(
-		ExtensionManifest,
-		strictOptions
-	)(input).pipe(Effect.mapError(invalidManifest))
+export const validateExtensionManifest = Effect.fn('ExtensionManifest.validate')(
+	(input: unknown): Effect.Effect<ExtensionManifest, InvalidExtensionManifest> =>
+		Schema.decodeUnknownEffect(
+			ExtensionManifest,
+			strictOptions
+		)(input).pipe(Effect.mapError(invalidManifest))
 );
 
 const CapsulePath = Schema.String.check(
@@ -231,7 +232,7 @@ export class PortableExtensionDescriptor extends Schema.Class<PortableExtensionD
 const hasDuplicates = (values: ReadonlyArray<string>) => new Set(values).size !== values.length;
 
 export const validatePortableExtensionPackage = Effect.fn('PortableExtensionPackage.validate')(
-	function* (input: unknown) {
+	function* (input: unknown): Effect.fn.Return<PortableExtensionPackage, InvalidExtensionManifest> {
 		const decoded = yield* Schema.decodeUnknownEffect(
 			PortableExtensionPackage,
 			strictOptions
