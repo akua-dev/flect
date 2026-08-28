@@ -40,6 +40,13 @@ const SidecarLive = RpcServer.layer(FlectRpcs).pipe(
 // whatever the native gateway layer can fail with, but the static type of
 // `serveFlectMcp` can't be narrowed below `unknown` from this call site. See
 // the Wave 4 report's "surprising error unions" section.
+//
+// oxlint-disable effecttsgo/missing-effect-context -- false positive: `tsc -b`
+// confirms both `SidecarLive` and `runSidecar` resolve to `R = never` (verified via an
+// explicit type-probe assignment during Wave 4 verification). effecttsgo's own context
+// resolution appears to collapse once the declared error channel above is `unknown`
+// rather than a concrete union, and falls back to reporting a missing `any` service -
+// same class of false positive as `makeControlBrokerLayer` in control-broker.ts.
 const runSidecar = Effect.fn('Sidecar.run')(function* (
 	argv: ReadonlyArray<string>
 ): Effect.fn.Return<undefined, unknown> {
