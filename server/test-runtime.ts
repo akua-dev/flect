@@ -201,6 +201,33 @@ const authoredLandingCss = [
 	'footer{padding:24px;text-align:center;color:#7a6a58}'
 ].join('\n');
 
+// A framework-source authored app: index.html references a real module
+// script, so the packaging adapter classifies it with a 'browser-source'
+// entrypoint and routes it through the guarded ProposalBuild/BrowserBuild
+// pipeline instead of the static direct-local path above. This reproduces
+// the build-path preview flash regression (issue #48).
+const authoredFrameworkHtml = [
+	'<!doctype html>',
+	'<html lang="en"><head><meta charset="utf-8">',
+	'<title>Tidewater Market</title>',
+	'</head><body>',
+	'<div id="app"></div>',
+	'<script type="module" src="/src/main.ts"></script>',
+	'</body></html>'
+].join('');
+
+const authoredFrameworkMain = [
+	"const root = document.querySelector<HTMLDivElement>('#app');",
+	'if (root !== null) {',
+	"\tconst heading = document.createElement('h1');",
+	"\theading.textContent = 'Tidewater Market';",
+	'\troot.append(heading);',
+	"\tconst tagline = document.createElement('p');",
+	"\ttagline.textContent = 'Tide charts, dock rentals, and fresh catch, built to order.';",
+	'\troot.append(tagline);',
+	'}'
+].join('\n');
+
 const matchesUserRequest = (text: string, request: string) =>
 	text === request || text.startsWith(`${request}\n`) || text.includes(`User request:\n${request}`);
 
@@ -507,21 +534,32 @@ export const FlectTestRuntimeLive = Layer.effect(
 																"flect app validate /workspace/project --name 'Driftwood Coffee'",
 																"flect app propose /workspace/project --name 'Driftwood Coffee'"
 															].join(' && ')
-														: matchesUserRequest(instruction, 'Commit Shaper source')
+														: matchesUserRequest(
+																	instruction,
+																	'Make a landing page app for Tidewater Market.'
+															  )
 															? [
-																	"printf 'export const shaped = true;\\n' > /workspace/shaped.ts",
-																	'git add -A',
-																	"git commit -m 'Shape source'",
-																	'git branch --show-current',
-																	'git rev-parse HEAD',
-																	"printf 'export const shaped = false;\\n' > /workspace/shaped.ts",
-																	'git status --short | grep shaped.ts',
-																	'git restore .',
-																	"grep 'shaped = true' /workspace/shaped.ts",
-																	'test -z "$(git status --short)"',
-																	...proposalCommands
+																	'mkdir -p /workspace/project/src',
+																	`printf %s ${shellQuote(authoredFrameworkHtml)} > /workspace/project/index.html`,
+																	`printf %s ${shellQuote(authoredFrameworkMain)} > /workspace/project/src/main.ts`,
+																	"flect app validate /workspace/project --name 'Tidewater Market'",
+																	"flect app propose /workspace/project --name 'Tidewater Market'"
 																].join(' && ')
-															: proposalCommands.join(' && ');
+															: matchesUserRequest(instruction, 'Commit Shaper source')
+																? [
+																		"printf 'export const shaped = true;\\n' > /workspace/shaped.ts",
+																		'git add -A',
+																		"git commit -m 'Shape source'",
+																		'git branch --show-current',
+																		'git rev-parse HEAD',
+																		"printf 'export const shaped = false;\\n' > /workspace/shaped.ts",
+																		'git status --short | grep shaped.ts',
+																		'git restore .',
+																		"grep 'shaped = true' /workspace/shaped.ts",
+																		'test -z "$(git status --short)"',
+																		...proposalCommands
+																	].join(' && ')
+																: proposalCommands.join(' && ');
 								return Stream.make(
 									ToolExecutionStarted.make({
 										type: 'tool_execution_started',
