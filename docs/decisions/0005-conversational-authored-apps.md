@@ -79,8 +79,17 @@ last-known-good.
   authoring checkpoint plus `applyLocalRevision`), so no transient candidate
   state ever becomes visible. Framework-source authored apps still pass
   through the guarded proposal build before automatic acceptance, so their
-  build progress remains visible; the transient preview state they publish is
-  a known cosmetic limitation.
+  build progress remains visible; the transient preview state they publish was
+  a known cosmetic limitation, closed by deferring the kernel's previewed
+  transition until the build's outcome is known (issue #48). `supersede` and
+  `accept` now also operate on a still-`proposed` revision, so the guarded
+  build checkpoints, rebuilds, and — on the auto-accept path — accepts without
+  the proposal ever publishing a visible `previewed`/candidate state; a
+  blocked review still promotes to `previewed` and falls back to the explicit
+  candidate ceremony, now only once the outcome is known instead of for the
+  whole build. The guarded build itself is unchanged: it still runs and still
+  gates acceptance, and a build failure still surfaces through the existing
+  bounded-failure and last-known-good treatment.
 - The Shaper conversation confirms an authored app only after acceptance.
   The turn latches the archive without claiming completion; the controller
   then concludes the turn through the agent workspace: "Change complete" is
