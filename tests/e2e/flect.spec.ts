@@ -1183,6 +1183,101 @@ test('authors a real landing page website into the isolated canvas without cerem
 	expect(background).toBe('rgb(250, 246, 240)');
 });
 
+test('authors a framework-source app without ever surfacing a transient candidate status', async ({
+	page
+}) => {
+	// Regression coverage for issue #48: a framework-source authored app
+	// still passes through the guarded ProposalBuild/BrowserBuild pipeline
+	// before automatic acceptance, but must never publish the "Imported
+	// candidate ... validated" review-style status or the explicit
+	// Activate/Discard candidate ceremony while that guarded build runs.
+	test.setTimeout(90_000);
+	const input = page.getByRole('textbox', { name: 'Message Flect' });
+	const activeRevision = await page.locator('.role-shell').getAttribute('data-active-revision');
+
+	// Attach a MutationObserver before the turn starts so every DOM mutation
+	// during the build is inspected, not just whatever a polled assertion
+	// happens to catch after the fact.
+	await page.evaluate(() => {
+		const probe = {
+			sawCandidateStatus: false,
+			sawImportDecision: false,
+			sawPreviewPhase: false,
+			statuses: [] as Array<string>
+		};
+		(window as unknown as { __flectPreviewFlashProbe: typeof probe }).__flectPreviewFlashProbe =
+			probe;
+		const check = () => {
+			const status = document.querySelector('[aria-label="Workbench status"]')?.textContent ?? '';
+			if (status.length > 0 && probe.statuses.at(-1) !== status) {
+				probe.statuses.push(status);
+			}
+			if (status.includes('Imported candidate')) {
+				probe.sawCandidateStatus = true;
+			}
+			if (document.querySelector('[aria-label="Import decision"]') !== null) {
+				probe.sawImportDecision = true;
+			}
+			if (document.querySelector('.role-shell')?.getAttribute('data-phase') === 'preview') {
+				probe.sawPreviewPhase = true;
+			}
+		};
+		new MutationObserver(check).observe(document.documentElement, {
+			attributes: true,
+			childList: true,
+			subtree: true,
+			characterData: true
+		});
+		check();
+	});
+
+	await input.fill('Make a landing page app for Tidewater Market.');
+	completedShapePages.add(page);
+	await input.press('Enter');
+
+	const frame = page.frameLocator('.capsule-frame');
+	await expect(frame.getByRole('heading', { name: 'Tidewater Market', level: 1 })).toBeVisible({
+		timeout: 60_000
+	});
+	await expect(
+		frame.getByText('Tide charts, dock rentals, and fresh catch, built to order.')
+	).toBeVisible();
+
+	// The guarded build still ran and still gated acceptance: the canvas only
+	// ever shows the automatically accepted app, with no competing review
+	// state at any point along the way.
+	await expect(page.getByRole('region', { name: 'Import decision' })).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Activate app' })).toHaveCount(0);
+	await expect(page.locator('.role-shell')).toHaveAttribute('data-phase', 'accepted');
+	await expect(page.locator('.role-shell')).not.toHaveAttribute(
+		'data-active-revision',
+		activeRevision ?? ''
+	);
+	await expect(page.getByText('Change complete: Tidewater Market')).toBeVisible();
+	await expect(page.getByRole('status', { name: 'Workbench status' })).toContainText(
+		'Flect is ready'
+	);
+
+	const probe = await page.evaluate(
+		() =>
+			(
+				window as unknown as {
+					__flectPreviewFlashProbe?: {
+						sawCandidateStatus: boolean;
+						sawImportDecision: boolean;
+						sawPreviewPhase: boolean;
+						statuses: Array<string>;
+					};
+				}
+			).__flectPreviewFlashProbe
+	);
+	expect(probe?.sawCandidateStatus, `observed statuses: ${JSON.stringify(probe?.statuses)}`).toBe(
+		false
+	);
+	expect(probe?.sawImportDecision).toBe(false);
+	expect(probe?.sawPreviewPhase).toBe(false);
+});
+
 test('keeps essential composer qualifiers at AA contrast', async ({ page }) => {
 	expect(await renderedContrastRatio(page, '.runtime-state', '.composer')).toBeGreaterThanOrEqual(
 		4.5
