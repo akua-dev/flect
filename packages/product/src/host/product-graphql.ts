@@ -17,6 +17,12 @@ const MAX_DOCUMENT_BYTES = 256 * 1024;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder('utf-8', { fatal: true });
 
+/**
+ * One fixed GraphQL operation registered with {@link makeProductGraphqlLayer}:
+ * its policy (endpoint, operation kind/name, variable/result bounds) paired
+ * with the exact document text. The document's SHA-256 must match
+ * `policy.documentSha256` - registration fails closed on a mismatch.
+ */
 export interface ProductGraphqlRegistration {
 	readonly policy: ProductGraphqlPolicy;
 	readonly document: string;
@@ -142,6 +148,14 @@ const decodeResponse = Effect.fn('ProductGraphql.decodeResponse')(function* (
 	}).pipe(Effect.mapError(() => failure(policyId, 'invalid-response')));
 });
 
+/**
+ * Compose a {@link ProductGraphql} Layer over `makeProductHttpLayer`, from a
+ * fixed set of SHA-256-pinned GraphQL registrations. Invocation sends only
+ * `{ operationName, query, variables }` for a registered operation ID;
+ * callers cannot choose a different document, endpoint, or header. Private
+ * GraphQL `errors` in the response become a sanitized `product-denied`
+ * failure rather than being surfaced verbatim.
+ */
 export const makeProductGraphqlLayer = (options: {
 	readonly registrations: ReadonlyArray<ProductGraphqlRegistration>;
 	readonly fetch?: Fetch;

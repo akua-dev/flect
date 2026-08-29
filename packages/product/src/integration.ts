@@ -171,6 +171,14 @@ export interface ProductEventDefinition {
 	) => Effect.Effect<ProductEventRequest, ProductOperationFailure>;
 }
 
+/**
+ * `defineProductIntegration` rejected the input: invalid metadata, an
+ * operation/event whose ID is not declared by exactly one capability, an
+ * unsupported migration shape, an unselectable inference owner, or a
+ * recommended-experience archive that failed to load or does not hash to
+ * the declared `archiveSha256`. `message` is safe to show to a user;
+ * `recovery` is a stable suggested next step.
+ */
 export class ProductIntegrationFailure extends Schema.TaggedErrorClass<ProductIntegrationFailure>()(
 	'ProductIntegrationFailure',
 	{
@@ -187,6 +195,15 @@ const failure = (reason: ProductIntegrationFailure['reason']): ProductIntegratio
 		recovery: 'Review the product integration and keep the current experience.'
 	});
 
+/**
+ * Input to {@link defineProductIntegration}. `metadata` is decoded strictly
+ * against `ProductIntegrationMetadata` (unknown fields fail), so build it as
+ * a plain object rather than an already-validated class instance.
+ * `loadRecommendedExperience` must resolve to the exact `.flect` archive
+ * bytes whose SHA-256 matches `metadata.experience.archiveSha256` -
+ * mismatches fail with `ProductIntegrationFailure` reason
+ * `'invalid-experience'`.
+ */
 export interface ProductIntegrationInput {
 	readonly metadata: unknown;
 	readonly operations: ReadonlyArray<ProductOperationDefinition>;
@@ -195,6 +212,12 @@ export interface ProductIntegrationInput {
 	readonly loadRecommendedExperience: Effect.Effect<Uint8Array, ProductIntegrationFailure>;
 }
 
+/**
+ * A validated product integration returned by {@link defineProductIntegration}.
+ * Only that function can produce a value satisfying {@link isProductIntegration};
+ * treat the shape as opaque and pass it to Flect's runtime bridge rather than
+ * constructing or mutating one by hand.
+ */
 export interface ProductIntegration {
 	readonly metadata: ProductIntegrationMetadata;
 	readonly operations: ReadonlyArray<ProductOperationDefinition>;
@@ -219,6 +242,11 @@ class ValidatedProductIntegration implements ProductIntegration {
 
 const validatedIntegrations = new WeakSet<ProductIntegration>();
 
+/**
+ * True only for a {@link ProductIntegration} produced by
+ * {@link defineProductIntegration}. Flect's runtime bridge uses this to
+ * refuse a hand-built object that merely satisfies the interface's shape.
+ */
 export const isProductIntegration = (value: ProductIntegration): value is ProductIntegration =>
 	validatedIntegrations.has(value);
 
@@ -252,6 +280,17 @@ const sanitizeArchive = (effect: Effect.Effect<Uint8Array, ProductIntegrationFai
 		)
 	);
 
+/**
+ * Validate one product's metadata, capability manifests, named
+ * operation/event closures, selected inference owner, and recommended
+ * `.flect` experience, returning a branded {@link ProductIntegration}. This
+ * is the SDK's primary entry point: every operation ID must belong to
+ * exactly one declared capability, every capability's operations must be
+ * defined, migrations must target the current `integrationVersion`, and the
+ * loaded experience archive must hash to the declared digest. Fails with
+ * {@link ProductIntegrationFailure} on the first violation; never partially
+ * validates.
+ */
 export const defineProductIntegration = Effect.fn('ProductIntegration.define')(function* (
 	input: ProductIntegrationInput
 ): Effect.fn.Return<ProductIntegration, ProductIntegrationFailure> {

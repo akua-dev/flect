@@ -126,6 +126,13 @@ const validDate = (value: string) =>
 	/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value) &&
 	Number.isFinite(Date.parse(value));
 
+/**
+ * Detached-sign a `.flect` archive's canonical unsigned content with Ed25519,
+ * returning a re-encoded archive with the new signature appended. Signing is
+ * a provenance signal only - it never grants a capability or widens what a
+ * capsule can request; hosts still evaluate every requested capability
+ * independently at import time.
+ */
 export const signCapsule = Effect.fn('CapsuleTrust.sign')(function* (
 	archive: Uint8Array,
 	options: {
@@ -193,6 +200,14 @@ const statusPriority = [
 	'verified'
 ] as const;
 
+/**
+ * Assess a `.flect` archive's signatures against a host's known publisher
+ * keys, returning the highest-priority {@link CapsuleSignatureStatus}
+ * (`changed-after-signing` > `invalid` > `revoked` > `expired` >
+ * `unknown-key` > `verified`, or `unsigned` with no claims). The result is
+ * `authoritative: false` by construction: it reports provenance only and
+ * never changes which capabilities a host may grant.
+ */
 export const verifyCapsuleSignatures = Effect.fn('CapsuleTrust.verify')(function* (
 	archive: Uint8Array,
 	keys: ReadonlyArray<CapsulePublisherKey>
@@ -257,6 +272,13 @@ export const verifyCapsuleSignatures = Effect.fn('CapsuleTrust.verify')(function
 	});
 });
 
+/**
+ * Re-encode a `.flect` archive as an unsigned local fork: it records
+ * `lineage` pointing at the parent's content digest, source, and revision,
+ * relabels provenance, and strips every existing signature. Forking
+ * deliberately removes upstream signatures rather than carrying them
+ * forward onto changed content.
+ */
 export const forkCapsule = Effect.fn('CapsuleTrust.fork')(function* (
 	archive: Uint8Array,
 	options: {

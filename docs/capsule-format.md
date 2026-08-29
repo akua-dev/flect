@@ -50,6 +50,61 @@ invalid.
 Every entrypoint must name a declared payload. Every payload byte count and hash
 is verified before a decoder returns a capsule.
 
+## Author a minimal capsule
+
+`@flect/product` exports the same codec this document describes
+(`encodeCapsule`, `decodeCapsule`, `hashCapsuleArchive` from
+`@flect/product/capsule`). The smallest possible capsule declares no
+capabilities and no extensions — a single static HTML entrypoint:
+
+```ts
+import { Effect } from 'effect';
+import { decodeCapsule, encodeCapsule, hashCapsuleArchive } from '@flect/product/capsule';
+
+const program = Effect.gen(function* () {
+	const archive = yield* encodeCapsule({
+		manifest: {
+			formatVersion: 1,
+			id: 'dev.example.hello-capsule',
+			name: 'Hello capsule',
+			version: '1.0.0',
+			entrypoints: [{ id: 'main', path: 'ui/index.html' }],
+			capabilities: [],
+			compatibility: { flect: '>=0.2.0 <1.0.0', schemaVersion: 1, platforms: ['browser'] },
+			provenance: {
+				publisher: 'example',
+				source: 'https://example.test/hello-capsule',
+				revision: 'v1',
+				builder: 'example'
+			},
+			signatures: []
+		},
+		files: [
+			{
+				path: 'ui/index.html',
+				contents: new TextEncoder().encode(
+					'<!doctype html><title>Hello</title><h1>Hello, capsule.</h1>'
+				)
+			}
+		]
+	});
+	const digest = yield* hashCapsuleArchive(archive);
+	const decoded = yield* decodeCapsule(archive); // round-trips back to the same manifest
+	return { archive, digest, decoded };
+});
+```
+
+This produces real, deterministic `.flect` bytes: running it twice yields a
+byte-identical archive, and `decodeCapsule(archive)` round-trips it back to
+the same manifest. Add capabilities (see
+[`docs/product-capabilities.md`](product-capabilities.md)) and a portable
+extension (below) only once the plain artifact works; every field above is
+required, and a missing or mistyped one now names the exact field in the
+`InvalidCapsule` failure rather than a generic rejection. Import the result
+into a running Flect host through Actions → "Import Flect app", or decode it
+programmatically — both paths use this exact codec, so what you verify here
+is what the host will verify on import.
+
 ## Portable extension packages
 
 Version 1 may declare at most 32 portable packages. A package contains a stable

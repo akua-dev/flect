@@ -89,6 +89,14 @@ export class ProductCapabilityUsage extends Schema.Class<ProductCapabilityUsage>
 	windowStartedAtMillis: TimestampMillis
 }) {}
 
+/**
+ * A named, user-visible capability request: the operations it covers, the
+ * resource/data classes it touches, and which confirmation policies
+ * (`once`/`session`/`workspace`/`persistent`) the host may offer. Register
+ * one per distinct grant a user should be able to approve, deny, or revoke
+ * independently; every operation ID an integration defines must belong to
+ * exactly one manifest passed to `defineProductIntegration`.
+ */
 export class ProductCapabilityManifest extends Schema.Class<ProductCapabilityManifest>(
 	'ProductCapabilityManifest'
 )(
@@ -257,6 +265,14 @@ export const ProductCapabilityDecisionChoice = Schema.Union([
 ]);
 export type ProductCapabilityDecisionChoice = typeof ProductCapabilityDecisionChoice.Type;
 
+/**
+ * Returned by an operation's or event's `authorize` closure to grant the
+ * exact resource/data scope Flect should validate against the user's
+ * capability reservation before invoking `execute`. Product denial always
+ * wins: returning a rejected `Effect` (typically a `ProductOperationFailure`
+ * with reason `'product-denied'`) instead stops the call before transport,
+ * regardless of what the user already granted.
+ */
 export class AuthorizedProductOperation extends Schema.Class<AuthorizedProductOperation>(
 	'AuthorizedProductOperation'
 )({
@@ -374,6 +390,14 @@ export class ProductCapabilityGrantRecord extends Schema.Class<ProductCapability
 	states: Schema.Array(ProductCapabilityGrantState).check(Schema.isMaxLength(128))
 }) {}
 
+/**
+ * The stable, sanitized failure shape every product operation and event
+ * returns. `reason` is the closed set of possible causes (grant, rate, or
+ * product-authorization outcomes plus input/output/transport failure); raw
+ * transport errors, credentials, and provider detail never reach this type.
+ * Build one with {@link makeProductOperationFailure} rather than
+ * constructing `message` by hand.
+ */
 export class ProductOperationFailure extends Schema.TaggedErrorClass<ProductOperationFailure>()(
 	'ProductOperationFailure',
 	{
@@ -403,6 +427,12 @@ export class ProductOperationFailure extends Schema.TaggedErrorClass<ProductOper
 	}
 ) {}
 
+/**
+ * Build a {@link ProductOperationFailure} with the stable public message for
+ * `reason`. Use this from an operation's `authorize`/`execute` closure
+ * instead of constructing the schema class directly, so the returned
+ * message always matches the reason.
+ */
 export const makeProductOperationFailure = (
 	operationId: string,
 	reason: ProductOperationFailure['reason']
