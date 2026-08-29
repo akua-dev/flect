@@ -13,6 +13,12 @@ export interface ProductHttpShape {
 	) => Effect.Effect<ProductHttpResponse, ProductHttpFailure>;
 }
 
+/**
+ * The `Context.Service` tag for a policy-fixed HTTPS transport. Provide it
+ * with {@link makeProductHttpLayer}; callers supply only a registered
+ * `ProductHttpRequest` and never see the origin, headers, or credentials the
+ * policy resolves.
+ */
 export class ProductHttp extends Context.Service<ProductHttp, ProductHttpShape>()(
 	'flect/ProductHttp'
 ) {}
@@ -84,6 +90,15 @@ const boundedBody = (
 			Schema.is(ProductHttpFailure)(error) ? error : failed(policy.id, 'transport')
 	});
 
+/**
+ * Compose a {@link ProductHttp} Layer from a fixed set of `ProductHttpPolicy`
+ * registrations. Each policy pins origin, path prefix, method, header, byte,
+ * and deadline bounds; requests outside a registration's exact policy fail
+ * with a sanitized `ProductHttpFailure` before any network call. Supply
+ * `credentialHeaders` to inject host-owned credentials per policy ID -
+ * caller input is validated before that closure runs, and its result never
+ * appears in the response, journal, or any other caller-visible state.
+ */
 export const makeProductHttpLayer = (options: {
 	readonly policies: ReadonlyArray<ProductHttpPolicy>;
 	readonly fetch?: Fetch;

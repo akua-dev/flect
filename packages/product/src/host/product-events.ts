@@ -22,6 +22,13 @@ const strict: SchemaAST.ParseOptions = {
 };
 const encoder = new TextEncoder();
 
+/**
+ * A host-owned event source for one policy ID, registered with
+ * {@link makeProductEventsLayer}. `open` receives only the fixed request, an
+ * optional last-accepted cursor to resume from, and an abort signal; it must
+ * call `emit` for each raw event so the Layer can decode, bound, and
+ * order-check it before it reaches a subscriber.
+ */
 export interface ProductEventConnector {
 	readonly open: (options: {
 		readonly request: ProductEventRequest;
@@ -63,6 +70,15 @@ const sanitizeConnector = (policyId: string, effect: Effect.Effect<void, Product
 		)
 	);
 
+/**
+ * Compose a {@link ProductEvents} Layer from a fixed set of event policies
+ * and their connectors. Applies backpressure (never drops or unbounds the
+ * queue), enforces canonical decimal sequence ordering (duplicate or
+ * regressing sequence values fail closed), and resumes a reconnect from the
+ * last accepted cursor up to the policy's declared attempt count. Caller
+ * cancellation, subscriber disposal, or an expired/revoked grant aborts the
+ * scoped connector and releases its resources.
+ */
 export const makeProductEventsLayer = (options: {
 	readonly policies: ReadonlyArray<ProductEventPolicy>;
 	readonly connectors: ReadonlyMap<string, ProductEventConnector>;
