@@ -6,7 +6,7 @@ colors:
   void: 'oklch(0.145 0 0)' # light: oklch(1 0 0)
   canvas: 'oklch(0.145 0 0)' # aliases void; light: oklch(1 0 0)
   surface: 'oklch(0.205 0 0)' # light: oklch(1 0 0)
-  surface-raised: 'oklch(0.269 0 0)' # light: oklch(0.97 0 0)
+  raised: 'oklch(0.269 0 0)' # light: oklch(0.97 0 0)
   ink: 'oklch(0.985 0 0)' # light: oklch(0.145 0 0)
   muted: 'oklch(0.708 0 0)' # light: oklch(0.45 0 0)
   quiet: 'oklch(0.708 0 0)' # aliases muted; light: oklch(0.45 0 0)
@@ -293,9 +293,9 @@ to communicate focus, movement, or temporary hierarchy.
 - **Primary:** Ink fill with Void content, using the neighboring neutral when
   active.
 - **Hover / Focus:** two motion tiers. Small-control hover and press tints
-  (color, background, opacity) use the 90ms `--interaction-motion` tier;
+  (color, background, opacity) use the 90ms `--quick` tier;
   layout, elevation, and sheet or rail movement keep the 180ms
-  `--state-motion` tier. Focus uses a visible 2px primary focus ring with
+  `--slow` tier. Focus uses a visible 2px primary focus ring with
   offset.
 - **Ghost:** transparent at rest, Raised Surface on hover, never a faint outline
   box.
