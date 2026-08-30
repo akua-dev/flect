@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from '@effect/vitest';
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from 'effect';
+import { Clock, Deferred, Effect, Fiber, Layer, Schema, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { BunCommandResult } from '../shared/bun-command';
 import {
@@ -8,7 +8,8 @@ import {
 	SessionBusy,
 	SessionNotFound,
 	SessionSelection,
-	ShapeCompleted
+	ShapeCompleted,
+	ShaperTurnStalled
 } from '../shared/contracts';
 import {
 	defaultInterfaceDocument,
@@ -49,6 +50,13 @@ type FakeOptions = {
 		readonly started: Deferred.Deferred<undefined>;
 		readonly completed: Deferred.Deferred<BunCommandResult>;
 	};
+	// Takes over the Shaper session's entire prompt() behavior, bypassing the
+	// gate/started machinery above, so a test can script an exact sequence of
+	// PiEvents (with real inter-event delays under TestClock) instead of a
+	// single gated response.
+	readonly shaperScript?: (
+		emit: (event: PiEvent) => void
+	) => Effect.Effect<void, PiOperationFailed>;
 };
 
 const authenticationLayer = Layer.succeed(ProviderAuthentication)({
@@ -100,6 +108,9 @@ function createFakePi(options: FakeOptions = {}) {
 		const dispose = vi.fn(() => undefined);
 		const prompt = vi.fn((_: string) => {
 			promptCalls += 1;
+			if (role === 'shaper' && options.shaperScript !== undefined) {
+				return options.shaperScript((event) => listener?.(event));
+			}
 			if (options.promptFailure) {
 				return Effect.fail(
 					new PiOperationFailed({
@@ -1241,6 +1252,114 @@ describe('FlectRuntimeLive', () => {
 				})
 			);
 			expect(fake.shaperAbort).toHaveBeenCalledOnce();
+		}).pipe(Effect.provide(fake.layer));
+	});
+
+	it.effect(
+		'fails a Shaper turn fast with a precise diagnostic when a tool call starts but never runs',
+		() => {
+			// Reproduces the truncated-tool-call stall class: pi-agent-core emits
+			// tool_execution_start for a Bash call and then never progresses it (no
+			// shell_request, no update, no completion). The inactivity watchdog
+			// must fire well before the 180s SHAPER_GENERATION_TIMEOUT.
+			const started = Deferred.makeUnsafe<undefined>();
+			const fake = createFakePi({
+				shaperScript: (emit) =>
+					Effect.gen(function* () {
+						emit({
+							type: 'tool_execution_started',
+							callId: 'call-1',
+							toolName: 'bash',
+							startedAt: yield* Clock.currentTimeMillis
+						});
+						yield* Deferred.succeed(started, undefined);
+						return yield* Effect.never;
+					})
+			});
+
+			return Effect.gen(function* () {
+				const runtime = yield* FlectRuntime;
+				const sessionId = yield* runtime.createSession(new SessionSelection({}));
+				const shapeFiber = yield* runtime
+					.shape(sessionId, 'Shape this', defaultInterfaceDocument)
+					.pipe(Stream.runDrain, Effect.forkChild({ startImmediately: true }));
+				yield* Deferred.await(started);
+
+				yield* TestClock.adjust('45 seconds');
+				const error = yield* Fiber.join(shapeFiber).pipe(Effect.flip);
+
+				expect(error).toEqual(
+					new ShaperTurnStalled({
+						sessionId,
+						message:
+							'The Shaper started a tool call that never began executing, so the turn stalled. Retry the request.'
+					})
+				);
+				expect(fake.shaperAbort).toHaveBeenCalledOnce();
+			}).pipe(Effect.provide(fake.layer));
+		}
+	);
+
+	it.effect('does not fire the watchdog for a slow but progressing tool call', () => {
+		// Each gap between events stays under the 45s inactivity window even
+		// though the call as a whole runs well past it, so the watchdog must
+		// never treat this as a stall.
+		const fake = createFakePi({
+			shaperScript: (emit) =>
+				Effect.gen(function* () {
+					emit({
+						type: 'tool_execution_started',
+						callId: 'call-1',
+						toolName: 'bash',
+						startedAt: yield* Clock.currentTimeMillis
+					});
+					for (let round = 0; round < 3; round += 1) {
+						yield* Effect.sleep('30 seconds');
+						emit({
+							type: 'tool_execution_updated',
+							callId: 'call-1',
+							toolName: 'bash',
+							updatedAt: yield* Clock.currentTimeMillis
+						});
+					}
+					emit({
+						type: 'tool_execution_completed',
+						callId: 'call-1',
+						toolName: 'bash',
+						completedAt: yield* Clock.currentTimeMillis,
+						durationMs: 90_000,
+						status: 'succeeded'
+					});
+				})
+		});
+
+		return Effect.gen(function* () {
+			const runtime = yield* FlectRuntime;
+			const sessionId = yield* runtime.createSession(new SessionSelection({}));
+			const shapeFiber = yield* runtime
+				.shape(sessionId, 'Shape this', defaultInterfaceDocument)
+				.pipe(Stream.runCollect, Effect.forkChild({ startImmediately: true }));
+
+			yield* TestClock.adjust('90 seconds');
+			const events = yield* Fiber.join(shapeFiber);
+
+			expect(events.at(-1)).toEqual(ShapeCompleted.make({ type: 'shape_completed' }));
+			expect(fake.shaperAbort).not.toHaveBeenCalled();
+		}).pipe(Effect.provide(fake.layer));
+	});
+
+	it.effect('completes a normal Shaper turn without engaging the watchdog', () => {
+		const fake = createFakePi();
+
+		return Effect.gen(function* () {
+			const runtime = yield* FlectRuntime;
+			const sessionId = yield* runtime.createSession(new SessionSelection({}));
+			const events = yield* runtime
+				.shape(sessionId, 'Shape this', defaultInterfaceDocument)
+				.pipe(Stream.runCollect);
+
+			expect(events.at(-1)).toEqual(ShapeCompleted.make({ type: 'shape_completed' }));
+			expect(fake.shaperAbort).not.toHaveBeenCalled();
 		}).pipe(Effect.provide(fake.layer));
 	});
 

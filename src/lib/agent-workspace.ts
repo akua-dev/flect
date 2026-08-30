@@ -46,7 +46,7 @@ import type { InterfaceDocument } from '../../shared/interface-document';
 import type { RevisionId, ShapingSnapshot } from '../../shared/revisions';
 import type { RoleContinuityRecord } from '../../shared/role-continuity';
 import { SandboxedShell } from '../shell/sandboxed-shell-service';
-import { FlectClient, FlectUnavailableError } from './api';
+import { FlectClient, FlectUnavailableError, ShaperTurnStalledError } from './api';
 import { OperationJournal, OperationJournalInput } from './operation-journal';
 import { restoreAgentContinuity } from './role-continuity';
 
@@ -69,7 +69,11 @@ export class AgentPromptOutcome extends Schema.Class<AgentPromptOutcome>('AgentP
 	editRequest: Schema.optionalKey(InterfaceEditRequested)
 }) {}
 
-export type AgentWorkspaceError = AgentTurnCancelled | FlectUnavailableError | SessionBusy;
+export type AgentWorkspaceError =
+	| AgentTurnCancelled
+	| FlectUnavailableError
+	| SessionBusy
+	| ShaperTurnStalledError;
 
 export interface ProviderAuthUiState {
 	readonly providers: ReadonlyArray<ProviderAuthSummary>;
@@ -1589,6 +1593,7 @@ export const AgentWorkspaceLive = Layer.effect(
 								case 'shape_completed':
 								case 'shape_busy':
 								case 'shape_error':
+								case 'shape_stalled':
 									return Effect.void;
 							}
 						}),

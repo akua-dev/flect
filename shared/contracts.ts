@@ -434,6 +434,15 @@ export class ShapeError extends Schema.Class<ShapeError>('ShapeError')({
 	message: Schema.Literal('The local Flect runtime could not complete this request.')
 }) {}
 
+const ShaperStallMessage = Schema.Literal(
+	'The Shaper started a tool call that never began executing, so the turn stalled. Retry the request.'
+);
+
+export class ShapeStalled extends Schema.Class<ShapeStalled>('ShapeStalled')({
+	type: Schema.Literal('shape_stalled'),
+	message: ShaperStallMessage
+}) {}
+
 export const ShapeEvent = Schema.Union([
 	AgentShellRequest,
 	ToolExecutionStarted,
@@ -443,7 +452,8 @@ export const ShapeEvent = Schema.Union([
 	ProposalValidationFailed,
 	ShapeCompleted,
 	ShapeBusy,
-	ShapeError
+	ShapeError,
+	ShapeStalled
 ]);
 export type ShapeEvent = typeof ShapeEvent.Type;
 
@@ -543,6 +553,14 @@ export class PiOperationFailed extends Schema.TaggedErrorClass<PiOperationFailed
 	}
 ) {}
 
+export class ShaperTurnStalled extends Schema.TaggedErrorClass<ShaperTurnStalled>()(
+	'ShaperTurnStalled',
+	{
+		sessionId: NonEmptyText,
+		message: ShaperStallMessage
+	}
+) {}
+
 export class ProviderAuthUnavailable extends Schema.TaggedErrorClass<ProviderAuthUnavailable>()(
 	'ProviderAuthUnavailable',
 	{
@@ -577,6 +595,7 @@ export const FlectRuntimeError = Schema.Union([
 	SessionBusy,
 	NoModelAvailable,
 	PiOperationFailed,
+	ShaperTurnStalled,
 	ProviderAuthUnavailable,
 	ProviderAuthBusy,
 	ProviderAuthPromptUnavailable,
