@@ -192,7 +192,7 @@ const expectContrast = (
 
 describe.each(modes)('palette contrast (%s)', (mode, properties) => {
 	it('keeps ink readable on every surface tier', () => {
-		for (const background of ['--void', '--canvas', '--surface', '--surface-raised']) {
+		for (const background of ['--void', '--canvas', '--surface', '--raised']) {
 			expectContrast(properties, mode, '--ink', background, 4.5);
 		}
 	});

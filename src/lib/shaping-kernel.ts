@@ -474,14 +474,19 @@ const makeShapingKernel = Effect.fn('ShapingKernel.make')(function* (
 				if (proposal === undefined || proposal.id !== id) {
 					return Effect.fail(missingRevision(id));
 				}
-				if (state.safeMode || proposal.status !== 'previewed') {
+				// A still-proposed revision may be superseded too, and stays
+				// proposed: the guarded framework-build path (capsule-staging.ts)
+				// checkpoints and rebuilds its proposal while deferring the
+				// previewed transition, so it never publishes a visible candidate
+				// state for a turn that is headed for automatic local acceptance.
+				if (state.safeMode || (proposal.status !== 'proposed' && proposal.status !== 'previewed')) {
 					return Effect.fail(invalidTransition(id));
 				}
 				const revision = InterfaceRevision.make({
 					version: 1,
 					id: RevisionId.make(nextId()),
 					parentId: state.active.id,
-					status: 'previewed',
+					status: proposal.status,
 					source,
 					document,
 					createdAt: now()
@@ -490,9 +495,13 @@ const makeShapingKernel = Effect.fn('ShapingKernel.make')(function* (
 					...state,
 					proposal: revision,
 					sequence: state.sequence + 1,
-					lastEvent: eventFor(state, 'revision-previewed', {
-						revisionId: revision.id
-					})
+					lastEvent: eventFor(
+						state,
+						proposal.status === 'previewed' ? 'revision-previewed' : 'revision-proposed',
+						{
+							revisionId: revision.id
+						}
+					)
 				};
 				const transition: readonly [InterfaceRevision, KernelState] = [revision, next];
 				return persist(next).pipe(Effect.as(transition));
@@ -508,7 +517,11 @@ const makeShapingKernel = Effect.fn('ShapingKernel.make')(function* (
 				if (proposal === undefined || proposal.id !== id) {
 					return Effect.fail(missingRevision(id));
 				}
-				if (proposal.status !== 'previewed') {
+				// A still-proposed revision may accept directly too: the guarded
+				// framework-build auto-accept path never calls `preview` (see
+				// `supersede` above), so its build-verified proposal reaches this
+				// call still in 'proposed' status.
+				if (proposal.status !== 'proposed' && proposal.status !== 'previewed') {
 					return Effect.fail(invalidTransition(id));
 				}
 				const accepted = InterfaceRevision.make({

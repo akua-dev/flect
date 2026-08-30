@@ -241,8 +241,22 @@ export const stageCapsuleProposal = Effect.fn('Workspace.stageCapsuleProposalLiv
 		yield* deps.transitionShaping(envelope, operationId, 'revision-accepted', next, accepted.id);
 		return;
 	}
+	// A framework-source app headed for automatic local acceptance must never
+	// publish the previewed/candidate presentation while its guarded build
+	// runs: `kernel.changes` mirrors every kernel state change into the
+	// published workspace snapshot immediately (see the `kernel.changes`
+	// subscriber in workspace-controller.ts), so calling `kernel.preview`
+	// this early would surface "Imported candidate ... validated" copy for
+	// the whole build even though nothing has been reviewed yet. Defer the
+	// previewed transition until the build's outcome is known: `supersede`
+	// and `accept` both now tolerate a still-proposed revision, so the build
+	// can checkpoint, rebuild, and (on the happy path) accept without the
+	// proposal ever becoming visibly 'previewed'. A blocked review still
+	// needs the explicit candidate ceremony, so it promotes to previewed
+	// once the outcome is known, right before it is shown.
+	const deferAutoAcceptPreview = options.finalize === 'local' && browserSource !== undefined;
 	const proposal = yield* kernel.propose(document, options.proposer);
-	let preview = yield* kernel.preview(proposal.id);
+	let preview = deferAutoAcceptPreview ? proposal : yield* kernel.preview(proposal.id);
 	let sourceProposalBranch: string | undefined;
 	if ((plainWebSource || browserSource !== undefined) && git !== undefined) {
 		const checkpointSource = Effect.gen(function* () {
@@ -505,9 +519,18 @@ export const stageCapsuleProposal = Effect.fn('Workspace.stageCapsuleProposalLiv
 			// required authority, runs only inside the isolated frame, and
 			// therefore accepts automatically like any other valid local
 			// change. Blocked reviews fall back to the explicit candidate
-			// ceremony below.
+			// ceremony below. When the previewed transition was deferred,
+			// `preview` is still the build-verified but still-'proposed'
+			// revision; `acceptProposal` accepts it directly without ever
+			// publishing a previewed/candidate presentation.
 			return yield* deps.acceptProposal(envelope, operationId);
 		}
+	}
+	if (deferAutoAcceptPreview) {
+		// The build turned out blocked: this framework-source app needs the
+		// explicit candidate ceremony after all, so promote it to previewed
+		// now, right before it is shown, instead of for the whole build.
+		preview = yield* kernel.preview(preview.id);
 	}
 	const next = yield* kernel.snapshot;
 	yield* deps.transitionShaping(envelope, operationId, 'revision-previewed', next, preview.id);
