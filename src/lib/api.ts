@@ -51,6 +51,15 @@ export class FlectUnavailableError extends Schema.TaggedErrorClass<FlectUnavaila
 	}
 ) {}
 
+export class ShaperTurnStalledError extends Schema.TaggedErrorClass<ShaperTurnStalledError>()(
+	'ShaperTurnStalledError',
+	{
+		message: Schema.Literal(
+			'The Shaper started a tool call that never began executing, so the turn stalled. Retry the request.'
+		)
+	}
+) {}
+
 const unavailable = () =>
 	new FlectUnavailableError({
 		message: 'The local Flect runtime is unavailable.'
@@ -109,7 +118,7 @@ export interface FlectClientShape {
 		sessionId: string,
 		instruction: string,
 		document: InterfaceDocument
-	) => Stream.Stream<ShapeEvent, FlectUnavailableError | SessionBusy>;
+	) => Stream.Stream<ShapeEvent, FlectUnavailableError | SessionBusy | ShaperTurnStalledError>;
 	readonly cancel: (
 		sessionId: string,
 		role: InteractiveAgentRole
@@ -335,12 +344,24 @@ export const makeFlectClientLayer = (baseUrl = '/api') =>
 					),
 					Stream.mapError(shapeFailure(sessionId)),
 					Stream.mapEffect(
-						(event): Effect.Effect<ShapeEvent, FlectUnavailableError | SessionBusy> => {
+						(
+							event
+						): Effect.Effect<
+							ShapeEvent,
+							FlectUnavailableError | SessionBusy | ShaperTurnStalledError
+						> => {
 							if (event.type === 'shape_busy') {
 								return Effect.fail(
 									new SessionBusy({
 										sessionId,
 										message: 'The session is busy.'
+									})
+								);
+							}
+							if (event.type === 'shape_stalled') {
+								return Effect.fail(
+									new ShaperTurnStalledError({
+										message: event.message
 									})
 								);
 							}
