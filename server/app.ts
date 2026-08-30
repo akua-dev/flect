@@ -26,6 +26,7 @@ import {
 	ShapeError,
 	ShapeEvent,
 	ShapeRequest,
+	ShapeStalled,
 	TurnBusy,
 	TurnError
 } from '../shared/contracts';
@@ -274,14 +275,23 @@ const shapeRoute = HttpRouter.add(
 
 		const runtime = yield* FlectRuntime;
 		const events = runtime.shape(path.value.sessionId, shape.value.instruction, document).pipe(
-			Stream.catchTag('SessionBusy', () =>
-				Stream.succeed(
-					new ShapeBusy({
-						type: 'shape_busy',
-						message: 'The session is busy.'
-					})
-				)
-			),
+			Stream.catchTags({
+				SessionBusy: () =>
+					Stream.succeed(
+						new ShapeBusy({
+							type: 'shape_busy',
+							message: 'The session is busy.'
+						})
+					),
+				ShaperTurnStalled: () =>
+					Stream.succeed(
+						new ShapeStalled({
+							type: 'shape_stalled',
+							message:
+								'The Shaper started a tool call that never began executing, so the turn stalled. Retry the request.'
+						})
+					)
+			}),
 			Stream.catch(() =>
 				Stream.succeed(
 					new ShapeError({
