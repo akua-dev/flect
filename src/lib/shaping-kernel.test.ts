@@ -216,6 +216,64 @@ describe('ShapingKernel', () => {
 		);
 	});
 
+	it.layer(makeShapingKernelTestLayer())((it) => {
+		it.effect('supersedes a still-proposed revision without promoting it to previewed', () =>
+			Effect.gen(function* () {
+				// The guarded framework-build auto-accept path (capsule-staging.ts)
+				// checkpoints and rebuilds its proposal before deciding whether to
+				// accept or fall back to the candidate ceremony; it must never pass
+				// through a visible 'previewed' state along the way, so `supersede`
+				// has to work on a still-'proposed' revision and keep it 'proposed'.
+				const kernel = yield* ShapingKernel;
+				const first = yield* kernel.propose(customizedDocument('Building candidate'), 'shaper');
+				assert.strictEqual(first.status, 'proposed');
+
+				const second = yield* kernel.supersede(
+					first.id,
+					customizedDocument('Rebuilt candidate'),
+					'shaper'
+				);
+				const snapshot = yield* kernel.snapshot;
+
+				assert.notStrictEqual(second.id, first.id);
+				assert.strictEqual(second.status, 'proposed');
+				assert.strictEqual(snapshot.proposal?.id, second.id);
+				assert.strictEqual(snapshot.proposal?.status, 'proposed');
+				assert.strictEqual(snapshot.proposal?.document.name, 'Rebuilt candidate');
+				assert.deepStrictEqual(snapshot.active.document, defaultInterfaceDocument);
+				assert.strictEqual(snapshot.lastEvent.type, 'revision-proposed');
+				assert.strictEqual(snapshot.lastEvent.revisionId, second.id);
+			})
+		);
+	});
+
+	it.layer(makeShapingKernelTestLayer())((it) => {
+		it.effect('accepts a build-verified proposal directly without a previewed transition', () =>
+			Effect.gen(function* () {
+				// Mirrors the deferred auto-accept sequence in capsule-staging.ts:
+				// propose, then supersede while still 'proposed' (the guarded build
+				// checkpoints its rebuilt document), then accept straight from
+				// 'proposed' so no previewed/candidate state is ever published.
+				const kernel = yield* ShapingKernel;
+				const proposed = yield* kernel.propose(customizedDocument('Built app'), 'shaper');
+				const rebuilt = yield* kernel.supersede(
+					proposed.id,
+					customizedDocument('Built app'),
+					'shaper'
+				);
+				assert.strictEqual(rebuilt.status, 'proposed');
+
+				const accepted = yield* kernel.accept(rebuilt.id);
+				const snapshot = yield* kernel.snapshot;
+
+				assert.strictEqual(accepted.status, 'accepted');
+				assert.deepStrictEqual(snapshot.active.document, customizedDocument('Built app'));
+				assert.strictEqual(snapshot.proposal, undefined);
+				assert.deepStrictEqual(snapshot.lastKnownGood.document, defaultInterfaceDocument);
+			})
+		);
+	});
+
 	const pendingProposalSnapshot = ShapingSnapshot.make({
 		version: 1,
 		active: InterfaceRevision.make({
