@@ -7,6 +7,7 @@ import {
 	SettingsManager
 } from '@earendil-works/pi-coding-agent';
 import {
+	Clock,
 	Context,
 	Deferred,
 	Effect,
@@ -38,6 +39,7 @@ import {
 	type SessionSelection,
 	ShapeCompleted,
 	type ShapeEvent,
+	ShaperTurnStalled,
 	TextDelta,
 	ToolExecutionCompleted,
 	ToolExecutionStarted,
@@ -898,6 +900,100 @@ Deterministic safe mode and rollback remain owned by the protected Flect kernel.
 
 Recovery reason: ${reason}`;
 
+// Real-model Shaper turns have an observed stall class: the model emits one
+// oversized Bash tool-call argument, pi-agent-core hits its output-token
+// limit, emits `tool_execution_start`, then errors the call without ever
+// running it (no `shell_request` reaches the shell), and the model
+// regenerates in a loop. Externally that looks like an infinite "Running
+// command" state: the SHAPER_GENERATION_TIMEOUT above still bounds the turn,
+// but only after the user has waited out the full 180 seconds with no
+// explanation. This watchdog is a runtime-side safety net behind the
+// prompt-side chunked-write mitigation in shapePrompt: it targets the exact
+// started-without-progress signature and fails fast with an actionable
+// diagnostic instead of making the user wait out the total timeout.
+type ShaperWatchdogSignal =
+	| { readonly kind: 'started'; readonly callId: string }
+	| { readonly kind: 'settled'; readonly callId: string }
+	| { readonly kind: 'progress' };
+
+// 45 seconds is chosen from two known bounds rather than guessed: the Pi
+// shell bridge (pi-shell-bridge.ts) times out any single in-flight shell
+// round trip after 32 seconds and always resolves tool_execution_completed
+// by then, so a legitimately slow single command can never starve this
+// watchdog of a progress signal for longer than ~32s; 45s adds >10s of
+// margin above that ceiling to absorb scheduling jitter without weakening
+// detection. It is also well under the 180s SHAPER_GENERATION_TIMEOUT, so a
+// genuine stall now surfaces about four times faster, with a precise
+// diagnostic, instead of silently spinning for the full total timeout.
+const SHAPER_INACTIVITY_TIMEOUT_MILLIS = 45_000;
+
+const shaperStalledFailure = (sessionId: string) =>
+	new ShaperTurnStalled({
+		sessionId,
+		message:
+			'The Shaper started a tool call that never began executing, so the turn stalled. Retry the request.'
+	});
+
+// Targeted detector, not a blind inactivity timer: the deadline is armed only
+// while at least one tool call is open (started but not yet settled), and it
+// resets only on genuine forward progress for that open call - a real
+// shell_request, tool_execution_updated/completed, text generation, or an
+// extension failure. A repeated tool_execution_started for a *new* call while
+// the current one is still open does NOT reset the deadline; that is exactly
+// the regenerate-in-a-loop signature this watchdog exists to catch, so
+// treating another "start" as liveness would mask the stall it is meant to
+// detect.
+const watchShaperTurnForStall = Effect.fn('Runtime.watchShaperTurnForStall')(function* (
+	sessionId: string,
+	signals: Queue.Queue<ShaperWatchdogSignal>
+): Effect.fn.Return<never, ShaperTurnStalled> {
+	const openCalls = new Set<string>();
+	let armedAt: number | undefined;
+
+	while (true) {
+		if (openCalls.size === 0) {
+			const signal = yield* Queue.take(signals);
+			if (signal.kind === 'started') {
+				openCalls.add(signal.callId);
+				armedAt = yield* Clock.currentTimeMillis;
+			}
+			continue;
+		}
+
+		const now = yield* Clock.currentTimeMillis;
+		const remaining = SHAPER_INACTIVITY_TIMEOUT_MILLIS - (now - (armedAt ?? now));
+		if (remaining <= 0) {
+			return yield* shaperStalledFailure(sessionId);
+		}
+
+		const outcome = yield* Effect.raceFirst(
+			Queue.take(signals),
+			Effect.sleep(remaining).pipe(Effect.as('timeout' as const))
+		);
+
+		if (outcome === 'timeout') {
+			return yield* shaperStalledFailure(sessionId);
+		}
+
+		switch (outcome.kind) {
+			case 'started':
+				openCalls.add(outcome.callId);
+				break;
+			case 'settled':
+				openCalls.delete(outcome.callId);
+				if (openCalls.size === 0) {
+					armedAt = undefined;
+				} else {
+					armedAt = yield* Clock.currentTimeMillis;
+				}
+				break;
+			case 'progress':
+				armedAt = yield* Clock.currentTimeMillis;
+				break;
+		}
+	}
+});
+
 export const FlectRuntimeLive = Layer.effect(
 	FlectRuntime,
 	Effect.gen(function* () {
@@ -1278,15 +1374,17 @@ export const FlectRuntimeLive = Layer.effect(
 						Effect.gen(function* () {
 							const runAttempt = Effect.fn('Runtime.runShapeAttempt')(function* (
 								promptText: string
-							): Effect.fn.Return<void, PiOperationFailed> {
+							): Effect.fn.Return<void, PiOperationFailed | ShaperTurnStalled> {
 								const response = makeBoundedResponse(
 									MAX_SHAPER_RESPONSE_BYTES,
 									record.shaper.abort
 								);
+								const watchdogSignals = yield* Queue.unbounded<ShaperWatchdogSignal>();
 								const unsubscribe = yield* record.shaper.subscribe((event) => {
 									switch (event.type) {
 										case 'text_delta':
 											response.append(event.delta);
+											Queue.offerUnsafe(watchdogSignals, { kind: 'progress' });
 											break;
 										case 'shell_request':
 											Queue.offerUnsafe(
@@ -1297,14 +1395,29 @@ export const FlectRuntimeLive = Layer.effect(
 													command: event.command
 												})
 											);
+											Queue.offerUnsafe(watchdogSignals, { kind: 'progress' });
 											break;
 										case 'tool_execution_started':
+											Queue.offerUnsafe(queue, publicToolEvent('shaper', event));
+											Queue.offerUnsafe(watchdogSignals, {
+												kind: 'started',
+												callId: event.callId
+											});
+											break;
 										case 'tool_execution_updated':
+											Queue.offerUnsafe(queue, publicToolEvent('shaper', event));
+											Queue.offerUnsafe(watchdogSignals, { kind: 'progress' });
+											break;
 										case 'tool_execution_completed':
 											Queue.offerUnsafe(queue, publicToolEvent('shaper', event));
+											Queue.offerUnsafe(watchdogSignals, {
+												kind: 'settled',
+												callId: event.callId
+											});
 											break;
 										case 'external_extension_failed':
 											Queue.offerUnsafe(queue, publicExtensionFailure('shaper', event));
+											Queue.offerUnsafe(watchdogSignals, { kind: 'progress' });
 											break;
 										case 'interface_edit_requested':
 											// The shaper role never proposes interface edits through this
@@ -1314,12 +1427,20 @@ export const FlectRuntimeLive = Layer.effect(
 									}
 								});
 
-								const completion = yield* record.shaper
-									.prompt(promptText)
-									.pipe(
-										Effect.timeoutOption(SHAPER_GENERATION_TIMEOUT),
-										Effect.ensuring(Effect.sync(() => unsubscribe()))
-									);
+								const completion = yield* Effect.raceFirst(
+									record.shaper
+										.prompt(promptText)
+										.pipe(Effect.timeoutOption(SHAPER_GENERATION_TIMEOUT)),
+									watchShaperTurnForStall(sessionId, watchdogSignals)
+								).pipe(
+									Effect.tapError((error) =>
+										error._tag === 'ShaperTurnStalled'
+											? Effect.ignore(record.shaper.abort())
+											: Effect.void
+									),
+									Effect.ensuring(Effect.sync(() => unsubscribe())),
+									Effect.ensuring(Queue.shutdown(watchdogSignals))
+								);
 
 								if (Option.isNone(completion)) {
 									yield* record.shaper.abort().pipe(Effect.catch(() => Effect.void));
