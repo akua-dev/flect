@@ -38,24 +38,30 @@
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
 
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.145 0 0);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.145 0 0);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.145 0 0);
-	--primary: oklch(0.205 0 0);
-	--primary-foreground: oklch(0.985 0 0);
-	--secondary: oklch(0.97 0 0);
-	--secondary-foreground: oklch(0.205 0 0);
-	--muted-surface: oklch(0.97 0 0);
-	--muted-foreground: oklch(0.45 0 0);
-	--accent: oklch(0.97 0 0);
-	--accent-foreground: oklch(0.205 0 0);
+	/* Light appearance: a deliberate "daylight on the anodized desk" pass, not
+	 * a mechanical invert of the dark tokens. Every neutral below carries a
+	 * whisper of cool steel-blue chroma (hue 258, the same family the void's
+	 * anodized-aluminum reads under interior light in dark mode reflects back
+	 * once it is under open sky) instead of shadcn's flat achromatic scale -
+	 * see DESIGN.md Colors > "Light appearance" for the full rationale. */
+	--background: oklch(0.99 0.006 258);
+	--foreground: oklch(0.145 0.006 258);
+	--card: oklch(0.99 0.006 258);
+	--card-foreground: oklch(0.145 0.006 258);
+	--popover: oklch(0.99 0.006 258);
+	--popover-foreground: oklch(0.145 0.006 258);
+	--primary: oklch(0.205 0.007 258);
+	--primary-foreground: oklch(0.985 0.004 258);
+	--secondary: oklch(0.955 0.008 258);
+	--secondary-foreground: oklch(0.205 0.007 258);
+	--muted-surface: oklch(0.955 0.008 258);
+	--muted-foreground: oklch(0.45 0.01 258);
+	--accent: oklch(0.955 0.008 258);
+	--accent-foreground: oklch(0.205 0.007 258);
 	--destructive: oklch(0.577 0.245 27.325);
-	--border: oklch(0.922 0 0);
-	--input: oklch(0.922 0 0);
-	--ring: oklch(0.708 0 0);
+	--border: oklch(0.9 0.008 258);
+	--input: oklch(0.9 0.008 258);
+	--ring: oklch(0.708 0.01 258);
 	--radius: 0.625rem;
 
 	--void: var(--background);
@@ -68,7 +74,10 @@
 	--line: var(--border);
 	--rule: 1px solid var(--line);
 	--rule-h: var(--hairline) solid var(--line);
-	--ready: var(--foreground);
+	/* Ready Mint, resolved (see DESIGN.md "Ready Mint" and issue #49): wired to
+	 * the documented oklch(0.780 0.120 158) mint in dark, and a darker/more
+	 * saturated same-hue mint here so it clears AA on near-white surfaces. */
+	--ready: oklch(0.44 0.13 158);
 	--danger: var(--destructive);
 	--accent-soft: color-mix(in oklch, var(--primary) 14%, transparent);
 	--accent-softer: color-mix(in oklch, var(--primary) 7%, transparent);
@@ -140,6 +149,7 @@
 		--shadow-strong: oklch(0 0 0 / 0.32);
 		--surface-shine: oklch(1 0 0 / 0.04);
 		--scrim: oklch(0 0 0 / 0.52);
+		--ready: oklch(0.78 0.12 158);
 	}
 }
 
@@ -608,7 +618,11 @@ textarea:focus-visible,
 
 .share-review__replace button {
 	min-height: 30px;
-	border: 0;
+	/* .share-review's own background is --canvas, which equals --surface in
+	 * light (see DESIGN.md "Light appearance"), so this needs a hairline to
+	 * stay visible at rest instead of relying on a tonal step that doesn't
+	 * exist in that appearance. */
+	border: var(--rule);
 	border-radius: 7px;
 	padding: 0 8px;
 	background: var(--surface);
@@ -825,7 +839,11 @@ textarea:focus-visible,
 
 .share-library__close {
 	min-height: 32px;
-	border: 0;
+	/* .share-library's own background is --canvas, which equals --surface in
+	 * light (see DESIGN.md "Light appearance"), so this needs a hairline to
+	 * stay visible at rest instead of relying on a tonal step that doesn't
+	 * exist in that appearance. */
+	border: var(--rule);
 	border-radius: 8px;
 	padding: 0 10px;
 	background: var(--surface);
@@ -1121,7 +1139,11 @@ textarea:focus-visible,
 .canvas-agent-entry,
 .interface-action {
 	min-height: 34px;
-	border: 0;
+	/* Surface equals Canvas in light (see DESIGN.md "Light appearance"), so a
+	 * fill alone is invisible here at rest; the hairline is what actually
+	 * separates the control in light, and stays a quiet structural line in
+	 * dark where the tonal step already carries it. */
+	border: var(--rule);
 	border-radius: 8px;
 	padding: 0 11px;
 	background: var(--surface);
