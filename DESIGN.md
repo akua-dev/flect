@@ -258,7 +258,7 @@ Semantic Color Rule.
 **Elevation flips its strategy instead of its sign.** In dark mode "raised"
 moves toward light: void 0.145 to canvas-adjacent raised 0.269, because a dark
 surface has headroom to climb toward the light source. A mechanical invert
-would instead move light-mode raised toward *dark* by the same delta - which
+would instead move light-mode raised toward _dark_ by the same delta - which
 overshoots into a visibly gray card that reads as a flat block, not a lift.
 Light mode has no equivalent headroom: canvas and surface already sit at
 0.99, near the top of the range. So Raised Surface in light drops only

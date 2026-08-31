@@ -246,10 +246,10 @@ describe('Ready Mint token (issue #49)', () => {
 			expect(chroma, `--ready (${mode}) should carry real chroma, not a neutral`).toBeGreaterThan(
 				0.05
 			);
-			expect(hue, `--ready (${mode}) should sit in the documented mint/green hue family`).toBeCloseTo(
-				158,
-				0
-			);
+			expect(
+				hue,
+				`--ready (${mode}) should sit in the documented mint/green hue family`
+			).toBeCloseTo(158, 0);
 		}
 	});
 
