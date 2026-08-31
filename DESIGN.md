@@ -15,7 +15,7 @@ colors:
   line: 'oklch(1 0 0 / 10%)' # light: oklch(0.9 0.008 258)
   primary: 'oklch(0.922 0 0)' # light: oklch(0.205 0.007 258)
   primary-hover: 'oklch(0.922 0 0)' # light: oklch(0.205 0.007 258)
-  ready: 'oklch(0.780 0.120 158)' # resolved mint; light: oklch(0.520 0.130 158)
+  ready: 'oklch(0.780 0.120 158)' # resolved mint; light: oklch(0.440 0.130 158)
   danger: 'oklch(0.704 0.191 22.216)' # light: oklch(0.577 0.245 27.325)
 typography:
   headline:
@@ -208,7 +208,7 @@ warning, or failure states.
 
 ### Secondary
 
-- **Ready Mint** (`oklch(0.780 0.120 158)` dark, `oklch(0.520 0.130 158)`
+- **Ready Mint** (`oklch(0.780 0.120 158)` dark, `oklch(0.440 0.130 158)`
   light): runtime readiness and successful completion. Resolved (issue #49):
   wired everywhere `--ready` is consumed, with a darker, more saturated
   light-mode value so the same named color clears AA on a near-white surface
@@ -277,10 +277,19 @@ dirt on a bright surface.
 documented mint hue (158) in both appearances, with per-appearance lightness
 and chroma chosen so the same semantic color clears AA in both:
 `oklch(0.780 0.120 158)` in dark (the value this document always named, ~9-10:1
-against Void/Surface) and a darker `oklch(0.520 0.130 158)` in light (~4.6-5:1
-against Void/Surface/Raised - the documented dark value alone measures under
-2:1 on a near-white background, which is why it needed its own light value
-rather than one shared number). This was chosen over retiring Ready Mint
+against Void/Surface) and a darker `oklch(0.440 0.130 158)` in light (~6.9:1
+against Void/Surface, ~6.2:1 against Raised - the documented dark value alone
+measures under 2:1 on a near-white background, which is why it needed its own
+light value rather than one shared number). The extra margin over a bare
+4.5:1 AA pass matters here: `--ready-halo`, a 10% mix of `--ready` into
+transparent, is also consumed as a real background behind `--ready` text
+(the installed-source badge in Share Library) - an earlier, lighter
+`oklch(0.520 0.130 158)` cleared every solid-surface check but measured only
+4.34:1 once actually composited through that translucent halo, caught by the
+axe WCAG audit in `tests/e2e/sharing.spec.ts`, not the solid-background
+palette test. `oklch(0.440 0.130 158)` was picked to clear the halo
+composite with headroom, not just the solid tokens. This was chosen over
+retiring Ready Mint
 because success/failure is the one state pair the shell communicates with
 color today (Failure Red already exists and is load-bearing); adding its
 positive counterpart is more consistent with the Semantic Color Rule than
