@@ -3,17 +3,19 @@ name: Flect
 description: The interface that takes your shape.
 colors:
   # Dark-mode values as shipped in src/styles.css; light-mode noted inline.
-  void: 'oklch(0.145 0 0)' # light: oklch(1 0 0)
-  canvas: 'oklch(0.145 0 0)' # aliases void; light: oklch(1 0 0)
-  surface: 'oklch(0.205 0 0)' # light: oklch(1 0 0)
-  raised: 'oklch(0.269 0 0)' # light: oklch(0.97 0 0)
-  ink: 'oklch(0.985 0 0)' # light: oklch(0.145 0 0)
-  muted: 'oklch(0.708 0 0)' # light: oklch(0.45 0 0)
-  quiet: 'oklch(0.708 0 0)' # aliases muted; light: oklch(0.45 0 0)
-  line: 'oklch(1 0 0 / 10%)' # light: oklch(0.922 0 0)
-  primary: 'oklch(0.922 0 0)' # light: oklch(0.205 0 0)
-  primary-hover: 'oklch(0.922 0 0)' # light: oklch(0.205 0 0)
-  ready: 'oklch(0.985 0 0)' # aliases ink until a mint accent ships; light: oklch(0.145 0 0)
+  # Light neutrals carry a deliberate whisper of cool steel-blue chroma
+  # (hue 258) instead of stock achromatic gray - see "Light appearance" below.
+  void: 'oklch(0.145 0 0)' # light: oklch(0.99 0.006 258)
+  canvas: 'oklch(0.145 0 0)' # aliases void; light: oklch(0.99 0.006 258)
+  surface: 'oklch(0.205 0 0)' # light: oklch(0.99 0.006 258)
+  raised: 'oklch(0.269 0 0)' # light: oklch(0.955 0.008 258)
+  ink: 'oklch(0.985 0 0)' # light: oklch(0.145 0.006 258)
+  muted: 'oklch(0.708 0 0)' # light: oklch(0.45 0.01 258)
+  quiet: 'oklch(0.708 0 0)' # aliases muted; light: oklch(0.45 0.01 258)
+  line: 'oklch(1 0 0 / 10%)' # light: oklch(0.9 0.008 258)
+  primary: 'oklch(0.922 0 0)' # light: oklch(0.205 0.007 258)
+  primary-hover: 'oklch(0.922 0 0)' # light: oklch(0.205 0.007 258)
+  ready: 'oklch(0.780 0.120 158)' # resolved mint; light: oklch(0.440 0.130 158)
   danger: 'oklch(0.704 0.191 22.216)' # light: oklch(0.577 0.245 27.325)
 typography:
   headline:
@@ -86,7 +88,8 @@ affordances, short labels, and restrained state motion.
 
 **Key Characteristics:**
 
-- Shadcn's neutral light and dark defaults, with no product accent color yet.
+- A deliberately tuned neutral hierarchy in both dark and light, with Ready
+  Mint and Failure Red as the only two named accents.
 - System typography tuned for calm density and high legibility.
 - Tonal layering before shadows; boundaries appear only when useful.
 - One centered agent composer that expands naturally into a conversation rail.
@@ -198,38 +201,103 @@ warning, or failure states.
 
 ### Primary
 
-- **Primary** (`oklch(0.922 0 0)` dark, `oklch(0.205 0 0)` light): actions,
-  focus, and selected controls using Shadcn's neutral defaults.
+- **Primary** (`oklch(0.922 0 0)` dark, `oklch(0.205 0.007 258)` light):
+  actions, focus, and selected controls.
 - **Primary Hover**: a neighboring neutral tone that preserves contrast without
   introducing a product accent.
 
 ### Secondary
 
-- **Ready** (`oklch(0.985 0 0)` dark, `oklch(0.145 0 0)` light): runtime
-  readiness and successful completion. Currently an alias of Ink; a mint
-  accent is a later, deliberate decision. Always paired with a label or
-  accessible name.
+- **Ready Mint** (`oklch(0.780 0.120 158)` dark, `oklch(0.440 0.130 158)`
+  light): runtime readiness and successful completion. Resolved (issue #49):
+  wired everywhere `--ready` is consumed, with a darker, more saturated
+  light-mode value so the same named color clears AA on a near-white surface
+  instead of washing out. See "Ready Mint, resolved" below. Always paired with
+  a label or accessible name per the Semantic Color Rule.
 - **Failure Red** (`oklch(0.704 0.191 22.216)` dark,
   `oklch(0.577 0.245 27.325)` light): actionable failures and destructive
   status only.
 
 ### Neutral
 
-- **Void** (`oklch(0.145 0 0)` dark, `oklch(1 0 0)` light): application
-  background.
+- **Void** (`oklch(0.145 0 0)` dark, `oklch(0.99 0.006 258)` light):
+  application background.
 - **Canvas** (same as Void): conversation canvas and protected shell.
-- **Surface** (`oklch(0.205 0 0)` dark, `oklch(1 0 0)` light): the prompt and
-  primary controls.
-- **Raised Surface** (`oklch(0.269 0 0)` dark, `oklch(0.97 0 0)` light):
+- **Surface** (`oklch(0.205 0 0)` dark, `oklch(0.99 0.006 258)` light): the
+  prompt and primary controls.
+- **Raised Surface** (`oklch(0.269 0 0)` dark, `oklch(0.955 0.008 258)` light):
   hover, menus, and temporary elevation.
-- **Ink** (`oklch(0.985 0 0)` dark, `oklch(0.145 0 0)` light): primary text
-  and high-emphasis icons.
-- **Muted** (`oklch(0.708 0 0)` dark, `oklch(0.45 0 0)` light): secondary text
-  with readable contrast.
+- **Ink** (`oklch(0.985 0 0)` dark, `oklch(0.145 0.006 258)` light): primary
+  text and high-emphasis icons.
+- **Muted** (`oklch(0.708 0 0)` dark, `oklch(0.45 0.01 258)` light): secondary
+  text with readable contrast.
 - **Quiet** (same as Muted today): disabled detail and decorative marks, never
   essential copy.
-- **Line** (`oklch(1 0 0 / 10%)` dark, `oklch(0.922 0 0)` light): structural
-  separators.
+- **Line** (`oklch(1 0 0 / 10%)` dark, `oklch(0.9 0.008 258)` light):
+  structural separators.
+
+### Light appearance
+
+The light appearance is a considered pass, not FQ-19.7's forbidden mechanical
+invert of the dark tokens. Two decisions carry it:
+
+**Hue, not just lightness, carries identity.** Dark mode's void is
+achromatic - true neutral black reads convincingly as anodized aluminum under
+interior light. That same desk under open sky does not stay achromatic: every
+light neutral above (`--background` through `--ring` in `src/styles.css`)
+carries a small, consistent chroma at hue 258 - a cool steel-blue, the same
+family a brushed metal surface reflects back in daylight. The tint is
+deliberately near the threshold of perception (chroma 0.006-0.01): close
+enough that the product still reads as quiet and neutral moment-to-moment,
+present enough that a light screenshot next to a dark one reads as the same
+desk in different light rather than a different, genuinely achromatic app
+skinned on top. It is not a second accent color - it never carries semantic
+meaning, so it does not compete with Ready Mint or Failure Red under the
+Semantic Color Rule.
+
+**Elevation flips its strategy instead of its sign.** In dark mode "raised"
+moves toward light: void 0.145 to canvas-adjacent raised 0.269, because a dark
+surface has headroom to climb toward the light source. A mechanical invert
+would instead move light-mode raised toward _dark_ by the same delta - which
+overshoots into a visibly gray card that reads as a flat block, not a lift.
+Light mode has no equivalent headroom: canvas and surface already sit at
+0.99, near the top of the range. So Raised Surface in light drops only
+~3.5% of L (0.99 to 0.955, versus dark's ~12% climb) and leans on the same
+hairline-plus-tint vocabulary the Neutral tokens already use for everyday
+structure - `--rule`/`--rule-h`, not a deeper fill - to carry the rest of the
+hierarchy. The documented Shadow Vocabulary (Prompt Lift, Menu Lift, Active
+Edge Light) is unchanged and already appearance-aware: `--shadow-strong`
+resolves to `oklch(0 0 0 / 0.16)` in light and `oklch(0 0 0 / 0.32)` in dark,
+so Menu Lift keeps working as a **light** micro-shadow instead of reading as
+dirt on a bright surface.
+
+### Ready Mint, resolved
+
+`--ready` is no longer an alias of `--foreground`/`--ink`. It resolves to the
+documented mint hue (158) in both appearances, with per-appearance lightness
+and chroma chosen so the same semantic color clears AA in both:
+`oklch(0.780 0.120 158)` in dark (the value this document always named, ~9-10:1
+against Void/Surface) and a darker `oklch(0.440 0.130 158)` in light (~6.9:1
+against Void/Surface, ~6.2:1 against Raised - the documented dark value alone
+measures under 2:1 on a near-white background, which is why it needed its own
+light value rather than one shared number). The extra margin over a bare
+4.5:1 AA pass matters here: `--ready-halo`, a 10% mix of `--ready` into
+transparent, is also consumed as a real background behind `--ready` text
+(the installed-source badge in Share Library) - an earlier, lighter
+`oklch(0.520 0.130 158)` cleared every solid-surface check but measured only
+4.34:1 once actually composited through that translucent halo, caught by the
+axe WCAG audit in `tests/e2e/sharing.spec.ts`, not the solid-background
+palette test. `oklch(0.440 0.130 158)` was picked to clear the halo
+composite with headroom, not just the solid tokens. This was chosen over
+retiring Ready Mint
+because success/failure is the one state pair the shell communicates with
+color today (Failure Red already exists and is load-bearing); adding its
+positive counterpart is more consistent with the Semantic Color Rule than
+leaving success state carried by ink alone. `--ready-halo` and every consumer
+in `src/styles.css` and `src/components/agent-rail.tsx` inherit the resolved
+value automatically since they read `var(--ready)` rather than a duplicated
+literal. `forced-colors: active` continues to map `--ready` to `CanvasText`,
+unaffected by this change.
 
 ### Named Rules
 
@@ -268,6 +336,11 @@ hierarchy. Nothing in the working shell needs to shout.
 Flect is flat by default. Depth comes from adjacent tonal surfaces and
 occlusion. A focused prompt may use one compact structural shadow; menus may use
 a tighter shadow because they temporarily sit above the working plane.
+Dark and light use the same vocabulary with different weight: dark raised
+surfaces separate by climbing toward the light source, light raised surfaces
+separate mostly through hairlines and a small tint step because they have no
+headroom left to climb - see Colors > "Light appearance" for the full
+reasoning.
 
 ### Shadow Vocabulary
 
