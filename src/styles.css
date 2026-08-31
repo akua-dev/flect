@@ -77,7 +77,7 @@
 	/* Ready Mint, resolved (see DESIGN.md "Ready Mint" and issue #49): wired to
 	 * the documented oklch(0.780 0.120 158) mint in dark, and a darker/more
 	 * saturated same-hue mint here so it clears AA on near-white surfaces. */
-	--ready: oklch(0.52 0.13 158);
+	--ready: oklch(0.44 0.13 158);
 	--danger: var(--destructive);
 	--accent-soft: color-mix(in oklch, var(--primary) 14%, transparent);
 	--accent-softer: color-mix(in oklch, var(--primary) 7%, transparent);

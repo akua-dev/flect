@@ -129,6 +129,51 @@ const parseOklch = (value: string): Rgb => {
 const resolveColor = (name: string, properties: CustomProperties): Rgb =>
 	parseOklch(resolveValue(name, properties));
 
+/** Parses a literal `color-mix(in oklch, var(--x) N%, transparent)` token
+ * (the shape every `*-halo`/`*-soft` overlay token in styles.css uses) into
+ * its source property name and mix percentage. */
+const parseColorMixOverTransparent = (
+	name: string,
+	properties: CustomProperties
+): { readonly source: string; readonly percent: number } => {
+	const raw = properties.get(name);
+	if (raw === undefined) throw new Error(`Custom property ${name} is not defined`);
+	const match = /^color-mix\(in oklch, var\((--[\w-]+)\) (\d+)%, transparent\)$/.exec(raw);
+	if (match === null) {
+		throw new Error(`${name} is not a literal color-mix(...) over transparent: ${raw}`);
+	}
+	const source = match[1];
+	const percent = match[2];
+	if (source === undefined || percent === undefined) throw new Error('unreachable');
+	return { source, percent: Number(percent) };
+};
+
+const alphaComposite = (foreground: Rgb, background: Rgb, alpha: number): Rgb => ({
+	r: alpha * foreground.r + (1 - alpha) * background.r,
+	g: alpha * foreground.g + (1 - alpha) * background.g,
+	b: alpha * foreground.b + (1 - alpha) * background.b
+});
+
+/**
+ * Resolves a translucent overlay token (like `--ready-halo`, a `color-mix`
+ * over transparent) to the RGB it actually renders as once composited over
+ * a given backdrop token. A source color can clear every solid-background
+ * contrast check and still be unreadable once rendered at, say, 10% opacity
+ * - this is what the real pixel looks like, not a proxy for it.
+ */
+const resolveTranslucentOverlay = (
+	overlayName: string,
+	backdropName: string,
+	properties: CustomProperties
+): Rgb => {
+	const { source, percent } = parseColorMixOverTransparent(overlayName, properties);
+	return alphaComposite(
+		resolveColor(source, properties),
+		resolveColor(backdropName, properties),
+		percent / 100
+	);
+};
+
 const stylesSource = readFileSync(fileURLToPath(new URL('./styles.css', import.meta.url)), 'utf8');
 const lightProperties = parseCustomProperties(lightBlock(stylesSource));
 const darkProperties = new Map([
@@ -257,5 +302,26 @@ describe('Ready Mint token (issue #49)', () => {
 		const lightMint = resolveColor('--ready', lightProperties);
 		const darkMint = resolveColor('--ready', darkProperties);
 		expect(lightMint).not.toEqual(darkMint);
+	});
+
+	it('keeps Ready Mint text readable through its own translucent halo, not just solid surfaces', () => {
+		// --ready-halo (10% of --ready mixed into transparent) is a real
+		// consumed background: the Share Library "installed" badge renders
+		// --ready text directly on --ready-halo over --surface. A source
+		// color can clear every solid-background check above and still be
+		// unreadable once actually composited at 10% opacity - an earlier
+		// light value (oklch(0.520 0.130 158)) passed every solid check in
+		// this file but measured 4.34:1 through the real halo, a regression
+		// only the axe WCAG audit in tests/e2e/sharing.spec.ts caught. This
+		// asserts the composited color directly so a future retune can't
+		// reintroduce the same gap.
+		for (const [mode, properties] of modes) {
+			const halo = resolveTranslucentOverlay('--ready-halo', '--surface', properties);
+			const measured = contrastRatio(resolveColor('--ready', properties), halo);
+			expect(
+				measured,
+				`--ready over --ready-halo on --surface (${mode}) measured ${measured.toFixed(2)}:1, requires 4.5:1`
+			).toBeGreaterThanOrEqual(4.5);
+		}
 	});
 });
