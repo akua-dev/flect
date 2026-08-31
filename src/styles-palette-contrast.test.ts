@@ -213,9 +213,49 @@ describe.each(modes)('palette contrast (%s)', (mode, properties) => {
 
 	it('keeps semantic state colors perceivable', () => {
 		for (const foreground of ['--danger', '--ready']) {
-			for (const background of ['--void', '--surface']) {
+			for (const background of ['--void', '--surface', '--raised']) {
 				expectContrast(properties, mode, foreground, background, 3);
 			}
 		}
+	});
+
+	it('keeps Ready Mint readable as label text, not just a decorative dot', () => {
+		// --ready is consumed as real text color (share-library install badge,
+		// product-adoption-card__state.is-ready), not only as a 6px status dot,
+		// so hold it to the same 4.5:1 text bar as ink/muted rather than the
+		// 3:1 floor used for purely decorative marks.
+		for (const background of ['--void', '--surface']) {
+			expectContrast(properties, mode, '--ready', background, 4.5);
+		}
+	});
+});
+
+// --- Ready Mint: resolved, per-appearance, never a silent ink alias --------
+
+describe('Ready Mint token (issue #49)', () => {
+	it('resolves to the documented mint hue in both appearances, not --foreground/--ink', () => {
+		for (const [mode, properties] of modes) {
+			const literal = resolveValue('--ready', properties);
+			expect(literal, `--ready (${mode}) should be a literal oklch() mint, not an alias`).toMatch(
+				/^oklch\(/
+			);
+			const match = /^oklch\(\s*[\d.]+\s+([\d.]+)\s+([\d.]+)\s*\)$/.exec(literal);
+			expect(match, `--ready (${mode}) should parse as oklch(L C H): ${literal}`).not.toBeNull();
+			const chroma = Number(match?.[1]);
+			const hue = Number(match?.[2]);
+			expect(chroma, `--ready (${mode}) should carry real chroma, not a neutral`).toBeGreaterThan(
+				0.05
+			);
+			expect(hue, `--ready (${mode}) should sit in the documented mint/green hue family`).toBeCloseTo(
+				158,
+				0
+			);
+		}
+	});
+
+	it('uses a darker, more saturated mint in light than dark so both clear AA on their own surfaces', () => {
+		const lightMint = resolveColor('--ready', lightProperties);
+		const darkMint = resolveColor('--ready', darkProperties);
+		expect(lightMint).not.toEqual(darkMint);
 	});
 });
