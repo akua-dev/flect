@@ -618,7 +618,11 @@ textarea:focus-visible,
 
 .share-review__replace button {
 	min-height: 30px;
-	border: 0;
+	/* .share-review's own background is --canvas, which equals --surface in
+	 * light (see DESIGN.md "Light appearance"), so this needs a hairline to
+	 * stay visible at rest instead of relying on a tonal step that doesn't
+	 * exist in that appearance. */
+	border: var(--rule);
 	border-radius: 7px;
 	padding: 0 8px;
 	background: var(--surface);
@@ -835,7 +839,11 @@ textarea:focus-visible,
 
 .share-library__close {
 	min-height: 32px;
-	border: 0;
+	/* .share-library's own background is --canvas, which equals --surface in
+	 * light (see DESIGN.md "Light appearance"), so this needs a hairline to
+	 * stay visible at rest instead of relying on a tonal step that doesn't
+	 * exist in that appearance. */
+	border: var(--rule);
 	border-radius: 8px;
 	padding: 0 10px;
 	background: var(--surface);
@@ -1131,7 +1139,11 @@ textarea:focus-visible,
 .canvas-agent-entry,
 .interface-action {
 	min-height: 34px;
-	border: 0;
+	/* Surface equals Canvas in light (see DESIGN.md "Light appearance"), so a
+	 * fill alone is invisible here at rest; the hairline is what actually
+	 * separates the control in light, and stays a quiet structural line in
+	 * dark where the tonal step already carries it. */
+	border: var(--rule);
 	border-radius: 8px;
 	padding: 0 11px;
 	background: var(--surface);
